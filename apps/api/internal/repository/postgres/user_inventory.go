@@ -1,0 +1,165 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+type UserRepo struct {
+	db *gorm.DB
+}
+
+func NewUserRepo(db *gorm.DB) *UserRepo {
+	return &UserRepo{db: db}
+}
+
+func (r *UserRepo) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	var user domain.User
+	if err := r.db.WithContext(ctx).First(&user, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *UserRepo) FindByTelegramID(ctx context.Context, telegramID int64) (*domain.User, error) {
+	var user domain.User
+	if err := r.db.WithContext(ctx).Where("telegram_id = ?", telegramID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *UserRepo) Upsert(ctx context.Context, user *domain.User) error {
+	now := time.Now().UTC()
+	user.LastLoginAt = &now
+	user.UpdatedAt = now
+	if user.CreatedAt.IsZero() {
+		user.CreatedAt = now
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "telegram_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"username", "first_name", "last_name", "photo_url", "last_login_at", "updated_at"}),
+	}).Create(user).Error
+}
+
+func (r *UserRepo) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error {
+	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("ton_wallet", wallet).Error
+}
+
+func (r *UserRepo) GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var user domain.User
+	err := r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Select("betting_balance").First(&user, "id = ?", userID).Error
+	if err != nil {
+		return 0, err
+	}
+	return user.BettingBalance, nil
+}
+
+func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledgerType domain.LedgerType, refType string, refID uuid.UUID) (int64, error) {
+	var balanceAfter int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user domain.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
+			return err
+		}
+		newBalance := user.BettingBalance + delta
+		if newBalance < 0 {
+			return errors.New("insufficient balance")
+		}
+		if err := tx.Model(&user).Update("betting_balance", newBalance).Error; err != nil {
+			return err
+		}
+		ledger := domain.BalanceLedger{
+			UserID:        userID,
+			Type:          ledgerType,
+			AmountNanoton: delta,
+			BalanceAfter:  newBalance,
+			ReferenceType: refType,
+			ReferenceID:   refID,
+			CreatedAt:     time.Now().UTC(),
+		}
+		if err := tx.Create(&ledger).Error; err != nil {
+			return err
+		}
+		balanceAfter = newBalance
+		return nil
+	})
+	return balanceAfter, err
+}
+
+func (r *UserRepo) UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier domain.StakingTier) error {
+	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("staking_tier", tier).Error
+}
+
+var _ domain.UserRepository = (*UserRepo)(nil)
+
+type InventoryRepo struct {
+	db *gorm.DB
+}
+
+func NewInventoryRepo(db *gorm.DB) *InventoryRepo {
+	return &InventoryRepo{db: db}
+}
+
+func (r *InventoryRepo) ListByUser(ctx context.Context, userID uuid.UUID, status *domain.InventoryStatus) ([]domain.InventoryItem, error) {
+	var items []domain.InventoryItem
+	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if status != nil {
+		q = q.Where("status = ?", *status)
+	}
+	err := q.Order("deposited_at DESC").Find(&items).Error
+	return items, err
+}
+
+func (r *InventoryRepo) FindByID(ctx context.Context, id uuid.UUID) (*domain.InventoryItem, error) {
+	var item domain.InventoryItem
+	if err := r.db.WithContext(ctx).First(&item, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *InventoryRepo) Create(ctx context.Context, item *domain.InventoryItem) error {
+	return r.db.WithContext(ctx).Create(item).Error
+}
+
+func (r *InventoryRepo) UpdateStatus(ctx context.Context, id uuid.UUID, from, to domain.InventoryStatus) error {
+	res := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("id = ? AND status = ?", id, from).
+		Update("status", to)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("inventory item not in expected status")
+	}
+	return nil
+}
+
+func (r *InventoryRepo) GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error) {
+	var fp domain.NFTFloorPrice
+	err := r.db.WithContext(ctx).First(&fp, "collection_slug = ?", collectionSlug).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, fmt.Errorf("floor price not found for %s", collectionSlug)
+	}
+	return fp.PriceNanoton, err
+}
+
+func (r *InventoryRepo) SetFloorPrice(ctx context.Context, slug string, price int64) error {
+	fp := domain.NFTFloorPrice{
+		CollectionSlug: slug,
+		PriceNanoton:   price,
+		UpdatedAt:      time.Now().UTC(),
+	}
+	return r.db.WithContext(ctx).Save(&fp).Error
+}
+
+var _ domain.InventoryRepository = (*InventoryRepo)(nil)

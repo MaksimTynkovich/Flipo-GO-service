@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS balance_ledgers;
+DROP TABLE IF EXISTS pvp_room_players;
+DROP TABLE IF EXISTS pvp_rooms;
+DROP TABLE IF EXISTS game_bets;
+DROP TABLE IF EXISTS game_rounds;
+DROP TABLE IF EXISTS user_staking_snapshots;
+DROP TABLE IF EXISTS staking_positions;
+DROP TABLE IF EXISTS nft_floor_prices;
+DROP TABLE IF EXISTS inventory_items;
+DROP TABLE IF EXISTS users;
