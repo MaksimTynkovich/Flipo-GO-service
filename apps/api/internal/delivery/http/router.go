@@ -12,12 +12,12 @@ import (
 )
 
 type Deps struct {
-	DB             *gorm.DB
-	Auth           *auth.Service
-	AuthHandler    *handlers.AuthHandler
+	DB               *gorm.DB
+	Auth             *auth.Service
+	AuthHandler      *handlers.AuthHandler
 	InventoryHandler *handlers.InventoryHandler
-	GameHandler    *handlers.GameHandler
-	Hub            *websocket.Hub
+	GameHandler      *handlers.GameHandler
+	Hub              *websocket.Hub
 }
 
 func NewRouter(deps Deps) *gin.Engine {

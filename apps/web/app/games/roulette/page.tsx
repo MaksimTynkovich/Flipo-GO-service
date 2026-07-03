@@ -11,7 +11,7 @@ import {
   placeRouletteBet,
   RouletteHistoryEntry,
 } from "@/lib/api";
-import { RouletteRoundState } from "@/lib/roulette";
+import { RouletteRoundState, isLandingPause } from "@/lib/roulette";
 import { cn } from "@/lib/utils";
 
 const PHASE_LABEL: Record<string, string> = {
@@ -21,6 +21,12 @@ const PHASE_LABEL: Record<string, string> = {
   waiting: "Ожидание",
 };
 
+function phaseLabel(state: RouletteRoundState | null): string {
+  if (!state?.phase) return "—";
+  if (isLandingPause(state)) return "Почти…";
+  return PHASE_LABEL[state.phase] ?? state.phase;
+}
+
 export default function RoulettePage() {
   const [state, setState] = useState<RouletteRoundState | null>(null);
   const [history, setHistory] = useState<RouletteHistoryEntry[]>([]);
@@ -28,6 +34,7 @@ export default function RoulettePage() {
   const [betting, setBetting] = useState(false);
   const [betMsg, setBetMsg] = useState<string | null>(null);
   const lastPhase = useRef<string | null>(null);
+  const [, setLandingTick] = useState(0);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -53,8 +60,19 @@ export default function RoulettePage() {
     lastPhase.current = state?.phase ?? null;
   }, [state?.phase, loadHistory]);
 
+  // Обновляем подпись «Почти…» после остановки колеса
+  useEffect(() => {
+    if (!state || state.phase !== "spinning") return;
+    const endRaw = state.spin_ends_at || state.ends_at;
+    if (!endRaw) return;
+    const endMs = new Date(endRaw).getTime();
+    const delay = Math.max(0, endMs - Date.now());
+    const id = window.setTimeout(() => setLandingTick((n) => n + 1), delay);
+    return () => window.clearTimeout(id);
+  }, [state?.phase, state?.spin_ends_at, state?.ends_at, state?.round_id]);
+
   const canBet = state?.phase === "betting" && !betting;
-  const phaseLabel = state?.phase ? PHASE_LABEL[state.phase] ?? state.phase : "—";
+  const statusLabel = phaseLabel(state);
 
   async function bet(color: string) {
     if (!canBet) return;
@@ -84,7 +102,7 @@ export default function RoulettePage() {
             <p className="text-sm text-muted">Раунд #{state?.round_number ?? "—"}</p>
           </div>
           <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-            {phaseLabel}
+            {statusLabel}
           </span>
         </div>
 

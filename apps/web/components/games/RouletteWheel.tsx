@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   alignRotationToIndex,
+  easeSpinFriction,
+  jitterForRound,
   numberColor,
   ROULETTE_SEGMENTS,
   RouletteRoundState,
@@ -20,14 +22,8 @@ const COLORS = {
 };
 
 const YELLOW = "#f1c40f";
-
-function easeSpinFriction(t: number): number {
-  if (t >= 1) return 1;
-  if (t <= 0) return 0;
-  const k = 5.2;
-  const denom = 1 - Math.exp(-k);
-  return (1 - Math.exp(-k * t)) / denom;
-}
+const WHEEL_SIZE = 340;
+const SETTLE_MS = 900;
 
 function animateSpin(
   from: number,
@@ -42,13 +38,12 @@ function animateSpin(
 
   function tick(now: number) {
     const t = Math.min(1, (now - start) / durationMs);
-    if (t >= 1) {
-      onUpdate(to);
-      onComplete?.();
-      return;
-    }
     onUpdate(from + totalDistance * easeSpinFriction(t));
-    frame = requestAnimationFrame(tick);
+    if (t < 1) {
+      frame = requestAnimationFrame(tick);
+    } else {
+      onComplete?.();
+    }
   }
 
   frame = requestAnimationFrame(tick);
@@ -95,6 +90,7 @@ type Props = {
 export function RouletteWheel({ state }: Props) {
   const [rotation, setRotation] = useState(0);
   const lastSpinRound = useRef<string | null>(null);
+  const roundJitter = useRef(0);
   const rotationRef = useRef(0);
   const cancelSpin = useRef<(() => void) | null>(null);
 
@@ -106,12 +102,37 @@ export function RouletteWheel({ state }: Props) {
     setRotation(value);
   }, []);
 
-  const snapToIndex = useCallback(
-    (index: number) => {
-      const aligned = alignRotationToIndex(rotationRef.current, index);
-      applyRotation(aligned);
+  const runSpinAnimation = useCallback(
+    (from: number, to: number, durationMs: number) => {
+      if (Math.abs(to - from) < 0.01) {
+        applyRotation(to);
+        return;
+      }
+      cancelSpin.current?.();
+      cancelSpin.current = animateSpin(
+        from,
+        to,
+        Math.max(SETTLE_MS, durationMs),
+        applyRotation,
+      );
     },
     [applyRotation],
+  );
+
+  const snapToIndex = useCallback(
+    (index: number, roundId: string, smooth = false) => {
+      const jitter = jitterForRound(roundId);
+      roundJitter.current = jitter;
+      const aligned = alignRotationToIndex(rotationRef.current, index, jitter);
+      const diff = Math.abs(aligned - rotationRef.current);
+      if (diff < 0.05) return;
+      if (smooth && diff < 30) {
+        runSpinAnimation(rotationRef.current, aligned, SETTLE_MS);
+      } else {
+        applyRotation(aligned);
+      }
+    },
+    [applyRotation, runSpinAnimation],
   );
 
   useEffect(() => {
@@ -126,14 +147,14 @@ export function RouletteWheel({ state }: Props) {
     if (state.phase === "betting") {
       cancelSpin.current?.();
       lastSpinRound.current = null;
+      roundJitter.current = 0;
       return;
     }
 
     if (wheelIndex === undefined) return;
 
     if (state.phase === "result") {
-      cancelSpin.current?.();
-      snapToIndex(wheelIndex);
+      snapToIndex(wheelIndex, state.round_id, true);
       return;
     }
 
@@ -150,44 +171,47 @@ export function RouletteWheel({ state }: Props) {
     }
 
     lastSpinRound.current = state.round_id;
+    roundJitter.current = jitterForRound(state.round_id);
 
     const fromMod = ((rotationRef.current % 360) + 360) % 360;
-    const target = spinTargetRotation(rotationRef.current, wheelIndex, 8);
+    const target = spinTargetRotation(
+      rotationRef.current,
+      wheelIndex,
+      8,
+      roundJitter.current,
+    );
     const progress = spinProgress(state);
     const from =
       progress > 0 && progress < 1
         ? fromMod + (target - fromMod) * easeSpinFriction(progress)
         : fromMod;
 
-    cancelSpin.current?.();
-    applyRotation(from);
-
     if (remaining <= 0 || progress >= 1) {
-      applyRotation(target);
+      runSpinAnimation(from, target, SETTLE_MS);
       return;
     }
 
-    cancelSpin.current = animateSpin(from, target, Math.max(300, remaining), applyRotation, () => {
-      applyRotation(target);
-    });
-  }, [state, applyRotation, snapToIndex]);
+    runSpinAnimation(from, target, remaining);
+  }, [state, applyRotation, snapToIndex, runSpinAnimation]);
 
-  const size = 300;
   const cx = 110;
   const cy = 110;
   const rOuter = 100;
   const rInner = 52;
-  const hubSize = rInner * 2 * (size / 220);
+  const hubSize = rInner * 2 * (WHEEL_SIZE / 220);
 
   return (
-    <div className="relative mx-auto" style={{ width: size, height: size }}>
+    <div
+      className="relative mx-auto w-full max-w-[340px]"
+      style={{ width: WHEEL_SIZE, height: WHEEL_SIZE }}
+    >
       <div className="absolute left-1/2 top-[-1px] z-30 -translate-x-1/2">
         <div
           className="mx-auto h-0 w-0"
           style={{
-            borderLeft: "7px solid transparent",
-            borderRight: "7px solid transparent",
-            borderTop: `12px solid ${YELLOW}`,
+            borderLeft: "8px solid transparent",
+            borderRight: "8px solid transparent",
+            borderTop: `13px solid ${YELLOW}`,
           }}
         />
       </div>
@@ -235,7 +259,7 @@ export function RouletteWheel({ state }: Props) {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     fill="#ffffff"
-                    fontSize="11"
+                    fontSize="12"
                     fontWeight="700"
                     fontFamily="system-ui, -apple-system, sans-serif"
                     transform={`rotate(${textRotate}, ${tx}, ${ty})`}
@@ -260,7 +284,7 @@ export function RouletteWheel({ state }: Props) {
         {phase === "betting" && (
           <span
             className="font-bold tabular-nums leading-none text-[#1a1f26]"
-            style={{ fontSize: "2rem" }}
+            style={{ fontSize: "2.25rem" }}
           >
             {countdown.toString().padStart(2, "0")}
           </span>

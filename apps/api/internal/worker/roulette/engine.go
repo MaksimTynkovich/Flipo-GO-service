@@ -13,14 +13,15 @@ import (
 )
 
 type Engine struct {
-	svc      *rouletteuc.Service
-	games    domain.GameRepository
-	bettingS int
-	spinS    int
+	svc           *rouletteuc.Service
+	games         domain.GameRepository
+	bettingS      int
+	spinS         int
+	resultPauseS  int
 }
 
-func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS int) *Engine {
-	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS}
+func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS, resultPauseS int) *Engine {
+	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS, resultPauseS: resultPauseS}
 }
 
 func (e *Engine) Run(ctx context.Context) {
@@ -72,6 +73,7 @@ func (e *Engine) runRound(ctx context.Context) {
 	}
 	_ = e.svc.UpdatePhase(ctx, spinState)
 	time.Sleep(time.Duration(e.spinS) * time.Second)
+	time.Sleep(time.Duration(e.resultPauseS) * time.Second)
 
 	result := provablyfair.RouletteNumberColor(resultNumber)
 	if err := e.svc.SettleRound(ctx, round.ID, serverSeed, roundNum); err != nil {
