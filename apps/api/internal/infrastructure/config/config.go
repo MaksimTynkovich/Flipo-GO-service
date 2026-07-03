@@ -35,7 +35,7 @@ func Load() *Config {
 		RedisURL:               getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTExpiry:              15 * time.Minute,
 		RouletteBettingSeconds: getEnvInt("ROULETTE_BETTING_SECONDS", 20),
-		RouletteSpinSeconds:    getEnvInt("ROULETTE_SPIN_SECONDS", 3),
+		RouletteSpinSeconds:    getEnvInt("ROULETTE_SPIN_SECONDS", 12),
 		CrashTickMs:            getEnvInt("CRASH_TICK_MS", 100),
 		PlatformFeeBps:         getEnvInt("PLATFORM_FEE_BPS", 500),
 		BoostWagerThreshold:    int64(getEnvInt("BOOST_WAGER_THRESHOLD_NANOTON", 5_000_000_000)),

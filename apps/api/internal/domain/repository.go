@@ -48,6 +48,7 @@ type GameRepository interface {
 	SettleBet(ctx context.Context, betID uuid.UUID, status BetStatus, payout int64, multiplier *float64) (bool, error)
 	FindBetByIdempotency(ctx context.Context, key string) (*GameBet, error)
 	ListPendingBetsByRound(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
+	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
 }
 
 type PvPRepository interface {

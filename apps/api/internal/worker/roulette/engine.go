@@ -57,16 +57,23 @@ func (e *Engine) runRound(ctx context.Context) {
 
 	time.Sleep(time.Duration(e.bettingS) * time.Second)
 
+	resultIndex := provablyfair.RouletteResultIndex(serverSeed, roundNum)
+	resultNumber := provablyfair.RouletteWheelNumber(resultIndex)
+	spinEnds := time.Now().Add(time.Duration(e.spinS) * time.Second)
 	spinState := &rouletteuc.RoundState{
 		RoundID:        round.ID,
 		RoundNumber:    roundNum,
 		Phase:          "spinning",
+		EndsAt:         spinEnds,
+		SpinEndsAt:     spinEnds,
 		ServerSeedHash: serverSeedHash,
+		ResultIndex:    &resultIndex,
+		ResultNumber:   &resultNumber,
 	}
 	_ = e.svc.UpdatePhase(ctx, spinState)
 	time.Sleep(time.Duration(e.spinS) * time.Second)
 
-	result := provablyfair.RouletteResult(serverSeed, roundNum)
+	result := provablyfair.RouletteNumberColor(resultNumber)
 	if err := e.svc.SettleRound(ctx, round.ID, serverSeed, roundNum); err != nil {
 		slog.Error("settle roulette round", "error", err)
 	}
@@ -77,6 +84,8 @@ func (e *Engine) runRound(ctx context.Context) {
 		Phase:          "result",
 		ServerSeedHash: serverSeedHash,
 		ServerSeed:     serverSeed,
+		ResultIndex:    &resultIndex,
+		ResultNumber:   &resultNumber,
 		Result:         result,
 	}
 	_ = e.svc.UpdatePhase(ctx, resultState)

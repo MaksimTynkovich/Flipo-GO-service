@@ -162,6 +162,16 @@ func (r *GameRepo) FindBetByIdempotency(ctx context.Context, key string) (*domai
 	return &bet, err
 }
 
+func (r *GameRepo) ListRecentFinishedRounds(ctx context.Context, gameType domain.GameType, limit int) ([]domain.GameRound, error) {
+	var rounds []domain.GameRound
+	err := r.db.WithContext(ctx).
+		Where("game_type = ? AND status = ?", gameType, "finished").
+		Order("round_number DESC").
+		Limit(limit).
+		Find(&rounds).Error
+	return rounds, err
+}
+
 var _ domain.GameRepository = (*GameRepo)(nil)
 
 type PvPRepo struct {

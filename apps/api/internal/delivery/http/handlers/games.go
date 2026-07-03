@@ -30,6 +30,18 @@ func (h *GameHandler) RouletteCurrent(c *gin.Context) {
 	c.JSON(http.StatusOK, state)
 }
 
+func (h *GameHandler) RouletteHistory(c *gin.Context) {
+	history, err := h.roulette.GetHistory(c.Request.Context(), 10)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if history == nil {
+		history = []roulette.HistoryEntry{}
+	}
+	c.JSON(http.StatusOK, history)
+}
+
 func (h *GameHandler) RouletteBet(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {

@@ -87,6 +87,16 @@ export async function getRouletteState() {
   return api("/api/v1/games/roulette/current");
 }
 
+export type RouletteHistoryEntry = {
+  round_number: number;
+  number: number;
+  color: string;
+};
+
+export async function getRouletteHistory() {
+  return api<RouletteHistoryEntry[]>("/api/v1/games/roulette/history");
+}
+
 export async function placeCrashBet(amount: number, key: string) {
   return api("/api/v1/games/crash/bet", {
     method: "POST",
