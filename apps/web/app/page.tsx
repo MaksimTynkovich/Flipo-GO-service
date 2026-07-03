@@ -35,15 +35,15 @@ const games = [
 
 const shortcuts = [
   {
-    href: "/inventory",
+    href: "/profile/inventory",
     title: "Инвентарь",
     desc: "Депозит и продажа Telegram Gifts",
     icon: Gift,
   },
   {
-    href: "/staking",
+    href: "/profile/staking",
     title: "Стейкинг",
-    desc: "3–5% в месяц на NFT",
+    desc: "До 5% в месяц — подарок остаётся у тебя",
     icon: Layers,
   },
 ];

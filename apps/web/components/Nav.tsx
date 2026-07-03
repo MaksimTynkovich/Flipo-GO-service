@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Gamepad2, Gift, Home, Layers } from "lucide-react";
+import { Gamepad2, Home, User } from "lucide-react";
 
 const links = [
   { href: "/", label: "Главная", icon: Home, match: (p: string) => p === "/" },
@@ -13,8 +13,12 @@ const links = [
     icon: Gamepad2,
     match: (p: string) => p.startsWith("/games"),
   },
-  { href: "/inventory", label: "Инвентарь", icon: Gift, match: (p: string) => p === "/inventory" },
-  { href: "/staking", label: "Стейкинг", icon: Layers, match: (p: string) => p === "/staking" },
+  {
+    href: "/profile",
+    label: "Профиль",
+    icon: User,
+    match: (p: string) => p.startsWith("/profile"),
+  },
 ];
 
 export function Nav() {

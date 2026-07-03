@@ -16,6 +16,7 @@ type Deps struct {
 	Auth             *auth.Service
 	AuthHandler      *handlers.AuthHandler
 	InventoryHandler *handlers.InventoryHandler
+	StakingHandler   *handlers.StakingHandler
 	GameHandler      *handlers.GameHandler
 	Hub              *websocket.Hub
 }
@@ -57,14 +58,17 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/inventory/:id/liquidate", deps.InventoryHandler.Liquidate)
 			authed.POST("/admin/floor-price", deps.InventoryHandler.SetFloorPrice)
 
-			authed.GET("/staking/positions", deps.InventoryHandler.ListStaking)
-			authed.POST("/staking/stake", deps.InventoryHandler.Stake)
-			authed.POST("/staking/unstake/:id", deps.InventoryHandler.Unstake)
+			authed.GET("/staking/gifts", deps.StakingHandler.ListProfileGifts)
+			authed.GET("/staking/positions", deps.StakingHandler.ListPositions)
+			authed.POST("/staking/stake", deps.StakingHandler.Stake)
+			authed.POST("/staking/unstake/:id", deps.StakingHandler.Unstake)
 
 			authed.GET("/games/roulette/current", deps.GameHandler.RouletteCurrent)
 			authed.GET("/games/roulette/history", deps.GameHandler.RouletteHistory)
 			authed.POST("/games/roulette/bet", deps.GameHandler.RouletteBet)
 			authed.GET("/games/crash/current", deps.GameHandler.CrashCurrent)
+			authed.GET("/games/crash/history", deps.GameHandler.CrashHistory)
+			authed.GET("/games/crash/bet/active", deps.GameHandler.CrashActiveBet)
 			authed.POST("/games/crash/bet", deps.GameHandler.CrashBet)
 			authed.POST("/games/crash/bet/:id/cashout", deps.GameHandler.CrashCashout)
 			authed.GET("/games/pvp/rooms", deps.GameHandler.PvPListRooms)

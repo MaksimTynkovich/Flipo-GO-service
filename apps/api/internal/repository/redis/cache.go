@@ -43,7 +43,7 @@ func (c *Cache) Publish(ctx context.Context, channel string, message []byte) err
 
 func (c *Cache) Subscribe(ctx context.Context, channel string) (<-chan []byte, func(), error) {
 	pubsub := c.client.Subscribe(ctx, channel)
-	ch := make(chan []byte, 64)
+	ch := make(chan []byte, 512)
 
 	go func() {
 		defer close(ch)

@@ -11,6 +11,7 @@ dev: up
 	$(MAKE) -j2 api web
 
 api:
+	@-lsof -ti :$${API_PORT:-8080} | xargs kill -9 2>/dev/null || true
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/server
 
 worker:

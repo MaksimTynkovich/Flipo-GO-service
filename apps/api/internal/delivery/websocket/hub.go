@@ -18,11 +18,12 @@ type Client struct {
 	Conn     *websocket.Conn
 	Send     chan []byte
 	GameType string
+	once     sync.Once
 }
 
 type Hub struct {
-	mu       sync.RWMutex
-	clients  map[string]map[*Client]bool
+	mu        sync.RWMutex
+	clients   map[string]map[*Client]bool
 	broadcast map[string]chan []byte
 }
 
@@ -42,16 +43,36 @@ func NewHub() *Hub {
 func (h *Hub) runBroadcast(gameType string) {
 	for msg := range h.broadcast[gameType] {
 		h.mu.RLock()
+		clients := make([]*Client, 0, len(h.clients[gameType]))
 		for client := range h.clients[gameType] {
+			clients = append(clients, client)
+		}
+		h.mu.RUnlock()
+
+		for _, client := range clients {
 			select {
 			case client.Send <- msg:
 			default:
-				close(client.Send)
-				delete(h.clients[gameType], client)
+				h.removeClient(client)
 			}
 		}
-		h.mu.RUnlock()
 	}
+}
+
+func (h *Hub) removeClient(client *Client) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.clients[client.GameType][client]; !ok {
+		return
+	}
+	delete(h.clients[client.GameType], client)
+	client.closeSend()
+}
+
+func (c *Client) closeSend() {
+	c.once.Do(func() {
+		close(c.Send)
+	})
 }
 
 func (h *Hub) Broadcast(gameType string, data []byte) {
@@ -71,10 +92,11 @@ func (h *Hub) Register(client *Client) {
 func (h *Hub) Unregister(client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if _, ok := h.clients[client.GameType][client]; ok {
-		delete(h.clients[client.GameType], client)
-		close(client.Send)
+	if _, ok := h.clients[client.GameType][client]; !ok {
+		return
 	}
+	delete(h.clients[client.GameType], client)
+	client.closeSend()
 }
 
 func (c *Client) ReadPump() {
@@ -83,8 +105,7 @@ func (c *Client) ReadPump() {
 		_ = c.Conn.Close()
 	}()
 	for {
-		_, _, err := c.Conn.ReadMessage()
-		if err != nil {
+		if _, _, err := c.Conn.ReadMessage(); err != nil {
 			break
 		}
 	}
@@ -107,7 +128,7 @@ func ServeWS(hub *Hub, gameType string, w http.ResponseWriter, r *http.Request) 
 	client := &Client{
 		Hub:      hub,
 		Conn:     conn,
-		Send:     make(chan []byte, 64),
+		Send:     make(chan []byte, 256),
 		GameType: gameType,
 	}
 	hub.Register(client)
@@ -122,4 +143,9 @@ func JSONMessage(event string, payload interface{}) []byte {
 	}
 	data, _ := json.Marshal(msg)
 	return data
+}
+
+// NotifyGameTick pushes live state to connected WS clients without a Redis hop.
+func (h *Hub) NotifyGameTick(gameType string, data []byte) {
+	h.Broadcast(gameType, JSONMessage("tick", json.RawMessage(data)))
 }

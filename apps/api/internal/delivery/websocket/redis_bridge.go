@@ -47,9 +47,7 @@ func (b *RedisBridge) subscribe(ctx context.Context, gameType, channel string) {
 			if !ok {
 				return
 			}
-			var payload interface{}
-			_ = json.Unmarshal(msg, &payload)
-			b.hub.Broadcast(gameType, JSONMessage("tick", payload))
+			b.hub.Broadcast(gameType, JSONMessage("tick", json.RawMessage(msg)))
 		}
 	}
 }

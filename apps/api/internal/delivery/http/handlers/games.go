@@ -70,6 +70,18 @@ func (h *GameHandler) CrashCurrent(c *gin.Context) {
 	c.JSON(http.StatusOK, state)
 }
 
+func (h *GameHandler) CrashHistory(c *gin.Context) {
+	history, err := h.crash.GetHistory(c.Request.Context(), 12)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if history == nil {
+		history = []crash.HistoryEntry{}
+	}
+	c.JSON(http.StatusOK, history)
+}
+
 func (h *GameHandler) CrashBet(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
@@ -86,6 +98,16 @@ func (h *GameHandler) CrashBet(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, bet)
+}
+
+func (h *GameHandler) CrashActiveBet(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	bet, err := h.crash.ActiveBet(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, bet)
 }
 
 func (h *GameHandler) CrashCashout(c *gin.Context) {

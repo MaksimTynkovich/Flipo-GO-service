@@ -2,7 +2,9 @@ package crash
 
 import (
 	"context"
+	"log/slog"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -10,28 +12,66 @@ import (
 	"github.com/google/uuid"
 )
 
+const engineLockKey = "crash:engine:lock"
+
 type RoundState struct {
-	RoundID        uuid.UUID `json:"round_id"`
-	RoundNumber    int64     `json:"round_number"`
-	Phase          string    `json:"phase"`
-	Multiplier     float64   `json:"multiplier"`
-	CrashPoint     float64   `json:"crash_point,omitempty"`
-	EndsAt         time.Time `json:"ends_at,omitempty"`
-	ServerSeedHash string    `json:"server_seed_hash"`
+	RoundID        uuid.UUID  `json:"round_id"`
+	RoundNumber    int64      `json:"round_number"`
+	Phase          string     `json:"phase"`
+	Multiplier     float64    `json:"multiplier"`
+	CrashPoint     float64    `json:"crash_point,omitempty"`
+	EndsAt         *time.Time `json:"ends_at,omitempty"`
+	ServerSeedHash string     `json:"server_seed_hash"`
+}
+
+type TickNotifier interface {
+	NotifyGameTick(game string, data []byte)
 }
 
 type Service struct {
-	games   domain.GameRepository
-	balance *balance.Service
-	cache   domain.GameStateCache
-	tickMs  int
+	games     domain.GameRepository
+	balance   *balance.Service
+	cache     domain.GameStateCache
+	tickMs    int
+	notifier  TickNotifier
+	memState  atomic.Pointer[RoundState]
+	persistCh chan []byte
 }
 
 func NewService(games domain.GameRepository, balance *balance.Service, cache domain.GameStateCache, tickMs int) *Service {
-	return &Service{games: games, balance: balance, cache: cache, tickMs: tickMs}
+	s := &Service{
+		games:     games,
+		balance:   balance,
+		cache:     cache,
+		tickMs:    tickMs,
+		persistCh: make(chan []byte, 256),
+	}
+	go s.persistWorker()
+	return s
+}
+
+func (s *Service) persistWorker() {
+	for data := range s.persistCh {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := s.cache.Set(ctx, "crash:round:current", data, 0); err != nil {
+			slog.Warn("crash redis set failed", "error", err)
+		}
+		if err := s.cache.Publish(ctx, "pubsub:game:crash", data); err != nil {
+			slog.Warn("crash redis publish failed", "error", err)
+		}
+		cancel()
+	}
+}
+
+func (s *Service) SetTickNotifier(notifier TickNotifier) {
+	s.notifier = notifier
 }
 
 func (s *Service) CurrentState(ctx context.Context) (*RoundState, error) {
+	if live := s.memState.Load(); live != nil {
+		copy := *live
+		return &copy, nil
+	}
 	data, err := s.cache.Get(ctx, "crash:round:current")
 	if err != nil || data == nil {
 		return nil, nil
@@ -41,6 +81,28 @@ func (s *Service) CurrentState(ctx context.Context) (*RoundState, error) {
 		return nil, err
 	}
 	return &state, nil
+}
+
+func (s *Service) TryAcquireEngineLock(ctx context.Context) (bool, error) {
+	return s.cache.AcquireLock(ctx, engineLockKey, 20*time.Second)
+}
+
+func (s *Service) RenewEngineLock(ctx context.Context) error {
+	pubCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	return s.cache.Set(pubCtx, engineLockKey, []byte("1"), 20*time.Second)
+}
+
+func (s *Service) ReleaseEngineLock(ctx context.Context) error {
+	return s.cache.ReleaseLock(ctx, engineLockKey)
+}
+
+func (s *Service) ActiveBet(ctx context.Context, userID uuid.UUID) (*domain.GameBet, error) {
+	state, err := s.CurrentState(ctx)
+	if err != nil || state == nil {
+		return nil, err
+	}
+	return s.games.FindPendingBetByUserAndRound(ctx, userID, state.RoundID)
 }
 
 func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, amount int64, idempotencyKey string) (*domain.GameBet, error) {
@@ -121,13 +183,53 @@ func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
 	return nil
 }
 
+// PublishState updates in-memory state and WS clients immediately; Redis is best-effort async.
 func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 	data, err := jsonMarshal(state)
 	if err != nil {
 		return err
 	}
-	if err := s.cache.Set(ctx, "crash:round:current", data, 0); err != nil {
-		return err
+
+	copy := *state
+	s.memState.Store(&copy)
+
+	if s.notifier != nil {
+		s.notifier.NotifyGameTick("crash", data)
 	}
-	return s.cache.Publish(ctx, "pubsub:game:crash", data)
+
+	select {
+	case s.persistCh <- data:
+	default:
+		slog.Warn("crash persist queue full")
+	}
+	return nil
+}
+
+type HistoryEntry struct {
+	RoundNumber int64   `json:"round_number"`
+	CrashPoint  float64 `json:"crash_point"`
+}
+
+func (s *Service) GetHistory(ctx context.Context, limit int) ([]HistoryEntry, error) {
+	rounds, err := s.games.ListRecentFinishedRounds(ctx, domain.GameCrash, limit)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]HistoryEntry, 0, len(rounds))
+	for _, round := range rounds {
+		var payload struct {
+			CrashPoint float64 `json:"crash_point"`
+		}
+		if len(round.ResultPayload) > 0 {
+			_ = jsonUnmarshal(round.ResultPayload, &payload)
+		}
+		if payload.CrashPoint < 1 {
+			continue
+		}
+		entries = append(entries, HistoryEntry{
+			RoundNumber: round.RoundNumber,
+			CrashPoint:  payload.CrashPoint,
+		})
+	}
+	return entries, nil
 }

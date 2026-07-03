@@ -136,6 +136,21 @@ func (r *GameRepo) ListPendingBetsByRound(ctx context.Context, roundID uuid.UUID
 	return bets, err
 }
 
+func (r *GameRepo) FindPendingBetByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) (*domain.GameBet, error) {
+	var bet domain.GameBet
+	result := r.db.WithContext(ctx).
+		Where("user_id = ? AND round_id = ? AND status = ?", userID, roundID, domain.BetPending).
+		Limit(1).
+		Find(&bet)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, nil
+	}
+	return &bet, nil
+}
+
 func (r *GameRepo) SettleBet(ctx context.Context, betID uuid.UUID, status domain.BetStatus, payout int64, multiplier *float64) (bool, error) {
 	now := time.Now().UTC()
 	updates := map[string]interface{}{
@@ -155,11 +170,14 @@ func (r *GameRepo) SettleBet(ctx context.Context, betID uuid.UUID, status domain
 
 func (r *GameRepo) FindBetByIdempotency(ctx context.Context, key string) (*domain.GameBet, error) {
 	var bet domain.GameBet
-	err := r.db.WithContext(ctx).Where("idempotency_key = ?", key).First(&bet).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	result := r.db.WithContext(ctx).Where("idempotency_key = ?", key).Limit(1).Find(&bet)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
 		return nil, nil
 	}
-	return &bet, err
+	return &bet, nil
 }
 
 func (r *GameRepo) ListRecentFinishedRounds(ctx context.Context, gameType domain.GameType, limit int) ([]domain.GameRound, error) {

@@ -20,6 +20,7 @@ type UserRepository interface {
 type InventoryRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID, status *InventoryStatus) ([]InventoryItem, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*InventoryItem, error)
+	FindByTelegramGiftID(ctx context.Context, userID uuid.UUID, giftID string) (*InventoryItem, error)
 	Create(ctx context.Context, item *InventoryItem) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, from, to InventoryStatus) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
@@ -48,6 +49,7 @@ type GameRepository interface {
 	SettleBet(ctx context.Context, betID uuid.UUID, status BetStatus, payout int64, multiplier *float64) (bool, error)
 	FindBetByIdempotency(ctx context.Context, key string) (*GameBet, error)
 	ListPendingBetsByRound(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
+	FindPendingBetByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) (*GameBet, error)
 	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
 }
 
