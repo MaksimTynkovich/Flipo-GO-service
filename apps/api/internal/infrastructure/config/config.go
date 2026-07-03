@@ -16,6 +16,8 @@ type Config struct {
 	JWTExpiry               time.Duration
 	RouletteBettingSeconds  int
 	RouletteSpinSeconds     int
+	RouletteResultPauseSeconds int
+	RouletteResultDisplaySeconds int
 	CrashTickMs             int
 	PlatformFeeBps          int
 	BoostWagerThreshold     int64
@@ -34,8 +36,10 @@ func Load() *Config {
 		DatabaseURL:            getEnv("DATABASE_URL", "postgres://flipo:flipo@localhost:5432/flipo?sslmode=disable"),
 		RedisURL:               getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTExpiry:              15 * time.Minute,
-		RouletteBettingSeconds: getEnvInt("ROULETTE_BETTING_SECONDS", 20),
-		RouletteSpinSeconds:    getEnvInt("ROULETTE_SPIN_SECONDS", 3),
+		RouletteBettingSeconds:     getEnvInt("ROULETTE_BETTING_SECONDS", 20),
+		RouletteSpinSeconds:        getEnvInt("ROULETTE_SPIN_SECONDS", 12),
+		RouletteResultPauseSeconds:   getEnvInt("ROULETTE_RESULT_PAUSE_SECONDS", 0),
+		RouletteResultDisplaySeconds: getEnvInt("ROULETTE_RESULT_DISPLAY_SECONDS", 1),
 		CrashTickMs:            getEnvInt("CRASH_TICK_MS", 100),
 		PlatformFeeBps:         getEnvInt("PLATFORM_FEE_BPS", 500),
 		BoostWagerThreshold:    int64(getEnvInt("BOOST_WAGER_THRESHOLD_NANOTON", 5_000_000_000)),

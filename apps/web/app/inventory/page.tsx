@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { WalletBar } from "@/components/WalletBar";
-import { Button, Card } from "@/components/ui/button";
+import { PageShell } from "@/components/PageShell";
+import { Button } from "@/components/ui/button";
 import { depositGift, formatTON, getInventory, InventoryItem, liquidateItem } from "@/lib/api";
 
 export default function InventoryPage() {
@@ -35,46 +35,57 @@ export default function InventoryPage() {
     load();
   }
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold">Inventory</h1>
-      <WalletBar />
+  const available = items.filter((i) => i.status === "available");
 
-      <Card className="space-y-3">
-        <p className="text-sm text-zinc-400">Deposit Telegram Gift</p>
+  return (
+    <PageShell
+      title="Инвентарь"
+      description="Вноси Telegram Gifts и конвертируй их в TON для игры"
+    >
+      <div className="panel space-y-3">
+        <p className="section-label">Депозит подарка</p>
         <input
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
+          className="input-field"
           placeholder="gift:id:collection:price"
           value={txRef}
           onChange={(e) => setTxRef(e.target.value)}
         />
-        <Button onClick={handleDeposit}>Deposit</Button>
-      </Card>
+        <Button className="w-full" variant="accent" onClick={handleDeposit}>
+          Внести
+        </Button>
+      </div>
 
-      {loading ? (
-        <p className="text-zinc-400">Loading...</p>
-      ) : items.length === 0 ? (
-        <p className="text-zinc-400">No items yet</p>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <Card key={item.id} className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-medium">{item.name}</p>
-                <p className="text-xs text-zinc-400">
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="section-label">Предметы</p>
+          <span className="text-xs text-muted">{available.length} доступно</span>
+        </div>
+
+        {loading ? (
+          <div className="panel py-6 text-center text-sm text-muted">Загрузка…</div>
+        ) : items.length === 0 ? (
+          <div className="panel py-6 text-center text-sm text-muted">
+            Инвентарь пуст — внеси первый подарок
+          </div>
+        ) : (
+          items.map((item) => (
+            <div key={item.id} className="panel flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{item.name}</p>
+                <p className="text-xs text-muted">
                   {item.collection_slug} · {formatTON(item.floor_price_nanoton)} TON
                 </p>
-                <p className="text-xs text-zinc-500">{item.status}</p>
+                <p className="text-[11px] capitalize text-muted">{item.status}</p>
               </div>
               {item.status === "available" && (
                 <Button variant="outline" onClick={() => handleLiquidate(item.id)}>
-                  Sell
+                  Продать
                 </Button>
               )}
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+            </div>
+          ))
+        )}
+      </section>
+    </PageShell>
   );
 }

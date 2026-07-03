@@ -13,14 +13,16 @@ import (
 )
 
 type Engine struct {
-	svc      *rouletteuc.Service
-	games    domain.GameRepository
-	bettingS int
-	spinS    int
+	svc              *rouletteuc.Service
+	games            domain.GameRepository
+	bettingS         int
+	spinS            int
+	resultPauseS     int
+	resultDisplayS   int
 }
 
-func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS int) *Engine {
-	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS}
+func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS, resultPauseS, resultDisplayS int) *Engine {
+	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS, resultPauseS: resultPauseS, resultDisplayS: resultDisplayS}
 }
 
 func (e *Engine) Run(ctx context.Context) {
@@ -57,16 +59,24 @@ func (e *Engine) runRound(ctx context.Context) {
 
 	time.Sleep(time.Duration(e.bettingS) * time.Second)
 
+	resultIndex := provablyfair.RouletteResultIndex(serverSeed, roundNum)
+	resultNumber := provablyfair.RouletteWheelNumber(resultIndex)
+	spinEnds := time.Now().Add(time.Duration(e.spinS) * time.Second)
 	spinState := &rouletteuc.RoundState{
 		RoundID:        round.ID,
 		RoundNumber:    roundNum,
 		Phase:          "spinning",
+		EndsAt:         spinEnds,
+		SpinEndsAt:     spinEnds,
 		ServerSeedHash: serverSeedHash,
+		ResultIndex:    &resultIndex,
+		ResultNumber:   &resultNumber,
 	}
 	_ = e.svc.UpdatePhase(ctx, spinState)
 	time.Sleep(time.Duration(e.spinS) * time.Second)
+	time.Sleep(time.Duration(e.resultPauseS) * time.Second)
 
-	result := provablyfair.RouletteResult(serverSeed, roundNum)
+	result := provablyfair.RouletteNumberColor(resultNumber)
 	if err := e.svc.SettleRound(ctx, round.ID, serverSeed, roundNum); err != nil {
 		slog.Error("settle roulette round", "error", err)
 	}
@@ -77,8 +87,10 @@ func (e *Engine) runRound(ctx context.Context) {
 		Phase:          "result",
 		ServerSeedHash: serverSeedHash,
 		ServerSeed:     serverSeed,
+		ResultIndex:    &resultIndex,
+		ResultNumber:   &resultNumber,
 		Result:         result,
 	}
 	_ = e.svc.UpdatePhase(ctx, resultState)
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Duration(e.resultDisplayS) * time.Second)
 }

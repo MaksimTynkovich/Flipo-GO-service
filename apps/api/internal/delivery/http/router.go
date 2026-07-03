@@ -12,12 +12,12 @@ import (
 )
 
 type Deps struct {
-	DB             *gorm.DB
-	Auth           *auth.Service
-	AuthHandler    *handlers.AuthHandler
+	DB               *gorm.DB
+	Auth             *auth.Service
+	AuthHandler      *handlers.AuthHandler
 	InventoryHandler *handlers.InventoryHandler
-	GameHandler    *handlers.GameHandler
-	Hub            *websocket.Hub
+	GameHandler      *handlers.GameHandler
+	Hub              *websocket.Hub
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -62,6 +62,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/staking/unstake/:id", deps.InventoryHandler.Unstake)
 
 			authed.GET("/games/roulette/current", deps.GameHandler.RouletteCurrent)
+			authed.GET("/games/roulette/history", deps.GameHandler.RouletteHistory)
 			authed.POST("/games/roulette/bet", deps.GameHandler.RouletteBet)
 			authed.GET("/games/crash/current", deps.GameHandler.CrashCurrent)
 			authed.POST("/games/crash/bet", deps.GameHandler.CrashBet)

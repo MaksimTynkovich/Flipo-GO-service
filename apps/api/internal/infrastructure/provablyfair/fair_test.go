@@ -7,13 +7,28 @@ import (
 )
 
 func TestRouletteResultDeterministic(t *testing.T) {
-	r1 := provablyfair.RouletteResult("testseed", 1)
-	r2 := provablyfair.RouletteResult("testseed", 1)
-	if r1 != r2 {
-		t.Fatalf("expected deterministic result, got %s and %s", r1, r2)
+	i1 := provablyfair.RouletteResultIndex("testseed", 1)
+	i2 := provablyfair.RouletteResultIndex("testseed", 1)
+	if i1 != i2 {
+		t.Fatalf("expected deterministic index, got %d and %d", i1, i2)
 	}
-	if r1 != "red" && r1 != "black" && r1 != "green" {
-		t.Fatalf("invalid color: %s", r1)
+	if i1 < 0 || i1 > 14 {
+		t.Fatalf("invalid index: %d", i1)
+	}
+	n := provablyfair.RouletteWheelNumber(i1)
+	c := provablyfair.RouletteNumberColor(n)
+	if c != "red" && c != "black" && c != "green" {
+		t.Fatalf("invalid color: %s", c)
+	}
+}
+
+func TestWheelOrder(t *testing.T) {
+	order := provablyfair.WheelOrder
+	if len(order) != 15 {
+		t.Fatalf("expected 15 segments, got %d", len(order))
+	}
+	if order[0] != 0 || order[1] != 1 || order[2] != 8 {
+		t.Fatalf("unexpected wheel order start: %v", order[:3])
 	}
 }
 

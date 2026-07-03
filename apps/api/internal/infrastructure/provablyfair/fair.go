@@ -22,18 +22,37 @@ func HashChain(seed string, length int) []string {
 	return chain
 }
 
-// RouletteResult: 0=green (14x), 1-7=red (2x), 8-14=black (2x)
-func RouletteResult(serverSeed string, nonce int64) string {
+// WheelOrder — порядок чисел на колесе (по часовой от 0).
+var WheelOrder = []int{0, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14}
+
+// RouletteResultIndex: 0–14 (индекс сектора на колесе).
+func RouletteResultIndex(serverSeed string, nonce int64) int {
 	h := HashSHA256(fmt.Sprintf("%s:%d", serverSeed, nonce))
-	val := hexToInt(h[:8]) % 15
+	return int(hexToInt(h[:8]) % 15)
+}
+
+func RouletteWheelNumber(index int) int {
+	if index < 0 || index >= len(WheelOrder) {
+		return 0
+	}
+	return WheelOrder[index]
+}
+
+// RouletteNumberColor: 0=green, 1–7=red, 8–14=black.
+func RouletteNumberColor(n int) string {
 	switch {
-	case val == 0:
+	case n == 0:
 		return "green"
-	case val <= 7:
+	case n >= 1 && n <= 7:
 		return "red"
 	default:
 		return "black"
 	}
+}
+
+func RouletteResult(serverSeed string, nonce int64) string {
+	idx := RouletteResultIndex(serverSeed, nonce)
+	return RouletteNumberColor(RouletteWheelNumber(idx))
 }
 
 func RoulettePayout(color string, amount int64) int64 {

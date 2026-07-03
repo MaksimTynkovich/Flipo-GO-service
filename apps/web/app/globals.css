@@ -5,12 +5,16 @@
 @tailwind utilities;
 
 :root {
-  --background: #0a0a0f;
+  --background: #0f1318;
   --foreground: #f4f4f5;
-  --card: #14141f;
+  --surface: #1a1f26;
+  --surface-raised: #222830;
+  --border: #2a3038;
+  --muted: #71717a;
+  --accent: #f1c40f;
   --primary: #3b82f6;
-  --accent: #22c55e;
-  --danger: #ef4444;
+  --success: #27ae60;
+  --danger: #c0392b;
 }
 
 body {
@@ -18,4 +22,31 @@ body {
   background: var(--background);
   font-family: 'Inter', system-ui, sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .app-container {
+    @apply mx-auto w-full max-w-lg px-5;
+  }
+
+  .panel {
+    @apply rounded-xl border border-border bg-surface p-5;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-border bg-surface-raised px-4 py-3 text-sm text-foreground outline-none transition-colors disabled:opacity-40;
+  }
+
+  .input-field::placeholder {
+    color: var(--muted);
+  }
+
+  .input-field:focus {
+    border-color: rgba(241, 196, 15, 0.5);
+  }
+
+  .section-label {
+    @apply text-[11px] font-medium uppercase tracking-wider text-muted;
+  }
 }

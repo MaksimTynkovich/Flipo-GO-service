@@ -1,70 +1,187 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { WalletBar } from "@/components/WalletBar";
-import { Button, Card } from "@/components/ui/button";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { RouletteHistory } from "@/components/games/RouletteHistory";
+import { RouletteWheel } from "@/components/games/RouletteWheel";
+import { PageShell } from "@/components/PageShell";
 import { connectGameWS } from "@/lib/ws";
-import { getRouletteState, placeRouletteBet } from "@/lib/api";
+import {
+  getRouletteHistory,
+  getRouletteState,
+  placeRouletteBet,
+  RouletteHistoryEntry,
+} from "@/lib/api";
+import { RouletteRoundState, isLandingPause } from "@/lib/roulette";
+import { cn } from "@/lib/utils";
 
-type RoundState = {
-  round_id: string;
-  round_number: number;
-  phase: string;
-  ends_at: string;
-  result?: string;
+const PHASE_LABEL: Record<string, string> = {
+  betting: "Приём ставок",
+  spinning: "Крутим колесо",
+  result: "Результат",
+  waiting: "Ожидание",
 };
 
-export default function RoulettePage() {
-  const [state, setState] = useState<RoundState | null>(null);
-  const [amount, setAmount] = useState("100000000");
-  const [betting, setBetting] = useState(false);
+function phaseLabel(state: RouletteRoundState | null): string {
+  if (!state?.phase) return "—";
+  if (isLandingPause(state)) return "Почти…";
+  return PHASE_LABEL[state.phase] ?? state.phase;
+}
 
-  useEffect(() => {
-    getRouletteState().then((s) => setState(s as RoundState)).catch(() => {});
-    const disconnect = connectGameWS("roulette", (msg) => {
-      if (msg.event === "tick") setState(msg.payload as RoundState);
-    });
-    return disconnect;
+export default function RoulettePage() {
+  const [state, setState] = useState<RouletteRoundState | null>(null);
+  const [history, setHistory] = useState<RouletteHistoryEntry[]>([]);
+  const [amountTon, setAmountTon] = useState("0.1");
+  const [betting, setBetting] = useState(false);
+  const [betMsg, setBetMsg] = useState<string | null>(null);
+  const lastPhase = useRef<string | null>(null);
+  const [, setLandingTick] = useState(0);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      setHistory(await getRouletteHistory());
+    } catch {
+      // ignore
+    }
   }, []);
 
+  useEffect(() => {
+    getRouletteState().then((s) => setState(s as RouletteRoundState)).catch(() => {});
+    loadHistory();
+    const disconnect = connectGameWS("roulette", (msg) => {
+      if (msg.event === "tick") setState(msg.payload as RouletteRoundState);
+    });
+    return disconnect;
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (state?.phase === "result" && lastPhase.current !== "result") {
+      loadHistory();
+    }
+    lastPhase.current = state?.phase ?? null;
+  }, [state?.phase, loadHistory]);
+
+  // Обновляем подпись «Почти…» после остановки колеса
+  useEffect(() => {
+    if (!state || state.phase !== "spinning") return;
+    const endRaw = state.spin_ends_at || state.ends_at;
+    if (!endRaw) return;
+    const endMs = new Date(endRaw).getTime();
+    const delay = Math.max(0, endMs - Date.now());
+    const id = window.setTimeout(() => setLandingTick((n) => n + 1), delay);
+    return () => window.clearTimeout(id);
+  }, [state?.phase, state?.spin_ends_at, state?.ends_at, state?.round_id]);
+
+  const canBet = state?.phase === "betting" && !betting;
+  const statusLabel = phaseLabel(state);
+
   async function bet(color: string) {
+    if (!canBet) return;
+    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+    if (nanotons <= 0) {
+      setBetMsg("Укажите сумму");
+      return;
+    }
     setBetting(true);
+    setBetMsg(null);
     try {
-      await placeRouletteBet(color, Number(amount), crypto.randomUUID());
+      await placeRouletteBet(color, nanotons, crypto.randomUUID());
+      setBetMsg("ok");
+    } catch (e) {
+      setBetMsg(e instanceof Error ? e.message : "Ошибка");
     } finally {
       setBetting(false);
     }
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold">Roulette</h1>
-      <WalletBar />
+    <PageShell flush>
+      <div className="space-y-5">
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="text-xl font-bold">Рулетка</h1>
+            <p className="text-sm text-muted">Раунд #{state?.round_number ?? "—"}</p>
+          </div>
+          <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+            {statusLabel}
+          </span>
+        </div>
 
-      <Card className="text-center">
-        <p className="text-xs text-zinc-400">Round #{state?.round_number ?? "—"}</p>
-        <p className="text-2xl font-bold capitalize">{state?.phase ?? "waiting"}</p>
-        {state?.result && <p className="text-lg text-accent">Result: {state.result}</p>}
-      </Card>
+        <RouletteHistory history={history} />
 
-      <input
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        placeholder="Amount (nanotons)"
-      />
+        <div className="flex justify-center py-1">
+          <RouletteWheel state={state} />
+        </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <Button className="bg-red-600 hover:bg-red-700" disabled={betting} onClick={() => bet("red")}>
-          Red 2x
-        </Button>
-        <Button className="bg-green-600 hover:bg-green-700" disabled={betting} onClick={() => bet("green")}>
-          Green 14x
-        </Button>
-        <Button className="bg-zinc-800 hover:bg-zinc-700" disabled={betting} onClick={() => bet("black")}>
-          Black 2x
-        </Button>
+        <div className="space-y-3">
+          <p className="section-label">Ставка</p>
+
+          <div className="flex items-center rounded-xl border border-border bg-surface-raised px-4 py-3">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              disabled={!canBet}
+              value={amountTon}
+              onChange={(e) => setAmountTon(e.target.value)}
+              className="w-full bg-transparent text-center text-base font-semibold tabular-nums text-foreground outline-none disabled:opacity-40"
+              placeholder="0.00"
+            />
+            <span className="shrink-0 text-sm font-medium text-muted">TON</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2.5">
+            <button
+              type="button"
+              disabled={!canBet}
+              onClick={() => bet("red")}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-xl py-3.5 text-white transition-all active:scale-[0.97]",
+                "bg-danger",
+                !canBet && "opacity-40",
+              )}
+            >
+              <span className="text-base font-bold">×2</span>
+              <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+                Красное
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={!canBet}
+              onClick={() => bet("green")}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-xl py-3.5 text-white transition-all active:scale-[0.97]",
+                "bg-success",
+                !canBet && "opacity-40",
+              )}
+            >
+              <span className="text-base font-bold">×14</span>
+              <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+                Зелёное
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={!canBet}
+              onClick={() => bet("black")}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-xl py-3.5 text-white transition-all active:scale-[0.97]",
+                "bg-[#3d4450]",
+                !canBet && "opacity-40",
+              )}
+            >
+              <span className="text-base font-bold">×2</span>
+              <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+                Чёрное
+              </span>
+            </button>
+          </div>
+
+          {betMsg && betMsg !== "ok" && (
+            <p className="text-center text-xs text-danger">{betMsg}</p>
+          )}
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

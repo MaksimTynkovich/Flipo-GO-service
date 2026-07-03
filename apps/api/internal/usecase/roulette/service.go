@@ -18,7 +18,10 @@ type RoundState struct {
 	RoundNumber    int64     `json:"round_number"`
 	Phase          string    `json:"phase"`
 	EndsAt         time.Time `json:"ends_at"`
+	SpinEndsAt     time.Time `json:"spin_ends_at,omitempty"`
 	ServerSeedHash string    `json:"server_seed_hash"`
+	ResultIndex    *int      `json:"result_index,omitempty"`
+	ResultNumber   *int      `json:"result_number,omitempty"`
 	Result         string    `json:"result,omitempty"`
 	ServerSeed     string    `json:"server_seed,omitempty"`
 }
@@ -88,8 +91,14 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, 
 }
 
 func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed string, nonce int64) error {
-	result := provablyfair.RouletteResult(serverSeed, nonce)
-	resultJSON, _ := json.Marshal(map[string]string{"color": result})
+	resultIndex := provablyfair.RouletteResultIndex(serverSeed, nonce)
+	resultNumber := provablyfair.RouletteWheelNumber(resultIndex)
+	result := provablyfair.RouletteNumberColor(resultNumber)
+	resultJSON, _ := json.Marshal(map[string]interface{}{
+		"color":  result,
+		"number": resultNumber,
+		"index":  resultIndex,
+	})
 
 	round, err := s.games.GetRoundByID(ctx, roundID)
 	if err != nil {
@@ -168,6 +177,38 @@ func (s *Service) CreateRound(ctx context.Context, serverSeed, serverSeedHash st
 
 func (s *Service) UpdatePhase(ctx context.Context, state *RoundState) error {
 	return s.PublishState(ctx, state)
+}
+
+type HistoryEntry struct {
+	RoundNumber int64  `json:"round_number"`
+	Number      int    `json:"number"`
+	Color       string `json:"color"`
+}
+
+func (s *Service) GetHistory(ctx context.Context, limit int) ([]HistoryEntry, error) {
+	rounds, err := s.games.ListRecentFinishedRounds(ctx, domain.GameRoulette, limit)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]HistoryEntry, 0, len(rounds))
+	for _, round := range rounds {
+		var payload struct {
+			Color  string `json:"color"`
+			Number int    `json:"number"`
+		}
+		if len(round.ResultPayload) > 0 {
+			_ = json.Unmarshal(round.ResultPayload, &payload)
+		}
+		if payload.Color == "" {
+			continue
+		}
+		entries = append(entries, HistoryEntry{
+			RoundNumber: round.RoundNumber,
+			Number:      payload.Number,
+			Color:       payload.Color,
+		})
+	}
+	return entries, nil
 }
 
 func ColorLabel(n int) string {
