@@ -13,15 +13,16 @@ import (
 )
 
 type Engine struct {
-	svc           *rouletteuc.Service
-	games         domain.GameRepository
-	bettingS      int
-	spinS         int
-	resultPauseS  int
+	svc              *rouletteuc.Service
+	games            domain.GameRepository
+	bettingS         int
+	spinS            int
+	resultPauseS     int
+	resultDisplayS   int
 }
 
-func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS, resultPauseS int) *Engine {
-	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS, resultPauseS: resultPauseS}
+func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS, resultPauseS, resultDisplayS int) *Engine {
+	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS, resultPauseS: resultPauseS, resultDisplayS: resultDisplayS}
 }
 
 func (e *Engine) Run(ctx context.Context) {
@@ -91,5 +92,5 @@ func (e *Engine) runRound(ctx context.Context) {
 		Result:         result,
 	}
 	_ = e.svc.UpdatePhase(ctx, resultState)
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Duration(e.resultDisplayS) * time.Second)
 }

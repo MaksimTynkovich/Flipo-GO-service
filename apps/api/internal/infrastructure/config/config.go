@@ -17,6 +17,7 @@ type Config struct {
 	RouletteBettingSeconds  int
 	RouletteSpinSeconds     int
 	RouletteResultPauseSeconds int
+	RouletteResultDisplaySeconds int
 	CrashTickMs             int
 	PlatformFeeBps          int
 	BoostWagerThreshold     int64
@@ -37,7 +38,8 @@ func Load() *Config {
 		JWTExpiry:              15 * time.Minute,
 		RouletteBettingSeconds:     getEnvInt("ROULETTE_BETTING_SECONDS", 20),
 		RouletteSpinSeconds:        getEnvInt("ROULETTE_SPIN_SECONDS", 12),
-		RouletteResultPauseSeconds: getEnvInt("ROULETTE_RESULT_PAUSE_SECONDS", 1),
+		RouletteResultPauseSeconds:   getEnvInt("ROULETTE_RESULT_PAUSE_SECONDS", 0),
+		RouletteResultDisplaySeconds: getEnvInt("ROULETTE_RESULT_DISPLAY_SECONDS", 1),
 		CrashTickMs:            getEnvInt("CRASH_TICK_MS", 100),
 		PlatformFeeBps:         getEnvInt("PLATFORM_FEE_BPS", 500),
 		BoostWagerThreshold:    int64(getEnvInt("BOOST_WAGER_THRESHOLD_NANOTON", 5_000_000_000)),

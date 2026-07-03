@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   alignRotationToIndex,
-  easeSpinFriction,
+  easeSpinRoulette,
   jitterForRound,
   numberColor,
   ROULETTE_SEGMENTS,
@@ -23,7 +23,8 @@ const COLORS = {
 
 const YELLOW = "#f1c40f";
 const WHEEL_SIZE = 340;
-const SETTLE_MS = 900;
+/** Короткий догон, только если опоздали с анимацией */
+const CATCHUP_MS = 250;
 
 function animateSpin(
   from: number,
@@ -38,7 +39,7 @@ function animateSpin(
 
   function tick(now: number) {
     const t = Math.min(1, (now - start) / durationMs);
-    onUpdate(from + totalDistance * easeSpinFriction(t));
+    onUpdate(from + totalDistance * easeSpinRoulette(t));
     if (t < 1) {
       frame = requestAnimationFrame(tick);
     } else {
@@ -88,7 +89,7 @@ type Props = {
 };
 
 export function RouletteWheel({ state }: Props) {
-  const [rotation, setRotation] = useState(0);
+  const wheelRef = useRef<HTMLDivElement>(null);
   const lastSpinRound = useRef<string | null>(null);
   const roundJitter = useRef(0);
   const rotationRef = useRef(0);
@@ -99,7 +100,10 @@ export function RouletteWheel({ state }: Props) {
 
   const applyRotation = useCallback((value: number) => {
     rotationRef.current = value;
-    setRotation(value);
+    const el = wheelRef.current;
+    if (el) {
+      el.style.transform = `rotate3d(0, 0, 1, ${value}deg)`;
+    }
   }, []);
 
   const runSpinAnimation = useCallback(
@@ -109,30 +113,20 @@ export function RouletteWheel({ state }: Props) {
         return;
       }
       cancelSpin.current?.();
-      cancelSpin.current = animateSpin(
-        from,
-        to,
-        Math.max(SETTLE_MS, durationMs),
-        applyRotation,
-      );
+      cancelSpin.current = animateSpin(from, to, Math.max(50, durationMs), applyRotation);
     },
     [applyRotation],
   );
 
   const snapToIndex = useCallback(
-    (index: number, roundId: string, smooth = false) => {
+    (index: number, roundId: string) => {
       const jitter = jitterForRound(roundId);
       roundJitter.current = jitter;
       const aligned = alignRotationToIndex(rotationRef.current, index, jitter);
-      const diff = Math.abs(aligned - rotationRef.current);
-      if (diff < 0.05) return;
-      if (smooth && diff < 30) {
-        runSpinAnimation(rotationRef.current, aligned, SETTLE_MS);
-      } else {
-        applyRotation(aligned);
-      }
+      if (Math.abs(aligned - rotationRef.current) < 0.05) return;
+      applyRotation(aligned);
     },
-    [applyRotation, runSpinAnimation],
+    [applyRotation],
   );
 
   useEffect(() => {
@@ -154,7 +148,8 @@ export function RouletteWheel({ state }: Props) {
     if (wheelIndex === undefined) return;
 
     if (state.phase === "result") {
-      snapToIndex(wheelIndex, state.round_id, true);
+      cancelSpin.current?.();
+      snapToIndex(wheelIndex, state.round_id);
       return;
     }
 
@@ -183,11 +178,16 @@ export function RouletteWheel({ state }: Props) {
     const progress = spinProgress(state);
     const from =
       progress > 0 && progress < 1
-        ? fromMod + (target - fromMod) * easeSpinFriction(progress)
+        ? fromMod + (target - fromMod) * easeSpinRoulette(progress)
         : fromMod;
 
     if (remaining <= 0 || progress >= 1) {
-      runSpinAnimation(from, target, SETTLE_MS);
+      const diff = Math.abs(target - from);
+      if (diff < 0.05) {
+        applyRotation(target);
+      } else {
+        runSpinAnimation(from, target, CATCHUP_MS);
+      }
       return;
     }
 
@@ -218,9 +218,10 @@ export function RouletteWheel({ state }: Props) {
 
       <div className="relative h-full w-full rounded-full border-[3px] border-[#1a1f26]">
         <div
+          ref={wheelRef}
           className="relative h-full w-full overflow-hidden rounded-full will-change-transform"
           style={{
-            transform: `rotate(${rotation}deg) translateZ(0)`,
+            transform: "rotate3d(0, 0, 1, 0deg)",
             backfaceVisibility: "hidden",
           }}
         >

@@ -99,7 +99,7 @@ func main() {
 		bridge.Start(ctx)
 	}
 
-	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds).Run(ctx)
+	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds, cfg.RouletteResultDisplaySeconds).Run(ctx)
 	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, 5).Run(ctx)
 
 	stakeWorker := stakingworker.NewWorker(stakeSvc)

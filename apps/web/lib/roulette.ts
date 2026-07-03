@@ -5,8 +5,8 @@ export const WHEEL_ORDER = [0, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14] as
 export const ROULETTE_SEGMENTS = WHEEL_ORDER.length;
 export const SEGMENT_ANGLE = 360 / ROULETTE_SEGMENTS;
 export const SPIN_DURATION_MS = 12_000;
-/** Пауза после остановки колеса до объявления результата (синхрон с бэкендом) */
-export const RESULT_PAUSE_MS = 1_000;
+/** Пауза после остановки колеса до объявления результата (0 = сразу) */
+export const RESULT_PAUSE_MS = 0;
 /** Доля половины сектора — случайное смещение остановки внутри ячейки */
 export const SEGMENT_JITTER_RATIO = 0.38;
 
@@ -96,15 +96,56 @@ export function isLandingPause(state: RouletteRoundState): boolean {
   return Date.now() >= endMs;
 }
 
-/**
- * Плавное замедление: скорость стремится к 0 в конце (ease-out, степень 7).
- * В отличие от экспоненты, нет резкого обрыва на последнем кадре.
- */
-export function easeSpinFriction(t: number): number {
-  if (t >= 1) return 1;
-  if (t <= 0) return 0;
+/** Cubic-bezier как в CSS: быстрый старт, длинный плавный финиш без скачка скорости */
+const SPIN_BEZIER = { x1: 0.05, y1: 0.48, x2: 0.16, y2: 1 };
+
+function bezierSample(t: number, p0: number, p1: number, p2: number, p3: number): number {
   const u = 1 - t;
-  return 1 - u * u * u * u * u * u * u;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+}
+
+function bezierX(s: number): number {
+  return bezierSample(s, 0, SPIN_BEZIER.x1, SPIN_BEZIER.x2, 1);
+}
+
+function bezierY(s: number): number {
+  return bezierSample(s, 0, SPIN_BEZIER.y1, SPIN_BEZIER.y2, 1);
+}
+
+function bezierDx(s: number): number {
+  const u = 1 - s;
+  return (
+    3 * u * u * SPIN_BEZIER.x1 +
+    6 * u * s * (SPIN_BEZIER.x2 - SPIN_BEZIER.x1) +
+    3 * s * s * (1 - SPIN_BEZIER.x2)
+  );
+}
+
+/**
+ * Гладкий спин на всё ROULETTE_SPIN_SECONDS — одна непрерывная кривая,
+ * без рывка на стыке «быстрой» и «медленной» фазы.
+ */
+export function easeSpinRoulette(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+
+  let s = t;
+  for (let i = 0; i < 10; i++) {
+    const x = bezierX(s) - t;
+    const dx = bezierDx(s);
+    if (Math.abs(dx) < 1e-7) break;
+    s -= x / dx;
+    if (s <= 0) {
+      s = 0;
+      break;
+    }
+    if (s >= 1) {
+      s = 1;
+      break;
+    }
+  }
+
+  return bezierY(s);
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result" | "waiting";
