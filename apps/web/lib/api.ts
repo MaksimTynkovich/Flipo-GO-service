@@ -108,6 +108,26 @@ export async function getCrashState() {
   return api("/api/v1/games/crash/current");
 }
 
+export type CrashHistoryEntry = {
+  round_number: number;
+  crash_point: number;
+};
+
+export async function getCrashHistory() {
+  return api<CrashHistoryEntry[]>("/api/v1/games/crash/history");
+}
+
+export type CrashActiveBet = {
+  id: string;
+  round_id: string;
+  amount_nanoton: number;
+  status: string;
+};
+
+export async function getCrashActiveBet() {
+  return api<CrashActiveBet | null>("/api/v1/games/crash/bet/active");
+}
+
 export async function cashoutCrash(betId: string, multiplier: number) {
   return api(`/api/v1/games/crash/bet/${betId}/cashout`, {
     method: "POST",
@@ -115,8 +135,52 @@ export async function cashoutCrash(betId: string, multiplier: number) {
   });
 }
 
+export type ProfileGift = {
+  slug: string;
+  name: string;
+  collection_slug: string;
+  image_url?: string;
+  price_nanoton: number;
+  daily_yield_nanoton: number;
+  monthly_yield_nanoton: number;
+  earned_nanoton: number;
+  is_staked: boolean;
+  item_id?: string;
+};
+
+export type StakingStats = {
+  staked_count: number;
+  total_count: number;
+  earned_nanoton: number;
+  active_daily_yield_nanoton: number;
+  active_monthly_yield_nanoton: number;
+  unlockable_monthly_nanoton: number;
+  boost_wager_nanoton: number;
+  boost_threshold_nanoton: number;
+  monthly_rate_percent: number;
+};
+
+export type ProfileGiftsResponse = {
+  gifts: ProfileGift[];
+  total_daily_yield_nanoton: number;
+  total_monthly_yield_nanoton: number;
+  monthly_rate_percent: number;
+  stats: StakingStats;
+};
+
+export async function getProfileGifts() {
+  return api<ProfileGiftsResponse>("/api/v1/staking/gifts");
+}
+
 export async function getStakingPositions() {
   return api("/api/v1/staking/positions");
+}
+
+export async function stakeGift(slug: string) {
+  return api("/api/v1/staking/stake", {
+    method: "POST",
+    body: JSON.stringify({ slug }),
+  });
 }
 
 export async function stakeItem(itemId: string) {

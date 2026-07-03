@@ -19,6 +19,7 @@ type Config struct {
 	RouletteResultPauseSeconds int
 	RouletteResultDisplaySeconds int
 	CrashTickMs             int
+	CrashBettingSeconds     int
 	PlatformFeeBps          int
 	BoostWagerThreshold     int64
 	DebugAuthEnabled        bool
@@ -41,6 +42,7 @@ func Load() *Config {
 		RouletteResultPauseSeconds:   getEnvInt("ROULETTE_RESULT_PAUSE_SECONDS", 0),
 		RouletteResultDisplaySeconds: getEnvInt("ROULETTE_RESULT_DISPLAY_SECONDS", 1),
 		CrashTickMs:            getEnvInt("CRASH_TICK_MS", 100),
+		CrashBettingSeconds:    getEnvInt("CRASH_BETTING_SECONDS", 8),
 		PlatformFeeBps:         getEnvInt("PLATFORM_FEE_BPS", 500),
 		BoostWagerThreshold:    int64(getEnvInt("BOOST_WAGER_THRESHOLD_NANOTON", 5_000_000_000)),
 		DebugAuthEnabled:       getEnvBool("DEBUG_AUTH_ENABLED", false),

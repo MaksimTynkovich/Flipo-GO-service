@@ -71,9 +71,10 @@ func main() {
 	)
 	balanceSvc := balance.NewService(userRepo)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
+	giftScanner := telegram.NewProfileGiftScanner(cfg.DebugAuthEnabled)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, cfg.BoostWagerThreshold)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, cfg.BoostWagerThreshold)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error
@@ -89,18 +90,20 @@ func main() {
 		cacheIface = &noopCache{}
 	}
 
+	hub := websocket.NewHub()
+
 	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
 	crashSvc := crash.NewService(gameRepo, balanceSvc, cacheIface, cfg.CrashTickMs)
+	crashSvc.SetTickNotifier(hub)
 	pvpSvc := pvp.NewService(pvpRepo, balanceSvc, cfg.PlatformFeeBps)
 
-	hub := websocket.NewHub()
 	if cache != nil {
 		bridge := websocket.NewRedisBridge(cache, hub)
 		bridge.Start(ctx)
 	}
 
 	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds, cfg.RouletteResultDisplaySeconds).Run(ctx)
-	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, 5).Run(ctx)
+	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, cfg.CrashBettingSeconds).Run(ctx)
 
 	stakeWorker := stakingworker.NewWorker(stakeSvc)
 	stakeWorker.Start(ctx)
@@ -111,6 +114,7 @@ func main() {
 		Auth:             authSvc,
 		AuthHandler:      handlers.NewAuthHandler(authSvc),
 		InventoryHandler: handlers.NewInventoryHandler(invSvc, stakeSvc),
+		StakingHandler:   handlers.NewStakingHandler(stakeSvc),
 		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc),
 		Hub:              hub,
 	})

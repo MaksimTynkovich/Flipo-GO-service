@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/google/uuid"
 )
 
@@ -18,11 +19,24 @@ type Service struct {
 	staking   domain.StakingRepository
 	inventory domain.InventoryRepository
 	users     domain.UserRepository
+	scanner   telegram.ProfileGiftScanner
 	threshold int64
 }
 
-func NewService(staking domain.StakingRepository, inventory domain.InventoryRepository, users domain.UserRepository, threshold int64) *Service {
-	return &Service{staking: staking, inventory: inventory, users: users, threshold: threshold}
+func NewService(
+	staking domain.StakingRepository,
+	inventory domain.InventoryRepository,
+	users domain.UserRepository,
+	scanner telegram.ProfileGiftScanner,
+	threshold int64,
+) *Service {
+	return &Service{
+		staking:   staking,
+		inventory: inventory,
+		users:     users,
+		scanner:   scanner,
+		threshold: threshold,
+	}
 }
 
 func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.StakingPosition, error) {

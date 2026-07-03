@@ -127,6 +127,17 @@ func (r *InventoryRepo) FindByID(ctx context.Context, id uuid.UUID) (*domain.Inv
 	return &item, nil
 }
 
+func (r *InventoryRepo) FindByTelegramGiftID(ctx context.Context, userID uuid.UUID, giftID string) (*domain.InventoryItem, error) {
+	var item domain.InventoryItem
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND telegram_gift_id = ?", userID, giftID).
+		First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *InventoryRepo) Create(ctx context.Context, item *domain.InventoryItem) error {
 	return r.db.WithContext(ctx).Create(item).Error
 }
