@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { PageShell } from "@/components/PageShell";
 import { formatTON } from "@/lib/api";
-import { ArrowRight, CircleDot, Gift, Layers, TrendingUp, Users, Zap } from "lucide-react";
+import { ArrowRight, CircleDot, Gift, Layers, ShoppingBag, TrendingUp, Users, Zap } from "lucide-react";
 
 const games = [
   {
@@ -35,9 +35,15 @@ const games = [
 
 const shortcuts = [
   {
+    href: "/market",
+    title: "Маркет",
+    desc: "Покупай и продавай Telegram Gifts",
+    icon: ShoppingBag,
+  },
+  {
     href: "/profile/inventory",
     title: "Инвентарь",
-    desc: "Депозит и продажа Telegram Gifts",
+    desc: "Депозит и продажа подарков",
     icon: Gift,
   },
   {

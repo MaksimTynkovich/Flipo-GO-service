@@ -5,9 +5,17 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { LanguageSelector } from "@/components/profile/LanguageSelector";
 import { PageShell } from "@/components/PageShell";
 import { formatTON } from "@/lib/api";
-import { ArrowRight, Gift, Layers, User, Users } from "lucide-react";
+import { ArrowRight, Gift, Layers, ShoppingBag, Users } from "lucide-react";
+import { UserAvatar } from "@/components/UserAvatar";
 
 const sections = [
+  {
+    href: "/market",
+    title: "Маркет",
+    desc: "Покупай и продавай Telegram Gifts",
+    icon: ShoppingBag,
+    color: "bg-accent/15 text-accent",
+  },
   {
     href: "/profile/inventory",
     title: "Инвентарь",
@@ -37,9 +45,7 @@ export default function ProfilePage() {
   return (
     <PageShell title="Профиль" description="Настройки аккаунта и управление активами">
       <div className="panel flex items-center gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface-raised">
-          <User className="h-7 w-7 text-muted" />
-        </div>
+        <UserAvatar user={user} size={56} className="rounded-2xl" />
         <div className="min-w-0">
           <p className="truncate text-lg font-bold">
             {loading ? "…" : user?.first_name || "Игрок"}

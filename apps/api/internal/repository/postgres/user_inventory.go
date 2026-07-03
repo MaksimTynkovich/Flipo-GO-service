@@ -155,6 +155,24 @@ func (r *InventoryRepo) UpdateStatus(ctx context.Context, id uuid.UUID, from, to
 	return nil
 }
 
+func (r *InventoryRepo) TransferOwnership(ctx context.Context, itemID, newUserID uuid.UUID, fromStatus domain.InventoryStatus) error {
+	now := time.Now().UTC()
+	res := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("id = ? AND status = ?", itemID, fromStatus).
+		Updates(map[string]interface{}{
+			"user_id":    newUserID,
+			"status":     domain.InvAvailable,
+			"updated_at": now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("inventory item not in expected status")
+	}
+	return nil
+}
+
 func (r *InventoryRepo) GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error) {
 	var fp domain.NFTFloorPrice
 	err := r.db.WithContext(ctx).First(&fp, "collection_slug = ?", collectionSlug).Error

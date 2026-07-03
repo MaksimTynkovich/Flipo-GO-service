@@ -7,6 +7,7 @@ export type User = {
   telegram_id: number;
   username: string;
   first_name: string;
+  photo_url?: string;
   betting_balance: number;
   staking_tier: "base" | "boost";
   ton_wallet?: string;
@@ -59,6 +60,13 @@ export async function authDebug() {
 
 export async function getMe() {
   return api<User>("/api/v1/me");
+}
+
+export async function updateWallet(wallet: string) {
+  return api<{ wallet: string }>("/api/v1/me/wallet", {
+    method: "PATCH",
+    body: JSON.stringify({ wallet }),
+  });
 }
 
 export async function getInventory() {
@@ -192,4 +200,52 @@ export async function stakeItem(itemId: string) {
 
 export function formatTON(nanotons: number): string {
   return (nanotons / 1_000_000_000).toFixed(4);
+}
+
+export type MarketListing = {
+  id: string;
+  price_nanoton: number;
+  source: "bot" | "user";
+  status: string;
+  created_at: string;
+  seller: {
+    id: string;
+    username: string;
+  };
+  item: {
+    id: string;
+    name: string;
+    sub_name: string;
+    condition?: string;
+    image_url: string;
+    collection_slug: string;
+    floor_price_nanoton: number;
+  };
+};
+
+export async function getMarketListings() {
+  return api<MarketListing[]>("/api/v1/market/listings");
+}
+
+export async function getMarketListing(id: string) {
+  return api<MarketListing>(`/api/v1/market/listings/${id}`);
+}
+
+export async function getMyMarketListings() {
+  return api<MarketListing[]>("/api/v1/market/listings/mine");
+}
+
+export async function createMarketListing(itemId: string, priceNanoton: number) {
+  return api<MarketListing>("/api/v1/market/listings", {
+    method: "POST",
+    body: JSON.stringify({ item_id: itemId, price_nanoton: priceNanoton }),
+  });
+}
+
+export async function cancelMarketListing(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/market/listings/${id}`, { method: "DELETE" });
+}
+
+export async function buyMarketListing(id: string) {
+  return api<{ balance: number }>(`/api/v1/market/listings/${id}/buy`, { method: "POST" });
 }

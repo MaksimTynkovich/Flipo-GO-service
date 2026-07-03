@@ -91,6 +91,8 @@ const (
 	LedgerStakeYield LedgerType = "stake_yield"
 	LedgerWithdraw   LedgerType = "withdraw"
 	LedgerRefund     LedgerType = "refund"
+	LedgerMarketBuy  LedgerType = "market_buy"
+	LedgerMarketSell LedgerType = "market_sell"
 )
 
 type BalanceLedger struct {
