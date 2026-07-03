@@ -23,6 +23,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
+	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
@@ -62,6 +63,7 @@ func main() {
 
 	userRepo := postgres.NewUserRepo(db)
 	invRepo := postgres.NewInventoryRepo(db)
+	marketRepo := postgres.NewMarketRepo(db)
 	stakeRepo := postgres.NewStakingRepo(db)
 	gameRepo := postgres.NewGameRepo(db)
 	pvpRepo := postgres.NewPvPRepo(db)
@@ -74,6 +76,7 @@ func main() {
 	giftScanner := telegram.NewProfileGiftScanner(cfg.DebugAuthEnabled)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc)
+	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, cfg.BoostWagerThreshold)
 
 	var cacheIface interface {
@@ -116,6 +119,7 @@ func main() {
 		InventoryHandler: handlers.NewInventoryHandler(invSvc, stakeSvc),
 		StakingHandler:   handlers.NewStakingHandler(stakeSvc),
 		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc),
+		MarketHandler:    handlers.NewMarketHandler(marketSvc),
 		Hub:              hub,
 	})
 

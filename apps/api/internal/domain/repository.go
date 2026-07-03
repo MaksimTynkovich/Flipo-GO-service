@@ -23,8 +23,21 @@ type InventoryRepository interface {
 	FindByTelegramGiftID(ctx context.Context, userID uuid.UUID, giftID string) (*InventoryItem, error)
 	Create(ctx context.Context, item *InventoryItem) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, from, to InventoryStatus) error
+	TransferOwnership(ctx context.Context, itemID, newUserID uuid.UUID, fromStatus InventoryStatus) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
 	SetFloorPrice(ctx context.Context, slug string, price int64) error
+}
+
+type MarketRepository interface {
+	ListActive(ctx context.Context, limit, offset int) ([]MarketListing, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*MarketListing, error)
+	ListBySeller(ctx context.Context, sellerID uuid.UUID) ([]MarketListing, error)
+	FindActiveByItemID(ctx context.Context, itemID uuid.UUID) (*MarketListing, error)
+	CreateListing(ctx context.Context, listing *MarketListing) error
+	CancelListing(ctx context.Context, id, sellerID uuid.UUID) error
+	Purchase(ctx context.Context, listingID, buyerID uuid.UUID, price, sellerProceeds int64, fee int) (*MarketListing, error)
+	EnsureBotUser(ctx context.Context) (*User, error)
+	CountActive(ctx context.Context) (int64, error)
 }
 
 type StakingRepository interface {

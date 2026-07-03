@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Gamepad2, Home, User } from "lucide-react";
+import { Gamepad2, Home, ShoppingBag, User } from "lucide-react";
 
 const links = [
   { href: "/", label: "Главная", icon: Home, match: (p: string) => p === "/" },
+  {
+    href: "/market",
+    label: "Маркет",
+    icon: ShoppingBag,
+    match: (p: string) => p.startsWith("/market"),
+  },
   {
     href: "/games",
     label: "Игры",

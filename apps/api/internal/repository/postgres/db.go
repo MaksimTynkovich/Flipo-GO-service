@@ -34,6 +34,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.PvPRoom{},
 		&domain.PvPRoomPlayer{},
 		&domain.BalanceLedger{},
+		&domain.MarketListing{},
 	)
 }
 
@@ -43,6 +44,9 @@ func MigrateOnly(ctx context.Context, dsn string) error {
 		return err
 	}
 	if err := AutoMigrate(db); err != nil {
+		return err
+	}
+	if err := SeedMarketMockData(ctx, db); err != nil {
 		return err
 	}
 	slog.InfoContext(ctx, "database migration completed")

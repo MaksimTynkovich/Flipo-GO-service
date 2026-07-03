@@ -18,6 +18,7 @@ type Deps struct {
 	InventoryHandler *handlers.InventoryHandler
 	StakingHandler   *handlers.StakingHandler
 	GameHandler      *handlers.GameHandler
+	MarketHandler    *handlers.MarketHandler
 	Hub              *websocket.Hub
 }
 
@@ -47,6 +48,9 @@ func NewRouter(deps Deps) *gin.Engine {
 		v1.POST("/auth/telegram", deps.AuthHandler.TelegramAuth)
 		v1.POST("/auth/debug", deps.AuthHandler.DebugAuth)
 
+		v1.GET("/market/listings", deps.MarketHandler.List)
+		v1.GET("/market/listings/:id", deps.MarketHandler.Get)
+
 		authed := v1.Group("")
 		authed.Use(middleware.JWTAuth(deps.Auth))
 		{
@@ -57,6 +61,11 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/inventory/deposit", deps.InventoryHandler.Deposit)
 			authed.POST("/inventory/:id/liquidate", deps.InventoryHandler.Liquidate)
 			authed.POST("/admin/floor-price", deps.InventoryHandler.SetFloorPrice)
+
+			authed.GET("/market/listings/mine", deps.MarketHandler.ListMine)
+			authed.POST("/market/listings", deps.MarketHandler.Create)
+			authed.DELETE("/market/listings/:id", deps.MarketHandler.Cancel)
+			authed.POST("/market/listings/:id/buy", deps.MarketHandler.Buy)
 
 			authed.GET("/staking/gifts", deps.StakingHandler.ListProfileGifts)
 			authed.GET("/staking/positions", deps.StakingHandler.ListPositions)
