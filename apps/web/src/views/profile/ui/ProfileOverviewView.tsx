@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Gift, Sparkles } from "lucide-react";
+import { ChevronRight, Gift, Sparkles, Users } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -72,6 +72,24 @@ export function ProfileOverviewView() {
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold">Инвентарь</p>
               <p className="mt-0.5 text-xs text-muted">Твои подарки — продажа и выставление на маркет</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1 text-accent">
+              <span className="text-xs font-semibold">Открыть</span>
+              <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+            </div>
+          </Link>
+
+          <Link
+            href={APP_ROUTES.profileReferrals}
+            onClick={() => haptics.impactOccurred("medium")}
+            className="panel flex items-center gap-3.5 transition-transform active:scale-[0.99]"
+          >
+            <div className="icon-box h-11 w-11">
+              <Users className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-semibold">Рефералы</p>
+              <p className="mt-0.5 text-xs text-muted">Приглашай друзей и получай бонусы</p>
             </div>
             <div className="flex shrink-0 items-center gap-1 text-accent">
               <span className="text-xs font-semibold">Открыть</span>
