@@ -12,7 +12,6 @@ export const APP_ROUTES = {
   deposit: "/deposit",
   profile: "/profile",
   profileStaking: "/profile/staking",
-  profileSettings: "/profile/settings",
   profileReferrals: "/profile/referrals",
 } as const;
 
@@ -45,11 +44,6 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
     backHref: APP_ROUTES.profile,
     backLabel: "Профиль",
   },
-  [APP_ROUTES.profileSettings]: {
-    title: "Настройки",
-    backHref: APP_ROUTES.profile,
-    backLabel: "Профиль",
-  },
   [APP_ROUTES.profileReferrals]: {
     title: "Рефералы",
     backHref: APP_ROUTES.profile,
@@ -79,8 +73,7 @@ export type AppScreenItem = {
     | "inventory"
     | "profile"
     | "deposit"
-    | "profile-staking"
-    | "profile-settings";
+    | "profile-staking";
   href: string;
   label: string;
   level: "tab" | "stack";
@@ -129,13 +122,6 @@ export const APP_SCREENS: AppScreenItem[] = [
     label: "Стейкинг",
     level: "stack",
     description: "Пассивный доход и управление staking-портфелем.",
-  },
-  {
-    id: "profile-settings",
-    href: APP_ROUTES.profileSettings,
-    label: "Настройки",
-    level: "stack",
-    description: "Параметры интерфейса и системные настройки профиля.",
   },
 ];
 

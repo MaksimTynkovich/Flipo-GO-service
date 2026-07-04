@@ -19,23 +19,20 @@ function ProgressBar({ value, className }: { value: number; className?: string }
 
 type Props = {
   stats: StakingStats;
-  isBoost: boolean;
 };
 
-export function StakingDashboard({ stats, isBoost }: Props) {
+export function StakingDashboard({ stats }: Props) {
   const liveEarned = useLiveEarned(stats.earned_nanoton, stats.active_daily_yield_nanoton);
 
   const portfolioPct = stats.total_count > 0 ? stats.staked_count / stats.total_count : 0;
-  const boostPct =
-    stats.boost_threshold_nanoton > 0
-      ? stats.boost_wager_nanoton / stats.boost_threshold_nanoton
-      : 0;
   const unstakedCount = stats.total_count - stats.staked_count;
 
   return (
     <div className="space-y-3">
       <div className="panel space-y-3">
-        <p className="section-label">Заработано</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="section-label">Заработано</p>
+        </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <p className="text-3xl font-bold tabular-nums tracking-tight">
             {formatTON(liveEarned)}
@@ -76,18 +73,6 @@ export function StakingDashboard({ stats, isBoost }: Props) {
         )}
       </div>
 
-      {!isBoost && stats.boost_threshold_nanoton > 0 && (
-        <div className="panel-sm space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-medium text-foreground">Буст до 5%</span>
-            <span className="tabular-nums text-muted">
-              {formatTON(stats.boost_wager_nanoton)} / {formatTON(stats.boost_threshold_nanoton)} TON
-            </span>
-          </div>
-          <ProgressBar value={boostPct} />
-          <p className="mt-2 text-[11px] text-muted">5 TON в рулетке за 7 дней → ставка 5%/мес</p>
-        </div>
-      )}
     </div>
   );
 }

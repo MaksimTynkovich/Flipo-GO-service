@@ -3,7 +3,7 @@ import { StakingSection } from "@/components/profile/StakingSection";
 
 export function ProfileStakingView() {
   return (
-    <PageShell description="Пассивный доход с подарков — управляй портфелем и доходностью.">
+    <PageShell description="Застейкай подарки и получай 3% в месяц. С активной игрой в рулетку — до 5%.">
       <StakingSection />
     </PageShell>
   );

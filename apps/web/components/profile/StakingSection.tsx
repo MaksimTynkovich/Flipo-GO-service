@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { GiftTile, GiftTileSkeleton } from "@/components/profile/GiftTile";
 import { StakingDashboard } from "@/components/profile/StakingDashboard";
+import { StakingTierOverview } from "@/components/profile/StakingTierOverview";
 import { Button } from "@/components/ui/button";
 import { formatTON, getProfileGifts, ProfileGift, StakingStats, stakeGift } from "@/lib/api";
 import { X } from "lucide-react";
@@ -103,9 +104,15 @@ export function StakingSection() {
   return (
     <div className="space-y-5">
       {loading ? (
+        <div className="h-28 animate-pulse rounded-2xl bg-surface-raised" />
+      ) : (
+        <StakingTierOverview isBoost={isBoost} stats={stats} />
+      )}
+
+      {loading ? (
         <div className="h-36 animate-pulse rounded-2xl bg-surface-raised" />
       ) : gifts.length > 0 ? (
-        <StakingDashboard stats={stats} isBoost={isBoost} />
+        <StakingDashboard stats={stats} />
       ) : null}
 
       {loading ? (
