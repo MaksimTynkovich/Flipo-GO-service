@@ -3,12 +3,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { GiftTile, GiftTileSkeleton } from "@/components/profile/GiftTile";
-import { StakingDashboard } from "@/components/profile/StakingDashboard";
-import { StakingTierOverview } from "@/components/profile/StakingTierOverview";
+import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
+import { StakingOverview } from "@/components/profile/StakingOverview";
 import { Button } from "@/components/ui/button";
-import { formatTON, getProfileGifts, ProfileGift, StakingStats, stakeGift } from "@/lib/api";
+import {
+  formatTON,
+  getProfileGifts,
+  getStakingPositions,
+  ProfileGift,
+  StakingStats,
+  stakeGift,
+  unstakeGift,
+} from "@/lib/api";
 import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
-import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Gift } from "lucide-react";
+import Link from "next/link";
+import { APP_ROUTES } from "@/src/shared/config/navigation";
 
 const emptyStats: StakingStats = {
   staked_count: 0,
@@ -22,22 +33,34 @@ const emptyStats: StakingStats = {
   monthly_rate_percent: 3,
 };
 
+type Tab = "staked" | "add";
+
 export function StakingSection() {
   const { user } = useAuth();
   const [gifts, setGifts] = useState<ProfileGift[]>([]);
   const [stats, setStats] = useState<StakingStats>(emptyStats);
+  const [positionByItem, setPositionByItem] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [staking, setStaking] = useState(false);
+  const [unstaking, setUnstaking] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [inspected, setInspected] = useState<ProfileGift | null>(null);
+  const [tab, setTab] = useState<Tab>("staked");
 
   async function load() {
     setLoading(true);
     try {
-      const data = await getProfileGifts();
+      const [data, positions] = await Promise.all([getProfileGifts(), getStakingPositions()]);
       setGifts(data.gifts);
       setStats(data.stats);
+      setPositionByItem(new Map(positions.map((p) => [p.inventory_item_id, p.id])));
       setSelected(new Set(data.gifts.filter((g) => !g.is_staked).map((g) => g.slug)));
+
+      if (data.stats.staked_count === 0 && data.gifts.some((g) => !g.is_staked)) {
+        setTab("add");
+      } else {
+        setTab("staked");
+      }
     } finally {
       setLoading(false);
     }
@@ -76,6 +99,10 @@ export function StakingSection() {
     setSelected(new Set(unstakedGifts.map((g) => g.slug)));
   }
 
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
   async function handleStake() {
     if (selectedGifts.length === 0) return;
     setStaking(true);
@@ -84,90 +111,173 @@ export function StakingSection() {
         await stakeGift(gift.slug);
       }
       await load();
+      setTab("staked");
     } finally {
       setStaking(false);
     }
   }
 
+  async function handleUnstake(gift: ProfileGift) {
+    const positionId = gift.item_id ? positionByItem.get(gift.item_id) : undefined;
+    if (!positionId) return;
+    setUnstaking(true);
+    try {
+      await unstakeGift(positionId);
+      setInspected(null);
+      await load();
+      if (stakedGifts.length <= 1) setTab("add");
+    } finally {
+      setUnstaking(false);
+    }
+  }
+
   const isBoost = user?.staking_tier === "boost";
-  const allStaked = unstakedGifts.length === 0 && gifts.length > 0;
   const allUnstakedSelected =
     selectedGifts.length === unstakedGifts.length && unstakedGifts.length > 0;
 
   const stakeLabel = staking
     ? "Стейкаем…"
-    : allStaked
-      ? "Портфель полный"
-      : allUnstakedSelected
-        ? "Застейкать всё"
-        : `Застейкать · ${selectedGifts.length}`;
+    : allUnstakedSelected
+      ? "Застейкать всё"
+      : selectedGifts.length > 0
+        ? `Застейкать · ${selectedGifts.length}`
+        : "Выберите подарки";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 pb-28">
       {loading ? (
-        <div className="h-28 animate-pulse rounded-2xl bg-surface-raised" />
-      ) : (
-        <StakingTierOverview isBoost={isBoost} stats={stats} />
-      )}
-
-      {loading ? (
-        <div className="h-36 animate-pulse rounded-2xl bg-surface-raised" />
+        <div className="h-52 animate-pulse rounded-2xl bg-surface-raised" />
       ) : gifts.length > 0 ? (
-        <StakingDashboard stats={stats} />
+        <StakingOverview isBoost={isBoost} stats={stats} />
       ) : null}
 
       {loading ? (
         <div className="grid grid-cols-3 gap-2">
-          {Array.from({ length: 3 }).map((_, i) => (
+          {Array.from({ length: 6 }).map((_, i) => (
             <GiftTileSkeleton key={i} />
           ))}
         </div>
       ) : gifts.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted">Подарков в профиле нет</p>
+        <div className="panel flex flex-col items-center gap-3 py-12 text-center">
+          <div className="icon-box h-14 w-14">
+            <Gift className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold">Подарков пока нет</p>
+            <p className="text-sm text-muted">Передай collectible gift боту — он появится здесь</p>
+          </div>
+          <Link href={APP_ROUTES.deposit}>
+            <Button variant="accent" className="rounded-xl px-6">
+              Как пополнить
+            </Button>
+          </Link>
+        </div>
       ) : (
-        <div className="space-y-4">
-          {stakedGifts.length > 0 && (
-            <section className="space-y-2">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
-                В стейке · {stakedGifts.length}
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {stakedGifts.map((gift) => (
-                  <GiftTile key={gift.slug} gift={gift} onInspect={setInspected} />
-                ))}
-              </div>
+        <>
+          <div className="segment-control">
+            <button
+              type="button"
+              onClick={() => setTab("staked")}
+              className={cn("segment-item", tab === "staked" && "segment-item-active")}
+            >
+              В стейке
+              {stakedGifts.length > 0 && (
+                <span className="tabular-nums text-[10px] opacity-70">{stakedGifts.length}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("add")}
+              className={cn("segment-item", tab === "add" && "segment-item-active")}
+            >
+              Добавить
+              {unstakedGifts.length > 0 && (
+                <span className="tabular-nums text-[10px] opacity-70">{unstakedGifts.length}</span>
+              )}
+            </button>
+          </div>
+
+          {tab === "staked" && (
+            <section className="space-y-3">
+              {stakedGifts.length === 0 ? (
+                <div className="panel py-10 text-center">
+                  <p className="font-medium">Стейкинг пуст</p>
+                  <p className="mt-1 text-sm text-muted">
+                    Добавь подарки — они начнут приносить доход каждый день
+                  </p>
+                  {unstakedGifts.length > 0 && (
+                    <Button
+                      variant="accent"
+                      className="mt-4 rounded-xl px-6"
+                      onClick={() => setTab("add")}
+                    >
+                      Добавить подарки
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {stakedGifts.map((gift) => (
+                    <GiftTile key={gift.slug} gift={gift} onInspect={setInspected} />
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
-          {unstakedGifts.length > 0 && (
-            <section className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
-                  Добавить · {unstakedGifts.length}
-                </p>
-                {unstakedGifts.length > 1 && selectedGifts.length < unstakedGifts.length && (
-                  <button type="button" onClick={selectAll} className="text-xs font-medium text-accent">
-                    Выбрать все
-                  </button>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {unstakedGifts.map((gift) => (
-                  <GiftTile
-                    key={gift.slug}
-                    gift={gift}
-                    selected={selected.has(gift.slug)}
-                    onToggle={toggleGift}
-                  />
-                ))}
-              </div>
+          {tab === "add" && (
+            <section className="space-y-3">
+              {unstakedGifts.length === 0 ? (
+                <div className="panel py-10 text-center">
+                  <p className="font-medium text-success">Весь портфель в стейке</p>
+                  <p className="mt-1 text-sm text-muted">Новых подарков для добавления нет</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between px-0.5">
+                    <p className="text-xs text-muted">
+                      Выбрано {selectedGifts.length} из {unstakedGifts.length}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {selectedGifts.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearSelection}
+                          className="text-xs font-medium text-muted"
+                        >
+                          Сбросить
+                        </button>
+                      )}
+                      {unstakedGifts.length > 1 && selectedGifts.length < unstakedGifts.length && (
+                        <button
+                          type="button"
+                          onClick={selectAll}
+                          className="text-xs font-medium text-accent"
+                        >
+                          Выбрать все
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {unstakedGifts.map((gift) => (
+                      <GiftTile
+                        key={gift.slug}
+                        gift={gift}
+                        selected={selected.has(gift.slug)}
+                        onToggle={toggleGift}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </section>
           )}
-        </div>
+        </>
       )}
 
-      {!loading && unstakedGifts.length > 0 && (
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-5">
+      {!loading && tab === "add" && unstakedGifts.length > 0 && (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-4">
           <div className="mx-auto max-w-lg">
             <Button
               variant="accent"
@@ -178,11 +288,11 @@ export function StakingSection() {
               <span className="block text-sm font-bold">{stakeLabel}</span>
               {selectedGifts.length > 0 && (
                 <span className="mt-0.5 inline-flex flex-wrap items-center justify-center gap-x-1 text-[11px] font-medium tabular-nums text-surface/75">
-                  <TonAmount amount={formatTON(actionTotals.price)} variant="mono" iconClassName="text-surface/75" />
+                  <TonAmount amount={formatTON(actionTotals.price)} variant="brand" iconClassName="h-5 w-5" />
                   <span>→</span>
                   <span className="inline-flex items-center gap-0.5">
                     +{formatTON(actionTotals.monthly)}
-                    <TonIcon className="h-[0.85em] w-[0.85em] text-surface/75" />
+                    <TonIcon variant="brand" className="h-5 w-5" />
                   </span>
                   /мес
                 </span>
@@ -193,52 +303,18 @@ export function StakingSection() {
       )}
 
       {inspected && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-5 pb-[calc(5rem+env(safe-area-inset-bottom))]"
-          onClick={() => setInspected(null)}
-        >
-          <div
-            className="w-full max-w-lg rounded-2xl border border-border bg-surface p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-semibold">{inspected.name}</p>
-                <p className="mt-0.5 text-xs text-muted">В стейке · подарок у тебя в профиле</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInspected(null)}
-                className="rounded-lg p-1 text-muted hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-xl bg-surface-raised px-2 py-3">
-                <p className="text-[10px] text-muted">Заработано</p>
-                <p className="mt-1 text-sm font-bold tabular-nums text-success">
-                  +{formatTON(inspected.earned_nanoton)}
-                </p>
-              </div>
-              <div className="rounded-xl bg-surface-raised px-2 py-3">
-                <p className="text-[10px] text-muted">В день</p>
-                <p className="mt-1 text-sm font-bold tabular-nums">
-                  +{formatTON(inspected.daily_yield_nanoton)}
-                </p>
-              </div>
-              <div className="rounded-xl bg-surface-raised px-2 py-3">
-                <p className="text-[10px] text-muted">В месяц</p>
-                <p className="mt-1 text-sm font-bold tabular-nums">
-                  +{formatTON(inspected.monthly_yield_nanoton)}
-                </p>
-              </div>
-            </div>
-            <p className="mt-3 inline-flex flex-wrap items-center justify-center gap-x-1 text-center text-[11px] text-muted">
-              Стоимость <TonAmount amount={formatTON(inspected.price_nanoton)} /> · {stats.monthly_rate_percent}%/мес
-            </p>
-          </div>
-        </div>
+        <StakingGiftSheet
+          gift={inspected}
+          stats={stats}
+          positionId={inspected.item_id ? positionByItem.get(inspected.item_id) : undefined}
+          unstaking={unstaking}
+          onClose={() => setInspected(null)}
+          onUnstake={
+            inspected.is_staked && inspected.can_unstake
+              ? () => handleUnstake(inspected)
+              : undefined
+          }
+        />
       )}
     </div>
   );

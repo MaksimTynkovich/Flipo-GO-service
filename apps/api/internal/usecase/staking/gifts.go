@@ -3,6 +3,7 @@ package staking
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -22,6 +23,7 @@ type ProfileGift struct {
 	MonthlyYieldNanoton int64   `json:"monthly_yield_nanoton"`
 	EarnedNanoton       int64   `json:"earned_nanoton"`
 	IsStaked            bool    `json:"is_staked"`
+	CanUnstake          bool    `json:"can_unstake"`
 	ItemID              *string `json:"item_id,omitempty"`
 }
 
@@ -57,6 +59,10 @@ func calcYields(priceNanoton int64, tier domain.StakingTier) (daily, monthly int
 	monthly = int64(float64(priceNanoton) * rate)
 	daily = monthly / DaysPerMonth
 	return daily, monthly
+}
+
+func itemCanUnstake(item domain.InventoryItem) bool {
+	return !strings.HasPrefix(item.TelegramTxRef, "profile:")
 }
 
 func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*ProfileGiftsResponse, error) {
@@ -109,6 +115,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			id := item.ID.String()
 			pg.ItemID = &id
 			pg.IsStaked = item.Status == domain.InvStaked
+			pg.CanUnstake = itemCanUnstake(*item)
 			if pos, ok := posByItem[item.ID]; ok {
 				pg.EarnedNanoton = pos.AccruedYieldNanoton
 			}
@@ -125,6 +132,46 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		resp.Gifts = append(resp.Gifts, pg)
 		resp.TotalDailyYield += daily
 		resp.TotalMonthlyYield += monthly
+	}
+
+	seenSlugs := make(map[string]bool, len(resp.Gifts))
+	for _, pg := range resp.Gifts {
+		seenSlugs[pg.Slug] = true
+	}
+
+	stakedStatus := domain.InvStaked
+	botStaked, _ := s.inventory.ListByUser(ctx, userID, &stakedStatus)
+	for _, item := range botStaked {
+		if !itemCanUnstake(item) || seenSlugs[item.TelegramGiftID] {
+			continue
+		}
+
+		daily, monthly := calcYields(item.FloorPriceNanoton, user.StakingTier)
+		id := item.ID.String()
+		pg := ProfileGift{
+			Slug:                item.TelegramGiftID,
+			Name:                item.Name,
+			CollectionSlug:      item.CollectionSlug,
+			ImageURL:            item.ImageURL,
+			PriceNanoton:        item.FloorPriceNanoton,
+			DailyYieldNanoton:   daily,
+			MonthlyYieldNanoton: monthly,
+			IsStaked:            true,
+			CanUnstake:          true,
+			ItemID:              &id,
+		}
+		if pos, ok := posByItem[item.ID]; ok {
+			pg.EarnedNanoton = pos.AccruedYieldNanoton
+		}
+
+		resp.Gifts = append(resp.Gifts, pg)
+		resp.Stats.TotalCount++
+		resp.Stats.StakedCount++
+		resp.Stats.ActiveDailyNanoton += daily
+		resp.Stats.ActiveMonthlyNanoton += monthly
+		resp.TotalDailyYield += daily
+		resp.TotalMonthlyYield += monthly
+		seenSlugs[item.TelegramGiftID] = true
 	}
 
 	return resp, nil

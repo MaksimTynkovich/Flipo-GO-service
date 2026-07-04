@@ -1,19 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  InventoryGiftCard,
+  InventoryGiftCardSkeleton,
+} from "@/components/inventory/InventoryGiftCard";
+import { InventoryGiftDetailSheet } from "@/components/inventory/InventoryGiftDetailSheet";
 import {
   cancelMarketListing,
   createMarketListing,
   depositGift,
-  formatTON,
   getInventory,
   getMyMarketListings,
   InventoryItem,
   liquidateItem,
   MarketListing,
 } from "@/lib/api";
-import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
+import { Gift } from "lucide-react";
 
 function tonToNanoton(ton: string): number {
   const val = parseFloat(ton.replace(",", "."));
@@ -26,16 +30,27 @@ export function InventorySection() {
   const [myListings, setMyListings] = useState<MarketListing[]>([]);
   const [txRef, setTxRef] = useState("");
   const [loading, setLoading] = useState(true);
-  const [listingItem, setListingItem] = useState<InventoryItem | null>(null);
+  const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [listPrice, setListPrice] = useState("");
   const [listError, setListError] = useState<string | null>(null);
-  const [listing, setListing] = useState(false);
+  const [isListing, setIsListing] = useState(false);
+  const [liquidating, setLiquidating] = useState(false);
+
+  const listingByItemId = useMemo(
+    () =>
+      new Map(
+        myListings
+          .filter((l) => l.status === "active")
+          .map((l) => [l.item.id, l]),
+      ),
+    [myListings],
+  );
 
   async function load() {
     setLoading(true);
     try {
       const [inv, mine] = await Promise.all([getInventory(), getMyMarketListings().catch(() => [])]);
-      setItems(inv);
+      setItems(inv.filter((i) => i.status !== "liquidated" && i.status !== "staked"));
       setMyListings(mine);
     } finally {
       setLoading(false);
@@ -46,6 +61,16 @@ export function InventorySection() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (selected) {
+      const listing = listingByItemId.get(selected.id);
+      setListPrice(
+        listing ? (listing.price_nanoton / 1_000_000_000).toFixed(2) : "",
+      );
+      setListError(null);
+    }
+  }, [selected, listingByItemId]);
+
   async function handleDeposit() {
     if (!txRef) return;
     await depositGift(txRef);
@@ -53,170 +78,104 @@ export function InventorySection() {
     load();
   }
 
-  async function handleLiquidate(id: string) {
-    await liquidateItem(id);
-    load();
+  function closeSheet() {
+    setSelected(null);
+    setListPrice("");
+    setListError(null);
+  }
+
+  async function handleLiquidate() {
+    if (!selected) return;
+    setLiquidating(true);
+    try {
+      await liquidateItem(selected.id);
+      closeSheet();
+      load();
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setLiquidating(false);
+    }
   }
 
   async function handleListOnMarket() {
-    if (!listingItem) return;
+    if (!selected) return;
     const price = tonToNanoton(listPrice);
     if (price <= 0) {
       setListError("Укажите корректную цену");
       return;
     }
-    setListing(true);
+    setIsListing(true);
     setListError(null);
     try {
-      await createMarketListing(listingItem.id, price);
-      setListingItem(null);
-      setListPrice("");
+      await createMarketListing(selected.id, price);
+      closeSheet();
       load();
     } catch (e) {
       setListError(e instanceof Error ? e.message : "Ошибка");
     } finally {
-      setListing(false);
+      setIsListing(false);
     }
   }
 
-  async function handleCancelListing(id: string) {
-    await cancelMarketListing(id);
+  async function handleCancelListing() {
+    if (!selected) return;
+    const listing = listingByItemId.get(selected.id);
+    if (!listing) return;
+    await cancelMarketListing(listing.id);
+    closeSheet();
     load();
   }
 
-  const available = items.filter((i) => i.status === "available");
-  const activeListings = myListings.filter((l) => l.status === "active");
+  const visibleItems = items.filter((i) => i.status !== "liquidated" && i.status !== "staked");
 
   return (
     <>
-      <div className="panel space-y-2">
-        <p className="section-label">Принимаемые подарки</p>
-        <p className="text-sm leading-relaxed text-muted">
-          Только upgraded collectible gifts — NFT из Telegram, например{" "}
-          <span className="text-foreground">Vintage Cigar #22477</span>. Обычные (не upgraded)
-          подарки не подходят.
-        </p>
-      </div>
-
-      <div className="panel space-y-3">
-        <p className="section-label">Привязать подарок</p>
-        <p className="text-xs text-muted">
-          Вставь ссылку или slug — подарок остаётся в твоём профиле Telegram
-        </p>
-        <input
-          className="input-field"
-          placeholder="vintagecigar-22477"
-          value={txRef}
-          onChange={(e) => setTxRef(e.target.value)}
-        />
-        <Button className="w-full" variant="accent" onClick={handleDeposit}>
-          Привязать
-        </Button>
-      </div>
-
-      {activeListings.length > 0 && (
-        <section className="space-y-2">
-          <p className="section-label">На маркете</p>
-          {activeListings.map((l) => (
-            <div key={l.id} className="panel flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-semibold">{l.item.name}</p>
-                <p className="inline-flex flex-wrap items-center gap-x-1 text-xs text-muted">
-                  <TonAmount amount={formatTON(l.price_nanoton)} /> · активен
-                </p>
-              </div>
-              <Button variant="outline" onClick={() => handleCancelListing(l.id)}>
-                Снять
-              </Button>
-            </div>
-          ))}
-        </section>
-      )}
-
       <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="section-label">Предметы</p>
-          <span className="text-xs text-muted">{available.length} доступно</span>
+        <div className="flex items-center justify-between px-0.5">
+          <p className="section-label">Мои подарки</p>
+          {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}
         </div>
 
-        {loading ? (
-          <div className="panel py-6 text-center text-sm text-muted">Загрузка…</div>
-        ) : items.length === 0 ? (
-          <div className="panel py-6 text-center text-sm text-muted">
-            Инвентарь пуст — внеси первый подарок
+        <div className="grid grid-cols-3 gap-2">
+          {loading
+            ? Array.from({ length: 6 }).map((_, i) => <InventoryGiftCardSkeleton key={i} />)
+            : visibleItems.map((item) => {
+                const listing = listingByItemId.get(item.id);
+                return (
+                  <InventoryGiftCard
+                    key={item.id}
+                    item={item}
+                    listingPrice={listing?.price_nanoton}
+                    onClick={setSelected}
+                  />
+                );
+              })}
+        </div>
+
+        {!loading && visibleItems.length === 0 && (
+          <div className="panel py-10 text-center">
+            <Gift className="mx-auto h-8 w-8 text-muted/50" />
+            <p className="mt-3 text-sm font-medium">Инвентарь пуст</p>
+            <p className="mt-1 text-xs text-muted">Привяжи первый подарок выше</p>
           </div>
-        ) : (
-          items.map((item) => (
-            <div key={item.id} className="panel flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-semibold">{item.name}</p>
-                <p className="inline-flex flex-wrap items-center gap-x-1 text-xs text-muted">
-                  {item.collection_slug} · <TonAmount amount={formatTON(item.floor_price_nanoton)} />
-                </p>
-                <p className="text-[11px] capitalize text-muted">{item.status}</p>
-              </div>
-              {item.status === "available" && (
-                <div className="flex shrink-0 flex-col gap-1.5">
-                  <Button variant="accent" onClick={() => setListingItem(item)}>
-                    На маркет
-                  </Button>
-                  <Button variant="outline" onClick={() => handleLiquidate(item.id)}>
-                    Продать боту
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))
         )}
       </section>
 
-      {listingItem && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center">
-          <div className="panel w-full max-w-sm space-y-4">
-            <div>
-              <p className="text-lg font-bold">Выставить на маркет</p>
-              <p className="text-sm text-muted">{listingItem.name}</p>
-            </div>
-            <div className="space-y-2">
-              <label className="section-label inline-flex items-center gap-1">
-                Цена (<TonIcon variant="mono" className="h-3 w-3" />)
-              </label>
-              <input
-                className="input-field"
-                type="text"
-                inputMode="decimal"
-                placeholder={formatTON(listingItem.floor_price_nanoton)}
-                value={listPrice}
-                onChange={(e) => setListPrice(e.target.value)}
-              />
-              <p className="inline-flex flex-wrap items-center gap-x-1 text-xs text-muted">
-                Floor: <TonAmount amount={formatTON(listingItem.floor_price_nanoton)} />
-              </p>
-            </div>
-            {listError && <p className="text-sm text-danger">{listError}</p>}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  setListingItem(null);
-                  setListPrice("");
-                  setListError(null);
-                }}
-              >
-                Отмена
-              </Button>
-              <Button
-                variant="accent"
-                className="flex-1"
-                disabled={listing}
-                onClick={handleListOnMarket}
-              >
-                {listing ? "…" : "Выставить"}
-              </Button>
-            </div>
-          </div>
-        </div>
+      {selected && (
+        <InventoryGiftDetailSheet
+          item={selected}
+          marketListing={listingByItemId.get(selected.id)}
+          listPrice={listPrice}
+          listError={listError}
+          isListing={isListing}
+          liquidating={liquidating}
+          onListPriceChange={setListPrice}
+          onClose={closeSheet}
+          onList={handleListOnMarket}
+          onLiquidate={handleLiquidate}
+          onCancelListing={handleCancelListing}
+        />
       )}
     </>
   );

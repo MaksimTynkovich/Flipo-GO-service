@@ -18,6 +18,7 @@ export type InventoryItem = {
   name: string;
   image_url: string;
   collection_slug: string;
+  telegram_gift_id?: string;
   floor_price_nanoton: number;
   status: string;
 };
@@ -153,7 +154,16 @@ export type ProfileGift = {
   monthly_yield_nanoton: number;
   earned_nanoton: number;
   is_staked: boolean;
+  can_unstake: boolean;
   item_id?: string;
+};
+
+export type StakingPosition = {
+  id: string;
+  inventory_item_id: string;
+  accrued_yield_nanoton: number;
+  principal_nanoton: number;
+  is_active: boolean;
 };
 
 export type StakingStats = {
@@ -181,7 +191,11 @@ export async function getProfileGifts() {
 }
 
 export async function getStakingPositions() {
-  return api("/api/v1/staking/positions");
+  return api<StakingPosition[]>("/api/v1/staking/positions");
+}
+
+export async function unstakeGift(positionId: string) {
+  return api<{ ok: boolean }>(`/api/v1/staking/unstake/${positionId}`, { method: "POST" });
 }
 
 export async function stakeGift(slug: string) {

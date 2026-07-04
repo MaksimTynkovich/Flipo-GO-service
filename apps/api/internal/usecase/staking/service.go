@@ -2,6 +2,8 @@ package staking
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -90,6 +92,14 @@ func (s *Service) Unstake(ctx context.Context, userID, positionID uuid.UUID) err
 	}
 	if target == nil {
 		return domain.ErrInvalidAmount
+	}
+
+	item, err := s.inventory.FindByID(ctx, target.InventoryItemID)
+	if err != nil {
+		return err
+	}
+	if strings.HasPrefix(item.TelegramTxRef, "profile:") {
+		return errors.New("profile gifts cannot be unstaked")
 	}
 
 	if err := s.staking.Deactivate(ctx, positionID); err != nil {
