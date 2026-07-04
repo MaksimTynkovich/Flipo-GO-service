@@ -13,6 +13,7 @@ import {
   liquidateItem,
   MarketListing,
 } from "@/lib/api";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 
 function tonToNanoton(ton: string): number {
   const val = parseFloat(ton.replace(",", "."));
@@ -120,8 +121,8 @@ export function InventorySection() {
             <div key={l.id} className="panel flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate font-semibold">{l.item.name}</p>
-                <p className="text-xs text-muted">
-                  {formatTON(l.price_nanoton)} TON · активен
+                <p className="inline-flex flex-wrap items-center gap-x-1 text-xs text-muted">
+                  <TonAmount amount={formatTON(l.price_nanoton)} /> · активен
                 </p>
               </div>
               <Button variant="outline" onClick={() => handleCancelListing(l.id)}>
@@ -149,8 +150,8 @@ export function InventorySection() {
             <div key={item.id} className="panel flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate font-semibold">{item.name}</p>
-                <p className="text-xs text-muted">
-                  {item.collection_slug} · {formatTON(item.floor_price_nanoton)} TON
+                <p className="inline-flex flex-wrap items-center gap-x-1 text-xs text-muted">
+                  {item.collection_slug} · <TonAmount amount={formatTON(item.floor_price_nanoton)} />
                 </p>
                 <p className="text-[11px] capitalize text-muted">{item.status}</p>
               </div>
@@ -177,7 +178,9 @@ export function InventorySection() {
               <p className="text-sm text-muted">{listingItem.name}</p>
             </div>
             <div className="space-y-2">
-              <label className="section-label">Цена (TON)</label>
+              <label className="section-label inline-flex items-center gap-1">
+                Цена (<TonIcon variant="mono" className="h-3 w-3" />)
+              </label>
               <input
                 className="input-field"
                 type="text"
@@ -186,8 +189,8 @@ export function InventorySection() {
                 value={listPrice}
                 onChange={(e) => setListPrice(e.target.value)}
               />
-              <p className="text-xs text-muted">
-                Floor: {formatTON(listingItem.floor_price_nanoton)} TON
+              <p className="inline-flex flex-wrap items-center gap-x-1 text-xs text-muted">
+                Floor: <TonAmount amount={formatTON(listingItem.floor_price_nanoton)} />
               </p>
             </div>
             {listError && <p className="text-sm text-danger">{listError}</p>}

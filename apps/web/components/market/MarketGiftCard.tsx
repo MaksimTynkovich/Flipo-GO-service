@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatTON, MarketListing } from "@/lib/api";
+import { TonAmount } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
 import { Gift } from "lucide-react";
 
@@ -27,7 +28,7 @@ export function MarketGiftCard({ listing, onClick }: Props) {
             src={imageSrc}
             alt={listing.item.name}
             loading="lazy"
-            className="h-full w-full object-contain p-2"
+            className="h-full w-full rounded-[20px] object-contain p-2"
             onError={() => setImgError(true)}
           />
         ) : (
@@ -39,9 +40,12 @@ export function MarketGiftCard({ listing, onClick }: Props) {
 
       <div className="min-w-0 space-y-0.5">
         <p className="truncate text-xs font-semibold leading-tight">{listing.item.name}</p>
-        <p className="text-[13px] font-semibold tabular-nums text-accent">
-          {formatTON(listing.price_nanoton)}
-          <span className="ml-0.5 text-[9px] font-medium text-muted">TON</span>
+        <p className="text-sm font-semibold tabular-nums text-accent">
+          <TonAmount
+            amount={formatTON(listing.price_nanoton)}
+            variant="brand"
+            iconClassName="h-6 w-6"
+          />
         </p>
       </div>
     </button>

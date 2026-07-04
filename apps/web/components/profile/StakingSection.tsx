@@ -7,6 +7,7 @@ import { StakingDashboard } from "@/components/profile/StakingDashboard";
 import { StakingTierOverview } from "@/components/profile/StakingTierOverview";
 import { Button } from "@/components/ui/button";
 import { formatTON, getProfileGifts, ProfileGift, StakingStats, stakeGift } from "@/lib/api";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { X } from "lucide-react";
 
 const emptyStats: StakingStats = {
@@ -176,8 +177,14 @@ export function StakingSection() {
             >
               <span className="block text-sm font-bold">{stakeLabel}</span>
               {selectedGifts.length > 0 && (
-                <span className="mt-0.5 block text-[11px] font-medium tabular-nums text-surface/75">
-                  {formatTON(actionTotals.price)} TON → +{formatTON(actionTotals.monthly)}/мес
+                <span className="mt-0.5 inline-flex flex-wrap items-center justify-center gap-x-1 text-[11px] font-medium tabular-nums text-surface/75">
+                  <TonAmount amount={formatTON(actionTotals.price)} variant="mono" iconClassName="text-surface/75" />
+                  <span>→</span>
+                  <span className="inline-flex items-center gap-0.5">
+                    +{formatTON(actionTotals.monthly)}
+                    <TonIcon className="h-[0.85em] w-[0.85em] text-surface/75" />
+                  </span>
+                  /мес
                 </span>
               )}
             </Button>
@@ -227,8 +234,8 @@ export function StakingSection() {
                 </p>
               </div>
             </div>
-            <p className="mt-3 text-center text-[11px] text-muted">
-              Стоимость {formatTON(inspected.price_nanoton)} TON · {stats.monthly_rate_percent}%/мес
+            <p className="mt-3 inline-flex flex-wrap items-center justify-center gap-x-1 text-center text-[11px] text-muted">
+              Стоимость <TonAmount amount={formatTON(inspected.price_nanoton)} /> · {stats.monthly_rate_percent}%/мес
             </p>
           </div>
         </div>

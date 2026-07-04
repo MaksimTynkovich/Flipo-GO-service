@@ -199,7 +199,7 @@ export async function stakeItem(itemId: string) {
 }
 
 export function formatTON(nanotons: number): string {
-  return (nanotons / 1_000_000_000).toFixed(4);
+  return (nanotons / 1_000_000_000).toFixed(2);
 }
 
 export type MarketListing = {

@@ -1,6 +1,7 @@
 "use client";
 
 import { formatTON } from "@/lib/api";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -82,8 +83,7 @@ export function CrashStatsBar({
           <span className="text-muted">
             <IconWallet />
           </span>
-          {balanceNanoton != null ? formatTON(balanceNanoton) : "—"}
-          <span className="text-xs font-medium text-muted">TON</span>
+          <TonAmount amount={balanceNanoton != null ? formatTON(balanceNanoton) : "—"} />
         </div>
         <div className="flex items-center gap-1.5 text-sm font-medium text-muted">
           <IconUsers />

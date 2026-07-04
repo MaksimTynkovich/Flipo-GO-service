@@ -1,6 +1,7 @@
 "use client";
 
 import { formatTON, StakingStats } from "@/lib/api";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { useLiveEarned } from "@/lib/staking-live";
 import { cn } from "@/lib/utils";
 import { TrendingUp, Zap } from "lucide-react";
@@ -35,8 +36,7 @@ export function StakingDashboard({ stats }: Props) {
         </div>
         <div className="mt-2 flex items-end justify-between gap-3">
           <p className="text-3xl font-bold tabular-nums tracking-tight">
-            {formatTON(liveEarned)}
-            <span className="ml-1.5 text-sm font-medium text-muted">TON</span>
+            <TonAmount amount={formatTON(liveEarned)} iconClassName="text-muted" />
           </p>
           {stats.active_daily_yield_nanoton > 0 && (
             <div className="flex items-center gap-1 rounded-lg bg-success/10 px-2 py-1 text-success">
@@ -48,8 +48,10 @@ export function StakingDashboard({ stats }: Props) {
           )}
         </div>
         {stats.active_monthly_yield_nanoton > 0 && (
-          <p className="mt-1 text-xs text-muted">
-            ~{formatTON(stats.active_monthly_yield_nanoton)} TON в месяц при текущем портфеле
+          <p className="mt-1 inline-flex flex-wrap items-center gap-x-1 text-xs text-muted">
+            ~
+            <TonAmount amount={formatTON(stats.active_monthly_yield_nanoton)} />
+            в месяц при текущем портфеле
           </p>
         )}
       </div>
@@ -63,9 +65,13 @@ export function StakingDashboard({ stats }: Props) {
         </div>
         <ProgressBar value={portfolioPct} />
         {unstakedCount > 0 && stats.unlockable_monthly_nanoton > 0 && (
-          <p className="mt-2 flex items-center gap-1 text-[11px] text-accent">
+          <p className="mt-2 flex flex-wrap items-center gap-x-1 text-[11px] text-accent">
             <Zap className="h-3 w-3 shrink-0" />
-            +{formatTON(stats.unlockable_monthly_nanoton)} TON/мес — застейкай ещё {unstakedCount}
+            <span className="inline-flex items-center gap-0.5">
+              +{formatTON(stats.unlockable_monthly_nanoton)}
+              <TonIcon className="h-[0.85em] w-[0.85em]" />
+            </span>
+            /мес — застейкай ещё {unstakedCount}
           </p>
         )}
         {stats.staked_count === stats.total_count && stats.total_count > 0 && (

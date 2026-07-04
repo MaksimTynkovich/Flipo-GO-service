@@ -12,6 +12,7 @@ import {
   RouletteHistoryEntry,
 } from "@/lib/api";
 import { RouletteRoundState, isLandingPause } from "@/lib/roulette";
+import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 
 const PHASE_LABEL: Record<string, string> = {
@@ -123,7 +124,7 @@ export default function RoulettePage() {
               className="w-full bg-transparent text-center text-base font-semibold tabular-nums text-foreground outline-none disabled:opacity-40"
               placeholder="0.00"
             />
-            <span className="shrink-0 text-sm font-medium text-muted">TON</span>
+            <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
           </div>
 
           <div className="grid grid-cols-3 gap-2.5">

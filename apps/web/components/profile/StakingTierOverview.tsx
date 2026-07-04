@@ -1,7 +1,8 @@
 "use client";
 
 import { formatTON, StakingStats } from "@/lib/api";
-import { formatStakingTierName, formatStakingTierSummary, stakingBoostHint } from "@/lib/staking-ui";
+import { TonAmount } from "@/components/icons/TonIcon";
+import { formatStakingTierName, formatStakingTierSummary, stakingBoostHint, stakingBoostThresholdTon } from "@/lib/staking-ui";
 import { cn } from "@/lib/utils";
 
 function ProgressBar({ value, className }: { value: number; className?: string }) {
@@ -53,12 +54,17 @@ export function StakingTierOverview({ isBoost, stats }: Props) {
         <div className="space-y-2 border-t border-[var(--border)] pt-3">
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium text-foreground">Повышенная ставка · 5%/мес</span>
-            <span className="tabular-nums text-muted">
-              {formatTON(stats.boost_wager_nanoton)} / {formatTON(stats.boost_threshold_nanoton)} TON
+            <span className="inline-flex items-center gap-1 tabular-nums text-muted">
+              <TonAmount amount={formatTON(stats.boost_wager_nanoton)} />
+              <span>/</span>
+              <TonAmount amount={formatTON(stats.boost_threshold_nanoton)} />
             </span>
           </div>
           <ProgressBar value={boostPct} />
-          <p className="text-[11px] text-muted">{stakingBoostHint()}</p>
+          <p className="inline-flex flex-wrap items-center gap-x-1 text-[11px] text-muted">
+            <TonAmount amount={String(stakingBoostThresholdTon())} />
+            {stakingBoostHint()}
+          </p>
         </div>
       ) : null}
     </div>

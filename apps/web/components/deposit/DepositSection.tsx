@@ -6,6 +6,7 @@ import { TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { depositGift, formatTON, updateWallet } from "@/lib/api";
+import { TonAmount } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { Gift, Wallet } from "lucide-react";
@@ -153,7 +154,7 @@ export function DepositSection() {
             <Link href={APP_ROUTES.inventory} className="text-accent">
               инвентарь
             </Link>
-            , продажа от {formatTON(100_000_000)} TON
+            , продажа от <TonAmount amount={formatTON(100_000_000)} />
           </p>
         </div>
       )}

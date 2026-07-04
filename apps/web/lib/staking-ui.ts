@@ -21,7 +21,11 @@ export function formatStakingTierSummary(tier?: StakingTier | null): string {
   return "—";
 }
 
-/** Пояснение, как получить повышенную ставку. */
-export function stakingBoostHint(thresholdTon = 5): string {
-  return `${thresholdTon} TON в рулетке за 7 дней — доходность вырастет до 5%/мес`;
+/** Пояснение, как получить повышенную ставку (без суммы — её рендерят с иконкой TON). */
+export function stakingBoostHint(): string {
+  return "в рулетке за 7 дней — доходность вырастет до 5%/мес";
+}
+
+export function stakingBoostThresholdTon(): number {
+  return 5;
 }

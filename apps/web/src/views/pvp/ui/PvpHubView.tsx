@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { api, formatTON } from "@/lib/api";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 type Room = {
@@ -74,7 +75,7 @@ export function PvpHubView() {
             onChange={(event) => setBetAmount(event.target.value)}
             placeholder="0.00"
           />
-          <span className="text-sm text-muted">TON</span>
+          <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Button className="w-full" variant="accent" onClick={createRoom}>
@@ -97,7 +98,9 @@ export function PvpHubView() {
           rooms.map((room) => (
             <div key={room.id} className="panel flex items-center justify-between gap-3">
               <div>
-                <p className="font-semibold tabular-nums">{formatTON(room.bet_amount_nanoton)} TON</p>
+                <p className="font-semibold tabular-nums">
+                  <TonAmount amount={formatTON(room.bet_amount_nanoton)} />
+                </p>
                 <p className="text-xs text-muted">
                   {STATUS_LABEL[room.status] ?? room.status} · до {room.max_players} игроков
                 </p>

@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { formatTON } from "@/lib/api";
+import { TonAmount } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
@@ -28,8 +29,11 @@ export function AppHeader() {
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="min-w-0 text-right">
             <p className="truncate text-[15px] font-semibold tabular-nums leading-none text-foreground">
-              {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
-              <span className="ml-1 text-[11px] font-normal text-muted">TON</span>
+              <TonAmount
+                amount={loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
+                variant="brand"
+                iconClassName="h-5 w-5"
+              />
             </p>
           </div>
 

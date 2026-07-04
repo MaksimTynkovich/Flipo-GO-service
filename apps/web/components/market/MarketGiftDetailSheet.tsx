@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Copy, Gift, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatTON, MarketListing } from "@/lib/api";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 
@@ -91,12 +92,12 @@ export function MarketGiftDetailSheet({
           </button>
         </div>
 
-        <div className="relative mb-4 flex aspect-square items-center justify-center overflow-hidden rounded-[1.25rem]">
+        <div className="relative mb-4 flex aspect-square items-center justify-center">
           {!imgError ? (
             <img
               src={imageSrc}
               alt={listing.item.name}
-              className="max-h-full max-w-full object-contain"
+              className="max-h-full max-w-full rounded-[20px] object-contain"
               onError={() => setImgError(true)}
             />
           ) : (
@@ -117,8 +118,11 @@ export function MarketGiftDetailSheet({
             </button>
           </div>
           <p className="shrink-0 text-[17px] font-semibold tabular-nums text-accent">
-            {formatTON(listing.price_nanoton)}
-            <span className="ml-1 text-xs font-medium text-muted">TON</span>
+            <TonAmount
+              amount={formatTON(listing.price_nanoton)}
+              variant="brand"
+              iconClassName="h-7 w-7"
+            />
           </p>
         </div>
 
@@ -147,7 +151,12 @@ export function MarketGiftDetailSheet({
               ? "Покупка…"
               : insufficientFunds
                 ? "Недостаточно средств"
-                : `Купить · ${formatTON(listing.price_nanoton)} TON`}
+                : (
+                    <span className="inline-flex items-center gap-1">
+                      Купить · {formatTON(listing.price_nanoton)}
+                      <TonIcon variant="brand" className="h-5 w-5" />
+                    </span>
+                  )}
           </Button>
         )}
       </div>

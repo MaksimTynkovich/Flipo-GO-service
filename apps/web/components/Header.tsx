@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { UserAvatar } from "@/components/UserAvatar";
 import { formatTON } from "@/lib/api";
+import { TonAmount } from "@/components/icons/TonIcon";
 import { Plus } from "lucide-react";
 
 export function Header() {
@@ -15,8 +16,11 @@ export function Header() {
         <Link href="/profile" className="flex min-w-0 items-center gap-2.5">
           <UserAvatar user={user} size={34} />
           <p className="truncate text-[15px] font-bold tabular-nums leading-none text-foreground">
-            {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
-            <span className="ml-1 text-[11px] font-medium text-muted">TON</span>
+            <TonAmount
+              amount={loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
+              variant="brand"
+              iconClassName="h-5 w-5"
+            />
           </p>
         </Link>
 

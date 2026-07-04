@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CrashChart } from "@/components/games/CrashChart";
 import { PageShell } from "@/components/PageShell";
@@ -13,6 +14,7 @@ import {
   placeCrashBet,
   CrashHistoryEntry,
 } from "@/lib/api";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { CrashRoundState, formatMultiplier } from "@/lib/crash";
 import { connectGameWS } from "@/lib/ws";
 import { cn } from "@/lib/utils";
@@ -35,7 +37,7 @@ export default function CrashPage() {
   const [betting, setBetting] = useState(false);
   const [cashingOut, setCashingOut] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [winMsg, setWinMsg] = useState<string | null>(null);
+  const [winMsg, setWinMsg] = useState<ReactNode | null>(null);
   const lastPhase = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
@@ -149,7 +151,13 @@ export default function CrashPage() {
     try {
       const mult = state.multiplier ?? liveMult;
       const res = (await cashoutCrash(activeBet.id, mult)) as { payout_nanoton: number };
-      setWinMsg(`+${formatTON(res.payout_nanoton)} TON @ ${formatMultiplier(mult)}`);
+      setWinMsg(
+        <span className="inline-flex items-center gap-1">
+          +{formatTON(res.payout_nanoton)}
+          <TonIcon className="h-[0.85em] w-[0.85em]" />
+          @ {formatMultiplier(mult)}
+        </span>,
+      );
       setActiveBet(null);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Не удалось забрать");
@@ -177,14 +185,20 @@ export default function CrashPage() {
                 <p className="text-[10px] font-medium uppercase tracking-wider text-muted">
                   В игре
                 </p>
-                <p className="text-sm font-semibold">{formatTON(activeBet.amountNanoton)} TON</p>
+                <p className="text-sm font-semibold">
+                  <TonAmount amount={formatTON(activeBet.amountNanoton)} />
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-medium uppercase tracking-wider text-muted">
                   Выигрыш
                 </p>
                 <p className="text-sm font-bold tabular-nums text-success">
-                  {potentialWin != null ? `${potentialWin.toFixed(4)} TON` : "—"}
+                  {potentialWin != null ? (
+                    <TonAmount amount={potentialWin.toFixed(2)} iconClassName="text-success" />
+                  ) : (
+                    "—"
+                  )}
                 </p>
               </div>
             </div>
@@ -210,7 +224,7 @@ export default function CrashPage() {
               onChange={(e) => setAmountTon(e.target.value)}
               className="w-full bg-transparent text-center text-lg font-bold tabular-nums outline-none disabled:opacity-40"
             />
-            <span className="w-10 shrink-0 text-right text-sm font-medium text-muted">TON</span>
+            <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
           </div>
 
           <div className="flex gap-2">
