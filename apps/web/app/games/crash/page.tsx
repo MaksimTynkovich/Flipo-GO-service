@@ -161,10 +161,7 @@ export default function CrashPage() {
   return (
     <PageShell flush>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-lg font-bold tracking-tight">Crash</h1>
-          <p className="text-xs text-muted">Успей забрать до краша</p>
-        </div>
+        <p className="text-xs text-muted">Успей забрать до краша</p>
 
         <CrashChart
           state={state}

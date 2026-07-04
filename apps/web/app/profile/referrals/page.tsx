@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { ProfileBackLink } from "@/components/profile/ProfileBackLink";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Copy, Users } from "lucide-react";
@@ -22,9 +21,7 @@ export default function ProfileReferralsPage() {
   }
 
   return (
-    <PageShell title="Рефералы" description="Приглашай друзей и получай бонусы за их активность">
-      <ProfileBackLink />
-
+    <PageShell description="Приглашай друзей и получай бонусы за их активность">
       <div className="panel flex flex-col items-center gap-4 py-8 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-success/15">
           <Users className="h-8 w-8 text-success" />

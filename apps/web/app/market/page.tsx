@@ -1,16 +1,5 @@
-"use client";
-
-import { PageShell } from "@/components/PageShell";
-import { MarketSection } from "@/components/market/MarketSection";
+import { MarketView } from "@/src/views/market";
 
 export default function MarketPage() {
-  return (
-    <PageShell
-      title="Маркет"
-      description="Покупай Telegram Gifts с баланса бота или у других игроков"
-      flush
-    >
-      <MarketSection />
-    </PageShell>
-  );
+  return <MarketView />;
 }

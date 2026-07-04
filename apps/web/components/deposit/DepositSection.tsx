@@ -7,7 +7,8 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { depositGift, formatTON, updateWallet } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, Gift, Wallet } from "lucide-react";
+import { APP_ROUTES } from "@/src/shared/config/navigation";
+import { Gift, Wallet } from "lucide-react";
 
 type Tab = "ton" | "gifts";
 
@@ -64,18 +65,7 @@ export function DepositSection() {
 
   return (
     <div className="space-y-5">
-      <Link
-        href="/"
-        className="-mt-1 inline-flex items-center gap-0.5 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Назад
-      </Link>
-
-      <div>
-        <h1 className="text-xl font-bold">Пополнение</h1>
-        <p className="mt-1 text-sm text-muted">Выбери способ зачисления средств</p>
-      </div>
+      <p className="text-sm text-muted">Выбери способ зачисления средств</p>
 
       <div className="flex gap-1 rounded-xl bg-surface-raised p-1">
         {tabs.map(({ id, label, icon: Icon }) => (
@@ -163,7 +153,7 @@ export function DepositSection() {
 
           <p className="text-center text-[11px] text-muted">
             Оценка и зачисление на баланс —{" "}
-            <Link href="/profile/inventory" className="text-accent">
+            <Link href={APP_ROUTES.inventory} className="text-accent">
               инвентарь
             </Link>
             , продажа от {formatTON(100_000_000)} TON

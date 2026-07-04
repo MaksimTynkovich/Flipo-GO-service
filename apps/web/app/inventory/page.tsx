@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { InventoryView } from "@/src/views/inventory";
 
 export default function InventoryPage() {
-  redirect("/profile/inventory");
+  return <InventoryView />;
 }

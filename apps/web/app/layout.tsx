@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers/Providers";
-import { Header } from "@/components/Header";
-import { Nav } from "@/components/Nav";
+import { AppLayout } from "@/src/widgets/app-shell/ui/AppLayout";
 
 export const metadata: Metadata = {
   title: "Flipo Casino",
@@ -16,11 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <Providers>
-          <Header />
-          <main className="app-container min-h-screen pb-[calc(5rem+env(safe-area-inset-bottom))] pt-[calc(3.75rem+env(safe-area-inset-top))]">
-            {children}
-          </main>
-          <Nav />
+          <AppLayout>{children}</AppLayout>
         </Providers>
       </body>
     </html>

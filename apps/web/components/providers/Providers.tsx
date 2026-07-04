@@ -1,6 +1,7 @@
 "use client";
 
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
+import { TelegramProvider } from "@/src/app/providers/TelegramProvider";
 import { AuthProvider } from "./AuthProvider";
 
 const manifestUrl =
@@ -11,7 +12,9 @@ const manifestUrl =
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <TonConnectUIProvider manifestUrl={manifestUrl}>
-      <AuthProvider>{children}</AuthProvider>
+      <TelegramProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </TelegramProvider>
     </TonConnectUIProvider>
   );
 }

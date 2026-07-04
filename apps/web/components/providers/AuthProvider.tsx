@@ -3,18 +3,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { authDebug, authTelegram, DEBUG_AUTH, getMe, User } from "@/lib/api";
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp: {
-        initData: string;
-        ready: () => void;
-        expand: () => void;
-      };
-    };
-  }
-}
-
 type AuthState = {
   user: User | null;
   loading: boolean;

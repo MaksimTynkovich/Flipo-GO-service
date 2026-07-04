@@ -97,10 +97,7 @@ export default function RoulettePage() {
     <PageShell flush>
       <div className="space-y-5">
         <div className="flex items-end justify-between">
-          <div>
-            <h1 className="text-xl font-bold">Рулетка</h1>
-            <p className="text-sm text-muted">Раунд #{state?.round_number ?? "—"}</p>
-          </div>
+          <p className="text-sm text-muted">Раунд #{state?.round_number ?? "—"}</p>
           <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
             {statusLabel}
           </span>
