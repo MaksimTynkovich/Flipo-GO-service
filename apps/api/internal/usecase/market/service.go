@@ -26,7 +26,9 @@ type ListingView struct {
 		ID                string          `json:"id"`
 		Name              string          `json:"name"`
 		SubName           string          `json:"sub_name"`
-		Condition         string          `json:"condition,omitempty"`
+		Model             string          `json:"model,omitempty"`
+		Symbol            string          `json:"symbol,omitempty"`
+		Backdrop          string          `json:"backdrop,omitempty"`
 		ImageURL          string          `json:"image_url"`
 		CollectionSlug    string          `json:"collection_slug"`
 		FloorPriceNanoton int64           `json:"floor_price_nanoton"`
@@ -166,8 +168,10 @@ func (s *Service) AddBotGift(ctx context.Context, transfer BotGiftInput) (*Listi
 	}
 
 	meta, _ := json.Marshal(map[string]string{
-		"sub_name":  transfer.SubName,
-		"condition": transfer.Condition,
+		"sub_name": transfer.SubName,
+		"model":    transfer.Model,
+		"symbol":   transfer.Symbol,
+		"backdrop": transfer.Backdrop,
 	})
 
 	now := time.Now().UTC()
@@ -220,14 +224,16 @@ type BotGiftInput struct {
 	TokenID        string
 	Name           string
 	SubName        string
-	Condition      string
+	Model          string
+	Symbol         string
+	Backdrop       string
 	ImageURL       string
 	PriceNanoton   int64
 	TxRef          string
 }
 
 func toListingView(l domain.MarketListing) ListingView {
-	subName, condition := parseItemMeta(l.Item.Metadata)
+	meta := parseGiftMeta(l.Item.Metadata)
 	sellerName := l.Seller.Username
 	if sellerName == "" {
 		sellerName = l.Seller.FirstName
@@ -247,8 +253,10 @@ func toListingView(l domain.MarketListing) ListingView {
 	v.Seller.Username = sellerName
 	v.Item.ID = l.Item.ID.String()
 	v.Item.Name = l.Item.Name
-	v.Item.SubName = subName
-	v.Item.Condition = condition
+	v.Item.SubName = meta.SubName
+	v.Item.Model = meta.Model
+	v.Item.Symbol = meta.Symbol
+	v.Item.Backdrop = meta.Backdrop
 	v.Item.ImageURL = l.Item.ImageURL
 	v.Item.CollectionSlug = l.Item.CollectionSlug
 	v.Item.FloorPriceNanoton = l.Item.FloorPriceNanoton
@@ -258,13 +266,20 @@ func toListingView(l domain.MarketListing) ListingView {
 	return v
 }
 
-func parseItemMeta(meta datatypes.JSON) (subName, condition string) {
-	if len(meta) == 0 {
-		return "", ""
+type giftMeta struct {
+	SubName  string `json:"sub_name"`
+	Model    string `json:"model"`
+	Symbol   string `json:"symbol"`
+	Backdrop string `json:"backdrop"`
+}
+
+func parseGiftMeta(raw datatypes.JSON) giftMeta {
+	if len(raw) == 0 {
+		return giftMeta{}
 	}
-	var m map[string]string
-	if err := json.Unmarshal(meta, &m); err != nil {
-		return "", ""
+	var m giftMeta
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return giftMeta{}
 	}
-	return m["sub_name"], m["condition"]
+	return m
 }

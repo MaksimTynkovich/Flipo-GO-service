@@ -216,7 +216,9 @@ export type MarketListing = {
     id: string;
     name: string;
     sub_name: string;
-    condition?: string;
+    model?: string;
+    symbol?: string;
+    backdrop?: string;
     image_url: string;
     collection_slug: string;
     floor_price_nanoton: number;

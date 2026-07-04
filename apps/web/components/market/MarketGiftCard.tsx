@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatTON, MarketListing } from "@/lib/api";
-import { giftGradient, giftImageUrl } from "@/lib/gifts";
+import { giftImageUrl } from "@/lib/gifts";
 import { Gift } from "lucide-react";
 
 type Props = {
@@ -14,64 +14,48 @@ export function MarketGiftCard({ listing, onClick }: Props) {
   const [imgError, setImgError] = useState(false);
   const slug = `${listing.item.collection_slug}-${listing.item.sub_name?.replace("#", "") || ""}`;
   const imageSrc = giftImageUrl(slug, listing.item.image_url);
-  const gradient = giftGradient(listing.item.collection_slug || listing.id);
 
   return (
     <button
       type="button"
       onClick={() => onClick?.(listing)}
-      className="group relative w-full touch-manipulation overflow-hidden rounded-2xl text-left transition-transform active:scale-[0.97]"
+      className="panel flex flex-col gap-2 p-2 text-left transition-opacity active:opacity-80"
     >
-      <div
-        className="relative aspect-[4/5] overflow-hidden rounded-2xl"
-        style={{ background: gradient }}
-      >
-        {/* Hex pattern overlay */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-20"
-          style={{
-            backgroundImage: `radial-gradient(circle at 50% 45%, rgba(255,255,255,0.15) 0%, transparent 55%)`,
-          }}
-        />
-
-        {listing.item.condition && (
-          <span className="absolute left-2.5 top-2.5 rounded-md bg-black/40 px-1.5 py-0.5 text-[10px] font-semibold text-white/90 backdrop-blur-sm">
-            {listing.item.condition}
-          </span>
+      <div className="relative aspect-square overflow-hidden rounded-xl bg-surface-raised">
+        {!imgError ? (
+          <img
+            src={imageSrc}
+            alt={listing.item.name}
+            loading="lazy"
+            className="h-full w-full object-contain p-2"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <Gift className="h-6 w-6 text-muted/50" />
+          </div>
         )}
+      </div>
 
-        <span className="absolute right-2.5 top-2.5 text-sm font-bold tabular-nums text-white">
+      <div className="min-w-0 space-y-0.5">
+        <p className="truncate text-xs font-semibold leading-tight">{listing.item.name}</p>
+        <p className="text-[13px] font-semibold tabular-nums text-accent">
           {formatTON(listing.price_nanoton)}
-          <span className="ml-0.5 text-[10px] font-medium text-white/70">TON</span>
-        </span>
-
-        <div className="absolute inset-x-0 top-[18%] flex justify-center px-4">
-          {!imgError ? (
-            <img
-              src={imageSrc}
-              alt={listing.item.name}
-              loading="lazy"
-              className="max-h-[55%] w-auto max-w-full object-contain drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover:scale-105"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-black/20">
-              <Gift className="h-8 w-8 text-white/40" />
-            </div>
-          )}
-        </div>
-
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-3 pb-3 pt-10">
-          <p className="truncate text-sm font-bold text-white">{listing.item.name}</p>
-          {listing.item.sub_name && (
-            <p className="truncate text-xs text-white/55">{listing.item.sub_name}</p>
-          )}
-        </div>
+          <span className="ml-0.5 text-[9px] font-medium text-muted">TON</span>
+        </p>
       </div>
     </button>
   );
 }
 
 export function MarketGiftCardSkeleton() {
-  return <div className="aspect-[4/5] animate-pulse rounded-2xl bg-surface-raised" />;
+  return (
+    <div className="panel space-y-2 p-2">
+      <div className="aspect-square animate-pulse rounded-xl bg-surface-raised" />
+      <div className="space-y-1">
+        <div className="h-3 w-3/4 animate-pulse rounded-md bg-surface-raised" />
+        <div className="h-3.5 w-1/2 animate-pulse rounded-md bg-surface-raised" />
+      </div>
+    </div>
+  );
 }
