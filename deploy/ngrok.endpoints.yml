@@ -1,0 +1,11 @@
+# Project ngrok endpoints (merged with your global ngrok config that holds authtoken).
+# Used by: make dev-tunnel
+version: 3
+
+endpoints:
+  - name: web
+    upstream:
+      url: 3000
+  - name: api
+    upstream:
+      url: 8080
