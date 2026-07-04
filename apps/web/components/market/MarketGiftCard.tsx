@@ -23,7 +23,7 @@ export function MarketGiftCard({ listing, onClick }: Props) {
       className="group relative w-full touch-manipulation overflow-hidden rounded-2xl text-left transition-transform active:scale-[0.97]"
     >
       <div
-        className="relative aspect-[4/5] overflow-hidden rounded-2xl ring-1 ring-white/5"
+        className="relative aspect-[4/5] overflow-hidden rounded-2xl"
         style={{ background: gradient }}
       >
         {/* Hex pattern overlay */}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Globe } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const LANGUAGES = [
   { code: "ru", label: "Русский" },
@@ -34,17 +35,13 @@ export function LanguageSelector() {
         <p className="section-label">Язык</p>
       </div>
       <p className="text-xs text-muted">Скоро — переключение языка интерфейса</p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="segment-control">
         {LANGUAGES.map((l) => (
           <button
             key={l.code}
             type="button"
             onClick={() => handleChange(l.code)}
-            className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
-              lang === l.code
-                ? "border-accent bg-accent/10 text-accent"
-                : "border-border bg-surface-raised text-muted hover:text-foreground"
-            }`}
+            className={cn("segment-item", lang === l.code && "segment-item-active")}
           >
             {l.label}
           </button>

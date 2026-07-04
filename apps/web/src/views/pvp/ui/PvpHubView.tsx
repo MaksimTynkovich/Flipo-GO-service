@@ -61,10 +61,10 @@ export function PvpHubView() {
   }
 
   return (
-    <PageShell description="Создай комнату 1 на 1 или присоединись к открытому бою.">
+    <PageShell description="Создай комнату или присоединись к открытому бою">
       <div className="panel space-y-3">
         <p className="section-label">Новая комната</p>
-        <div className="flex items-center rounded-2xl border border-border bg-surface-raised px-4 py-3">
+        <div className="input-inset">
           <input
             type="number"
             step="0.01"

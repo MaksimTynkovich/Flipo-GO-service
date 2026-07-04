@@ -13,32 +13,30 @@ export function AppTabBar() {
   return (
     <nav
       aria-label="Основная навигация"
-      className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl hairline-top"
     >
-      <div className="app-container px-0">
-        <div className="grid h-16 grid-cols-4 gap-1 rounded-[1.75rem] border border-border/60 bg-surface/95 p-1.5 shadow-floating backdrop-blur-xl">
-          {MAIN_TABS.map(({ href, label, icon: Icon, match }) => {
-            const active = match(pathname);
+      <div className="app-container grid h-[3.25rem] grid-cols-4 items-stretch">
+        {MAIN_TABS.map(({ href, label, icon: Icon, match }) => {
+          const active = match(pathname);
 
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                onClick={() => haptics.selectionChanged()}
-                className={cn(
-                  "flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl text-muted transition-colors active:scale-[0.98]",
-                  active && "bg-surface-raised text-foreground",
-                )}
-              >
-                <Icon size={20} strokeWidth={active ? 2.5 : 2} />
-                <span className={cn("truncate text-[10px] font-medium", active && "font-semibold")}>
-                  {label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              onClick={() => haptics.selectionChanged()}
+              className={cn(
+                "flex min-w-0 flex-col items-center justify-center gap-0.5 transition-colors active:opacity-70",
+                active ? "text-accent" : "text-muted",
+              )}
+            >
+              <Icon size={22} strokeWidth={active ? 2.25 : 1.75} />
+              <span className={cn("truncate text-[10px]", active ? "font-semibold" : "font-medium")}>
+                {label}
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

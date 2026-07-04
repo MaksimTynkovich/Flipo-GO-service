@@ -13,6 +13,8 @@ type TelegramTheme = {
   textColor: string;
   hintColor: string;
   buttonColor: string;
+  linkColor: string;
+  secondaryBgColor: string;
 };
 
 export function useTelegramTheme(): TelegramTheme {

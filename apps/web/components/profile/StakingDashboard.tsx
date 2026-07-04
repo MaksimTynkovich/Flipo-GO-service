@@ -34,8 +34,8 @@ export function StakingDashboard({ stats, isBoost }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-border bg-surface p-4">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted">Заработано</p>
+      <div className="panel space-y-3">
+        <p className="section-label">Заработано</p>
         <div className="mt-2 flex items-end justify-between gap-3">
           <p className="text-3xl font-bold tabular-nums tracking-tight">
             {formatTON(liveEarned)}
@@ -57,7 +57,7 @@ export function StakingDashboard({ stats, isBoost }: Props) {
         )}
       </div>
 
-      <div className="rounded-xl border border-border bg-surface px-4 py-3">
+      <div className="panel-sm space-y-2">
         <div className="mb-2 flex items-center justify-between text-xs">
           <span className="font-medium text-foreground">Портфель в стейке</span>
           <span className="tabular-nums text-muted">
@@ -77,8 +77,8 @@ export function StakingDashboard({ stats, isBoost }: Props) {
       </div>
 
       {!isBoost && stats.boost_threshold_nanoton > 0 && (
-        <div className="rounded-xl border border-border bg-surface px-4 py-3">
-          <div className="mb-2 flex items-center justify-between text-xs">
+        <div className="panel-sm space-y-2">
+          <div className="flex items-center justify-between text-xs">
             <span className="font-medium text-foreground">Буст до 5%</span>
             <span className="tabular-nums text-muted">
               {formatTON(stats.boost_wager_nanoton)} / {formatTON(stats.boost_threshold_nanoton)} TON

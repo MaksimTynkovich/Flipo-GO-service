@@ -112,7 +112,7 @@ export default function RoulettePage() {
         <div className="space-y-3">
           <p className="section-label">Ставка</p>
 
-          <div className="flex items-center rounded-xl border border-border bg-surface-raised px-4 py-3">
+          <div className="input-inset">
             <input
               type="number"
               step="0.01"

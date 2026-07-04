@@ -185,7 +185,6 @@ export type GameLobbyItem = {
   description: string;
   badge: string;
   icon: LucideIcon;
-  accentClassName: string;
 };
 
 export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
@@ -195,7 +194,6 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
     description: "Лови множитель и успей забрать выигрыш до обвала.",
     badge: "Live",
     icon: TrendingUp,
-    accentClassName: "bg-success/15 text-success",
   },
   {
     href: APP_ROUTES.roulette,
@@ -203,7 +201,6 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
     description: "Классические цвета, быстрые раунды и моментальный вход.",
     badge: "Live",
     icon: CircleDot,
-    accentClassName: "bg-danger/15 text-danger",
   },
   {
     href: APP_ROUTES.pvp,
@@ -211,7 +208,6 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
     description: "Комнаты 1 на 1 — создай бой или присоединись к открытому.",
     badge: "Rooms",
     icon: Users,
-    accentClassName: "bg-primary/15 text-primary",
   },
 ];
 

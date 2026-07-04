@@ -171,7 +171,7 @@ export default function CrashPage() {
         />
 
         {activeBet && state?.phase === "running" && (
-          <div className="rounded-xl border border-success/20 bg-success/10 px-4 py-3">
+          <div className="rounded-xl bg-success/10 px-4 py-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-wider text-muted">
@@ -192,17 +192,15 @@ export default function CrashPage() {
         )}
 
         {winMsg && (
-          <div className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-center text-sm font-semibold text-success">
+          <div className="rounded-xl bg-success/10 px-4 py-3 text-center text-sm font-semibold text-success">
             {winMsg}
           </div>
         )}
 
-        <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
-            Ставка
-          </p>
+        <div className="panel space-y-3">
+          <p className="section-label">Ставка</p>
 
-          <div className="flex items-center rounded-xl border border-border bg-surface-raised px-4 py-3">
+          <div className="input-inset">
             <input
               type="number"
               step="0.01"
@@ -223,9 +221,8 @@ export default function CrashPage() {
                 disabled={!canBet}
                 onClick={() => setAmountTon(v)}
                 className={cn(
-                  "flex h-9 flex-1 items-center justify-center rounded-lg text-xs font-semibold",
-                  "border border-border bg-surface-raised text-muted",
-                  amountTon === v && "border-accent/50 text-accent",
+                  "quick-amount",
+                  amountTon === v && "quick-amount-active",
                   !canBet && "opacity-40",
                 )}
               >
@@ -240,9 +237,9 @@ export default function CrashPage() {
               disabled={!canBet}
               onClick={bet}
               className={cn(
-                "flex h-12 items-center justify-center rounded-xl text-sm font-bold text-[#1a1f26]",
-                "bg-accent shadow-[0_4px_14px_rgba(241,196,15,0.2)]",
-                !canBet && "opacity-40 shadow-none",
+                "flex h-12 items-center justify-center rounded-xl text-sm font-bold text-white",
+                "bg-accent",
+                !canBet && "opacity-40",
               )}
             >
               {betting ? "…" : "Поставить"}
@@ -253,8 +250,8 @@ export default function CrashPage() {
               onClick={cashout}
               className={cn(
                 "flex h-12 items-center justify-center rounded-xl text-sm font-bold text-white",
-                "bg-success shadow-[0_4px_14px_rgba(39,174,96,0.2)]",
-                !canCashout && "opacity-40 shadow-none",
+                "bg-success",
+                !canCashout && "opacity-40",
               )}
             >
               {cashingOut ? "…" : "Забрать"}

@@ -2,7 +2,10 @@ export type TelegramThemeParams = {
   bg_color?: string;
   text_color?: string;
   hint_color?: string;
+  link_color?: string;
   button_color?: string;
+  button_text_color?: string;
+  secondary_bg_color?: string;
 };
 
 export type TelegramBackButton = {
@@ -44,10 +47,12 @@ declare global {
 }
 
 export const TELEGRAM_THEME_DEFAULTS = {
-  bgColor: "#0f1318",
-  textColor: "#f4f4f5",
-  hintColor: "#8b93a1",
-  buttonColor: "#f1c40f",
+  bgColor: "#17212b",
+  textColor: "#f5f5f5",
+  hintColor: "#708499",
+  buttonColor: "#5288c1",
+  linkColor: "#6ab2f2",
+  secondaryBgColor: "#232e3c",
 } as const;
 
 type Rgb = {
@@ -72,6 +77,8 @@ export function readTelegramTheme() {
     textColor: params?.text_color || TELEGRAM_THEME_DEFAULTS.textColor,
     hintColor: params?.hint_color || TELEGRAM_THEME_DEFAULTS.hintColor,
     buttonColor: params?.button_color || TELEGRAM_THEME_DEFAULTS.buttonColor,
+    linkColor: params?.link_color || TELEGRAM_THEME_DEFAULTS.linkColor,
+    secondaryBgColor: params?.secondary_bg_color || TELEGRAM_THEME_DEFAULTS.secondaryBgColor,
   };
 }
 
@@ -140,16 +147,24 @@ function getLuminance(color: string) {
 
 function deriveThemeTokens(theme = readTelegramTheme()) {
   const isDark = getLuminance(theme.bgColor) < 0.45;
+  const accent = theme.buttonColor || theme.linkColor;
 
   return {
     background: theme.bgColor,
     foreground: theme.textColor,
     muted: theme.hintColor,
-    accent: theme.buttonColor,
-    surface: mixColors(theme.bgColor, theme.textColor, isDark ? 0.08 : 0.04),
-    surfaceRaised: mixColors(theme.bgColor, theme.textColor, isDark ? 0.14 : 0.08),
-    border: mixColors(theme.bgColor, theme.textColor, isDark ? 0.18 : 0.12),
-    primary: mixColors(theme.buttonColor, theme.textColor, isDark ? 0.12 : 0.2),
+    accent,
+    link: theme.linkColor,
+    surface: theme.secondaryBgColor || mixColors(theme.bgColor, theme.textColor, isDark ? 0.06 : 0.04),
+    surfaceRaised: mixColors(
+      theme.secondaryBgColor || theme.bgColor,
+      theme.textColor,
+      isDark ? 0.1 : 0.06,
+    ),
+    border: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+    primary: accent,
+    success: isDark ? "#4fae4e" : "#31a24c",
+    danger: isDark ? "#e56555" : "#e53935",
     isDark,
   };
 }
@@ -170,9 +185,13 @@ export function applyTelegramThemeToDocument(theme = readTelegramTheme()) {
   root.style.setProperty("--foreground", tokens.foreground);
   root.style.setProperty("--muted", tokens.muted);
   root.style.setProperty("--accent", tokens.accent);
+  root.style.setProperty("--accent-subtle", `color-mix(in srgb, ${tokens.accent} 14%, transparent)`);
+  root.style.setProperty("--link", tokens.link);
   root.style.setProperty("--surface", tokens.surface);
   root.style.setProperty("--surface-raised", tokens.surfaceRaised);
   root.style.setProperty("--border", tokens.border);
   root.style.setProperty("--primary", tokens.primary);
+  root.style.setProperty("--success", tokens.success);
+  root.style.setProperty("--danger", tokens.danger);
   root.style.colorScheme = tokens.isDark ? "dark" : "light";
 }

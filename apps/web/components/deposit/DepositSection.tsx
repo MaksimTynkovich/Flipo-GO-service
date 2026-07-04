@@ -67,16 +67,13 @@ export function DepositSection() {
     <div className="space-y-5">
       <p className="text-sm text-muted">Выбери способ зачисления средств</p>
 
-      <div className="flex gap-1 rounded-xl bg-surface-raised p-1">
+      <div className="segment-control">
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-colors",
-              tab === id ? "bg-surface text-foreground" : "text-muted",
-            )}
+            className={cn("segment-item", tab === id && "segment-item-active")}
           >
             <Icon className="h-3.5 w-3.5" />
             {label}
@@ -98,7 +95,7 @@ export function DepositSection() {
           </div>
 
           {connectedAddress && (
-            <div className="rounded-xl border border-border bg-surface-raised px-3 py-2.5 text-center">
+            <div className="surface-inset px-3 py-2.5 text-center">
               <p className="text-[10px] uppercase tracking-wider text-muted">Подключён</p>
               <p className="mt-1 font-mono text-sm tabular-nums text-foreground">
                 {shortenAddress(connectedAddress)}
@@ -118,7 +115,7 @@ export function DepositSection() {
             </p>
           </div>
 
-          <div className="rounded-xl border border-border bg-surface-raised px-3 py-2.5 text-xs text-muted">
+          <div className="surface-inset px-3 py-2.5 text-xs text-muted">
             <p>1. Отправь upgraded gift боту @flipo</p>
             <p className="mt-1">2. Вставь ссылку или slug подарка ниже</p>
           </div>
