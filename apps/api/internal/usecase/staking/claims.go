@@ -1,0 +1,152 @@
+package staking
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"time"
+
+	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/google/uuid"
+)
+
+func (s *Service) EnsureCurrentEpoch(ctx context.Context) (*domain.StakingEpoch, error) {
+	if err := s.SettleEndedEpochs(ctx); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	epoch, err := s.staking.GetActiveEpoch(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+	if epoch != nil {
+		return epoch, nil
+	}
+
+	start, end := CurrentEpochBounds(now)
+	epoch = &domain.StakingEpoch{
+		ID:        uuid.New(),
+		StartsAt:  start,
+		EndsAt:    end,
+		Status:    domain.EpochActive,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := s.staking.CreateEpoch(ctx, epoch); err != nil {
+		return nil, err
+	}
+	return epoch, nil
+}
+
+func (s *Service) resolveGiftSlugConflict(ctx context.Context, giftSlug string, newUserID uuid.UUID) error {
+	existing, err := s.staking.FindActivePositionBySlug(ctx, giftSlug)
+	if err != nil {
+		return err
+	}
+	if existing == nil || existing.UserID == newUserID {
+		return nil
+	}
+
+	slog.Info("staking gift superseded",
+		"gift_slug", giftSlug,
+		"previous_user_id", existing.UserID,
+		"new_user_id", newUserID,
+	)
+	return s.revokePosition(ctx, existing, domain.StakingRevokedSuperseded)
+}
+
+func (s *Service) revokePosition(ctx context.Context, pos *domain.StakingPosition, reason domain.StakingRevokeReason) error {
+	if err := s.staking.DeactivateWithReason(ctx, pos.ID, reason); err != nil {
+		return err
+	}
+	_ = s.staking.DeleteGiftClaim(ctx, pos.GiftSlug)
+	return s.releaseInventoryItem(ctx, pos.InventoryItemID)
+}
+
+func (s *Service) releaseInventoryItem(ctx context.Context, itemID uuid.UUID) error {
+	item, err := s.inventory.FindByID(ctx, itemID)
+	if err != nil {
+		return nil
+	}
+	if item.Status != domain.InvStaked {
+		return nil
+	}
+	return s.inventory.UpdateStatus(ctx, itemID, domain.InvStaked, domain.InvAvailable)
+}
+
+func (s *Service) createStake(
+	ctx context.Context,
+	userID uuid.UUID,
+	item *domain.InventoryItem,
+	source domain.StakingSource,
+) (*domain.StakingPosition, error) {
+	if item.TelegramGiftID == "" {
+		return nil, domain.ErrInvalidAmount
+	}
+
+	epoch, err := s.EnsureCurrentEpoch(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.resolveGiftSlugConflict(ctx, item.TelegramGiftID, userID); err != nil {
+		return nil, err
+	}
+
+	positions, err := s.staking.ListActiveByUserEpoch(ctx, userID, epoch.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range positions {
+		if p.GiftSlug == item.TelegramGiftID {
+			return nil, errors.New("gift already staked this week")
+		}
+	}
+
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.inventory.UpdateStatus(ctx, item.ID, domain.InvAvailable, domain.InvStaked); err != nil {
+		return nil, err
+	}
+
+	principal := s.itemDisplayPrice(ctx, *item)
+	now := time.Now().UTC()
+	pos := &domain.StakingPosition{
+		ID:               uuid.New(),
+		UserID:           userID,
+		InventoryItemID:  item.ID,
+		EpochID:          epoch.ID,
+		GiftSlug:         item.TelegramGiftID,
+		Source:           source,
+		TierAtStake:      user.StakingTier,
+		PrincipalNanoton: principal,
+		LastAccrualAt:    now,
+		StakedAt:         now,
+		IsActive:         true,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if err := s.staking.CreatePosition(ctx, pos); err != nil {
+		_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvStaked, domain.InvAvailable)
+		return nil, err
+	}
+
+	claim := &domain.StakingGiftClaim{
+		GiftSlug:   item.TelegramGiftID,
+		UserID:     userID,
+		PositionID: pos.ID,
+		EpochID:    epoch.ID,
+		CreatedAt:  now,
+	}
+	if err := s.staking.UpsertGiftClaim(ctx, claim); err != nil {
+		_ = s.staking.DeactivateWithReason(ctx, pos.ID, domain.StakingRevokedSuperseded)
+		_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvStaked, domain.InvAvailable)
+		return nil, err
+	}
+
+	return pos, nil
+}

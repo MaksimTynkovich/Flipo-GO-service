@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, ProfileGift, StakingStats } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
@@ -14,10 +13,8 @@ import { Gift } from "lucide-react";
 type Props = {
   gift: ProfileGift;
   stats: StakingStats;
-  positionId?: string;
-  unstaking: boolean;
+  epochEndsAt?: string | null;
   onClose: () => void;
-  onUnstake?: () => void;
 };
 
 function StatCell({ label, value, accent }: { label: string; value: ReactNode; accent?: boolean }) {
@@ -29,14 +26,7 @@ function StatCell({ label, value, accent }: { label: string; value: ReactNode; a
   );
 }
 
-export function StakingGiftSheet({
-  gift,
-  stats,
-  positionId,
-  unstaking,
-  onClose,
-  onUnstake,
-}: Props) {
+export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(gift.slug, gift.image_url);
 
@@ -77,6 +67,12 @@ export function StakingGiftSheet({
           <p className="mt-1 inline-flex items-center gap-1 text-sm tabular-nums text-muted">
             Стоимость <TonAmount amount={formatTON(gift.price_nanoton)} variant="brand" iconClassName="h-5 w-5" />
           </p>
+          {gift.source === "profile" && (
+            <p className="mt-1 text-xs text-muted">Из профиля Telegram</p>
+          )}
+          {gift.source === "inventory" && (
+            <p className="mt-1 text-xs text-muted">Из инвентаря</p>
+          )}
         </div>
 
         <div className="mb-5 grid grid-cols-3 gap-2">
@@ -94,26 +90,17 @@ export function StakingGiftSheet({
           />
         </div>
 
-        {gift.is_staked && gift.can_unstake && positionId && onUnstake && (
-          <Button
-            variant="outline"
-            className="h-12 w-full rounded-2xl text-[15px] font-semibold"
-            disabled={unstaking}
-            onClick={onUnstake}
-          >
-            {unstaking ? "Снимаем…" : "Вернуть в инвентарь"}
-          </Button>
-        )}
-
-        {gift.is_staked && !gift.can_unstake && (
+        {gift.is_staked ? (
           <p className="py-2 text-center text-xs leading-relaxed text-muted">
-            Подарок в профиле Telegram — снять со стейка нельзя, он не на балансе бота
+            Подарок заблокирован до конца недели. Доход выплатится на баланс после завершения эпохи
+            {epochEndsAt
+              ? ` (${new Date(epochEndsAt).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })})`
+              : ""}
+            .
           </p>
-        )}
-
-        {!gift.is_staked && (
+        ) : (
           <p className="py-2 text-center text-xs text-muted">
-            Ставка {stats.monthly_rate_percent}%/мес от стоимости подарка
+            Ставка {stats.monthly_rate_percent}%/мес от стоимости подарка. Выплата — в конце недели.
           </p>
         )}
       </div>

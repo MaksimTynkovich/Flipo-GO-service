@@ -25,7 +25,14 @@ type ProfileGift struct {
 	EarnedNanoton       int64   `json:"earned_nanoton"`
 	IsStaked            bool    `json:"is_staked"`
 	CanUnstake          bool    `json:"can_unstake"`
+	Source              string  `json:"source,omitempty"`
 	ItemID              *string `json:"item_id,omitempty"`
+}
+
+type StakingEpochView struct {
+	ID       string `json:"id"`
+	StartsAt string `json:"starts_at"`
+	EndsAt   string `json:"ends_at"`
 }
 
 type StakingStats struct {
@@ -41,11 +48,12 @@ type StakingStats struct {
 }
 
 type ProfileGiftsResponse struct {
-	Gifts               []ProfileGift `json:"gifts"`
-	TotalDailyYield     int64         `json:"total_daily_yield_nanoton"`
-	TotalMonthlyYield   int64         `json:"total_monthly_yield_nanoton"`
-	MonthlyRatePercent  float64       `json:"monthly_rate_percent"`
-	Stats               StakingStats  `json:"stats"`
+	Gifts              []ProfileGift    `json:"gifts"`
+	Epoch              StakingEpochView `json:"epoch"`
+	TotalDailyYield    int64            `json:"total_daily_yield_nanoton"`
+	TotalMonthlyYield  int64            `json:"total_monthly_yield_nanoton"`
+	MonthlyRatePercent float64          `json:"monthly_rate_percent"`
+	Stats              StakingStats     `json:"stats"`
 }
 
 func monthlyRate(tier domain.StakingTier) float64 {
@@ -62,12 +70,13 @@ func calcYields(priceNanoton int64, tier domain.StakingTier) (daily, monthly int
 	return daily, monthly
 }
 
-func itemCanUnstake(item domain.InventoryItem) bool {
-	return !strings.HasPrefix(item.TelegramTxRef, "profile:")
-}
-
 func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*ProfileGiftsResponse, error) {
 	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	epoch, err := s.EnsureCurrentEpoch(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -83,16 +92,16 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 
 	rate := monthlyRate(user.StakingTier)
 	resp := &ProfileGiftsResponse{
-		Gifts:              make([]ProfileGift, 0, len(scanned)),
+		Gifts:              make([]ProfileGift, 0),
+		Epoch:              epochView(epoch),
 		MonthlyRatePercent: rate * 100,
 		Stats: StakingStats{
-			TotalCount:            len(scanned),
 			BoostThresholdNanoton: s.threshold,
 			MonthlyRatePercent:    rate * 100,
 		},
 	}
 
-	positions, _ := s.staking.ListActiveByUser(ctx, userID)
+	positions, _ := s.staking.ListActiveByUserEpoch(ctx, userID, epoch.ID)
 	posByItem := make(map[uuid.UUID]domain.StakingPosition, len(positions))
 	for _, p := range positions {
 		posByItem[p.InventoryItemID] = p
@@ -101,6 +110,26 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 
 	if wager, err := s.staking.SumRouletteWagerLast7Days(ctx, userID); err == nil {
 		resp.Stats.BoostWagerNanoton = wager
+	}
+
+	seenSlugs := make(map[string]bool)
+
+	addGift := func(pg ProfileGift) {
+		if seenSlugs[pg.Slug] {
+			return
+		}
+		seenSlugs[pg.Slug] = true
+		resp.Gifts = append(resp.Gifts, pg)
+		resp.Stats.TotalCount++
+		resp.TotalDailyYield += pg.DailyYieldNanoton
+		resp.TotalMonthlyYield += pg.MonthlyYieldNanoton
+		if pg.IsStaked {
+			resp.Stats.StakedCount++
+			resp.Stats.ActiveDailyNanoton += pg.DailyYieldNanoton
+			resp.Stats.ActiveMonthlyNanoton += pg.MonthlyYieldNanoton
+		} else {
+			resp.Stats.UnlockableMonthlyNanoton += pg.MonthlyYieldNanoton
+		}
 	}
 
 	for _, g := range scanned {
@@ -114,41 +143,30 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			PriceNanoton:        displayPrice,
 			DailyYieldNanoton:   daily,
 			MonthlyYieldNanoton: monthly,
+			Source:              string(domain.StakingSourceProfile),
+			CanUnstake:          false,
 		}
 
 		item, err := s.inventory.FindByTelegramGiftID(ctx, userID, g.Slug)
 		if err == nil {
 			id := item.ID.String()
 			pg.ItemID = &id
-			pg.IsStaked = item.Status == domain.InvStaked
-			pg.CanUnstake = itemCanUnstake(*item)
 			if pos, ok := posByItem[item.ID]; ok {
+				pg.IsStaked = true
 				pg.EarnedNanoton = pos.AccruedYieldNanoton
 			}
 		}
 
-		if pg.IsStaked {
-			resp.Stats.StakedCount++
-			resp.Stats.ActiveDailyNanoton += daily
-			resp.Stats.ActiveMonthlyNanoton += monthly
-		} else {
-			resp.Stats.UnlockableMonthlyNanoton += monthly
+		addGift(pg)
+	}
+
+	available := domain.InvAvailable
+	invItems, _ := s.inventory.ListByUser(ctx, userID, &available)
+	for _, item := range invItems {
+		if seenSlugs[item.TelegramGiftID] || isProfileOnlyVirtual(item) {
+			continue
 		}
-
-		resp.Gifts = append(resp.Gifts, pg)
-		resp.TotalDailyYield += daily
-		resp.TotalMonthlyYield += monthly
-	}
-
-	seenSlugs := make(map[string]bool, len(resp.Gifts))
-	for _, pg := range resp.Gifts {
-		seenSlugs[pg.Slug] = true
-	}
-
-	stakedStatus := domain.InvStaked
-	botStaked, _ := s.inventory.ListByUser(ctx, userID, &stakedStatus)
-	for _, item := range botStaked {
-		if !itemCanUnstake(item) || seenSlugs[item.TelegramGiftID] {
+		if strings.HasPrefix(item.TelegramTxRef, "profile:") {
 			continue
 		}
 
@@ -163,25 +181,30 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			PriceNanoton:        displayPrice,
 			DailyYieldNanoton:   daily,
 			MonthlyYieldNanoton: monthly,
-			IsStaked:            true,
-			CanUnstake:          true,
+			Source:              string(domain.StakingSourceInventory),
+			CanUnstake:          false,
 			ItemID:              &id,
 		}
 		if pos, ok := posByItem[item.ID]; ok {
+			pg.IsStaked = true
 			pg.EarnedNanoton = pos.AccruedYieldNanoton
 		}
-
-		resp.Gifts = append(resp.Gifts, pg)
-		resp.Stats.TotalCount++
-		resp.Stats.StakedCount++
-		resp.Stats.ActiveDailyNanoton += daily
-		resp.Stats.ActiveMonthlyNanoton += monthly
-		resp.TotalDailyYield += daily
-		resp.TotalMonthlyYield += monthly
-		seenSlugs[item.TelegramGiftID] = true
+		addGift(pg)
 	}
 
 	return resp, nil
+}
+
+func isProfileOnlyVirtual(item domain.InventoryItem) bool {
+	return strings.HasPrefix(item.TelegramTxRef, "profile:")
+}
+
+func epochView(epoch *domain.StakingEpoch) StakingEpochView {
+	return StakingEpochView{
+		ID:       epoch.ID.String(),
+		StartsAt: epoch.StartsAt.Format(time.RFC3339),
+		EndsAt:   epoch.EndsAt.Format(time.RFC3339),
+	}
 }
 
 func (s *Service) enrichScannedGifts(ctx context.Context, scanned []telegram.ScannedGift) []telegram.ScannedGift {
@@ -215,6 +238,18 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 		return nil, err
 	}
 
+	item, err := s.inventory.FindByTelegramGiftID(ctx, userID, slug)
+	if err == nil && item.Status == domain.InvAvailable {
+		source := domain.StakingSourceInventory
+		if isProfileItem(*item) {
+			source = domain.StakingSourceProfile
+		}
+		return s.createStake(ctx, userID, item, source)
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
 	scanned, err := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
 		TelegramUserID: user.TelegramID,
 		Username:       user.Username,
@@ -235,40 +270,27 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 		return nil, domain.ErrInvalidAmount
 	}
 
-	item, err := s.inventory.FindByTelegramGiftID(ctx, userID, slug)
-	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		now := time.Now().UTC()
-		item = &domain.InventoryItem{
-			ID:                uuid.New(),
-			UserID:            userID,
-			Source:            domain.NFTSourceTelegramGift,
-			TelegramGiftID:    gift.Slug,
-			CollectionSlug:    gift.CollectionSlug,
-			TokenID:           gift.TokenID,
-			Name:              gift.Name,
-			ImageURL:          gift.ImageURL,
-			Metadata:          datatypes.JSON(gifts.ItemMetadata(gift.Attributes)),
-			FloorPriceNanoton: gift.PriceNanoton,
-			Status:            domain.InvAvailable,
-			DepositedAt:       now,
-			TelegramTxRef:     "profile:" + gift.Slug,
-			CreatedAt:         now,
-			UpdatedAt:         now,
-		}
-		if err := s.inventory.Create(ctx, item); err != nil {
-			return nil, err
-		}
+	now := time.Now().UTC()
+	item = &domain.InventoryItem{
+		ID:                uuid.New(),
+		UserID:            userID,
+		Source:            domain.NFTSourceTelegramGift,
+		TelegramGiftID:    gift.Slug,
+		CollectionSlug:    gift.CollectionSlug,
+		TokenID:           gift.TokenID,
+		Name:              gift.Name,
+		ImageURL:          gift.ImageURL,
+		Metadata:          datatypes.JSON(gifts.ItemMetadata(gift.Attributes)),
+		FloorPriceNanoton: gift.PriceNanoton,
+		Status:            domain.InvAvailable,
+		DepositedAt:       now,
+		TelegramTxRef:     "profile:" + gift.Slug,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	if err := s.inventory.Create(ctx, item); err != nil {
+		return nil, err
 	}
 
-	if item.Status == domain.InvStaked {
-		return nil, errors.New("already staked")
-	}
-	if item.Status != domain.InvAvailable {
-		return nil, domain.ErrInvalidAmount
-	}
-
-	return s.Stake(ctx, userID, item.ID)
+	return s.createStake(ctx, userID, item, domain.StakingSourceProfile)
 }

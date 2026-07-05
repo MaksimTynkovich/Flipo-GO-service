@@ -36,6 +36,33 @@ func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int6
 	return n.sendMessage(ctx, telegramUserID, text)
 }
 
+func (n *BotNotifier) SendDailyStakingYield(ctx context.Context, telegramUserID int64, yieldNanoton int64) error {
+	if !n.Enabled() || telegramUserID == 0 || yieldNanoton <= 0 {
+		return nil
+	}
+	text := fmt.Sprintf("📈 За вчера стейкинг принёс %s TON", formatTON(yieldNanoton))
+	return n.sendMessage(ctx, telegramUserID, text)
+}
+
+func (n *BotNotifier) SendWeeklyStakingComplete(ctx context.Context, telegramUserID int64, totalYieldNanoton int64) error {
+	if !n.Enabled() || telegramUserID == 0 {
+		return nil
+	}
+	text := "✅ Недельный стейкинг завершён!\n\n"
+	if totalYieldNanoton > 0 {
+		text += fmt.Sprintf("Доход за неделю: %s TON — зачислен на баланс.\n\n", formatTON(totalYieldNanoton))
+	} else {
+		text += "Доход за неделю: 0 TON.\n\n"
+	}
+	text += "Пора добавить подарки в новый стейкинг."
+	return n.sendMessage(ctx, telegramUserID, text)
+}
+
+func formatTON(nanoton int64) string {
+	ton := float64(nanoton) / 1_000_000_000
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", ton), "0"), ".")
+}
+
 func (n *BotNotifier) sendMessage(ctx context.Context, chatID int64, text string) error {
 	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", n.token)
 	form := url.Values{}

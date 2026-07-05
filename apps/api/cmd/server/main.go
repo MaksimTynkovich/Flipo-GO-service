@@ -91,7 +91,7 @@ func main() {
 	hub := websocket.NewHub()
 	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, giftValuator, cfg.BoostWagerThreshold)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error

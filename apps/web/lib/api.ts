@@ -163,7 +163,14 @@ export type ProfileGift = {
   earned_nanoton: number;
   is_staked: boolean;
   can_unstake: boolean;
+  source?: "profile" | "inventory";
   item_id?: string;
+};
+
+export type StakingEpoch = {
+  id: string;
+  starts_at: string;
+  ends_at: string;
 };
 
 export type StakingPosition = {
@@ -188,6 +195,7 @@ export type StakingStats = {
 
 export type ProfileGiftsResponse = {
   gifts: ProfileGift[];
+  epoch: StakingEpoch;
   total_daily_yield_nanoton: number;
   total_monthly_yield_nanoton: number;
   monthly_rate_percent: number;
@@ -206,10 +214,11 @@ export async function unstakeGift(positionId: string) {
   return api<{ ok: boolean }>(`/api/v1/staking/unstake/${positionId}`, { method: "POST" });
 }
 
-export async function stakeGift(slug: string) {
+export async function stakeGift(opts: { slug?: string; itemId?: string }) {
+  const body = opts.itemId ? { item_id: opts.itemId } : { slug: opts.slug };
   return api("/api/v1/staking/stake", {
     method: "POST",
-    body: JSON.stringify({ slug }),
+    body: JSON.stringify(body),
   });
 }
 

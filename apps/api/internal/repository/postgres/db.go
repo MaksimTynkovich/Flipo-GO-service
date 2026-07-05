@@ -23,11 +23,16 @@ func NewDB(dsn string) (*gorm.DB, error) {
 }
 
 func AutoMigrate(db *gorm.DB) error {
+	if err := migrateStakingEpochs(db); err != nil {
+		return err
+	}
 	return db.AutoMigrate(
 		&domain.User{},
 		&domain.InventoryItem{},
 		&domain.NFTFloorPrice{},
+		&domain.StakingEpoch{},
 		&domain.StakingPosition{},
+		&domain.StakingGiftClaim{},
 		&domain.UserStakingSnapshot{},
 		&domain.GameRound{},
 		&domain.GameBet{},

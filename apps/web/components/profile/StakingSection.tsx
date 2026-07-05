@@ -9,11 +9,9 @@ import { Button } from "@/components/ui/button";
 import {
   formatTON,
   getProfileGifts,
-  getStakingPositions,
   ProfileGift,
   StakingStats,
   stakeGift,
-  unstakeGift,
 } from "@/lib/api";
 import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
@@ -39,21 +37,20 @@ export function StakingSection() {
   const { user } = useAuth();
   const [gifts, setGifts] = useState<ProfileGift[]>([]);
   const [stats, setStats] = useState<StakingStats>(emptyStats);
-  const [positionByItem, setPositionByItem] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [staking, setStaking] = useState(false);
-  const [unstaking, setUnstaking] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [inspected, setInspected] = useState<ProfileGift | null>(null);
   const [tab, setTab] = useState<Tab>("staked");
+  const [epochEndsAt, setEpochEndsAt] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     try {
-      const [data, positions] = await Promise.all([getProfileGifts(), getStakingPositions()]);
+      const data = await getProfileGifts();
       setGifts(data.gifts);
       setStats(data.stats);
-      setPositionByItem(new Map(positions.map((p) => [p.inventory_item_id, p.id])));
+      setEpochEndsAt(data.epoch.ends_at);
       setSelected(new Set(data.gifts.filter((g) => !g.is_staked).map((g) => g.slug)));
 
       if (data.stats.staked_count === 0 && data.gifts.some((g) => !g.is_staked)) {
@@ -108,26 +105,16 @@ export function StakingSection() {
     setStaking(true);
     try {
       for (const gift of selectedGifts) {
-        await stakeGift(gift.slug);
+        if (gift.source === "inventory" && gift.item_id) {
+          await stakeGift({ itemId: gift.item_id });
+        } else {
+          await stakeGift({ slug: gift.slug });
+        }
       }
       await load();
       setTab("staked");
     } finally {
       setStaking(false);
-    }
-  }
-
-  async function handleUnstake(gift: ProfileGift) {
-    const positionId = gift.item_id ? positionByItem.get(gift.item_id) : undefined;
-    if (!positionId) return;
-    setUnstaking(true);
-    try {
-      await unstakeGift(positionId);
-      setInspected(null);
-      await load();
-      if (stakedGifts.length <= 1) setTab("add");
-    } finally {
-      setUnstaking(false);
     }
   }
 
@@ -149,6 +136,21 @@ export function StakingSection() {
         <div className="h-52 animate-pulse rounded-2xl bg-surface-raised" />
       ) : (
         <StakingOverview isBoost={isBoost} stats={stats} />
+      )}
+
+      {!loading && epochEndsAt && (
+        <p className="px-0.5 text-center text-xs leading-relaxed text-muted">
+          Неделя стейкинга до{" "}
+          {new Date(epochEndsAt).toLocaleString("ru-RU", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "Europe/Moscow",
+          })}{" "}
+          (МСК) · выплата в конце недели
+        </p>
       )}
 
       {loading ? (
@@ -323,14 +325,8 @@ export function StakingSection() {
         <StakingGiftSheet
           gift={inspected}
           stats={stats}
-          positionId={inspected.item_id ? positionByItem.get(inspected.item_id) : undefined}
-          unstaking={unstaking}
+          epochEndsAt={epochEndsAt}
           onClose={() => setInspected(null)}
-          onUnstake={
-            inspected.is_staked && inspected.can_unstake
-              ? () => handleUnstake(inspected)
-              : undefined
-          }
         />
       )}
     </div>

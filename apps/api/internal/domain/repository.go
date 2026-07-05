@@ -45,12 +45,25 @@ type MarketRepository interface {
 type StakingRepository interface {
 	CreatePosition(ctx context.Context, pos *StakingPosition) error
 	ListActiveByUser(ctx context.Context, userID uuid.UUID) ([]StakingPosition, error)
+	ListActiveByUserEpoch(ctx context.Context, userID, epochID uuid.UUID) ([]StakingPosition, error)
 	ListAllActive(ctx context.Context) ([]StakingPosition, error)
+	ListAllActiveEpoch(ctx context.Context, epochID uuid.UUID) ([]StakingPosition, error)
 	Deactivate(ctx context.Context, positionID uuid.UUID) error
+	DeactivateWithReason(ctx context.Context, positionID uuid.UUID, reason StakingRevokeReason) error
 	UpdateAccrual(ctx context.Context, positionID uuid.UUID, yieldDelta int64) error
 	GetSnapshot(ctx context.Context, userID uuid.UUID) (*UserStakingSnapshot, error)
 	UpsertSnapshot(ctx context.Context, snap *UserStakingSnapshot) error
 	SumRouletteWagerLast7Days(ctx context.Context, userID uuid.UUID) (int64, error)
+
+	GetActiveEpoch(ctx context.Context, now time.Time) (*StakingEpoch, error)
+	GetEpochDueForSettlement(ctx context.Context, now time.Time) (*StakingEpoch, error)
+	CreateEpoch(ctx context.Context, epoch *StakingEpoch) error
+	SettleEpoch(ctx context.Context, epochID uuid.UUID) error
+	GetGiftClaim(ctx context.Context, giftSlug string) (*StakingGiftClaim, error)
+	UpsertGiftClaim(ctx context.Context, claim *StakingGiftClaim) error
+	DeleteGiftClaim(ctx context.Context, giftSlug string) error
+	DeleteGiftClaimsByEpoch(ctx context.Context, epochID uuid.UUID) error
+	FindActivePositionBySlug(ctx context.Context, giftSlug string) (*StakingPosition, error)
 }
 
 type GameRepository interface {

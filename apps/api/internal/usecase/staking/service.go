@@ -24,6 +24,7 @@ type Service struct {
 	users     domain.UserRepository
 	scanner   telegram.ProfileGiftScanner
 	valuator  *gifts.Valuator
+	notifier  Notifier
 	threshold int64
 }
 
@@ -33,6 +34,7 @@ func NewService(
 	users domain.UserRepository,
 	scanner telegram.ProfileGiftScanner,
 	valuator *gifts.Valuator,
+	notifier Notifier,
 	threshold int64,
 ) *Service {
 	return &Service{
@@ -41,6 +43,7 @@ func NewService(
 		users:     users,
 		scanner:   scanner,
 		valuator:  valuator,
+		notifier:  notifier,
 		threshold: threshold,
 	}
 }
@@ -53,78 +56,23 @@ func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.
 	if item.UserID != userID || item.Status != domain.InvAvailable {
 		return nil, domain.ErrInvalidAmount
 	}
-
-	user, err := s.users.FindByID(ctx, userID)
-	if err != nil {
-		return nil, err
+	source := domain.StakingSourceInventory
+	if isProfileItem(*item) {
+		source = domain.StakingSourceProfile
 	}
-
-	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvStaked); err != nil {
-		return nil, err
-	}
-
-	principal := item.FloorPriceNanoton
-	if s.valuator != nil {
-		if price, _ := s.valuator.QuoteInventoryBuyback(ctx, *item); price > 0 {
-			principal = price
-		} else {
-			principal = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
-		}
-	} else {
-		principal = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
-	}
-
-	now := time.Now().UTC()
-	pos := &domain.StakingPosition{
-		ID:               uuid.New(),
-		UserID:           userID,
-		InventoryItemID:  itemID,
-		TierAtStake:      user.StakingTier,
-		PrincipalNanoton: principal,
-		LastAccrualAt:    now,
-		StakedAt:         now,
-		IsActive:         true,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-	if err := s.staking.CreatePosition(ctx, pos); err != nil {
-		return nil, err
-	}
-	return pos, nil
+	return s.createStake(ctx, userID, item, source)
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID uuid.UUID) error {
-	positions, err := s.staking.ListActiveByUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-	var target *domain.StakingPosition
-	for i := range positions {
-		if positions[i].ID == positionID {
-			target = &positions[i]
-			break
-		}
-	}
-	if target == nil {
-		return domain.ErrInvalidAmount
-	}
-
-	item, err := s.inventory.FindByID(ctx, target.InventoryItemID)
-	if err != nil {
-		return err
-	}
-	if strings.HasPrefix(item.TelegramTxRef, "profile:") {
-		return errors.New("profile gifts cannot be unstaked")
-	}
-
-	if err := s.staking.Deactivate(ctx, positionID); err != nil {
-		return err
-	}
-	return s.inventory.UpdateStatus(ctx, target.InventoryItemID, domain.InvStaked, domain.InvAvailable)
+	return errors.New("unstaking is not available during the weekly epoch; wait for the week to end")
 }
 
 func (s *Service) ListPositions(ctx context.Context, userID uuid.UUID) ([]domain.StakingPosition, error) {
-	return s.staking.ListActiveByUser(ctx, userID)
+	epoch, err := s.EnsureCurrentEpoch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.staking.ListActiveByUserEpoch(ctx, userID, epoch.ID)
 }
 
 func (s *Service) RecalculateTiers(ctx context.Context) error {
@@ -168,12 +116,30 @@ func (s *Service) RecalculateTiers(ctx context.Context) error {
 }
 
 func (s *Service) AccrueDailyYield(ctx context.Context) error {
+	if _, err := s.EnsureCurrentEpoch(ctx); err != nil {
+		return err
+	}
+
 	positions, err := s.staking.ListAllActive(ctx)
 	if err != nil {
 		return err
 	}
 
+	msk := MoscowLocation()
+	now := time.Now().In(msk)
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, msk)
+
+	userYield := make(map[uuid.UUID]int64)
+
 	for _, pos := range positions {
+		lastInMsk := pos.LastAccrualAt.In(msk)
+		if !lastInMsk.Before(todayStart) {
+			continue
+		}
+		if !pos.StakedAt.Before(todayStart) {
+			continue
+		}
+
 		user, err := s.users.FindByID(ctx, pos.UserID)
 		if err != nil {
 			continue
@@ -192,10 +158,24 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 		if err := s.staking.UpdateAccrual(ctx, pos.ID, dailyYield); err != nil {
 			return err
 		}
-		_, err = s.users.UpdateBalance(ctx, pos.UserID, dailyYield, domain.LedgerStakeYield, "staking", pos.ID)
-		if err != nil {
-			return err
+		userYield[pos.UserID] += dailyYield
+	}
+
+	if s.notifier != nil {
+		for userID, yield := range userYield {
+			user, err := s.users.FindByID(ctx, userID)
+			if err != nil {
+				continue
+			}
+			if err := s.notifier.SendDailyStakingYield(ctx, user.TelegramID, yield); err != nil {
+				continue
+			}
 		}
 	}
+
 	return nil
+}
+
+func isProfileItem(item domain.InventoryItem) bool {
+	return strings.HasPrefix(item.TelegramTxRef, "profile:")
 }

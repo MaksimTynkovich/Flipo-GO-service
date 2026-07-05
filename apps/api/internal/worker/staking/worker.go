@@ -16,7 +16,7 @@ type Worker struct {
 func NewWorker(svc *stakinguc.Service) *Worker {
 	return &Worker{
 		svc:  svc,
-		cron: cron.New(cron.WithSeconds()),
+		cron: cron.New(cron.WithSeconds(), cron.WithLocation(stakinguc.MoscowLocation())),
 	}
 }
 
@@ -26,11 +26,21 @@ func (w *Worker) Start(ctx context.Context) {
 			slog.Error("tier recalc failed", "error", err)
 		}
 	})
-	_, _ = w.cron.AddFunc("0 5 0 * * *", func() {
+
+	// Daily yield accrual + yesterday report at 11:00 MSK.
+	_, _ = w.cron.AddFunc("0 0 11 * * *", func() {
 		if err := w.svc.AccrueDailyYield(ctx); err != nil {
 			slog.Error("yield accrual failed", "error", err)
 		}
 	})
+
+	// Weekly settlement at Monday 00:05 MSK.
+	_, _ = w.cron.AddFunc("0 5 0 * * 1", func() {
+		if err := w.svc.SettleEndedEpochs(ctx); err != nil {
+			slog.Error("epoch settlement failed", "error", err)
+		}
+	})
+
 	w.cron.Start()
 	slog.Info("staking worker started")
 }
