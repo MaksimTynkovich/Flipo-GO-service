@@ -160,6 +160,11 @@ func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (i
 	return user.BettingBalance, nil
 }
 
+// BuybackFromUser pays the seller and lists the gift on the market under the bot account.
+func (s *Service) BuybackFromUser(ctx context.Context, sellerID, itemID uuid.UUID, payout, listPrice int64) (int64, error) {
+	return s.market.SellToBot(ctx, sellerID, itemID, payout, listPrice)
+}
+
 // AddBotGift registers a gift received by the bot and lists it on the market.
 func (s *Service) AddBotGift(ctx context.Context, transfer BotGiftInput) (*ListingView, error) {
 	botUser, err := s.market.EnsureBotUser(ctx)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Gift, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, MarketListing } from "@/lib/api";
 import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
@@ -74,9 +75,7 @@ export function MarketGiftDetailSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/55 backdrop-blur-sm">
-      <button type="button" aria-label="Закрыть" className="absolute inset-0" onClick={onClose} />
-
+    <ModalOverlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -171,6 +170,6 @@ export function MarketGiftDetailSheet({
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

@@ -205,6 +205,105 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 	return &result, nil
 }
 
+func (r *MarketRepo) SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, payout, listPrice int64) (int64, error) {
+	if payout <= 0 || listPrice <= 0 {
+		return 0, domain.ErrInvalidAmount
+	}
+
+	var newBalance int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item domain.InventoryItem
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&item, "id = ? AND user_id = ? AND status = ?", itemID, sellerID, domain.InvAvailable).Error; err != nil {
+			return err
+		}
+
+		botUser, err := ensureBotUserTx(tx)
+		if err != nil {
+			return err
+		}
+
+		var seller domain.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&seller, "id = ?", sellerID).Error; err != nil {
+			return err
+		}
+
+		sellerBalance := seller.BettingBalance + payout
+		if err := tx.Model(&seller).Update("betting_balance", sellerBalance).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&domain.BalanceLedger{
+			UserID:        sellerID,
+			Type:          domain.LedgerLiquidate,
+			AmountNanoton: payout,
+			BalanceAfter:  sellerBalance,
+			ReferenceType: "inventory",
+			ReferenceID:   itemID,
+			CreatedAt:     time.Now().UTC(),
+		}).Error; err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		if err := tx.Model(&item).Updates(map[string]interface{}{
+			"user_id":    botUser.ID,
+			"status":     domain.InvLocked,
+			"updated_at": now,
+		}).Error; err != nil {
+			return err
+		}
+
+		listing := domain.MarketListing{
+			ID:              uuid.New(),
+			SellerID:        botUser.ID,
+			InventoryItemID: itemID,
+			PriceNanoton:    listPrice,
+			Status:          domain.ListingActive,
+			Source:          domain.ListingSourceBot,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		if err := tx.Create(&listing).Error; err != nil {
+			return err
+		}
+
+		newBalance = sellerBalance
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+func ensureBotUserTx(tx *gorm.DB) (*domain.User, error) {
+	var user domain.User
+	err := tx.Where("telegram_id = ?", domain.BotTelegramID).First(&user).Error
+	if err == nil {
+		return &user, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	user = domain.User{
+		ID:             uuid.New(),
+		TelegramID:     domain.BotTelegramID,
+		Username:       "flipo_bot",
+		FirstName:      "Flipo Bot",
+		BettingBalance: 0,
+		StakingTier:    domain.TierBase,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := tx.Create(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (r *MarketRepo) EnsureBotUser(ctx context.Context) (*domain.User, error) {
 	var user domain.User
 	err := r.db.WithContext(ctx).Where("telegram_id = ?", domain.BotTelegramID).First(&user).Error

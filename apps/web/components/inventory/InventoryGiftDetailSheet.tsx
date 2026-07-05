@@ -7,6 +7,7 @@ import { formatTON, InventoryItem, MarketListing } from "@/lib/api";
 import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { formatCollectionSlug, giftImageUrl, giftValuationNanoton, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
+import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -60,9 +61,7 @@ export function InventoryGiftDetailSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/55 backdrop-blur-sm">
-      <button type="button" aria-label="Закрыть" className="absolute inset-0" onClick={onClose} />
-
+    <ModalOverlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -159,6 +158,6 @@ export function InventoryGiftDetailSheet({
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

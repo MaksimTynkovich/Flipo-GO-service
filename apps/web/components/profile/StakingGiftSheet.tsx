@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, ProfileGift, StakingStats } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
@@ -40,9 +41,7 @@ export function StakingGiftSheet({
   const imageSrc = giftImageUrl(gift.slug, gift.image_url);
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/55 backdrop-blur-sm">
-      <button type="button" aria-label="Закрыть" className="absolute inset-0" onClick={onClose} />
-
+    <ModalOverlay onClose={onClose}>
       <div className="relative mx-auto w-full max-w-lg rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
 
@@ -118,6 +117,6 @@ export function StakingGiftSheet({
           </p>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

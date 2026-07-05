@@ -147,30 +147,15 @@ export function StakingSection() {
     <div className="space-y-4 pb-28">
       {loading ? (
         <div className="h-52 animate-pulse rounded-2xl bg-surface-raised" />
-      ) : gifts.length > 0 ? (
+      ) : (
         <StakingOverview isBoost={isBoost} stats={stats} />
-      ) : null}
+      )}
 
       {loading ? (
         <div className="grid grid-cols-3 gap-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <GiftTileSkeleton key={i} />
           ))}
-        </div>
-      ) : gifts.length === 0 ? (
-        <div className="panel flex flex-col items-center gap-3 py-12 text-center">
-          <div className="icon-box h-14 w-14">
-            <Gift className="h-6 w-6" />
-          </div>
-          <div className="space-y-1">
-            <p className="font-semibold">Подарков пока нет</p>
-            <p className="text-sm text-muted">Передай collectible gift боту — он появится здесь</p>
-          </div>
-          <Link href={APP_ROUTES.deposit}>
-            <Button variant="accent" className="rounded-xl px-6">
-              Как пополнить
-            </Button>
-          </Link>
         </div>
       ) : (
         <>
@@ -229,8 +214,19 @@ export function StakingSection() {
             <section className="space-y-3">
               {unstakedGifts.length === 0 ? (
                 <div className="panel py-10 text-center">
-                  <p className="font-medium text-success">Весь портфель в стейке</p>
-                  <p className="mt-1 text-sm text-muted">Новых подарков для добавления нет</p>
+                  {gifts.length > 0 ? (
+                    <>
+                      <p className="font-medium text-success">Весь портфель в стейке</p>
+                      <p className="mt-1 text-sm text-muted">Новых подарков для добавления нет</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium">Нет подарков для добавления</p>
+                      <p className="mt-1 text-sm text-muted">
+                        Сначала пополни инвентарь collectible gift
+                      </p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
@@ -272,6 +268,27 @@ export function StakingSection() {
                 </>
               )}
             </section>
+          )}
+
+          {gifts.length === 0 && (
+            <div className="panel flex items-start gap-3 p-4">
+              <div className="icon-box h-10 w-10 shrink-0">
+                <Gift className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Подарков пока нет</p>
+                  <p className="text-xs leading-relaxed text-muted">
+                    Передай collectible gift боту — он появится здесь
+                  </p>
+                </div>
+                <Link href={APP_ROUTES.deposit}>
+                  <Button variant="outline" className="h-9 rounded-xl px-4 text-xs">
+                    Как пополнить
+                  </Button>
+                </Link>
+              </div>
+            </div>
           )}
         </>
       )}

@@ -2,7 +2,6 @@ package inventory
 
 import (
 	"context"
-	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
@@ -23,10 +22,11 @@ type Service struct {
 	users     domain.UserRepository
 	deposit   *telegram.DepositService
 	valuator  *gifts.Valuator
+	market    LiquidationBroker
 }
 
-func NewService(inventory domain.InventoryRepository, users domain.UserRepository, deposit *telegram.DepositService, valuator *gifts.Valuator) *Service {
-	return &Service{inventory: inventory, users: users, deposit: deposit, valuator: valuator}
+func NewService(inventory domain.InventoryRepository, users domain.UserRepository, deposit *telegram.DepositService, valuator *gifts.Valuator, market LiquidationBroker) *Service {
+	return &Service{inventory: inventory, users: users, deposit: deposit, valuator: valuator, market: market}
 }
 
 func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]domain.InventoryItem, error) {
@@ -90,11 +90,6 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 		return 0, domain.ErrInvalidAmount
 	}
 
-	now := time.Now().UTC()
-	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvLiquidated); err != nil {
-		return 0, err
-	}
-
 	payout := item.FloorPriceNanoton
 	if s.valuator != nil {
 		if price, _ := s.valuator.QuoteInventoryBuyback(ctx, *item); price > 0 {
@@ -107,12 +102,11 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 		return 0, domain.ErrInvalidAmount
 	}
 
-	balance, err := s.users.UpdateBalance(ctx, userID, payout, domain.LedgerLiquidate, "inventory", itemID)
-	if err != nil {
-		return 0, err
+	if s.market == nil {
+		return 0, domain.ErrInvalidAmount
 	}
-	_ = now
-	return balance, nil
+
+	return s.market.BuybackFromUser(ctx, userID, itemID, payout, payout)
 }
 
 func (s *Service) SetFloorPrice(ctx context.Context, slug string, price int64) error {

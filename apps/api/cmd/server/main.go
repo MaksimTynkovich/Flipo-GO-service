@@ -85,12 +85,12 @@ func main() {
 	giftScanner := telegram.NewProfileGiftScanner(cfg.DebugAuthEnabled, mtprotoCfg)
 	giftValuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
-	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftValuator)
+	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)
+	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftValuator, marketSvc)
 
 	hub := websocket.NewHub()
 	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
-	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, giftValuator, cfg.BoostWagerThreshold)
 
 	var cacheIface interface {
