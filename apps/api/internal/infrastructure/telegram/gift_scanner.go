@@ -95,17 +95,27 @@ func (s *MTProtoGiftScanner) ScanProfileGifts(ctx context.Context, req ProfileGi
 
 func scanTargetFromRequest(req ProfileGiftScanRequest) ScanTarget {
 	if req.Username != "" {
-		return ScanTarget{
-			UserID:   req.TelegramUserID,
-			Username: req.Username,
-		}
+		return ScanTargetByUsername(req.Username)
 	}
 	return ScanTargetByID(req.TelegramUserID)
 }
 
-func NewProfileGiftScanner(debugEnabled bool, cfg MTProtoConfig) ProfileGiftScanner {
-	if debugEnabled {
+type EmptyGiftScanner struct{}
+
+func NewEmptyGiftScanner() *EmptyGiftScanner {
+	return &EmptyGiftScanner{}
+}
+
+func (s *EmptyGiftScanner) ScanProfileGifts(_ context.Context, _ ProfileGiftScanRequest) ([]ScannedGift, error) {
+	return nil, ErrMTProtoNotConfigured
+}
+
+func NewProfileGiftScanner(mtprotoCfg MTProtoConfig, debugFakeGifts bool) ProfileGiftScanner {
+	if mtprotoCfg.Enabled() {
+		return NewMTProtoGiftScanner(mtprotoCfg)
+	}
+	if debugFakeGifts {
 		return NewDebugGiftScanner()
 	}
-	return NewMTProtoGiftScanner(cfg)
+	return NewEmptyGiftScanner()
 }

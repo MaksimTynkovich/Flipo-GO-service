@@ -11,33 +11,35 @@ import (
 )
 
 func (r *StakingRepo) GetActiveEpoch(ctx context.Context, now time.Time) (*domain.StakingEpoch, error) {
-	var epoch domain.StakingEpoch
+	var epochs []domain.StakingEpoch
 	err := r.db.WithContext(ctx).
 		Where("status = ? AND starts_at <= ? AND ends_at > ?", domain.EpochActive, now, now).
 		Order("starts_at DESC").
-		First(&epoch).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
+		Limit(1).
+		Find(&epochs).Error
 	if err != nil {
 		return nil, err
 	}
-	return &epoch, nil
+	if len(epochs) == 0 {
+		return nil, nil
+	}
+	return &epochs[0], nil
 }
 
 func (r *StakingRepo) GetEpochDueForSettlement(ctx context.Context, now time.Time) (*domain.StakingEpoch, error) {
-	var epoch domain.StakingEpoch
+	var epochs []domain.StakingEpoch
 	err := r.db.WithContext(ctx).
 		Where("status = ? AND ends_at <= ?", domain.EpochActive, now).
 		Order("ends_at ASC").
-		First(&epoch).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
+		Limit(1).
+		Find(&epochs).Error
 	if err != nil {
 		return nil, err
 	}
-	return &epoch, nil
+	if len(epochs) == 0 {
+		return nil, nil
+	}
+	return &epochs[0], nil
 }
 
 func (r *StakingRepo) CreateEpoch(ctx context.Context, epoch *domain.StakingEpoch) error {

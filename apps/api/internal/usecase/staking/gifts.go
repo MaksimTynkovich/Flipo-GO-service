@@ -3,6 +3,7 @@ package staking
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -81,14 +82,21 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		return nil, err
 	}
 
-	scanned, err := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
+	scanned, scanErr := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
 		TelegramUserID: user.TelegramID,
 		Username:       user.Username,
 	})
-	if err != nil {
-		return nil, err
+	if scanErr != nil {
+		slog.Warn("profile gift scan failed",
+			"user_id", userID,
+			"telegram_id", user.TelegramID,
+			"username", user.Username,
+			"error", scanErr,
+		)
+		scanned = nil
+	} else {
+		scanned = s.enrichScannedGifts(ctx, scanned)
 	}
-	scanned = s.enrichScannedGifts(ctx, scanned)
 
 	rate := monthlyRate(user.StakingTier)
 	resp := &ProfileGiftsResponse{
@@ -163,11 +171,13 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	available := domain.InvAvailable
 	invItems, _ := s.inventory.ListByUser(ctx, userID, &available)
 	for _, item := range invItems {
-		if seenSlugs[item.TelegramGiftID] || isProfileOnlyVirtual(item) {
+		if seenSlugs[item.TelegramGiftID] {
 			continue
 		}
-		if strings.HasPrefix(item.TelegramTxRef, "profile:") {
-			continue
+
+		source := domain.StakingSourceInventory
+		if isProfileOnlyVirtual(item) {
+			source = domain.StakingSourceProfile
 		}
 
 		displayPrice := s.itemDisplayPrice(ctx, item)
@@ -181,7 +191,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			PriceNanoton:        displayPrice,
 			DailyYieldNanoton:   daily,
 			MonthlyYieldNanoton: monthly,
-			Source:              string(domain.StakingSourceInventory),
+			Source:              string(source),
 			CanUnstake:          false,
 			ItemID:              &id,
 		}
@@ -190,6 +200,33 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			pg.EarnedNanoton = pos.AccruedYieldNanoton
 		}
 		addGift(pg)
+	}
+
+	for _, pos := range positions {
+		if seenSlugs[pos.GiftSlug] {
+			continue
+		}
+		item, err := s.inventory.FindByID(ctx, pos.InventoryItemID)
+		if err != nil {
+			continue
+		}
+		displayPrice := s.itemDisplayPrice(ctx, *item)
+		daily, monthly := calcYields(displayPrice, user.StakingTier)
+		id := item.ID.String()
+		addGift(ProfileGift{
+			Slug:                item.TelegramGiftID,
+			Name:                item.Name,
+			CollectionSlug:      item.CollectionSlug,
+			ImageURL:            item.ImageURL,
+			PriceNanoton:        displayPrice,
+			DailyYieldNanoton:   daily,
+			MonthlyYieldNanoton: monthly,
+			EarnedNanoton:       pos.AccruedYieldNanoton,
+			IsStaked:            true,
+			CanUnstake:          false,
+			Source:              string(pos.Source),
+			ItemID:              &id,
+		})
 	}
 
 	return resp, nil
@@ -238,15 +275,9 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 		return nil, err
 	}
 
-	item, err := s.inventory.FindByTelegramGiftID(ctx, userID, slug)
-	if err == nil && item.Status == domain.InvAvailable {
-		source := domain.StakingSourceInventory
-		if isProfileItem(*item) {
-			source = domain.StakingSourceProfile
-		}
-		return s.createStake(ctx, userID, item, source)
-	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if item, err := s.inventory.FindByTelegramGiftID(ctx, userID, slug); err == nil {
+		return s.stakeExistingItem(ctx, userID, item)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 
@@ -271,7 +302,7 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 	}
 
 	now := time.Now().UTC()
-	item = &domain.InventoryItem{
+	item := &domain.InventoryItem{
 		ID:                uuid.New(),
 		UserID:            userID,
 		Source:            domain.NFTSourceTelegramGift,
@@ -289,8 +320,35 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 		UpdatedAt:         now,
 	}
 	if err := s.inventory.Create(ctx, item); err != nil {
+		if item, findErr := s.inventory.FindByTelegramGiftID(ctx, userID, slug); findErr == nil {
+			return s.stakeExistingItem(ctx, userID, item)
+		}
 		return nil, err
 	}
 
 	return s.createStake(ctx, userID, item, domain.StakingSourceProfile)
+}
+
+func (s *Service) stakeExistingItem(ctx context.Context, userID uuid.UUID, item *domain.InventoryItem) (*domain.StakingPosition, error) {
+	switch item.Status {
+	case domain.InvAvailable:
+		source := domain.StakingSourceInventory
+		if isProfileItem(*item) {
+			source = domain.StakingSourceProfile
+		}
+		return s.createStake(ctx, userID, item, source)
+	case domain.InvStaked:
+		return nil, errors.New("gift already staked")
+	case domain.InvLiquidated:
+		if !isProfileItem(*item) {
+			return nil, errors.New("gift was sold and is no longer available")
+		}
+		if err := s.inventory.UpdateStatus(ctx, item.ID, domain.InvLiquidated, domain.InvAvailable); err != nil {
+			return nil, err
+		}
+		item.Status = domain.InvAvailable
+		return s.createStake(ctx, userID, item, domain.StakingSourceProfile)
+	default:
+		return nil, errors.New("gift is not available for staking")
+	}
 }
