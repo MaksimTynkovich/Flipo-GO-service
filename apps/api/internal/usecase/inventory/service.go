@@ -12,7 +12,10 @@ import (
 
 type ItemView struct {
 	domain.InventoryItem
-	BuybackPriceNanoton int64 `json:"buyback_price_nanoton"`
+	BuybackPriceNanoton int64  `json:"buyback_price_nanoton"`
+	Model               string `json:"model,omitempty"`
+	Symbol              string `json:"symbol,omitempty"`
+	Backdrop            string `json:"backdrop,omitempty"`
 }
 
 type Service struct {
@@ -49,24 +52,22 @@ func (s *Service) toItemView(ctx context.Context, item domain.InventoryItem) Ite
 
 func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.InventoryItem) ItemView {
 	view := ItemView{InventoryItem: item}
+	attrs := gifts.ItemAttributes(item.Metadata)
+	view.Model = attrs.Model
+	view.Symbol = attrs.Symbol
+	view.Backdrop = attrs.Backdrop
+
 	if valuator == nil {
-		view.BuybackPriceNanoton = item.FloorPriceNanoton
+		view.BuybackPriceNanoton = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
 		return view
 	}
 	price, _ := valuator.QuoteInventoryBuyback(ctx, item)
 	if price > 0 {
 		view.BuybackPriceNanoton = price
 	} else {
-		view.BuybackPriceNanoton = applyBuybackFallback(item.FloorPriceNanoton)
+		view.BuybackPriceNanoton = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
 	}
 	return view
-}
-
-func applyBuybackFallback(floor int64) int64 {
-	if floor <= 0 {
-		return 0
-	}
-	return int64(float64(floor) * (1 - gifts.BuybackHaircut))
 }
 
 func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*domain.InventoryItem, error) {
@@ -99,7 +100,7 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 		if price, _ := s.valuator.QuoteInventoryBuyback(ctx, *item); price > 0 {
 			payout = price
 		} else {
-			payout = applyBuybackFallback(item.FloorPriceNanoton)
+			payout = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
 		}
 	}
 	if payout <= 0 {

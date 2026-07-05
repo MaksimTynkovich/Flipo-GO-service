@@ -21,6 +21,9 @@ export type InventoryItem = {
   telegram_gift_id?: string;
   floor_price_nanoton: number;
   buyback_price_nanoton?: number;
+  model?: string;
+  symbol?: string;
+  backdrop?: string;
   status: string;
 };
 

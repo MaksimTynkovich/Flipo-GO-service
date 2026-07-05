@@ -104,13 +104,14 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	}
 
 	for _, g := range scanned {
-		daily, monthly := calcYields(g.PriceNanoton, user.StakingTier)
+		displayPrice := s.giftDisplayPrice(ctx, g)
+		daily, monthly := calcYields(displayPrice, user.StakingTier)
 		pg := ProfileGift{
 			Slug:                g.Slug,
 			Name:                g.Name,
 			CollectionSlug:      g.CollectionSlug,
 			ImageURL:            g.ImageURL,
-			PriceNanoton:        g.PriceNanoton,
+			PriceNanoton:        displayPrice,
 			DailyYieldNanoton:   daily,
 			MonthlyYieldNanoton: monthly,
 		}
@@ -151,14 +152,15 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			continue
 		}
 
-		daily, monthly := calcYields(item.FloorPriceNanoton, user.StakingTier)
+		displayPrice := s.itemDisplayPrice(ctx, item)
+		daily, monthly := calcYields(displayPrice, user.StakingTier)
 		id := item.ID.String()
 		pg := ProfileGift{
 			Slug:                item.TelegramGiftID,
 			Name:                item.Name,
 			CollectionSlug:      item.CollectionSlug,
 			ImageURL:            item.ImageURL,
-			PriceNanoton:        item.FloorPriceNanoton,
+			PriceNanoton:        displayPrice,
 			DailyYieldNanoton:   daily,
 			MonthlyYieldNanoton: monthly,
 			IsStaked:            true,
@@ -187,6 +189,24 @@ func (s *Service) enrichScannedGifts(ctx context.Context, scanned []telegram.Sca
 		return scanned
 	}
 	return s.valuator.Enrich(ctx, scanned)
+}
+
+func (s *Service) giftDisplayPrice(ctx context.Context, gift telegram.ScannedGift) int64 {
+	if s.valuator != nil {
+		if price, _ := s.valuator.QuoteBuyback(ctx, gift); price > 0 {
+			return price
+		}
+	}
+	return gifts.ApplyBuybackHaircut(gift.PriceNanoton)
+}
+
+func (s *Service) itemDisplayPrice(ctx context.Context, item domain.InventoryItem) int64 {
+	if s.valuator != nil {
+		if price, _ := s.valuator.QuoteInventoryBuyback(ctx, item); price > 0 {
+			return price
+		}
+	}
+	return gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
 }
 
 func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string) (*domain.StakingPosition, error) {

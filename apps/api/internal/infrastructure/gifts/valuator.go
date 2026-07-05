@@ -32,7 +32,7 @@ func NewValuator(market *MarketPrices, floors FloorPriceLookup) *Valuator {
 	return &Valuator{market: market, floors: floors}
 }
 
-// Enrich applies staking valuation (minimum trait price, no buyback haircut).
+// Enrich stores the raw floor quote (minimum trait / collection price, no haircut).
 func (v *Valuator) Enrich(ctx context.Context, gifts []telegram.ScannedGift) []telegram.ScannedGift {
 	if len(gifts) == 0 {
 		return gifts
@@ -50,7 +50,7 @@ func (v *Valuator) Enrich(ctx context.Context, gifts []telegram.ScannedGift) []t
 }
 
 func (v *Valuator) QuoteStaking(ctx context.Context, gift telegram.ScannedGift) (int64, string) {
-	return v.quote(ctx, gift, false)
+	return v.quote(ctx, gift, true)
 }
 
 func (v *Valuator) QuoteBuyback(ctx context.Context, gift telegram.ScannedGift) (int64, string) {
@@ -140,9 +140,13 @@ func finalizeQuote(price int64, source string, buyback bool) (int64, string) {
 	return applyBuybackHaircut(price), source
 }
 
-func applyBuybackHaircut(price int64) int64 {
+func ApplyBuybackHaircut(price int64) int64 {
 	if price <= 0 {
 		return 0
 	}
 	return int64(float64(price) * (1 - BuybackHaircut))
+}
+
+func applyBuybackHaircut(price int64) int64 {
+	return ApplyBuybackHaircut(price)
 }

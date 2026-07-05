@@ -63,13 +63,24 @@ func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.
 		return nil, err
 	}
 
+	principal := item.FloorPriceNanoton
+	if s.valuator != nil {
+		if price, _ := s.valuator.QuoteInventoryBuyback(ctx, *item); price > 0 {
+			principal = price
+		} else {
+			principal = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
+		}
+	} else {
+		principal = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
+	}
+
 	now := time.Now().UTC()
 	pos := &domain.StakingPosition{
 		ID:               uuid.New(),
 		UserID:           userID,
 		InventoryItemID:  itemID,
 		TierAtStake:      user.StakingTier,
-		PrincipalNanoton: item.FloorPriceNanoton,
+		PrincipalNanoton: principal,
 		LastAccrualAt:    now,
 		StakedAt:         now,
 		IsActive:         true,

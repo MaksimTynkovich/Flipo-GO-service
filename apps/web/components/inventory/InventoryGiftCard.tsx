@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatTON, InventoryItem } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
-import { giftImageUrl } from "@/lib/gifts";
+import { formatCollectionSlug, giftImageUrl, giftValuationNanoton, traitValue } from "@/lib/gifts";
 import { Gift } from "lucide-react";
 
 export function inventoryItemSlug(item: InventoryItem): string {
@@ -23,8 +23,9 @@ const STATUS_LABEL: Record<string, string> = {
 export function InventoryGiftCard({ item, listingPrice, onClick }: Props) {
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
-  const price = listingPrice ?? item.floor_price_nanoton;
+  const price = listingPrice ?? giftValuationNanoton(item);
   const statusLabel = STATUS_LABEL[item.status];
+  const collection = formatCollectionSlug(item.collection_slug);
 
   return (
     <button
@@ -58,6 +59,11 @@ export function InventoryGiftCard({ item, listingPrice, onClick }: Props) {
         <p className="text-sm font-semibold tabular-nums text-accent">
           <TonAmount amount={formatTON(price)} variant="brand" iconClassName="h-6 w-6" />
         </p>
+        <div className="space-y-0.5 pt-0.5">
+          <p className="truncate text-[10px] capitalize text-muted">{collection}</p>
+          <p className="truncate text-[10px] text-muted/80">{traitValue(item.backdrop)}</p>
+          <p className="truncate text-[10px] text-muted/80">{traitValue(item.symbol)}</p>
+        </div>
       </div>
     </button>
   );
@@ -70,6 +76,8 @@ export function InventoryGiftCardSkeleton() {
       <div className="space-y-1">
         <div className="h-3 w-3/4 animate-pulse rounded-md bg-surface-raised" />
         <div className="h-3.5 w-1/2 animate-pulse rounded-md bg-surface-raised" />
+        <div className="h-2.5 w-full animate-pulse rounded-md bg-surface-raised" />
+        <div className="h-2.5 w-2/3 animate-pulse rounded-md bg-surface-raised" />
       </div>
     </div>
   );

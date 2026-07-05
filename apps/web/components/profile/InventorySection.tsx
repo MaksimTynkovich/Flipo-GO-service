@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
   InventoryGiftCard,
   InventoryGiftCardSkeleton,
@@ -10,7 +9,6 @@ import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGu
 import { InventoryGiftDetailSheet } from "@/components/inventory/InventoryGiftDetailSheet";
 import {
   cancelMarketListing,
-  createMarketListing,
   getInventory,
   getMyMarketListings,
   InventoryItem,
@@ -20,20 +18,12 @@ import {
 import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
 import { Gift } from "lucide-react";
 
-function tonToNanoton(ton: string): number {
-  const val = parseFloat(ton.replace(",", "."));
-  if (Number.isNaN(val) || val <= 0) return 0;
-  return Math.round(val * 1_000_000_000);
-}
-
 export function InventorySection() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [myListings, setMyListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
-  const [listPrice, setListPrice] = useState("");
   const [listError, setListError] = useState<string | null>(null);
-  const [isListing, setIsListing] = useState(false);
   const [liquidating, setLiquidating] = useState(false);
 
   const listingByItemId = useMemo(
@@ -71,17 +61,12 @@ export function InventorySection() {
 
   useEffect(() => {
     if (selected) {
-      const listing = listingByItemId.get(selected.id);
-      setListPrice(
-        listing ? (listing.price_nanoton / 1_000_000_000).toFixed(2) : "",
-      );
       setListError(null);
     }
-  }, [selected, listingByItemId]);
+  }, [selected]);
 
   function closeSheet() {
     setSelected(null);
-    setListPrice("");
     setListError(null);
   }
 
@@ -96,26 +81,6 @@ export function InventorySection() {
       setListError(e instanceof Error ? e.message : "Ошибка");
     } finally {
       setLiquidating(false);
-    }
-  }
-
-  async function handleListOnMarket() {
-    if (!selected) return;
-    const price = tonToNanoton(listPrice);
-    if (price <= 0) {
-      setListError("Укажите корректную цену");
-      return;
-    }
-    setIsListing(true);
-    setListError(null);
-    try {
-      await createMarketListing(selected.id, price);
-      closeSheet();
-      load();
-    } catch (e) {
-      setListError(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setIsListing(false);
     }
   }
 
@@ -169,13 +134,9 @@ export function InventorySection() {
         <InventoryGiftDetailSheet
           item={selected}
           marketListing={listingByItemId.get(selected.id)}
-          listPrice={listPrice}
           listError={listError}
-          isListing={isListing}
           liquidating={liquidating}
-          onListPriceChange={setListPrice}
           onClose={closeSheet}
-          onList={handleListOnMarket}
           onLiquidate={handleLiquidate}
           onCancelListing={handleCancelListing}
         />
