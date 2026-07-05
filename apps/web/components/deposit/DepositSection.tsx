@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { depositGift, formatTON, updateWallet } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
+import { depositBotMention } from "@/lib/bot";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { Gift, Wallet } from "lucide-react";
 
@@ -117,8 +118,8 @@ export function DepositSection() {
           </div>
 
           <div className="surface-inset px-3 py-2.5 text-xs text-muted">
-            <p>1. Отправь upgraded gift боту @flipo</p>
-            <p className="mt-1">2. Вставь ссылку или slug подарка ниже</p>
+            <p>1. Отправь upgraded gift боту {depositBotMention()}</p>
+            <p className="mt-1">2. Бот оценит подарок и зачислит его в инвентарь</p>
           </div>
 
           <input

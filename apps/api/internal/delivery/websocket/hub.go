@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -25,6 +26,10 @@ type Hub struct {
 	mu        sync.RWMutex
 	clients   map[string]map[*Client]bool
 	broadcast map[string]chan []byte
+
+	userMu        sync.RWMutex
+	userClients   map[uuid.UUID]map[*UserClient]bool
+	userBroadcast chan userEnvelope
 }
 
 func NewHub() *Hub {

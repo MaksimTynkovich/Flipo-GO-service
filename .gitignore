@@ -9,4 +9,5 @@ bin/
 apps/web/.env.local
 ngrok.log
 data/telegram/
+session.json
 .DS_Store

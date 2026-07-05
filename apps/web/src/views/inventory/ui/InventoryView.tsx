@@ -3,7 +3,7 @@ import { InventorySection } from "@/components/profile/InventorySection";
 
 export function InventoryView() {
   return (
-    <PageShell title="Инвентарь" description="Продавай подарки боту или выставляй на маркет">
+    <PageShell title="Инвентарь" description="Пополняй подарками через бота, стейкай или продавай">
       <InventorySection />
     </PageShell>
   );

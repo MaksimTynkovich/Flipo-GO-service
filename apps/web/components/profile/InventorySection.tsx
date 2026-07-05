@@ -6,17 +6,18 @@ import {
   InventoryGiftCard,
   InventoryGiftCardSkeleton,
 } from "@/components/inventory/InventoryGiftCard";
+import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGuide";
 import { InventoryGiftDetailSheet } from "@/components/inventory/InventoryGiftDetailSheet";
 import {
   cancelMarketListing,
   createMarketListing,
-  depositGift,
   getInventory,
   getMyMarketListings,
   InventoryItem,
   liquidateItem,
   MarketListing,
 } from "@/lib/api";
+import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
 import { Gift } from "lucide-react";
 
 function tonToNanoton(ton: string): number {
@@ -28,7 +29,6 @@ function tonToNanoton(ton: string): number {
 export function InventorySection() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [myListings, setMyListings] = useState<MarketListing[]>([]);
-  const [txRef, setTxRef] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [listPrice, setListPrice] = useState("");
@@ -62,6 +62,14 @@ export function InventorySection() {
   }, []);
 
   useEffect(() => {
+    const onDeposited = () => {
+      load();
+    };
+    window.addEventListener(INVENTORY_DEPOSITED_EVENT, onDeposited);
+    return () => window.removeEventListener(INVENTORY_DEPOSITED_EVENT, onDeposited);
+  }, []);
+
+  useEffect(() => {
     if (selected) {
       const listing = listingByItemId.get(selected.id);
       setListPrice(
@@ -70,13 +78,6 @@ export function InventorySection() {
       setListError(null);
     }
   }, [selected, listingByItemId]);
-
-  async function handleDeposit() {
-    if (!txRef) return;
-    await depositGift(txRef);
-    setTxRef("");
-    load();
-  }
 
   function closeSheet() {
     setSelected(null);
@@ -131,7 +132,9 @@ export function InventorySection() {
 
   return (
     <>
-      <section className="space-y-2">
+      <InventoryDepositGuide />
+
+      <section className="mt-5 space-y-2">
         <div className="flex items-center justify-between px-0.5">
           <p className="section-label">Мои подарки</p>
           {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}
@@ -157,7 +160,7 @@ export function InventorySection() {
           <div className="panel py-10 text-center">
             <Gift className="mx-auto h-8 w-8 text-muted/50" />
             <p className="mt-3 text-sm font-medium">Инвентарь пуст</p>
-            <p className="mt-1 text-xs text-muted">Привяжи первый подарок выше</p>
+            <p className="mt-1 text-xs text-muted">Отправь collectible gift боту — он появится здесь</p>
           </div>
         )}
       </section>

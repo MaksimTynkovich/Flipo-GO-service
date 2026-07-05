@@ -91,5 +91,9 @@ func NewRouter(deps Deps) *gin.Engine {
 		websocket.ServeWS(deps.Hub, game, c.Writer, c.Request)
 	})
 
+	r.GET("/ws/user", func(c *gin.Context) {
+		websocket.ServeUserWS(deps.Hub, deps.Auth, c.Writer, c.Request)
+	})
+
 	return r
 }

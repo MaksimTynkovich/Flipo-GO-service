@@ -17,6 +17,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
 	redisrepo "github.com/flipo/flipo/apps/api/internal/repository/redis"
@@ -31,6 +32,7 @@ import (
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
+	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
 )
 
 func main() {
@@ -84,6 +86,10 @@ func main() {
 	giftValuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftValuator)
+
+	hub := websocket.NewHub()
+	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
+	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
 	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, giftValuator, cfg.BoostWagerThreshold)
 
@@ -101,8 +107,6 @@ func main() {
 		cacheIface = &noopCache{}
 	}
 
-	hub := websocket.NewHub()
-
 	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
 	crashSvc := crash.NewService(gameRepo, balanceSvc, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
@@ -119,6 +123,9 @@ func main() {
 	stakeWorker := stakingworker.NewWorker(stakeSvc)
 	stakeWorker.Start(ctx)
 	defer stakeWorker.Stop()
+
+	giftDepositWorker := giftdepositworker.NewWorker(mtprotoCfg, autoDepositSvc)
+	giftDepositWorker.Start(ctx)
 
 	router := httpx.NewRouter(httpx.Deps{
 		DB:               db,

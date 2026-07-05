@@ -49,6 +49,9 @@ scan-gifts:
 		$(if $(SELF),-self,) \
 		-verbose $(if $(RAW),-raw,)
 
+process-deposits:
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/process-deposits
+
 test:
 	cd apps/api && go test ./...
 

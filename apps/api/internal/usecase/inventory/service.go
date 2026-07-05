@@ -44,12 +44,16 @@ func (s *Service) ListAll(ctx context.Context, userID uuid.UUID) ([]ItemView, er
 }
 
 func (s *Service) toItemView(ctx context.Context, item domain.InventoryItem) ItemView {
+	return BuildItemView(ctx, s.valuator, item)
+}
+
+func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.InventoryItem) ItemView {
 	view := ItemView{InventoryItem: item}
-	if s.valuator == nil {
+	if valuator == nil {
 		view.BuybackPriceNanoton = item.FloorPriceNanoton
 		return view
 	}
-	price, _ := s.valuator.QuoteInventoryBuyback(ctx, item)
+	price, _ := valuator.QuoteInventoryBuyback(ctx, item)
 	if price > 0 {
 		view.BuybackPriceNanoton = price
 	} else {

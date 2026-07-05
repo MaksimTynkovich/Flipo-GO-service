@@ -138,6 +138,17 @@ func (r *InventoryRepo) FindByTelegramGiftID(ctx context.Context, userID uuid.UU
 	return &item, nil
 }
 
+func (r *InventoryRepo) FindByGiftSlug(ctx context.Context, slug string) (*domain.InventoryItem, error) {
+	var item domain.InventoryItem
+	err := r.db.WithContext(ctx).
+		Where("telegram_gift_id = ?", slug).
+		First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *InventoryRepo) Create(ctx context.Context, item *domain.InventoryItem) error {
 	return r.db.WithContext(ctx).Create(item).Error
 }

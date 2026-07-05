@@ -3,6 +3,8 @@
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
 import { TelegramProvider } from "@/src/app/providers/TelegramProvider";
 import { AuthProvider } from "./AuthProvider";
+import { ToastProvider } from "./ToastProvider";
+import { UserRealtimeProvider } from "./UserRealtimeProvider";
 
 const manifestUrl =
   typeof window !== "undefined"
@@ -13,7 +15,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <TonConnectUIProvider manifestUrl={manifestUrl}>
       <TelegramProvider>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <UserRealtimeProvider>{children}</UserRealtimeProvider>
+          </ToastProvider>
+        </AuthProvider>
       </TelegramProvider>
     </TonConnectUIProvider>
   );
