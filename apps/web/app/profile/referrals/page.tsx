@@ -21,7 +21,7 @@ export default function ProfileReferralsPage() {
   }
 
   return (
-    <PageShell description="Приглашай друзей и получай бонусы за их активность">
+    <PageShell flush>
       <div className="panel flex flex-col items-center gap-4 py-8 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-success/15">
           <Users className="h-8 w-8 text-success" />

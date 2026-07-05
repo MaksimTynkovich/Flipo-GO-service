@@ -7,6 +7,8 @@ import {
   formatStakingTierName,
   stakingBoostHint,
   stakingBoostThresholdTon,
+  weeklyYieldFromMonthly,
+  weeklyYieldNanoton,
 } from "@/lib/staking-ui";
 import { cn } from "@/lib/utils";
 import { Sparkles, TrendingUp, Zap } from "lucide-react";
@@ -42,10 +44,10 @@ export function StakingOverview({ isBoost, stats }: Props) {
   const portfolioPct = stats.total_count > 0 ? stats.staked_count / stats.total_count : 0;
   const unstakedCount = stats.total_count - stats.staked_count;
 
-  const maxMonthly =
-    stats.active_monthly_yield_nanoton + stats.unlockable_monthly_nanoton;
-  const yieldPct =
-    maxMonthly > 0 ? stats.active_monthly_yield_nanoton / maxMonthly : 0;
+  const activeWeeklyYield = weeklyYieldNanoton(stats.active_daily_yield_nanoton);
+  const unlockableWeeklyYield = weeklyYieldFromMonthly(stats.unlockable_monthly_nanoton);
+  const maxWeekly = activeWeeklyYield + unlockableWeeklyYield;
+  const yieldPct = maxWeekly > 0 ? activeWeeklyYield / maxWeekly : 0;
 
   const boostPct =
     stats.boost_threshold_nanoton > 0
@@ -66,7 +68,7 @@ export function StakingOverview({ isBoost, stats }: Props) {
           </p>
         </div>
         <span className="chip chip-accent shrink-0">
-          {formatStakingTierName(isBoost ? "boost" : "base")} · {stats.monthly_rate_percent}%
+          {formatStakingTierName(isBoost ? "boost" : "base")} · {stats.monthly_rate_percent}%/мес
         </span>
       </div>
 
@@ -78,10 +80,10 @@ export function StakingOverview({ isBoost, stats }: Props) {
           </p>
         </div>
         <div className="stat-tile">
-          <p className="text-[10px] text-muted">В месяц</p>
+          <p className="text-[10px] text-muted">За неделю</p>
           <p className="mt-1 text-sm font-semibold tabular-nums">
             <TonAmount
-              amount={formatTON(stats.active_monthly_yield_nanoton)}
+              amount={`+${formatTON(activeWeeklyYield)}`}
               variant="brand"
               iconClassName="h-5 w-5"
             />
@@ -100,7 +102,7 @@ export function StakingOverview({ isBoost, stats }: Props) {
         <div className="space-y-2 rounded-xl bg-surface-raised/70 py-3">
           <div className="flex items-center justify-between gap-2 text-xs">
             <span className="font-medium text-foreground">Шкала дохода</span>
-            {maxMonthly > 0 && (
+            {maxWeekly > 0 && (
               <span className="tabular-nums text-muted">
                 {Math.round(yieldPct * 100)}% потенциала
               </span>
@@ -114,16 +116,16 @@ export function StakingOverview({ isBoost, stats }: Props) {
             <span className="inline-flex items-center gap-1 tabular-nums text-muted">
               сейчас
               <TonAmount
-                amount={formatTON(stats.active_monthly_yield_nanoton)}
+                amount={`+${formatTON(activeWeeklyYield)}`}
                 variant="brand"
                 iconClassName="h-5 w-5"
               />
-              /мес
+              /нед
             </span>
-            {stats.unlockable_monthly_nanoton > 0 && (
+            {unlockableWeeklyYield > 0 && (
               <span className="inline-flex items-center gap-1 tabular-nums text-accent">
                 <Zap className="h-3 w-3 shrink-0" />
-                +{formatTON(stats.unlockable_monthly_nanoton)}
+                +{formatTON(unlockableWeeklyYield)}
                 <TonIcon variant="brand" className="h-5 w-5" />
               </span>
             )}
@@ -158,7 +160,7 @@ export function StakingOverview({ isBoost, stats }: Props) {
           <div className="flex items-center justify-between gap-2 text-xs">
             <span className="inline-flex items-center gap-1 font-medium text-foreground">
               <Sparkles className="h-3.5 w-3.5 text-accent" />
-              Повышенная ставка · 5%
+              Повышенная ставка · 5%/мес
             </span>
             <span className="inline-flex items-center gap-1 tabular-nums text-muted">
               <TonAmount amount={formatTON(stats.boost_wager_nanoton)} variant="brand" iconClassName="h-5 w-5" />

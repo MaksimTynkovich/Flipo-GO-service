@@ -10,7 +10,7 @@ export function GamesLobbyView() {
   const haptics = useTelegramHaptics();
 
   return (
-    <PageShell title="Игры" description="Выбери режим и начни играть">
+    <PageShell flush>
       <section className="space-y-2">
         {GAME_LOBBY_ITEMS.map((item) => (
           <Link

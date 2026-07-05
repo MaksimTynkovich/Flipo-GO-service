@@ -62,7 +62,7 @@ export function PvpHubView() {
   }
 
   return (
-    <PageShell description="Создай комнату или присоединись к открытому бою">
+    <PageShell flush>
       <div className="panel space-y-3">
         <p className="section-label">Новая комната</p>
         <div className="input-inset">

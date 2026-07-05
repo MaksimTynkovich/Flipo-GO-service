@@ -3,7 +3,7 @@ import { StakingSection } from "@/components/profile/StakingSection";
 
 export function ProfileStakingView() {
   return (
-    <PageShell title="Стейкинг подарков" description="Застейкай подарки и получай до 5% в месяц.">
+    <PageShell flush>
       <StakingSection />
     </PageShell>
   );

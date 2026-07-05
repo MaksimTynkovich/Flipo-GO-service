@@ -7,6 +7,7 @@ import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, ProfileGift, StakingStats } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
+import { formatStakingEpochEnd, weeklyYieldNanoton } from "@/lib/staking-ui";
 import { cn } from "@/lib/utils";
 import { Gift } from "lucide-react";
 
@@ -29,6 +30,8 @@ function StatCell({ label, value, accent }: { label: string; value: ReactNode; a
 export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(gift.slug, gift.image_url);
+  const epochEnd = epochEndsAt ? formatStakingEpochEnd(epochEndsAt) : null;
+  const weeklyYield = weeklyYieldNanoton(gift.daily_yield_nanoton);
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -85,22 +88,27 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
           )}
           <StatCell label="В день" value={`+${formatTON(gift.daily_yield_nanoton)}`} />
           <StatCell
-            label="В месяц"
-            value={<TonAmount amount={`+${formatTON(gift.monthly_yield_nanoton)}`} variant="brand" iconClassName="h-5 w-5" />}
+            label="За неделю"
+            value={<TonAmount amount={`+${formatTON(weeklyYield)}`} variant="brand" iconClassName="h-5 w-5" />}
           />
         </div>
 
         {gift.is_staked ? (
-          <p className="py-2 text-center text-xs leading-relaxed text-muted">
-            Подарок заблокирован до конца недели. Доход выплатится на баланс после завершения эпохи
-            {epochEndsAt
-              ? ` (${new Date(epochEndsAt).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })})`
-              : ""}
-            .
-          </p>
+          <div className="rounded-xl bg-surface-raised px-3 py-3 text-center">
+            <p className="text-xs font-medium text-foreground">Заблокирован до конца недели</p>
+            {epochEnd && (
+              <p className="mt-1 text-xs text-muted">
+                До {epochEnd.dateLine}, {epochEnd.timeLine}
+              </p>
+            )}
+            <p className="mt-2 text-[11px] leading-relaxed text-muted">
+              Доход выплатится на баланс после завершения недели
+            </p>
+          </div>
         ) : (
-          <p className="py-2 text-center text-xs text-muted">
-            Ставка {stats.monthly_rate_percent}%/мес от стоимости подарка. Выплата — в конце недели.
+          <p className="rounded-xl bg-surface-raised px-3 py-3 text-center text-xs leading-relaxed text-muted">
+            Ставка {stats.monthly_rate_percent}% в месяц от стоимости подарка.
+            Выплата на баланс — в конце недели.
           </p>
         )}
       </div>
