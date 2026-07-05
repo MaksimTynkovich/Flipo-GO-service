@@ -72,6 +72,9 @@ func (s *Service) releaseInventoryItem(ctx context.Context, itemID uuid.UUID) er
 	if item.Status != domain.InvStaked {
 		return nil
 	}
+	if isProfileItem(*item) {
+		return s.inventory.UpdateStatus(ctx, itemID, domain.InvStaked, domain.InvDissolved)
+	}
 	return s.inventory.UpdateStatus(ctx, itemID, domain.InvStaked, domain.InvAvailable)
 }
 
@@ -109,7 +112,21 @@ func (s *Service) createStake(
 		return nil, err
 	}
 
-	if err := s.inventory.UpdateStatus(ctx, item.ID, domain.InvAvailable, domain.InvStaked); err != nil {
+	if item.UserID != userID {
+		return nil, domain.ErrInvalidAmount
+	}
+
+	switch item.Status {
+	case domain.InvAvailable:
+	case domain.InvDissolved:
+		if !isProfileItem(*item) {
+			return nil, domain.ErrInvalidAmount
+		}
+	default:
+		return nil, domain.ErrInvalidAmount
+	}
+
+	if err := s.inventory.UpdateStatus(ctx, item.ID, item.Status, domain.InvStaked); err != nil {
 		return nil, err
 	}
 
@@ -131,7 +148,7 @@ func (s *Service) createStake(
 		UpdatedAt:        now,
 	}
 	if err := s.staking.CreatePosition(ctx, pos); err != nil {
-		_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvStaked, domain.InvAvailable)
+		_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvStaked, item.Status)
 		return nil, err
 	}
 
@@ -144,7 +161,7 @@ func (s *Service) createStake(
 	}
 	if err := s.staking.UpsertGiftClaim(ctx, claim); err != nil {
 		_ = s.staking.DeactivateWithReason(ctx, pos.ID, domain.StakingRevokedSuperseded)
-		_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvStaked, domain.InvAvailable)
+		_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvStaked, item.Status)
 		return nil, err
 	}
 

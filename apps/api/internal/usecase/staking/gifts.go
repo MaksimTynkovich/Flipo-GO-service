@@ -339,15 +339,16 @@ func (s *Service) stakeExistingItem(ctx context.Context, userID uuid.UUID, item 
 		return s.createStake(ctx, userID, item, source)
 	case domain.InvStaked:
 		return nil, errors.New("gift already staked")
-	case domain.InvLiquidated:
+	case domain.InvDissolved:
 		if !isProfileItem(*item) {
-			return nil, errors.New("gift was sold and is no longer available")
+			return nil, errors.New("gift is not available for staking")
 		}
-		if err := s.inventory.UpdateStatus(ctx, item.ID, domain.InvLiquidated, domain.InvAvailable); err != nil {
-			return nil, err
-		}
-		item.Status = domain.InvAvailable
 		return s.createStake(ctx, userID, item, domain.StakingSourceProfile)
+	case domain.InvLiquidated:
+		if isProfileItem(*item) {
+			return nil, errors.New("gift is not available for staking")
+		}
+		return nil, errors.New("gift was sold and is no longer available")
 	default:
 		return nil, errors.New("gift is not available for staking")
 	}

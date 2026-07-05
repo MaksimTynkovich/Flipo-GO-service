@@ -41,6 +41,9 @@ func (s *Service) ListAll(ctx context.Context, userID uuid.UUID) ([]ItemView, er
 	}
 	out := make([]ItemView, 0, len(items))
 	for _, item := range items {
+		if isProfileVirtualItem(item) {
+			continue
+		}
 		out = append(out, s.toItemView(ctx, item))
 	}
 	return out, nil
@@ -89,6 +92,9 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	if item.Status != domain.InvAvailable {
 		return 0, domain.ErrInvalidAmount
 	}
+	if isProfileVirtualItem(*item) {
+		return 0, domain.ErrInvalidAmount
+	}
 
 	payout := item.FloorPriceNanoton
 	if s.valuator != nil {
@@ -111,4 +117,8 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 
 func (s *Service) SetFloorPrice(ctx context.Context, slug string, price int64) error {
 	return s.inventory.SetFloorPrice(ctx, slug, price)
+}
+
+func isProfileVirtualItem(item domain.InventoryItem) bool {
+	return domain.IsProfileVirtualItem(item)
 }

@@ -166,6 +166,15 @@ func migrateStakingEpochs(db *gorm.DB) error {
 		return fmt.Errorf("drop staking_epoches: %w", err)
 	}
 
+	// Profile virtual rows must never be sellable in inventory.
+	if err := db.Exec(`
+		UPDATE inventory_items
+		SET status = 'dissolved', updated_at = NOW()
+		WHERE telegram_tx_ref LIKE 'profile:%' AND status = 'available'
+	`).Error; err != nil {
+		return fmt.Errorf("dissolve leaked profile inventory rows: %w", err)
+	}
+
 	return nil
 }
 

@@ -56,11 +56,10 @@ func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.
 	if item.UserID != userID || item.Status != domain.InvAvailable {
 		return nil, domain.ErrInvalidAmount
 	}
-	source := domain.StakingSourceInventory
 	if isProfileItem(*item) {
-		source = domain.StakingSourceProfile
+		return nil, domain.ErrInvalidAmount
 	}
-	return s.createStake(ctx, userID, item, source)
+	return s.createStake(ctx, userID, item, domain.StakingSourceInventory)
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID uuid.UUID) error {

@@ -230,7 +230,12 @@ export async function stakeItem(itemId: string) {
 }
 
 export function formatTON(nanotons: number): string {
-  return (nanotons / 1_000_000_000).toFixed(2);
+  if (nanotons <= 0) return "0";
+  const ton = nanotons / 1_000_000_000;
+  let prec = 2;
+  if (ton < 0.01) prec = 6;
+  else if (ton < 1) prec = 4;
+  return ton.toFixed(prec).replace(/\.?0+$/, "");
 }
 
 export type MarketListing = {

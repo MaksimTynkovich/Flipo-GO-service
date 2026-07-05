@@ -59,8 +59,17 @@ func (n *BotNotifier) SendWeeklyStakingComplete(ctx context.Context, telegramUse
 }
 
 func formatTON(nanoton int64) string {
+	if nanoton <= 0 {
+		return "0"
+	}
 	ton := float64(nanoton) / 1_000_000_000
-	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", ton), "0"), ".")
+	prec := 2
+	if ton < 0.01 {
+		prec = 6
+	} else if ton < 1 {
+		prec = 4
+	}
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.*f", prec, ton), "0"), ".")
 }
 
 func (n *BotNotifier) sendMessage(ctx context.Context, chatID int64, text string) error {

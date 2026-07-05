@@ -122,10 +122,13 @@ export function InventorySection() {
         </div>
 
         {!loading && visibleItems.length === 0 && (
-          <div className="panel py-10 text-center">
-            <Gift className="mx-auto h-8 w-8 text-muted/50" />
-            <p className="mt-3 text-sm font-medium">Инвентарь пуст</p>
-            <p className="mt-1 text-xs text-muted">Отправь collectible gift боту — он появится здесь</p>
+          <div className="panel flex flex-col items-center gap-3 py-8 text-center">
+            <div className="icon-box h-11 w-11 rounded-xl">
+              <Gift className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Здесь будут отображаться ваши подарки</p>
+            </div>
           </div>
         )}
       </section>

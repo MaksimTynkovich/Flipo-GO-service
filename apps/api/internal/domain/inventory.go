@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +22,8 @@ const (
 	InvStaked     InventoryStatus = "staked"
 	InvLiquidated InventoryStatus = "liquidated"
 	InvLocked     InventoryStatus = "locked"
+	// InvDissolved — виртуальная запись профильного стейка; не продаётся и не показывается в инвентаре.
+	InvDissolved InventoryStatus = "dissolved"
 )
 
 type InventoryItem struct {
@@ -42,6 +45,11 @@ type InventoryItem struct {
 	UpdatedAt         time.Time       `json:"updated_at"`
 
 	User User `gorm:"foreignKey:UserID" json:"-"`
+}
+
+// IsProfileVirtualItem — запись создана только для стейка из профиля Telegram, без депозита в бота.
+func IsProfileVirtualItem(item InventoryItem) bool {
+	return strings.HasPrefix(item.TelegramTxRef, "profile:")
 }
 
 type NFTFloorPrice struct {

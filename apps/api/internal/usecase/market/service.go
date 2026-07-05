@@ -95,6 +95,9 @@ func (s *Service) CreateListing(ctx context.Context, userID, itemID uuid.UUID, p
 	if item.Status != domain.InvAvailable {
 		return nil, domain.ErrInvalidAmount
 	}
+	if domain.IsProfileVirtualItem(*item) {
+		return nil, domain.ErrInvalidAmount
+	}
 
 	if _, err := s.market.FindActiveByItemID(ctx, itemID); err == nil {
 		return nil, domain.ErrAlreadyListed

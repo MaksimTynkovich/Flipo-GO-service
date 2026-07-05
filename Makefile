@@ -52,6 +52,15 @@ scan-gifts:
 process-deposits:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/process-deposits
 
+staking-tick-daily:
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/staking-tick -daily
+
+staking-tick-settle:
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/staking-tick -settle
+
+staking-tick:
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/staking-tick -daily -settle
+
 test:
 	cd apps/api && go test ./...
 

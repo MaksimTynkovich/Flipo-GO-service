@@ -140,7 +140,7 @@ export function InventoryGiftDetailSheet({
                 "Продажа…"
               ) : (
                 <span className="inline-flex items-center gap-1">
-                  Продать {formatTON(valuation)}
+                  Продать за {formatTON(valuation)}
                   <TonIcon variant="brand" className="h-5 w-5" />
                 </span>
               )}

@@ -11,7 +11,7 @@ export function StakingProfileVisibilityHint() {
       <div className="min-w-0 flex-1">
         <span className="chip chip-accent">Важно</span>
         <p className="mt-2 text-sm font-semibold leading-snug text-foreground">
-          Включи видимость подарков в профиле
+          Включите видимость подарков в профиле
         </p>
         <p className="mt-1.5 text-xs leading-relaxed text-muted">
           Без этого подарки из профиля не появятся в стейкинге.
