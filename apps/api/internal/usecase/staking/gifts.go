@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -71,10 +72,14 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		return nil, err
 	}
 
-	scanned, err := s.scanner.ScanProfileGifts(ctx, user.TelegramID)
+	scanned, err := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
+		TelegramUserID: user.TelegramID,
+		Username:       user.Username,
+	})
 	if err != nil {
 		return nil, err
 	}
+	scanned = s.enrichScannedGifts(ctx, scanned)
 
 	rate := monthlyRate(user.StakingTier)
 	resp := &ProfileGiftsResponse{
@@ -177,16 +182,27 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	return resp, nil
 }
 
+func (s *Service) enrichScannedGifts(ctx context.Context, scanned []telegram.ScannedGift) []telegram.ScannedGift {
+	if s.valuator == nil {
+		return scanned
+	}
+	return s.valuator.Enrich(ctx, scanned)
+}
+
 func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string) (*domain.StakingPosition, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	scanned, err := s.scanner.ScanProfileGifts(ctx, user.TelegramID)
+	scanned, err := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
+		TelegramUserID: user.TelegramID,
+		Username:       user.Username,
+	})
 	if err != nil {
 		return nil, err
 	}
+	scanned = s.enrichScannedGifts(ctx, scanned)
 
 	var gift *telegram.ScannedGift
 	for i := range scanned {
@@ -214,7 +230,7 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 			TokenID:           gift.TokenID,
 			Name:              gift.Name,
 			ImageURL:          gift.ImageURL,
-			Metadata:          datatypes.JSON([]byte("{}")),
+			Metadata:          datatypes.JSON(gifts.ItemMetadata(gift.Attributes)),
 			FloorPriceNanoton: gift.PriceNanoton,
 			Status:            domain.InvAvailable,
 			DepositedAt:       now,

@@ -5,18 +5,25 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/google/uuid"
 )
+
+type ItemView struct {
+	domain.InventoryItem
+	BuybackPriceNanoton int64 `json:"buyback_price_nanoton"`
+}
 
 type Service struct {
 	inventory domain.InventoryRepository
 	users     domain.UserRepository
 	deposit   *telegram.DepositService
+	valuator  *gifts.Valuator
 }
 
-func NewService(inventory domain.InventoryRepository, users domain.UserRepository, deposit *telegram.DepositService) *Service {
-	return &Service{inventory: inventory, users: users, deposit: deposit}
+func NewService(inventory domain.InventoryRepository, users domain.UserRepository, deposit *telegram.DepositService, valuator *gifts.Valuator) *Service {
+	return &Service{inventory: inventory, users: users, deposit: deposit, valuator: valuator}
 }
 
 func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]domain.InventoryItem, error) {
@@ -24,8 +31,38 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]domain.Inventor
 	return s.inventory.ListByUser(ctx, userID, &status)
 }
 
-func (s *Service) ListAll(ctx context.Context, userID uuid.UUID) ([]domain.InventoryItem, error) {
-	return s.inventory.ListByUser(ctx, userID, nil)
+func (s *Service) ListAll(ctx context.Context, userID uuid.UUID) ([]ItemView, error) {
+	items, err := s.inventory.ListByUser(ctx, userID, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ItemView, 0, len(items))
+	for _, item := range items {
+		out = append(out, s.toItemView(ctx, item))
+	}
+	return out, nil
+}
+
+func (s *Service) toItemView(ctx context.Context, item domain.InventoryItem) ItemView {
+	view := ItemView{InventoryItem: item}
+	if s.valuator == nil {
+		view.BuybackPriceNanoton = item.FloorPriceNanoton
+		return view
+	}
+	price, _ := s.valuator.QuoteInventoryBuyback(ctx, item)
+	if price > 0 {
+		view.BuybackPriceNanoton = price
+	} else {
+		view.BuybackPriceNanoton = applyBuybackFallback(item.FloorPriceNanoton)
+	}
+	return view
+}
+
+func applyBuybackFallback(floor int64) int64 {
+	if floor <= 0 {
+		return 0
+	}
+	return int64(float64(floor) * (1 - gifts.BuybackHaircut))
 }
 
 func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*domain.InventoryItem, error) {
@@ -53,7 +90,19 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 		return 0, err
 	}
 
-	balance, err := s.users.UpdateBalance(ctx, userID, item.FloorPriceNanoton, domain.LedgerLiquidate, "inventory", itemID)
+	payout := item.FloorPriceNanoton
+	if s.valuator != nil {
+		if price, _ := s.valuator.QuoteInventoryBuyback(ctx, *item); price > 0 {
+			payout = price
+		} else {
+			payout = applyBuybackFallback(item.FloorPriceNanoton)
+		}
+	}
+	if payout <= 0 {
+		return 0, domain.ErrInvalidAmount
+	}
+
+	balance, err := s.users.UpdateBalance(ctx, userID, payout, domain.LedgerLiquidate, "inventory", itemID)
 	if err != nil {
 		return 0, err
 	}

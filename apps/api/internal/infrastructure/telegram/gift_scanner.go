@@ -2,20 +2,35 @@ package telegram
 
 import (
 	"context"
-	"errors"
+	"time"
 )
 
+const defaultScanTimeout = 60 * time.Second
+
+type GiftAttributes struct {
+	Model    string `json:"model,omitempty"`
+	Backdrop string `json:"backdrop,omitempty"`
+	Symbol   string `json:"symbol,omitempty"`
+}
+
 type ScannedGift struct {
-	Slug           string
-	Name           string
-	CollectionSlug string
-	TokenID        string
-	ImageURL       string
-	PriceNanoton   int64
+	Slug           string         `json:"slug"`
+	Name           string         `json:"name"`
+	CollectionSlug string         `json:"collection_slug"`
+	TokenID        string         `json:"token_id"`
+	ImageURL       string         `json:"image_url"`
+	Attributes     GiftAttributes `json:"attributes,omitempty"`
+	PriceNanoton   int64          `json:"price_nanoton"`
+	PriceSource    string         `json:"price_source,omitempty"`
+}
+
+type ProfileGiftScanRequest struct {
+	TelegramUserID int64
+	Username       string
 }
 
 type ProfileGiftScanner interface {
-	ScanProfileGifts(ctx context.Context, telegramUserID int64) ([]ScannedGift, error)
+	ScanProfileGifts(ctx context.Context, req ProfileGiftScanRequest) ([]ScannedGift, error)
 }
 
 type DebugGiftScanner struct{}
@@ -24,7 +39,7 @@ func NewDebugGiftScanner() *DebugGiftScanner {
 	return &DebugGiftScanner{}
 }
 
-func (s *DebugGiftScanner) ScanProfileGifts(_ context.Context, _ int64) ([]ScannedGift, error) {
+func (s *DebugGiftScanner) ScanProfileGifts(_ context.Context, _ ProfileGiftScanRequest) ([]ScannedGift, error) {
 	return []ScannedGift{
 		{
 			Slug:           "vintagecigar-22477",
@@ -53,20 +68,44 @@ func (s *DebugGiftScanner) ScanProfileGifts(_ context.Context, _ int64) ([]Scann
 	}, nil
 }
 
-type MTProtoGiftScanner struct{}
-
-func NewMTProtoGiftScanner() *MTProtoGiftScanner {
-	return &MTProtoGiftScanner{}
+type MTProtoGiftScanner struct {
+	cfg     MTProtoConfig
+	timeout time.Duration
 }
 
-func (s *MTProtoGiftScanner) ScanProfileGifts(_ context.Context, _ int64) ([]ScannedGift, error) {
-	// TODO: payments.getSavedStarGifts via MTProto userbot session
-	return nil, errors.New("mtproto gift scanner not configured")
+func NewMTProtoGiftScanner(cfg MTProtoConfig) *MTProtoGiftScanner {
+	return &MTProtoGiftScanner{cfg: cfg, timeout: defaultScanTimeout}
 }
 
-func NewProfileGiftScanner(debugEnabled bool) ProfileGiftScanner {
+func (s *MTProtoGiftScanner) ScanProfileGifts(ctx context.Context, req ProfileGiftScanRequest) ([]ScannedGift, error) {
+	if !s.cfg.Enabled() {
+		return nil, ErrMTProtoNotConfigured
+	}
+
+	scanCtx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+
+	target := scanTargetFromRequest(req)
+	result, err := ScanProfileGiftsOnce(scanCtx, s.cfg, target, ScanOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return result.Gifts, nil
+}
+
+func scanTargetFromRequest(req ProfileGiftScanRequest) ScanTarget {
+	if req.Username != "" {
+		return ScanTarget{
+			UserID:   req.TelegramUserID,
+			Username: req.Username,
+		}
+	}
+	return ScanTargetByID(req.TelegramUserID)
+}
+
+func NewProfileGiftScanner(debugEnabled bool, cfg MTProtoConfig) ProfileGiftScanner {
 	if debugEnabled {
 		return NewDebugGiftScanner()
 	}
-	return NewMTProtoGiftScanner()
+	return NewMTProtoGiftScanner(cfg)
 }

@@ -20,6 +20,7 @@ export type InventoryItem = {
   collection_slug: string;
   telegram_gift_id?: string;
   floor_price_nanoton: number;
+  buyback_price_nanoton?: number;
   status: string;
 };
 

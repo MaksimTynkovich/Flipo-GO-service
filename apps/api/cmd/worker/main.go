@@ -32,7 +32,7 @@ func main() {
 	stakeRepo := postgres.NewStakingRepo(db)
 	invRepo := postgres.NewInventoryRepo(db)
 	userRepo := postgres.NewUserRepo(db)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, telegram.NewMTProtoGiftScanner(), cfg.BoostWagerThreshold)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, telegram.NewMTProtoGiftScanner(telegram.MTProtoConfig{}), nil, cfg.BoostWagerThreshold)
 
 	worker := stakingworker.NewWorker(stakeSvc)
 	worker.Start(ctx)

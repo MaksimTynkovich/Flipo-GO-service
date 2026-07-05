@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/google/uuid"
 )
@@ -22,6 +23,7 @@ type Service struct {
 	inventory domain.InventoryRepository
 	users     domain.UserRepository
 	scanner   telegram.ProfileGiftScanner
+	valuator  *gifts.Valuator
 	threshold int64
 }
 
@@ -30,6 +32,7 @@ func NewService(
 	inventory domain.InventoryRepository,
 	users domain.UserRepository,
 	scanner telegram.ProfileGiftScanner,
+	valuator *gifts.Valuator,
 	threshold int64,
 ) *Service {
 	return &Service{
@@ -37,6 +40,7 @@ func NewService(
 		inventory: inventory,
 		users:     users,
 		scanner:   scanner,
+		valuator:  valuator,
 		threshold: threshold,
 	}
 }

@@ -47,6 +47,7 @@ export function InventoryGiftDetailSheet({
   const [copied, setCopied] = useState(false);
 
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
+  const buybackPrice = item.buyback_price_nanoton ?? item.floor_price_nanoton;
   const displayPrice = marketListing?.price_nanoton ?? item.floor_price_nanoton;
 
   useEffect(() => {
@@ -125,12 +126,20 @@ export function InventoryGiftDetailSheet({
             <span className="truncate text-right text-sm font-medium">{item.collection_slug}</span>
           </div>
           {!marketListing && (
-            <div className="flex items-center justify-between gap-4 py-3.5">
-              <span className="text-sm text-muted">Floor</span>
-              <span className="text-sm font-medium tabular-nums">
-                <TonAmount amount={formatTON(item.floor_price_nanoton)} variant="brand" iconClassName="h-5 w-5" />
-              </span>
-            </div>
+            <>
+              <div className="flex items-center justify-between gap-4 py-3.5">
+                <span className="text-sm text-muted">Оценка</span>
+                <span className="text-sm font-medium tabular-nums">
+                  <TonAmount amount={formatTON(item.floor_price_nanoton)} variant="brand" iconClassName="h-5 w-5" />
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3.5">
+                <span className="text-sm text-muted">Выкуп ботом</span>
+                <span className="text-sm font-medium tabular-nums">
+                  <TonAmount amount={formatTON(buybackPrice)} variant="brand" iconClassName="h-5 w-5" />
+                </span>
+              </div>
+            </>
           )}
         </div>
 
@@ -165,7 +174,7 @@ export function InventoryGiftDetailSheet({
               disabled={liquidating}
               onClick={onLiquidate}
             >
-              {liquidating ? "Продажа…" : "Продать боту"}
+              {liquidating ? "Продажа…" : `Продать боту · ${formatTON(buybackPrice)}`}
             </Button>
           </div>
         )}

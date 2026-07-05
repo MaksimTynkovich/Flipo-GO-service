@@ -16,6 +16,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/handlers"
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
 	redisrepo "github.com/flipo/flipo/apps/api/internal/repository/redis"
@@ -73,11 +74,18 @@ func main() {
 	)
 	balanceSvc := balance.NewService(userRepo)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
-	giftScanner := telegram.NewProfileGiftScanner(cfg.DebugAuthEnabled)
+	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	if mtprotoCfg.Enabled() {
+		slog.Info("telegram mtproto gift scanner enabled", "session", cfg.TelegramSessionPath)
+	} else {
+		slog.Warn("telegram mtproto gift scanner disabled; set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH and run make tg-auth")
+	}
+	giftScanner := telegram.NewProfileGiftScanner(cfg.DebugAuthEnabled, mtprotoCfg)
+	giftValuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
-	invSvc := inventory.NewService(invRepo, userRepo, depositSvc)
+	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftValuator)
 	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, cfg.BoostWagerThreshold)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, giftValuator, cfg.BoostWagerThreshold)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error

@@ -26,6 +26,9 @@ type Config struct {
 	DebugTelegramID         int64
 	DebugUsername           string
 	DebugInitialBalance     int64
+	TelegramAPIID           int
+	TelegramAPIHash         string
+	TelegramSessionPath     string
 }
 
 func Load() *Config {
@@ -49,6 +52,9 @@ func Load() *Config {
 		DebugTelegramID:        int64(getEnvInt("DEBUG_TELEGRAM_ID", 999000001)),
 		DebugUsername:          getEnv("DEBUG_USERNAME", "debug_user"),
 		DebugInitialBalance:    int64(getEnvInt("DEBUG_INITIAL_BALANCE_NANOTON", 10_000_000_000)),
+		TelegramAPIID:          getEnvInt("TELEGRAM_API_ID", 0),
+		TelegramAPIHash:        getEnv("TELEGRAM_API_HASH", ""),
+		TelegramSessionPath:    getEnv("TELEGRAM_SESSION_PATH", "data/telegram/session.json"),
 	}
 }
 

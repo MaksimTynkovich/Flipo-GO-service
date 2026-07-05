@@ -39,6 +39,16 @@ web:
 migrate:
 	cd apps/api && go run ./cmd/server --migrate-only
 
+tg-auth:
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/tgauth
+
+scan-gifts:
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/tgscan \
+		$(if $(TELEGRAM_ID),-telegram-id $(TELEGRAM_ID),) \
+		$(if $(USERNAME),-username $(USERNAME),) \
+		$(if $(SELF),-self,) \
+		-verbose $(if $(RAW),-raw,)
+
 test:
 	cd apps/api && go test ./...
 
