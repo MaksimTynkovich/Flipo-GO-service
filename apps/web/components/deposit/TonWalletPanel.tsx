@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { TonConnectButton, useIsConnectionRestored, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { useIsConnectionRestored, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { TonWalletConnectControl } from "@/components/deposit/TonWalletConnectControl";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
   confirmWalletDeposit,
@@ -347,21 +348,7 @@ export function TonWalletPanel() {
         </div>
 
         <div className="space-y-4 p-4">
-          <div className="flex justify-center rounded-2xl bg-surface-raised/50 py-3 [&_button]:!rounded-xl">
-            <TonConnectButton />
-          </div>
-
-          {displayWallet && (
-            <div className="rounded-2xl bg-surface-raised/70 p-3 text-center">
-              <p className="text-[11px] uppercase tracking-wide text-muted">Твой кошелёк для вывода</p>
-              <p className="mt-2 break-all font-mono text-sm leading-relaxed text-foreground/90">
-                {displayWallet}
-              </p>
-              <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                Вывод придёт на этот адрес в Telegram Wallet.
-              </p>
-            </div>
-          )}
+          <TonWalletConnectControl />
 
           <div className="segment-control">
             <button

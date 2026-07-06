@@ -5,8 +5,8 @@ import { Providers } from "@/components/providers/Providers";
 import { AppLayout } from "@/src/widgets/app-shell/ui/AppLayout";
 
 export const metadata: Metadata = {
-  title: "Flipo Casino",
-  description: "Telegram Mini App Crypto Casino on TON",
+  title: "Flipo",
+  description: "Flipi, Games, staking and more on TON",
 };
 
 export const viewport: Viewport = {

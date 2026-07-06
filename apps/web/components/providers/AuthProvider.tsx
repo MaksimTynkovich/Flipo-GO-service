@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { authDebug, authTelegram, DEBUG_AUTH, getMe, User } from "@/lib/api";
 import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
 import { getTelegramWebApp, initTelegramWebApp } from "@/src/shared/lib/twa";
+import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
 
 type AuthState = {
   user: User | null;
@@ -66,11 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-zinc-400">
-        Loading...
-      </div>
-    );
+    return <AppSplashScreen />;
   }
 
   if (!user && error) {
