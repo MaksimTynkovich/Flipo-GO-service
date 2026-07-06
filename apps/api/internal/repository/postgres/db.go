@@ -40,6 +40,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.PvPRoomPlayer{},
 		&domain.BalanceLedger{},
 		&domain.MarketListing{},
+		&domain.TonTransfer{},
 	)
 }
 

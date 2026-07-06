@@ -102,3 +102,25 @@ type GameStateCache interface {
 	AcquireLock(ctx context.Context, key string, ttl time.Duration) (bool, error)
 	ReleaseLock(ctx context.Context, key string) error
 }
+
+type TonTransferRepository interface {
+	FindByID(ctx context.Context, id uuid.UUID) (*TonTransfer, error)
+	FindByIDForUser(ctx context.Context, id, userID uuid.UUID) (*TonTransfer, error)
+	FindByIdempotencyKey(ctx context.Context, key string) (*TonTransfer, error)
+	FindByDepositComment(ctx context.Context, comment string) (*TonTransfer, error)
+	FindByTxHash(ctx context.Context, txHash string) (*TonTransfer, error)
+	ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]TonTransfer, error)
+	ListByStatus(ctx context.Context, statuses []TonTransferStatus, limit int) ([]TonTransfer, error)
+	HasActiveWithdrawal(ctx context.Context, userID uuid.UUID) (bool, error)
+	Create(ctx context.Context, transfer *TonTransfer) error
+	Update(ctx context.Context, transfer *TonTransfer) error
+	CreateWithdrawalAtomic(
+		ctx context.Context,
+		userID uuid.UUID,
+		amountNanoton, feeNanoton int64,
+		walletAddress, idempotencyKey string,
+	) (*TonTransfer, int64, error)
+	CompleteDepositAtomic(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) (int64, error)
+	FailWithdrawalAtomic(ctx context.Context, transferID uuid.UUID, errMsg string) (int64, error)
+	CompleteWithdrawal(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) error
+}

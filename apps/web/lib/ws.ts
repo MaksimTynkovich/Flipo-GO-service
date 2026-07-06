@@ -27,6 +27,7 @@ export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
   if (!token) {
     return () => {};
   }
+  const authToken = token;
 
   let ws: WebSocket | null = null;
   let closed = false;
@@ -34,7 +35,7 @@ export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
 
   function connect() {
     if (closed) return;
-    ws = new WebSocket(`${WS_URL}/ws/user?token=${encodeURIComponent(token)}`);
+    ws = new WebSocket(`${WS_URL}/ws/user?token=${encodeURIComponent(authToken)}`);
 
     ws.onmessage = (ev) => {
       try {

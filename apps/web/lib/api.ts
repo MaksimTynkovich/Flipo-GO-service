@@ -306,3 +306,56 @@ export type ReferralStats = {
 export async function getReferralStats() {
   return api<ReferralStats>("/api/v1/referrals/stats");
 }
+
+export type WalletDepositIntent = {
+  id: string;
+  to_address: string;
+  amount_nanoton: number;
+  comment: string;
+  expires_at: string;
+};
+
+export type WalletTransfer = {
+  id: string;
+  direction: "deposit" | "withdraw";
+  status: string;
+  amount_nanoton: number;
+  fee_nanoton: number;
+  net_nanoton: number;
+  wallet_address: string;
+  tx_hash?: string;
+  error_message?: string;
+  created_at: string;
+  confirmed_at?: string;
+};
+
+export async function createWalletDepositIntent(amountNanoton: number) {
+  return api<WalletDepositIntent>("/api/v1/wallet/deposit/intent", {
+    method: "POST",
+    body: JSON.stringify({ amount_nanoton: amountNanoton }),
+  });
+}
+
+export async function confirmWalletDeposit(transferId: string, txHash?: string) {
+  return api<{ transfer: WalletTransfer; balance: number }>(
+    `/api/v1/wallet/deposit/${transferId}/confirm`,
+    {
+      method: "POST",
+      body: JSON.stringify({ tx_hash: txHash || "" }),
+    },
+  );
+}
+
+export async function requestWalletWithdraw(amountNanoton: number, idempotencyKey: string) {
+  return api<{ transfer: WalletTransfer; balance: number }>("/api/v1/wallet/withdraw", {
+    method: "POST",
+    body: JSON.stringify({
+      amount_nanoton: amountNanoton,
+      idempotency_key: idempotencyKey,
+    }),
+  });
+}
+
+export async function getWalletTransfers() {
+  return api<WalletTransfer[]>("/api/v1/wallet/transfers");
+}

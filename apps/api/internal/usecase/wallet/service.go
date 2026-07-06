@@ -1,0 +1,331 @@
+package wallet
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Config struct {
+	DepositAddress      string
+	MinDepositNanoton   int64
+	MinWithdrawNanoton  int64
+	WithdrawFeeNanoton  int64
+	DepositTTL          time.Duration
+	ChainDevMode        bool
+}
+
+type Service struct {
+	users    domain.UserRepository
+	transfers domain.TonTransferRepository
+	chain    *ton.Client
+	cfg      Config
+}
+
+func NewService(users domain.UserRepository, transfers domain.TonTransferRepository, chain *ton.Client, cfg Config) *Service {
+	return &Service{
+		users:     users,
+		transfers: transfers,
+		chain:     chain,
+		cfg:       cfg,
+	}
+}
+
+type DepositIntentView struct {
+	ID            string `json:"id"`
+	ToAddress     string `json:"to_address"`
+	AmountNanoton int64  `json:"amount_nanoton"`
+	Comment       string `json:"comment"`
+	ExpiresAt     string `json:"expires_at"`
+}
+
+type TransferView struct {
+	ID            string  `json:"id"`
+	Direction     string  `json:"direction"`
+	Status        string  `json:"status"`
+	AmountNanoton int64   `json:"amount_nanoton"`
+	FeeNanoton    int64   `json:"fee_nanoton"`
+	NetNanoton    int64   `json:"net_nanoton"`
+	WalletAddress string  `json:"wallet_address"`
+	TxHash        *string `json:"tx_hash,omitempty"`
+	ErrorMessage  *string `json:"error_message,omitempty"`
+	CreatedAt     string  `json:"created_at"`
+	ConfirmedAt   *string `json:"confirmed_at,omitempty"`
+}
+
+func (s *Service) CreateDepositIntent(ctx context.Context, userID uuid.UUID, amountNanoton int64) (*DepositIntentView, error) {
+	if amountNanoton < s.cfg.MinDepositNanoton {
+		return nil, domain.ErrInvalidAmount
+	}
+	if !s.chain.Enabled() {
+		return nil, domain.ErrChainUnavailable
+	}
+
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user.TonWallet == "" {
+		return nil, domain.ErrWalletNotLinked
+	}
+
+	now := time.Now().UTC()
+	expiresAt := now.Add(s.cfg.DepositTTL)
+	transferID := uuid.New()
+	comment := fmt.Sprintf("flipo:dep:%s", strings.ReplaceAll(transferID.String(), "-", ""))
+
+	transfer := &domain.TonTransfer{
+		ID:             transferID,
+		UserID:         userID,
+		Direction:      domain.TonDirectionDeposit,
+		Status:         domain.TonStatusAwaitingPayment,
+		AmountNanoton:  amountNanoton,
+		WalletAddress:  user.TonWallet,
+		DepositComment: &comment,
+		ExpiresAt:      &expiresAt,
+	}
+	if err := s.transfers.Create(ctx, transfer); err != nil {
+		return nil, err
+	}
+
+	return &DepositIntentView{
+		ID:            transfer.ID.String(),
+		ToAddress:     s.cfg.DepositAddress,
+		AmountNanoton: amountNanoton,
+		Comment:       comment,
+		ExpiresAt:     expiresAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UUID, txHash string) (*TransferView, int64, error) {
+	transfer, err := s.transfers.FindByIDForUser(ctx, transferID, userID)
+	if err != nil {
+		return nil, 0, domain.ErrTransferNotFound
+	}
+	if transfer.Direction != domain.TonDirectionDeposit {
+		return nil, 0, domain.ErrTransferNotFound
+	}
+	if transfer.IsTerminal() {
+		bal, _ := s.users.GetBalanceForUpdate(ctx, userID)
+		return toView(transfer), bal, nil
+	}
+	if transfer.ExpiresAt != nil && time.Now().UTC().After(*transfer.ExpiresAt) {
+		transfer.Status = domain.TonStatusExpired
+		_ = s.transfers.Update(ctx, transfer)
+		return nil, 0, domain.ErrTransferExpired
+	}
+
+	if txHash != "" {
+		ok, err := s.chain.VerifyTxHash(ctx, txHash)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !ok && !s.cfg.ChainDevMode {
+			return nil, 0, domain.ErrChainUnavailable
+		}
+		balanceAfter, err := s.transfers.CompleteDepositAtomic(ctx, transferID, txHash, 0)
+		if err != nil {
+			return nil, 0, err
+		}
+		updated, _ := s.transfers.FindByID(ctx, transferID)
+		return toView(updated), balanceAfter, nil
+	}
+
+	if s.cfg.ChainDevMode {
+		devHash := fmt.Sprintf("dev:%s", transferID.String())
+		balanceAfter, err := s.transfers.CompleteDepositAtomic(ctx, transferID, devHash, 0)
+		if err != nil {
+			return nil, 0, err
+		}
+		updated, _ := s.transfers.FindByID(ctx, transferID)
+		return toView(updated), balanceAfter, nil
+	}
+
+	if transfer.DepositComment == nil {
+		return nil, 0, domain.ErrTransferNotFound
+	}
+	incoming, err := s.findDepositOnChain(ctx, s.cfg.DepositAddress, *transfer.DepositComment, transfer.AmountNanoton)
+	if err != nil {
+		return nil, 0, err
+	}
+	if incoming == nil {
+		return toView(transfer), 0, nil
+	}
+
+	balanceAfter, err := s.transfers.CompleteDepositAtomic(ctx, transferID, incoming.TxHash, incoming.LT)
+	if err != nil {
+		return nil, 0, err
+	}
+	updated, _ := s.transfers.FindByID(ctx, transferID)
+	return toView(updated), balanceAfter, nil
+}
+
+func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, amountNanoton int64, idempotencyKey string) (*TransferView, int64, error) {
+	if amountNanoton < s.cfg.MinWithdrawNanoton {
+		return nil, 0, domain.ErrInvalidAmount
+	}
+	if !s.chain.CanSend() {
+		return nil, 0, domain.ErrChainUnavailable
+	}
+	if idempotencyKey == "" {
+		return nil, 0, domain.ErrInvalidAmount
+	}
+	if amountNanoton <= s.cfg.WithdrawFeeNanoton {
+		return nil, 0, domain.ErrInvalidAmount
+	}
+
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if user.TonWallet == "" {
+		return nil, 0, domain.ErrWalletNotLinked
+	}
+
+	transfer, balanceAfter, err := s.transfers.CreateWithdrawalAtomic(
+		ctx,
+		userID,
+		amountNanoton,
+		s.cfg.WithdrawFeeNanoton,
+		user.TonWallet,
+		idempotencyKey,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	return toView(transfer), balanceAfter, nil
+}
+
+func (s *Service) ListTransfers(ctx context.Context, userID uuid.UUID, limit int) ([]TransferView, error) {
+	items, err := s.transfers.ListByUser(ctx, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TransferView, 0, len(items))
+	for i := range items {
+		out = append(out, *toView(&items[i]))
+	}
+	return out, nil
+}
+
+func (s *Service) GetTransfer(ctx context.Context, userID, transferID uuid.UUID) (*TransferView, error) {
+	transfer, err := s.transfers.FindByIDForUser(ctx, transferID, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrTransferNotFound
+		}
+		return nil, err
+	}
+	return toView(transfer), nil
+}
+
+func (s *Service) ProcessPendingDeposits(ctx context.Context) error {
+	items, err := s.transfers.ListByStatus(ctx, []domain.TonTransferStatus{domain.TonStatusAwaitingPayment}, 50)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for i := range items {
+		transfer := items[i]
+		if transfer.ExpiresAt != nil && now.After(*transfer.ExpiresAt) {
+			transfer.Status = domain.TonStatusExpired
+			_ = s.transfers.Update(ctx, &items[i])
+			continue
+		}
+		if transfer.DepositComment == nil {
+			continue
+		}
+		incoming, err := s.findDepositOnChain(ctx, s.cfg.DepositAddress, *transfer.DepositComment, transfer.AmountNanoton)
+		if err != nil {
+			continue
+		}
+		if incoming == nil {
+			continue
+		}
+		if _, err := s.transfers.CompleteDepositAtomic(ctx, transfer.ID, incoming.TxHash, incoming.LT); err != nil {
+			continue
+		}
+	}
+	return nil
+}
+
+func (s *Service) findDepositOnChain(ctx context.Context, depositAddress, comment string, minAmount int64) (*ton.IncomingTransfer, error) {
+	delays := []time.Duration{0, 2 * time.Second, 5 * time.Second, 10 * time.Second}
+	var lastErr error
+	for _, delay := range delays {
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
+		}
+		incoming, err := s.chain.FindDepositByComment(ctx, depositAddress, comment, minAmount)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if incoming != nil {
+			return incoming, nil
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, nil
+}
+
+func (s *Service) ProcessPendingWithdrawals(ctx context.Context) error {
+	items, err := s.transfers.ListByStatus(ctx, []domain.TonTransferStatus{domain.TonStatusQueued}, 20)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		transfer := items[i]
+		transfer.Status = domain.TonStatusBroadcasting
+		if err := s.transfers.Update(ctx, &items[i]); err != nil {
+			continue
+		}
+
+		txHash, lt, err := s.chain.SendTON(ctx, transfer.WalletAddress, transfer.NetAmountNanoton(), "")
+		if err != nil {
+			_, _ = s.transfers.FailWithdrawalAtomic(ctx, transfer.ID, err.Error())
+			continue
+		}
+		_ = s.transfers.CompleteWithdrawal(ctx, transfer.ID, txHash, lt)
+	}
+	return nil
+}
+
+func toView(transfer *domain.TonTransfer) *TransferView {
+	if transfer == nil {
+		return nil
+	}
+	var confirmedAt *string
+	if transfer.ConfirmedAt != nil {
+		v := transfer.ConfirmedAt.Format(time.RFC3339)
+		confirmedAt = &v
+	}
+	return &TransferView{
+		ID:            transfer.ID.String(),
+		Direction:     string(transfer.Direction),
+		Status:        string(transfer.Status),
+		AmountNanoton: transfer.AmountNanoton,
+		FeeNanoton:    transfer.FeeNanoton,
+		NetNanoton:    transfer.NetAmountNanoton(),
+		WalletAddress: transfer.WalletAddress,
+		TxHash:        transfer.TxHash,
+		ErrorMessage:  transfer.ErrorMessage,
+		CreatedAt:     transfer.CreatedAt.Format(time.RFC3339),
+		ConfirmedAt:   confirmedAt,
+	}
+}

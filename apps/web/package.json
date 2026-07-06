@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ton/core": "^0.60.1",
     "@tonconnect/ui-react": "^2.0.9",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",

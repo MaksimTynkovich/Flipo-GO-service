@@ -22,6 +22,17 @@ type Config struct {
 	CrashBettingSeconds     int
 	PlatformFeeBps          int
 	BoostWagerThreshold     int64
+	TonDepositAddress       string
+	TonAPIBaseURL           string
+	TonAPIKey               string
+	TonChainDevMode         bool
+	TonLiteConfigURL        string
+	TonHotWalletMnemonic    string
+	TonHotWalletVersion     string
+	TonMinDepositNanoton    int64
+	TonMinWithdrawNanoton   int64
+	TonWithdrawFeeNanoton   int64
+	TonDepositTTLMinutes    int
 	DebugAuthEnabled        bool
 	DebugTelegramID         int64
 	DebugUsername           string
@@ -48,6 +59,17 @@ func Load() *Config {
 		CrashBettingSeconds:    getEnvInt("CRASH_BETTING_SECONDS", 8),
 		PlatformFeeBps:         getEnvInt("PLATFORM_FEE_BPS", 500),
 		BoostWagerThreshold:    int64(getEnvInt("BOOST_WAGER_THRESHOLD_NANOTON", 5_000_000_000)),
+		TonDepositAddress:      getEnv("TON_DEPOSIT_ADDRESS", ""),
+		TonAPIBaseURL:          getEnv("TON_API_BASE_URL", "https://toncenter.com/api/v2"),
+		TonAPIKey:              getEnv("TON_API_KEY", ""),
+		TonChainDevMode:        getEnvBool("TON_CHAIN_DEV_MODE", false),
+		TonLiteConfigURL:       getEnv("TON_LITE_CONFIG_URL", "https://ton-blockchain.github.io/global.config.json"),
+		TonHotWalletMnemonic:   getEnv("TON_HOT_WALLET_MNEMONIC", ""),
+		TonHotWalletVersion:    getEnv("TON_HOT_WALLET_VERSION", "V3R2"),
+		TonMinDepositNanoton:   int64(getEnvInt("TON_MIN_DEPOSIT_NANOTON", 100_000_000)),
+		TonMinWithdrawNanoton:  int64(getEnvInt("TON_MIN_WITHDRAW_NANOTON", 100_000_000)),
+		TonWithdrawFeeNanoton:  int64(getEnvInt("TON_WITHDRAW_FEE_NANOTON", 50_000_000)),
+		TonDepositTTLMinutes:   getEnvInt("TON_DEPOSIT_TTL_MINUTES", 30),
 		DebugAuthEnabled:       getEnvBool("DEBUG_AUTH_ENABLED", false),
 		DebugTelegramID:        int64(getEnvInt("DEBUG_TELEGRAM_ID", 999000001)),
 		DebugUsername:          getEnv("DEBUG_USERNAME", "debug_user"),

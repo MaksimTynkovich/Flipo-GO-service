@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
 	redisrepo "github.com/flipo/flipo/apps/api/internal/repository/redis"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
@@ -30,10 +32,12 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
+	"github.com/flipo/flipo/apps/api/internal/usecase/wallet"
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
+	walletworker "github.com/flipo/flipo/apps/api/internal/worker/wallet"
 )
 
 func main() {
@@ -43,6 +47,10 @@ func main() {
 	flag.Parse()
 
 	cfg := config.Load()
+	if err := validateWalletConfig(cfg); err != nil {
+		slog.Error("wallet config invalid", "error", err)
+		os.Exit(1)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -69,10 +77,28 @@ func main() {
 	invRepo := postgres.NewInventoryRepo(db)
 	marketRepo := postgres.NewMarketRepo(db)
 	stakeRepo := postgres.NewStakingRepo(db)
+	tonTransferRepo := postgres.NewTonTransferRepo(db)
 	gameRepo := postgres.NewGameRepo(db)
 	pvpRepo := postgres.NewPvPRepo(db)
 
 	referralSvc := referral.NewService(userRepo)
+	tonClient := ton.NewClient(
+		cfg.TonAPIBaseURL,
+		cfg.TonAPIKey,
+		cfg.TonDepositAddress,
+		cfg.TonChainDevMode,
+		cfg.TonLiteConfigURL,
+		cfg.TonHotWalletMnemonic,
+		cfg.TonHotWalletVersion,
+	)
+	walletSvc := wallet.NewService(userRepo, tonTransferRepo, tonClient, wallet.Config{
+		DepositAddress:     cfg.TonDepositAddress,
+		MinDepositNanoton:  cfg.TonMinDepositNanoton,
+		MinWithdrawNanoton: cfg.TonMinWithdrawNanoton,
+		WithdrawFeeNanoton: cfg.TonWithdrawFeeNanoton,
+		DepositTTL:         time.Duration(cfg.TonDepositTTLMinutes) * time.Minute,
+		ChainDevMode:       cfg.TonChainDevMode,
+	})
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
@@ -131,6 +157,10 @@ func main() {
 	giftDepositWorker := giftdepositworker.NewWorker(mtprotoCfg, autoDepositSvc)
 	giftDepositWorker.Start(ctx)
 
+	walletWorker := walletworker.NewWorker(walletSvc)
+	walletWorker.Start(ctx)
+	defer walletWorker.Stop()
+
 	router := httpx.NewRouter(httpx.Deps{
 		DB:               db,
 		Auth:             authSvc,
@@ -140,6 +170,7 @@ func main() {
 		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc),
 		MarketHandler:    handlers.NewMarketHandler(marketSvc),
 		ReferralHandler:  handlers.NewReferralHandler(referralSvc),
+		WalletHandler:    handlers.NewWalletHandler(walletSvc),
 		Hub:              hub,
 	})
 
@@ -186,5 +217,24 @@ func (n *noopCache) AcquireLock(ctx context.Context, key string, ttl time.Durati
 	return true, nil
 }
 func (n *noopCache) ReleaseLock(ctx context.Context, key string) error {
+	return nil
+}
+
+func validateWalletConfig(cfg *config.Config) error {
+	if cfg.TonChainDevMode {
+		return nil
+	}
+	if cfg.TonDepositAddress == "" {
+		return fmt.Errorf("TON_DEPOSIT_ADDRESS is required when TON_CHAIN_DEV_MODE=false")
+	}
+	if cfg.TonAPIBaseURL == "" {
+		return fmt.Errorf("TON_API_BASE_URL is required when TON_CHAIN_DEV_MODE=false")
+	}
+	if cfg.TonLiteConfigURL == "" {
+		return fmt.Errorf("TON_LITE_CONFIG_URL is required when TON_CHAIN_DEV_MODE=false")
+	}
+	if cfg.TonHotWalletMnemonic == "" {
+		return fmt.Errorf("TON_HOT_WALLET_MNEMONIC is required when TON_CHAIN_DEV_MODE=false")
+	}
 	return nil
 }
