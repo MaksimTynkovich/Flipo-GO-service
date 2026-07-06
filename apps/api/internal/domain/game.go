@@ -70,6 +70,9 @@ type PvPRoom struct {
 	WinnerID         *uuid.UUID `gorm:"type:uuid" json:"winner_id,omitempty"`
 	PlatformFeeBps   int        `gorm:"not null;default:500" json:"platform_fee_bps"`
 	GameRoundID      *uuid.UUID `gorm:"type:uuid" json:"game_round_id,omitempty"`
+	SpinAt           *time.Time `json:"spin_at,omitempty"`
+	SpinEndsAt       *time.Time `json:"spin_ends_at,omitempty"`
+	PayoutNanoton    *int64     `json:"payout_nanoton,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	FinishedAt       *time.Time `json:"finished_at,omitempty"`
 }

@@ -37,6 +37,7 @@ import (
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
+	pvpworker "github.com/flipo/flipo/apps/api/internal/worker/pvp"
 	walletworker "github.com/flipo/flipo/apps/api/internal/worker/wallet"
 )
 
@@ -140,7 +141,8 @@ func main() {
 	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
 	crashSvc := crash.NewService(gameRepo, balanceSvc, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
-	pvpSvc := pvp.NewService(pvpRepo, balanceSvc, cfg.PlatformFeeBps)
+	pvpSvc := pvp.NewService(pvpRepo, userRepo, balanceSvc, cfg.PlatformFeeBps)
+	pvpSvc.SetTickNotifier(hub)
 
 	if cache != nil {
 		bridge := websocket.NewRedisBridge(cache, hub)
@@ -149,6 +151,7 @@ func main() {
 
 	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds, cfg.RouletteResultDisplaySeconds).Run(ctx)
 	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, cfg.CrashBettingSeconds).Run(ctx)
+	go pvpworker.NewWorker(pvpSvc, 500*time.Millisecond).Run(ctx)
 
 	stakeWorker := stakingworker.NewWorker(stakeSvc)
 	stakeWorker.Start(ctx)

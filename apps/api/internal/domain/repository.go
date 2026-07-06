@@ -89,6 +89,11 @@ type PvPRepository interface {
 	GetRoom(ctx context.Context, id uuid.UUID) (*PvPRoom, error)
 	UpdateRoom(ctx context.Context, room *PvPRoom) error
 	ListOpenRooms(ctx context.Context) ([]PvPRoom, error)
+	ListActiveRooms(ctx context.Context) ([]PvPRoom, error)
+	ListRecentFinishedRooms(ctx context.Context, limit int) ([]PvPRoom, error)
+	ListCountdownDue(ctx context.Context, now time.Time) ([]PvPRoom, error)
+	ListSpinningDue(ctx context.Context, now time.Time) ([]PvPRoom, error)
+	HasPlayer(ctx context.Context, roomID, userID uuid.UUID) (bool, error)
 	AddPlayer(ctx context.Context, player *PvPRoomPlayer) error
 	ListPlayers(ctx context.Context, roomID uuid.UUID) ([]PvPRoomPlayer, error)
 	CountPlayers(ctx context.Context, roomID uuid.UUID) (int, error)

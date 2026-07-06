@@ -133,12 +133,18 @@ func (h *GameHandler) CrashCashout(c *gin.Context) {
 }
 
 func (h *GameHandler) PvPListRooms(c *gin.Context) {
-	rooms, err := h.pvp.ListOpenRooms(c.Request.Context())
+	state, err := h.pvp.CurrentState(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, rooms)
+	if state.Active == nil {
+		state.Active = []pvp.RoomView{}
+	}
+	if state.History == nil {
+		state.History = []pvp.RoomView{}
+	}
+	c.JSON(http.StatusOK, state)
 }
 
 func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
@@ -151,8 +157,12 @@ func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if req.MaxPlayers == 0 {
+  if req.MaxPlayers == 0 {
 		req.MaxPlayers = 2
+	}
+	if req.MaxPlayers != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "pvp rooms support exactly 2 players"})
+		return
 	}
 	room, err := h.pvp.CreateRoom(c.Request.Context(), userID, req.BetAmountNanoton, req.MaxPlayers)
 	if err != nil {

@@ -222,6 +222,49 @@ func (r *PvPRepo) ListOpenRooms(ctx context.Context) ([]domain.PvPRoom, error) {
 	return rooms, err
 }
 
+func (r *PvPRepo) ListActiveRooms(ctx context.Context) ([]domain.PvPRoom, error) {
+	var rooms []domain.PvPRoom
+	err := r.db.WithContext(ctx).
+		Where("status IN ?", []string{"open", "countdown", "spinning"}).
+		Order("created_at DESC").
+		Find(&rooms).Error
+	return rooms, err
+}
+
+func (r *PvPRepo) ListRecentFinishedRooms(ctx context.Context, limit int) ([]domain.PvPRoom, error) {
+	var rooms []domain.PvPRoom
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "finished").
+		Order("finished_at DESC").
+		Limit(limit).
+		Find(&rooms).Error
+	return rooms, err
+}
+
+func (r *PvPRepo) ListCountdownDue(ctx context.Context, now time.Time) ([]domain.PvPRoom, error) {
+	var rooms []domain.PvPRoom
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND spin_at IS NOT NULL AND spin_at <= ?", "countdown", now).
+		Find(&rooms).Error
+	return rooms, err
+}
+
+func (r *PvPRepo) ListSpinningDue(ctx context.Context, now time.Time) ([]domain.PvPRoom, error) {
+	var rooms []domain.PvPRoom
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND spin_ends_at IS NOT NULL AND spin_ends_at <= ?", "spinning", now).
+		Find(&rooms).Error
+	return rooms, err
+}
+
+func (r *PvPRepo) HasPlayer(ctx context.Context, roomID, userID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).
+		Where("room_id = ? AND user_id = ?", roomID, userID).
+		Count(&count).Error
+	return count > 0, err
+}
+
 func (r *PvPRepo) AddPlayer(ctx context.Context, player *domain.PvPRoomPlayer) error {
 	return r.db.WithContext(ctx).Create(player).Error
 }

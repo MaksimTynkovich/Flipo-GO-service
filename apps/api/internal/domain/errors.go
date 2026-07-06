@@ -16,5 +16,6 @@ var (
 	ErrTransferExpired   = errors.New("transfer expired")
 	ErrTransferNotFound  = errors.New("transfer not found")
 	ErrDuplicateRequest  = errors.New("duplicate request")
+	ErrAlreadyJoined     = errors.New("already joined")
 	ErrChainUnavailable  = errors.New("chain verification unavailable")
 )
