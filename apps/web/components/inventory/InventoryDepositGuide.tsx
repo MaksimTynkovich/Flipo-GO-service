@@ -3,7 +3,20 @@
 import { ArrowUpRight, Gift } from "lucide-react";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 
-export function InventoryDepositGuide() {
+type Props = {
+  variant?: "inventory" | "deposit";
+};
+
+export function InventoryDepositGuide({ variant = "inventory" }: Props) {
+  const description =
+    variant === "deposit" ? (
+      <>
+        Отправь подарок боту {depositBotMention()} — он появится в инвентаре автоматически.
+      </>
+    ) : (
+      <>Отправь подарок боту {depositBotMention()} — он появится здесь автоматически.</>
+    );
+
   return (
     <section className="panel overflow-hidden p-0">
       <div className="flex items-start gap-3 p-4">
@@ -12,9 +25,7 @@ export function InventoryDepositGuide() {
         </div>
         <div className="min-w-0 flex-1">
           <span className="chip chip-accent">Пополнение</span>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            Отправь подарок боту {depositBotMention()} — он появится здесь автоматически.
-          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p>
         </div>
       </div>
 

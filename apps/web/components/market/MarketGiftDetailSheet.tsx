@@ -5,8 +5,8 @@ import { Copy, Gift, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, MarketListing } from "@/lib/api";
-import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
-import { giftImageUrl } from "@/lib/gifts";
+import { TonIcon } from "@/components/icons/TonIcon";
+import { formatCollectionSlug, giftImageUrl, traitValue } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -20,10 +20,6 @@ type Props = {
   onClose: () => void;
   onBuy: () => void;
 };
-
-function traitValue(value?: string) {
-  return value?.trim() || "—";
-}
 
 function displayTitle(item: MarketListing["item"]) {
   if (item.sub_name) {
@@ -112,7 +108,7 @@ export function MarketGiftDetailSheet({
             )}
           </div>
 
-          <div className="mb-1 flex items-start justify-between gap-3">
+          <div className="mb-3 flex items-start justify-between gap-3 px-3">
             <div className="flex min-w-0 items-start gap-1.5">
               <p className="min-w-0 text-[17px] font-semibold leading-tight">{title}</p>
               <button
@@ -124,21 +120,18 @@ export function MarketGiftDetailSheet({
                 <Copy className="h-4 w-4" />
               </button>
             </div>
-            <p className="shrink-0 text-[17px] font-semibold tabular-nums text-accent">
-              <TonAmount
-                amount={formatTON(listing.price_nanoton)}
-                variant="brand"
-                iconClassName="h-7 w-7"
-              />
-            </p>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-surface-raised px-2.5 py-1 text-[15px] font-semibold tabular-nums text-foreground">
+              {formatTON(listing.price_nanoton)}
+              <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
+            </span>
           </div>
 
           {copied && <p className="mb-2 text-xs text-accent">Скопировано</p>}
 
           <div className="mb-3 divide-y divide-[var(--border)] rounded-2xl bg-surface-raised/60 px-4">
-            <TraitRow label="Model" value={traitValue(listing.item.model)} />
-            <TraitRow label="Symbol" value={traitValue(listing.item.symbol)} />
-            <TraitRow label="Backdrop" value={traitValue(listing.item.backdrop)} />
+            <TraitRow label="Коллекция" value={formatCollectionSlug(listing.item.collection_slug)} />
+            <TraitRow label="Узор" value={traitValue(listing.item.backdrop)} />
+            <TraitRow label="Символ" value={traitValue(listing.item.symbol)} />
           </div>
         </div>
 
@@ -151,8 +144,10 @@ export function MarketGiftDetailSheet({
             <p className="py-2 text-center text-sm text-muted">Это ваш лот</p>
           ) : (
             <Button
-              className={cn("h-12 w-full rounded-2xl text-[15px] font-semibold")}
-              variant="accent"
+              className={cn(
+                "h-12 w-full rounded-2xl text-[15px] font-semibold text-white active:opacity-90",
+                "bg-[#8774e1] hover:bg-[#8774e1]",
+              )}
               disabled={!canBuy || buying}
               onClick={onBuy}
             >
@@ -161,7 +156,7 @@ export function MarketGiftDetailSheet({
                 : insufficientFunds
                   ? "Недостаточно средств"
                   : (
-                      <span className="inline-flex items-center gap-1">
+                      <span className="inline-flex items-center justify-center gap-1">
                         Купить · {formatTON(listing.price_nanoton)}
                         <TonIcon variant="brand" className="h-5 w-5" />
                       </span>

@@ -1,15 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { TonConnectButton, useTonWallet } from "@tonconnect/ui-react";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { Button } from "@/components/ui/button";
-import { depositGift, formatTON, updateWallet } from "@/lib/api";
-import { TonAmount } from "@/components/icons/TonIcon";
+import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGuide";
+import { updateWallet } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { depositBotMention } from "@/lib/bot";
-import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { Gift, Wallet } from "lucide-react";
 
 type Tab = "ton" | "gifts";
@@ -25,9 +21,6 @@ export function DepositSection() {
   const syncedWallet = useRef<string | null>(null);
 
   const [tab, setTab] = useState<Tab>("ton");
-  const [txRef, setTxRef] = useState("");
-  const [depositing, setDepositing] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
 
   const connectedAddress = wallet?.account?.address ?? user?.ton_wallet;
 
@@ -44,21 +37,6 @@ export function DepositSection() {
       })
       .catch(() => {});
   }, [wallet?.account?.address, user, setUser]);
-
-  async function handleGiftDeposit() {
-    if (!txRef.trim()) return;
-    setDepositing(true);
-    setMsg(null);
-    try {
-      const item = await depositGift(txRef.trim());
-      setMsg(`Подарок «${item.name}» зачислен в инвентарь`);
-      setTxRef("");
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setDepositing(false);
-    }
-  }
 
   const tabs: { id: Tab; label: string; icon: typeof Wallet }[] = [
     { id: "ton", label: "TON кошелёк", icon: Wallet },
@@ -107,58 +85,7 @@ export function DepositSection() {
         </div>
       )}
 
-      {tab === "gifts" && (
-        <div className="panel space-y-4">
-          <div>
-            <p className="section-label">Подарки Telegram</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              Передай collectible gift боту — он попадёт в инвентарь. Продай за TON или используй
-              в играх.
-            </p>
-          </div>
-
-          <div className="surface-inset px-3 py-2.5 text-xs text-muted">
-            <p>1. Отправь upgraded gift боту {depositBotMention()}</p>
-            <p className="mt-1">2. Бот оценит подарок и зачислит его в инвентарь</p>
-          </div>
-
-          <input
-            className="input-field"
-            placeholder="vintagecigar-22477"
-            value={txRef}
-            onChange={(e) => setTxRef(e.target.value)}
-            disabled={depositing}
-          />
-
-          <Button
-            variant="accent"
-            className="w-full"
-            disabled={depositing || !txRef.trim()}
-            onClick={handleGiftDeposit}
-          >
-            {depositing ? "Проверяем…" : "Зачислить подарок"}
-          </Button>
-
-          {msg && (
-            <p
-              className={cn(
-                "text-center text-xs",
-                msg.startsWith("Подарок") ? "text-success" : "text-danger",
-              )}
-            >
-              {msg}
-            </p>
-          )}
-
-          <p className="text-center text-[11px] text-muted">
-            Оценка и зачисление на баланс —{" "}
-            <Link href={APP_ROUTES.inventory} className="text-accent">
-              инвентарь
-            </Link>
-            , продажа от <TonAmount amount={formatTON(100_000_000)} />
-          </p>
-        </div>
-      )}
+      {tab === "gifts" && <InventoryDepositGuide variant="deposit" />}
     </div>
   );
 }

@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Gift, Sparkles, Users } from "lucide-react";
+import { ChevronRight, Gift, Plus, Sparkles, Users } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { formatTON } from "@/lib/api";
-import { TonAmount } from "@/components/icons/TonIcon";
+import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
@@ -31,16 +31,26 @@ export function ProfileOverviewView() {
       <div className="grid grid-cols-2 gap-2">
         <div className="stat-tile">
           <p className="text-[11px] text-muted">Баланс</p>
-          <p className="mt-1 text-sm font-semibold tabular-nums">
-            <TonAmount
-              amount={loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
-              iconClassName="h-4 w-4"
-            />
-          </p>
+          <div className="mt-1 flex items-center justify-between gap-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1 truncate text-sm font-semibold tabular-nums text-foreground">
+              {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
+              <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
+            </span>
+            <Link
+              href={APP_ROUTES.deposit}
+              aria-label="Пополнить баланс"
+              onClick={() => haptics.impactOccurred("medium")}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-muted transition-colors active:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </Link>
+          </div>
         </div>
         <div className="stat-tile">
           <p className="text-[11px] text-muted">Кошелёк</p>
-          <p className="mt-1 truncate text-sm font-semibold">{user?.ton_wallet ? "Подключён" : "Не подключён"}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground">
+            {user?.ton_wallet ? "Подключён" : "Не подключён"}
+          </p>
         </div>
       </div>
 
