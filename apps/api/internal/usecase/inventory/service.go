@@ -2,6 +2,8 @@ package inventory
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
@@ -18,15 +20,30 @@ type ItemView struct {
 }
 
 type Service struct {
-	inventory domain.InventoryRepository
-	users     domain.UserRepository
-	deposit   *telegram.DepositService
-	valuator  *gifts.Valuator
-	market    LiquidationBroker
+	inventory    domain.InventoryRepository
+	users        domain.UserRepository
+	deposit      *telegram.DepositService
+	giftTransfer *telegram.GiftTransferService
+	valuator     *gifts.Valuator
+	market       LiquidationBroker
 }
 
-func NewService(inventory domain.InventoryRepository, users domain.UserRepository, deposit *telegram.DepositService, valuator *gifts.Valuator, market LiquidationBroker) *Service {
-	return &Service{inventory: inventory, users: users, deposit: deposit, valuator: valuator, market: market}
+func NewService(
+	inventory domain.InventoryRepository,
+	users domain.UserRepository,
+	deposit *telegram.DepositService,
+	giftTransfer *telegram.GiftTransferService,
+	valuator *gifts.Valuator,
+	market LiquidationBroker,
+) *Service {
+	return &Service{
+		inventory:    inventory,
+		users:        users,
+		deposit:      deposit,
+		giftTransfer: giftTransfer,
+		valuator:     valuator,
+		market:       market,
+	}
 }
 
 func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]domain.InventoryItem, error) {
@@ -41,7 +58,7 @@ func (s *Service) ListAll(ctx context.Context, userID uuid.UUID) ([]ItemView, er
 	}
 	out := make([]ItemView, 0, len(items))
 	for _, item := range items {
-		if isProfileVirtualItem(item) {
+		if isProfileVirtualItem(item) || item.Status == domain.InvWithdrawn {
 			continue
 		}
 		out = append(out, s.toItemView(ctx, item))
@@ -113,6 +130,50 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	}
 
 	return s.market.BuybackFromUser(ctx, userID, itemID, payout, payout)
+}
+
+func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) error {
+	item, err := s.inventory.FindByID(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item.UserID != userID {
+		return domain.ErrInvalidAmount
+	}
+	if item.Status != domain.InvAvailable {
+		return domain.ErrInvalidAmount
+	}
+	if isProfileVirtualItem(*item) {
+		return domain.ErrInvalidAmount
+	}
+	if item.Source != domain.NFTSourceTelegramGift || item.TelegramGiftID == "" {
+		return domain.ErrInvalidAmount
+	}
+	if s.giftTransfer == nil {
+		return fmt.Errorf("gift withdrawal is not configured")
+	}
+
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	recipient := telegram.ScanTargetByID(user.TelegramID)
+	if user.Username != "" {
+		recipient = telegram.ScanTargetByUsername(user.Username)
+	}
+
+	if err := s.giftTransfer.SendGift(ctx, item.TelegramGiftID, recipient); err != nil {
+		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
+			return fmt.Errorf("gift withdrawal is not configured")
+		}
+		if errors.Is(err, telegram.ErrGiftNotOnAccount) {
+			return fmt.Errorf("gift is not available for withdrawal")
+		}
+		return err
+	}
+
+	return s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn)
 }
 
 func (s *Service) SetFloorPrice(ctx context.Context, slug string, price int64) error {

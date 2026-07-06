@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { formatTON, InventoryItem } from "@/lib/api";
-import { TonAmount } from "@/components/icons/TonIcon";
-import { formatCollectionSlug, giftImageUrl, giftValuationNanoton, traitValue } from "@/lib/gifts";
+import { TonIcon } from "@/components/icons/TonIcon";
+import { formatCollectionSlug, giftImageUrl, giftValuationNanoton } from "@/lib/gifts";
 import { Gift } from "lucide-react";
 
 export function inventoryItemSlug(item: InventoryItem): string {
@@ -54,16 +54,13 @@ export function InventoryGiftCard({ item, listingPrice, onClick }: Props) {
         )}
       </div>
 
-      <div className="min-w-0 space-y-0.5">
+      <div className="min-w-0 space-y-1">
         <p className="truncate text-xs font-semibold leading-tight">{item.name}</p>
-        <p className="text-sm font-semibold tabular-nums text-accent">
-          <TonAmount amount={formatTON(price)} variant="brand" iconClassName="h-6 w-6" />
-        </p>
-        <div className="space-y-0.5 pt-0.5">
-          <p className="truncate text-[10px] capitalize text-muted">{collection}</p>
-          <p className="truncate text-[10px] text-muted/80">{traitValue(item.backdrop)}</p>
-          <p className="truncate text-[10px] text-muted/80">{traitValue(item.symbol)}</p>
-        </div>
+        <p className="truncate text-[10px] capitalize text-muted">{collection}</p>
+        <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-surface-raised px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+          {formatTON(price)}
+          <TonIcon variant="brand" className="h-3 w-3 shrink-0" />
+        </span>
       </div>
     </button>
   );
@@ -75,9 +72,8 @@ export function InventoryGiftCardSkeleton() {
       <div className="aspect-square animate-pulse rounded-xl bg-surface-raised" />
       <div className="space-y-1">
         <div className="h-3 w-3/4 animate-pulse rounded-md bg-surface-raised" />
-        <div className="h-3.5 w-1/2 animate-pulse rounded-md bg-surface-raised" />
-        <div className="h-2.5 w-full animate-pulse rounded-md bg-surface-raised" />
-        <div className="h-2.5 w-2/3 animate-pulse rounded-md bg-surface-raised" />
+        <div className="h-2.5 w-1/2 animate-pulse rounded-md bg-surface-raised" />
+        <div className="h-5 w-14 animate-pulse rounded-lg bg-surface-raised" />
       </div>
     </div>
   );

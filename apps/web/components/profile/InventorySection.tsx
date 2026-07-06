@@ -14,6 +14,7 @@ import {
   InventoryItem,
   liquidateItem,
   MarketListing,
+  withdrawGiftItem,
 } from "@/lib/api";
 import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
 import { Gift } from "lucide-react";
@@ -25,6 +26,7 @@ export function InventorySection() {
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [liquidating, setLiquidating] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const listingByItemId = useMemo(
     () =>
@@ -40,7 +42,7 @@ export function InventorySection() {
     setLoading(true);
     try {
       const [inv, mine] = await Promise.all([getInventory(), getMyMarketListings().catch(() => [])]);
-      setItems(inv.filter((i) => i.status !== "liquidated" && i.status !== "staked"));
+      setItems(inv.filter((i) => i.status !== "liquidated" && i.status !== "staked" && i.status !== "withdrawn"));
       setMyListings(mine);
     } finally {
       setLoading(false);
@@ -84,6 +86,20 @@ export function InventorySection() {
     }
   }
 
+  async function handleWithdraw() {
+    if (!selected) return;
+    setWithdrawing(true);
+    try {
+      await withdrawGiftItem(selected.id);
+      closeSheet();
+      load();
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
   async function handleCancelListing() {
     if (!selected) return;
     const listing = listingByItemId.get(selected.id);
@@ -93,7 +109,9 @@ export function InventorySection() {
     load();
   }
 
-  const visibleItems = items.filter((i) => i.status !== "liquidated" && i.status !== "staked");
+  const visibleItems = items.filter(
+    (i) => i.status !== "liquidated" && i.status !== "staked" && i.status !== "withdrawn",
+  );
 
   return (
     <>
@@ -139,8 +157,10 @@ export function InventorySection() {
           marketListing={listingByItemId.get(selected.id)}
           listError={listError}
           liquidating={liquidating}
+          withdrawing={withdrawing}
           onClose={closeSheet}
           onLiquidate={handleLiquidate}
+          onWithdraw={handleWithdraw}
           onCancelListing={handleCancelListing}
         />
       )}

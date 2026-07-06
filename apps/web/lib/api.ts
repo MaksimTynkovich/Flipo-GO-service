@@ -86,6 +86,10 @@ export async function liquidateItem(id: string) {
   return api<{ balance: number }>(`/api/v1/inventory/${id}/liquidate`, { method: "POST" });
 }
 
+export async function withdrawGiftItem(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/inventory/${id}/withdraw`, { method: "POST" });
+}
+
 export async function depositGift(txRef: string) {
   return api<InventoryItem>("/api/v1/inventory/deposit", {
     method: "POST",

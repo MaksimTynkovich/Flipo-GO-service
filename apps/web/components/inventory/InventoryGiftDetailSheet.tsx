@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Copy, Gift, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatTON, InventoryItem, MarketListing } from "@/lib/api";
-import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
+import { TonIcon } from "@/components/icons/TonIcon";
 import { formatCollectionSlug, giftImageUrl, giftValuationNanoton, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
@@ -15,8 +15,10 @@ type Props = {
   marketListing?: MarketListing;
   listError: string | null;
   liquidating: boolean;
+  withdrawing: boolean;
   onClose: () => void;
   onLiquidate: () => void;
+  onWithdraw: () => void;
   onCancelListing: () => void;
 };
 
@@ -34,8 +36,10 @@ export function InventoryGiftDetailSheet({
   marketListing,
   listError,
   liquidating,
+  withdrawing,
   onClose,
   onLiquidate,
+  onWithdraw,
   onCancelListing,
 }: Props) {
   const [imgError, setImgError] = useState(false);
@@ -98,7 +102,7 @@ export function InventoryGiftDetailSheet({
             )}
           </div>
 
-          <div className="mb-1 flex items-start justify-between gap-3">
+          <div className="mb-3 flex items-start justify-between gap-3 px-3">
             <div className="flex min-w-0 items-start gap-1.5">
               <p className="min-w-0 text-[17px] font-semibold leading-tight">{item.name}</p>
               <button
@@ -110,9 +114,10 @@ export function InventoryGiftDetailSheet({
                 <Copy className="h-4 w-4" />
               </button>
             </div>
-            <p className="shrink-0 text-[17px] font-semibold tabular-nums text-accent">
-              <TonAmount amount={formatTON(displayPrice)} variant="brand" iconClassName="h-7 w-7" />
-            </p>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-surface-raised px-2.5 py-1 text-[15px] font-semibold tabular-nums text-foreground">
+              {formatTON(displayPrice)}
+              <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
+            </span>
           </div>
 
           {copied && <p className="mb-2 text-xs text-accent">Скопировано</p>}
@@ -128,23 +133,33 @@ export function InventoryGiftDetailSheet({
           {listError && <p className="mb-3 text-center text-sm text-danger">{listError}</p>}
 
           {item.status === "available" && (
-            <Button
-              className={cn(
-                "h-12 w-full rounded-2xl text-[15px] font-semibold text-white active:opacity-90",
-                "bg-[#8774e1] hover:bg-[#8774e1]",
-              )}
-              disabled={liquidating}
-              onClick={onLiquidate}
-            >
-              {liquidating ? (
-                "Продажа…"
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  Продать за {formatTON(valuation)}
-                  <TonIcon variant="brand" className="h-5 w-5" />
-                </span>
-              )}
-            </Button>
+            <div className="mb-1 flex items-start justify-between gap-3">
+              <Button
+                className={cn(
+                  "h-12 min-w-0 flex-1 rounded-2xl px-2 text-[14px] font-semibold text-white active:opacity-90 sm:text-[15px]",
+                  "bg-[#8774e1] hover:bg-[#8774e1]",
+                )}
+                disabled={liquidating || withdrawing}
+                onClick={onLiquidate}
+              >
+                {liquidating ? (
+                  "Продажа…"
+                ) : (
+                  <span className="inline-flex items-center justify-center gap-1">
+                    Продать
+                  </span>
+                )}
+              </Button>
+
+              <Button
+                className="h-12 min-w-0 flex-1 rounded-2xl px-2 text-[14px] font-semibold sm:text-[15px]"
+                variant="outline"
+                disabled={liquidating || withdrawing}
+                onClick={onWithdraw}
+              >
+                {withdrawing ? "Вывод…" : "Вывести"}
+              </Button>
+            </div>
           )}
 
           {item.status === "locked" && marketListing && (

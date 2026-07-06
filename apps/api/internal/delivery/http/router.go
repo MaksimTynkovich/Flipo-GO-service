@@ -60,6 +60,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/inventory", deps.InventoryHandler.List)
 			authed.POST("/inventory/deposit", deps.InventoryHandler.Deposit)
 			authed.POST("/inventory/:id/liquidate", deps.InventoryHandler.Liquidate)
+			authed.POST("/inventory/:id/withdraw", deps.InventoryHandler.Withdraw)
 			authed.POST("/admin/floor-price", deps.InventoryHandler.SetFloorPrice)
 
 			authed.GET("/market/listings/mine", deps.MarketHandler.ListMine)

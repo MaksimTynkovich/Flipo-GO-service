@@ -61,6 +61,20 @@ func (h *InventoryHandler) Liquidate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"balance": balance})
 }
 
+func (h *InventoryHandler) Withdraw(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	itemID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.inventory.Withdraw(c.Request.Context(), userID, itemID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (h *InventoryHandler) Stake(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {

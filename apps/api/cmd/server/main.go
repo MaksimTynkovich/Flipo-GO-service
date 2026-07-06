@@ -85,8 +85,9 @@ func main() {
 	giftScanner := telegram.NewProfileGiftScanner(mtprotoCfg, cfg.DebugAuthEnabled && !mtprotoCfg.Enabled())
 	giftValuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
+	giftTransfer := telegram.NewGiftTransferService(mtprotoCfg)
 	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)
-	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftValuator, marketSvc)
+	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftTransfer, giftValuator, marketSvc)
 
 	hub := websocket.NewHub()
 	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
