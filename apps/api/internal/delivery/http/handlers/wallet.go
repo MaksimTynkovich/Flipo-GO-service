@@ -115,22 +115,49 @@ func (h *WalletHandler) GetTransfer(c *gin.Context) {
 func writeWalletError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidAmount):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Укажи корректную сумму. Проверь минимальный лимит операции.",
+			"code":  "invalid_amount",
+		})
 	case errors.Is(err, domain.ErrInsufficientFunds):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Недостаточно средств на балансе.",
+			"code":  "insufficient_funds",
+		})
 	case errors.Is(err, domain.ErrWalletNotLinked):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Сначала подключи TON-кошелёк.",
+			"code":  "wallet_not_linked",
+		})
 	case errors.Is(err, domain.ErrTransferPending):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "У тебя уже есть активная операция. Дождись её завершения.",
+			"code":  "transfer_pending",
+		})
 	case errors.Is(err, domain.ErrTransferExpired):
-		c.JSON(http.StatusGone, gin.H{"error": err.Error()})
+		c.JSON(http.StatusGone, gin.H{
+			"error": "Время на оплату истекло. Создай новое пополнение.",
+			"code":  "transfer_expired",
+		})
 	case errors.Is(err, domain.ErrTransferNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Операция не найдена.",
+			"code":  "transfer_not_found",
+		})
 	case errors.Is(err, domain.ErrDuplicateRequest):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "Такой запрос уже обрабатывается.",
+			"code":  "duplicate_request",
+		})
 	case errors.Is(err, domain.ErrChainUnavailable):
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Сервис TON временно недоступен. Попробуй через пару минут.",
+			"code":  "chain_unavailable",
+		})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Не удалось выполнить операцию. Попробуй ещё раз.",
+			"code":  "internal_error",
+		})
 	}
 }

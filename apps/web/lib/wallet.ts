@@ -23,6 +23,9 @@ export function newIdempotencyKey(prefix: string): string {
 /** Platform withdrawal fee in nanoton (keep in sync with TON_WITHDRAW_FEE_NANOTON). */
 export const WITHDRAW_FEE_NANOTON = 50_000_000;
 
+/** Minimum deposit / withdraw receive amount in nanoton. */
+export const MIN_TRANSFER_NANOTON = 100_000_000;
+
 export function withdrawDebitNanoton(receiveNanoton: number): number {
   if (receiveNanoton <= 0) return 0;
   return receiveNanoton + WITHDRAW_FEE_NANOTON;

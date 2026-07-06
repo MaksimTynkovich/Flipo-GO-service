@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TonConnectButton, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
@@ -14,7 +14,21 @@ import {
 } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { Button } from "@/components/ui/button";
-import { encodeTonCommentPayload, nanotonFromTonInput, newIdempotencyKey, sleep, WITHDRAW_FEE_NANOTON, withdrawDebitNanoton } from "@/lib/wallet";
+import {
+  formatWalletError,
+  formatTransferDate,
+  walletStatusLabel,
+  type WalletMessage,
+} from "@/lib/wallet-errors";
+import {
+  encodeTonCommentPayload,
+  MIN_TRANSFER_NANOTON,
+  nanotonFromTonInput,
+  newIdempotencyKey,
+  sleep,
+  WITHDRAW_FEE_NANOTON,
+  withdrawDebitNanoton,
+} from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { ArrowDownToLine, ArrowUpFromLine, History, Wallet } from "lucide-react";
 
@@ -23,23 +37,73 @@ function shortenAddress(addr: string) {
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-function statusLabel(status: string) {
-  switch (status) {
-    case "awaiting_payment":
-      return "Ожидает оплату";
-    case "queued":
-      return "В очереди";
-    case "broadcasting":
-      return "Отправляется";
-    case "completed":
-      return "Завершено";
-    case "failed":
-      return "Ошибка";
-    case "expired":
-      return "Истекло";
-    default:
-      return status;
-  }
+function WalletAlert({ message }: { message: WalletMessage }) {
+  return (
+    <p
+      className={cn(
+        "rounded-xl px-3 py-2.5 text-xs leading-relaxed",
+        message.type === "error" && "bg-red-500/10 text-red-300",
+        message.type === "success" && "bg-success/10 text-success",
+        message.type === "info" && "bg-surface-raised text-muted",
+      )}
+    >
+      {message.text}
+    </p>
+  );
+}
+
+function TransferHistory({
+  title,
+  items,
+  direction,
+  emptyText,
+}: {
+  title: string;
+  items: WalletTransfer[];
+  direction: "deposit" | "withdraw";
+  emptyText: string;
+}) {
+  return (
+    <div className="panel space-y-3">
+      <div className="flex items-center gap-2">
+        <History className="h-4 w-4 text-muted" />
+        <p className="section-label">{title}</p>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs leading-relaxed text-muted">{emptyText}</p>
+      ) : (
+        <div className="space-y-2">
+          {items.slice(0, 8).map((item) => (
+            <div key={item.id} className="stat-tile flex items-center justify-between gap-3 text-left">
+              <div className="min-w-0">
+                <p className="text-xs text-muted">{formatTransferDate(item.created_at)}</p>
+                <p className="mt-0.5 text-sm font-semibold text-foreground">
+                  {walletStatusLabel(item.status)}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {item.direction === "withdraw" && item.fee_nanoton > 0
+                    ? `Комиссия ${formatTON(item.fee_nanoton)}`
+                    : null}
+                  {item.status === "failed" && item.error_message
+                    ? " · Не удалось завершить"
+                    : null}
+                </p>
+              </div>
+              <p
+                className={cn(
+                  "shrink-0 text-sm font-semibold tabular-nums",
+                  direction === "deposit" ? "text-success" : "text-foreground",
+                )}
+              >
+                {direction === "deposit" ? "+" : "−"}
+                {formatTON(direction === "withdraw" ? item.net_nanoton : item.amount_nanoton)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function TonWalletPanel() {
@@ -51,10 +115,18 @@ export function TonWalletPanel() {
   const [withdrawAmount, setWithdrawAmount] = useState("1");
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<WalletMessage | null>(null);
   const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
 
   const connectedAddress = wallet?.account?.address ?? user?.ton_wallet;
+  const deposits = useMemo(
+    () => transfers.filter((item) => item.direction === "deposit"),
+    [transfers],
+  );
+  const withdrawals = useMemo(
+    () => transfers.filter((item) => item.direction === "withdraw"),
+    [transfers],
+  );
 
   useEffect(() => {
     const addr = wallet?.account?.address;
@@ -73,14 +145,14 @@ export function TonWalletPanel() {
   }, []);
 
   useEffect(() => {
-    const hasPending = transfers.some((item) => item.status === "awaiting_payment");
-    if (!hasPending) return;
+    const hasPendingDeposit = deposits.some((item) => item.status === "awaiting_payment");
+    if (!hasPendingDeposit) return;
 
     const timer = setInterval(() => {
       refreshTransfers().catch(() => {});
     }, 5000);
     return () => clearInterval(timer);
-  }, [transfers.some((item) => item.status === "awaiting_payment")]);
+  }, [deposits]);
 
   async function refreshTransfers() {
     try {
@@ -90,15 +162,24 @@ export function TonWalletPanel() {
     }
   }
 
+  function switchMode(next: "deposit" | "withdraw") {
+    setMode(next);
+    setMessage(null);
+  }
+
   async function handleDeposit() {
     setMessage(null);
     const amountNanoton = nanotonFromTonInput(depositAmount);
     if (amountNanoton <= 0) {
-      setMessage("Введите сумму пополнения");
+      setMessage({ type: "error", text: "Введи сумму пополнения." });
+      return;
+    }
+    if (amountNanoton < MIN_TRANSFER_NANOTON) {
+      setMessage({ type: "error", text: "Минимальное пополнение — 0.1 TON." });
       return;
     }
     if (!connectedAddress) {
-      setMessage("Сначала подключи кошелёк");
+      setMessage({ type: "error", text: "Сначала подключи TON-кошелёк." });
       return;
     }
 
@@ -124,15 +205,23 @@ export function TonWalletPanel() {
 
       if (confirm.transfer.status === "completed") {
         if (user) setUser({ ...user, betting_balance: confirm.balance });
-        setMessage("Пополнение зачислено на баланс.");
+        setMessage({ type: "success", text: "Пополнение зачислено на баланс." });
       } else if (confirm.transfer.status === "awaiting_payment") {
-        setMessage("Платёж отправлен. Зачисление появится в течение минуты — обнови страницу.");
+        setMessage({
+          type: "info",
+          text: "Платёж отправлен. Зачисление появится в течение минуты — статус обновится в истории пополнений.",
+        });
+      } else if (confirm.transfer.status === "expired") {
+        setMessage({ type: "error", text: "Время на оплату истекло. Создай новое пополнение." });
       } else {
-        setMessage(`Статус пополнения: ${statusLabel(confirm.transfer.status)}`);
+        setMessage({
+          type: "info",
+          text: `Статус пополнения: ${walletStatusLabel(confirm.transfer.status)}.`,
+        });
       }
       await refreshTransfers();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Не удалось отправить пополнение");
+      setMessage({ type: "error", text: formatWalletError(e, "deposit") });
     } finally {
       setLoading(false);
     }
@@ -140,24 +229,39 @@ export function TonWalletPanel() {
 
   async function handleWithdraw() {
     setMessage(null);
-    const amountNanoton = nanotonFromTonInput(withdrawAmount);
-    if (amountNanoton <= 0) {
-      setMessage("Введите сумму вывода");
+    const receiveNanoton = nanotonFromTonInput(withdrawAmount);
+    if (receiveNanoton <= 0) {
+      setMessage({ type: "error", text: "Введи сумму, которую хочешь получить на кошелёк." });
+      return;
+    }
+    if (receiveNanoton < MIN_TRANSFER_NANOTON) {
+      setMessage({ type: "error", text: "Минимальная сумма вывода на кошелёк — 0.1 TON." });
       return;
     }
     if (!connectedAddress) {
-      setMessage("Сначала подключи кошелёк");
+      setMessage({ type: "error", text: "Сначала подключи TON-кошелёк." });
+      return;
+    }
+    const debitNanoton = withdrawDebitNanoton(receiveNanoton);
+    if (user && user.betting_balance < debitNanoton) {
+      setMessage({
+        type: "error",
+        text: `Недостаточно средств. Нужно ${formatTON(debitNanoton)} с учётом комиссии ${formatTON(WITHDRAW_FEE_NANOTON)}.`,
+      });
       return;
     }
 
     setLoading(true);
     try {
-      const result = await requestWalletWithdraw(amountNanoton, newIdempotencyKey("withdraw"));
+      const result = await requestWalletWithdraw(receiveNanoton, newIdempotencyKey("withdraw"));
       if (user) setUser({ ...user, betting_balance: result.balance });
-      setMessage("Заявка на вывод создана. Средства отправятся на подключённый кошелёк.");
+      setMessage({
+        type: "success",
+        text: `Вывод создан. На кошелёк придёт ${formatTON(receiveNanoton)}.`,
+      });
       await refreshTransfers();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Не удалось создать вывод");
+      setMessage({ type: "error", text: formatWalletError(e, "withdraw") });
     } finally {
       setLoading(false);
     }
@@ -195,7 +299,7 @@ export function TonWalletPanel() {
         <div className="segment-control">
           <button
             type="button"
-            onClick={() => setMode("deposit")}
+            onClick={() => switchMode("deposit")}
             className={cn("segment-item", mode === "deposit" && "segment-item-active")}
           >
             <ArrowDownToLine className="h-3.5 w-3.5" />
@@ -203,7 +307,7 @@ export function TonWalletPanel() {
           </button>
           <button
             type="button"
-            onClick={() => setMode("withdraw")}
+            onClick={() => switchMode("withdraw")}
             className={cn("segment-item", mode === "withdraw" && "segment-item-active")}
           >
             <ArrowUpFromLine className="h-3.5 w-3.5" />
@@ -223,6 +327,7 @@ export function TonWalletPanel() {
                 placeholder="1"
               />
             </label>
+            <p className="text-[11px] leading-relaxed text-muted">Минимум — 0.1 TON.</p>
             <Button className="h-11 w-full rounded-xl" disabled={loading} onClick={handleDeposit}>
               {loading ? "Отправляем…" : "Пополнить через кошелёк"}
             </Button>
@@ -262,6 +367,7 @@ export function TonWalletPanel() {
                 variant="brand"
                 iconClassName="h-4 w-4"
               />
+              . Минимум к получению — 0.1 TON.
             </p>
             <Button
               className="h-11 w-full rounded-xl"
@@ -274,37 +380,23 @@ export function TonWalletPanel() {
           </div>
         )}
 
-        {message && <p className="text-xs leading-relaxed text-muted">{message}</p>}
+        {message && <WalletAlert message={message} />}
       </div>
 
-      {transfers.length > 0 && (
-        <div className="panel space-y-3">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted" />
-            <p className="section-label">История операций</p>
-          </div>
-          <div className="space-y-2">
-            {transfers.slice(0, 8).map((item) => (
-              <div key={item.id} className="stat-tile flex items-center justify-between gap-3 text-left">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {item.direction === "deposit" ? "Пополнение" : "Вывод"}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {statusLabel(item.status)}
-                    {item.direction === "withdraw" && item.fee_nanoton > 0
-                      ? ` · комиссия ${formatTON(item.fee_nanoton)}`
-                      : ""}
-                  </p>
-                </div>
-                <p className="text-sm font-semibold tabular-nums text-success">
-                  {item.direction === "deposit" ? "+" : "−"}
-                  {formatTON(item.direction === "withdraw" ? item.net_nanoton : item.amount_nanoton)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+      {mode === "deposit" ? (
+        <TransferHistory
+          title="История пополнений"
+          items={deposits}
+          direction="deposit"
+          emptyText="Пополнений пока не было."
+        />
+      ) : (
+        <TransferHistory
+          title="История выводов"
+          items={withdrawals}
+          direction="withdraw"
+          emptyText="Выводов пока не было."
+        />
       )}
     </div>
   );
