@@ -185,3 +185,7 @@ func (s *Service) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet str
 	}
 	return normalized, nil
 }
+
+func (s *Service) ClearWallet(ctx context.Context, userID uuid.UUID) error {
+	return s.users.UpdateWallet(ctx, userID, "")
+}

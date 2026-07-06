@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { TonConnectButton, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
+import { TonConnectButton, useIsConnectionRestored, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
   confirmWalletDeposit,
   createWalletDepositIntent,
+  clearWallet,
   formatTON,
   getWalletTransfers,
   requestWalletWithdraw,
@@ -22,29 +23,32 @@ import {
 } from "@/lib/wallet-errors";
 import {
   encodeTonCommentPayload,
+  formatTonWalletAddress,
   MIN_TRANSFER_NANOTON,
   nanotonFromTonInput,
   newIdempotencyKey,
+  shortenTonWalletAddress,
   sleep,
+  tonWalletAddressesEqual,
   WITHDRAW_FEE_NANOTON,
   withdrawDebitNanoton,
 } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
-import { ArrowDownToLine, ArrowUpFromLine, History, Wallet } from "lucide-react";
-
-function shortenAddress(addr: string) {
-  if (addr.length <= 12) return addr;
-  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
-}
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  History,
+  Wallet,
+} from "lucide-react";
 
 function WalletAlert({ message }: { message: WalletMessage }) {
   return (
     <p
       className={cn(
-        "rounded-xl px-3 py-2.5 text-xs leading-relaxed",
+        "rounded-2xl px-4 py-3 text-xs leading-relaxed",
         message.type === "error" && "bg-red-500/10 text-red-300",
         message.type === "success" && "bg-success/10 text-success",
-        message.type === "info" && "bg-surface-raised text-muted",
+        message.type === "info" && "bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-muted",
       )}
     >
       {message.text}
@@ -64,51 +68,58 @@ function TransferHistory({
   emptyText: string;
 }) {
   return (
-    <div className="panel space-y-3">
-      <div className="flex items-center gap-2">
-        <History className="h-4 w-4 text-muted" />
-        <p className="section-label">{title}</p>
+    <section className="panel overflow-hidden p-0">
+      <div className="border-b border-[var(--border)] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <History className="h-4 w-4 text-muted" />
+          <p className="section-label">{title}</p>
+        </div>
       </div>
-      {items.length === 0 ? (
-        <p className="text-xs leading-relaxed text-muted">{emptyText}</p>
-      ) : (
-        <div className="space-y-2">
-          {items.slice(0, 8).map((item) => (
-            <div key={item.id} className="stat-tile flex items-center justify-between gap-3 text-left">
+      <div className="space-y-2 p-4">
+        {items.length === 0 ? (
+          <p className="text-xs leading-relaxed text-muted">{emptyText}</p>
+        ) : (
+          items.slice(0, 8).map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-3 rounded-2xl bg-surface-raised/70 px-3 py-3"
+            >
               <div className="min-w-0">
-                <p className="text-xs text-muted">{formatTransferDate(item.created_at)}</p>
+                <p className="text-[11px] text-muted">{formatTransferDate(item.created_at)}</p>
                 <p className="mt-0.5 text-sm font-semibold text-foreground">
                   {walletStatusLabel(item.status)}
                 </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {item.direction === "withdraw" && item.fee_nanoton > 0
-                    ? `Комиссия ${formatTON(item.fee_nanoton)}`
-                    : null}
-                  {item.status === "failed" && item.error_message
-                    ? " · Не удалось завершить"
-                    : null}
-                </p>
+                {item.wallet_address ? (
+                  <p className="mt-0.5 truncate font-mono text-xs text-muted">
+                    {direction === "deposit" ? "С" : "На"}:{" "}
+                    {shortenTonWalletAddress(item.wallet_address)}
+                  </p>
+                ) : null}
+                {item.status === "failed" && item.error_message ? (
+                  <p className="mt-0.5 text-xs text-muted">Не удалось завершить</p>
+                ) : null}
               </div>
               <p
                 className={cn(
-                  "shrink-0 text-sm font-semibold tabular-nums",
-                  direction === "deposit" ? "text-success" : "text-foreground",
+                  "shrink-0 text-sm font-bold tabular-nums",
+                  direction === "deposit" ? "text-success" : "text-red-400",
                 )}
               >
                 {direction === "deposit" ? "+" : "−"}
                 {formatTON(direction === "withdraw" ? item.net_nanoton : item.amount_nanoton)}
               </p>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
+          ))
+        )}
+      </div>
+    </section>
   );
 }
 
 export function TonWalletPanel() {
   const { user, setUser } = useAuth();
   const wallet = useTonWallet();
+  const connectionRestored = useIsConnectionRestored();
   const [tonConnectUI] = useTonConnectUI();
 
   const [depositAmount, setDepositAmount] = useState("1");
@@ -118,7 +129,9 @@ export function TonWalletPanel() {
   const [message, setMessage] = useState<WalletMessage | null>(null);
   const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
 
-  const connectedAddress = wallet?.account?.address ?? user?.ton_wallet;
+  const connectedAddr = wallet?.account?.address;
+  const isWalletConnected = Boolean(connectedAddr);
+  const displayWallet = connectedAddr ? formatTonWalletAddress(connectedAddr) : null;
   const deposits = useMemo(
     () => transfers.filter((item) => item.direction === "deposit"),
     [transfers],
@@ -127,16 +140,28 @@ export function TonWalletPanel() {
     () => transfers.filter((item) => item.direction === "withdraw"),
     [transfers],
   );
+  const pendingDeposits = deposits.filter((item) => item.status === "awaiting_payment").length;
 
   useEffect(() => {
-    const addr = wallet?.account?.address;
-    if (!addr || user?.ton_wallet === addr) return;
-    updateWallet(addr)
-      .then((res) => {
-        if (user) setUser({ ...user, ton_wallet: res.wallet });
+    if (!connectionRestored) return;
+
+    if (connectedAddr) {
+      if (user?.ton_wallet && tonWalletAddressesEqual(user.ton_wallet, connectedAddr)) return;
+      updateWallet(connectedAddr)
+        .then((res) => {
+          if (user) setUser({ ...user, ton_wallet: res.wallet });
+        })
+        .catch(() => {});
+      return;
+    }
+
+    if (!user?.ton_wallet) return;
+    clearWallet()
+      .then(() => {
+        if (user) setUser({ ...user, ton_wallet: undefined });
       })
       .catch(() => {});
-  }, [wallet?.account?.address, user, setUser]);
+  }, [connectionRestored, connectedAddr, user, setUser]);
 
   useEffect(() => {
     getWalletTransfers()
@@ -178,7 +203,7 @@ export function TonWalletPanel() {
       setMessage({ type: "error", text: "Минимальное пополнение — 0.1 TON." });
       return;
     }
-    if (!connectedAddress) {
+    if (!isWalletConnected) {
       setMessage({ type: "error", text: "Сначала подключи TON-кошелёк." });
       return;
     }
@@ -238,7 +263,7 @@ export function TonWalletPanel() {
       setMessage({ type: "error", text: "Минимальная сумма вывода на кошелёк — 0.1 TON." });
       return;
     }
-    if (!connectedAddress) {
+    if (!isWalletConnected) {
       setMessage({ type: "error", text: "Сначала подключи TON-кошелёк." });
       return;
     }
@@ -268,120 +293,179 @@ export function TonWalletPanel() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="panel space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="section-label">TON кошелёк</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              Подключи Telegram Wallet и пополняй или выводи TON напрямую. Все операции проходят
-              через защищённый контур с защитой от повторных списаний.
-            </p>
-          </div>
-          <div className="icon-box h-10 w-10 shrink-0 rounded-xl">
-            <Wallet className="h-4 w-4" />
-          </div>
-        </div>
-
-        <div className="flex justify-center [&_button]:!rounded-xl">
-          <TonConnectButton />
-        </div>
-
-        {connectedAddress && (
-          <div className="surface-inset px-3 py-2.5 text-center">
-            <p className="text-[10px] uppercase tracking-wider text-muted">Подключён</p>
-            <p className="mt-1 font-mono text-sm tabular-nums text-foreground">
-              {shortenAddress(connectedAddress)}
-            </p>
-          </div>
-        )}
-
-        <div className="segment-control">
-          <button
-            type="button"
-            onClick={() => switchMode("deposit")}
-            className={cn("segment-item", mode === "deposit" && "segment-item-active")}
-          >
-            <ArrowDownToLine className="h-3.5 w-3.5" />
-            Пополнить
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode("withdraw")}
-            className={cn("segment-item", mode === "withdraw" && "segment-item-active")}
-          >
-            <ArrowUpFromLine className="h-3.5 w-3.5" />
-            Вывести
-          </button>
-        </div>
-
-        {mode === "deposit" ? (
-          <div className="space-y-3">
-            <label className="block space-y-2">
-              <span className="text-xs text-muted">Сумма пополнения</span>
-              <input
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                inputMode="decimal"
-                className="h-11 w-full rounded-xl border border-[var(--border)] bg-surface-raised px-3 text-sm tabular-nums outline-none focus:border-accent"
-                placeholder="1"
-              />
-            </label>
-            <p className="text-[11px] leading-relaxed text-muted">Минимум — 0.1 TON.</p>
-            <Button className="h-11 w-full rounded-xl" disabled={loading} onClick={handleDeposit}>
-              {loading ? "Отправляем…" : "Пополнить через кошелёк"}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <label className="block space-y-2">
-              <span className="text-xs text-muted">Сколько получить на кошелёк</span>
-              <input
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                inputMode="decimal"
-                className="h-11 w-full rounded-xl border border-[var(--border)] bg-surface-raised px-3 text-sm tabular-nums outline-none focus:border-accent"
-                placeholder="1"
-              />
-            </label>
-            {nanotonFromTonInput(withdrawAmount) > 0 && (
-              <div className="surface-inset space-y-1 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
-                <p>
-                  Комиссия сервиса:{" "}
-                  <TonAmount amount={formatTON(WITHDRAW_FEE_NANOTON)} variant="brand" iconClassName="h-3.5 w-3.5" />
+    <div className="space-y-4 pb-8">
+      <section className="panel overflow-hidden p-0">
+        <div className="bg-[radial-gradient(circle_at_top,_color-mix(in_srgb,var(--accent)_20%,transparent),_transparent_60%)] px-5 py-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-3">
+              <span className="chip chip-accent">TON Wallet</span>
+              <div className="space-y-2">
+                <p className="text-[1.4rem] font-semibold leading-tight text-foreground">
+                  Пополняй и выводи TON напрямую
                 </p>
-                <p>
-                  С баланса спишется:{" "}
+                <p className="text-sm leading-relaxed text-muted">
+                  Подключите свой TON Wallet для доступа ко всем возможностям пополнения и вывода средств. Баланс и история операций будут отображаться здесь после подключения.
+             
+                </p>
+              </div>
+            </div>
+
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent/15 text-accent shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent)_20%,transparent)]">
+              <Wallet className="h-7 w-7" />
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-surface-raised/80 p-3">
+              <p className="text-[11px] text-muted">Баланс</p>
+              <div className="mt-1 text-xl font-bold tabular-nums text-foreground">
+                <TonAmount
+                  amount={user ? formatTON(user.betting_balance) : "—"}
+                  variant="brand"
+                  iconClassName="h-5 w-5"
+                />
+              </div>
+            </div>
+            <div className="rounded-2xl bg-surface-raised/80 p-3">
+              <p className="text-[11px] text-muted">Кошелёк</p>
+              <p className="mt-1 font-mono text-sm font-bold text-foreground">
+                {displayWallet ? shortenTonWalletAddress(displayWallet) : "Не подключён"}
+              </p>
+              {pendingDeposits > 0 && (
+                <p className="mt-1 text-[11px] text-muted">
+                  {pendingDeposits} в обработке
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel overflow-hidden p-0">
+        <div className="border-b border-[var(--border)] px-4 py-3">
+          <p className="section-label">{mode === "deposit" ? "Пополнение" : "Вывод"}</p>
+        </div>
+
+        <div className="space-y-4 p-4">
+          <div className="flex justify-center rounded-2xl bg-surface-raised/50 py-3 [&_button]:!rounded-xl">
+            <TonConnectButton />
+          </div>
+
+          {displayWallet && (
+            <div className="rounded-2xl bg-surface-raised/70 p-3 text-center">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Твой кошелёк для вывода</p>
+              <p className="mt-2 break-all font-mono text-sm leading-relaxed text-foreground/90">
+                {displayWallet}
+              </p>
+              <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                Вывод придёт на этот адрес в Telegram Wallet.
+              </p>
+            </div>
+          )}
+
+          <div className="segment-control">
+            <button
+              type="button"
+              onClick={() => switchMode("deposit")}
+              className={cn("segment-item", mode === "deposit" && "segment-item-active")}
+            >
+              <ArrowDownToLine className="h-3.5 w-3.5" />
+              Пополнить
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("withdraw")}
+              className={cn("segment-item", mode === "withdraw" && "segment-item-active")}
+            >
+              <ArrowUpFromLine className="h-3.5 w-3.5" />
+              Вывести
+            </button>
+          </div>
+
+          {mode === "deposit" ? (
+            <div className="space-y-3">
+              <label className="block space-y-2">
+                <span className="text-xs text-muted">Сумма пополнения</span>
+                <input
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  inputMode="decimal"
+                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-surface-raised px-3 text-sm tabular-nums outline-none focus:border-accent"
+                  placeholder="1"
+                />
+              </label>
+
+              <div className="rounded-2xl bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] p-4">
+                <p className="text-xs leading-relaxed text-muted">
+                  Минимум — 0.1 TON. После подтверждения в кошельке зачисление появится на балансе
+                  автоматически.
+                </p>
+              </div>
+
+              <Button className="h-11 w-full rounded-xl" disabled={loading} onClick={handleDeposit}>
+                {loading ? "Отправляем…" : "Пополнить через кошелёк"}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <label className="block space-y-2">
+                <span className="text-xs text-muted">Сколько получить на кошелёк</span>
+                <input
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  inputMode="decimal"
+                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-surface-raised px-3 text-sm tabular-nums outline-none focus:border-accent"
+                  placeholder="1"
+                />
+              </label>
+
+              {nanotonFromTonInput(withdrawAmount) > 0 && (
+                <div className="rounded-2xl bg-surface-raised/70 p-3 text-[11px] leading-relaxed text-muted">
+                  <p>
+                    Комиссия сервиса:{" "}
+                    <TonAmount
+                      amount={formatTON(WITHDRAW_FEE_NANOTON)}
+                      variant="brand"
+                      iconClassName="h-3.5 w-3.5"
+                    />
+                  </p>
+                  <p className="mt-1">
+                    С баланса спишется:{" "}
+                    <TonAmount
+                      amount={formatTON(withdrawDebitNanoton(nanotonFromTonInput(withdrawAmount)))}
+                      variant="brand"
+                      iconClassName="h-3.5 w-3.5"
+                    />
+                  </p>
+                </div>
+              )}
+
+              <div className="rounded-2xl bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] p-4">
+                <p className="text-xs leading-relaxed text-muted">
+                  Доступно{" "}
                   <TonAmount
-                    amount={formatTON(withdrawDebitNanoton(nanotonFromTonInput(withdrawAmount)))}
+                    amount={user ? formatTON(user.betting_balance) : "—"}
                     variant="brand"
                     iconClassName="h-3.5 w-3.5"
                   />
+                  . Минимум к получению — 0.1 TON.
                 </p>
               </div>
-            )}
-            <p className="text-[11px] leading-relaxed text-muted">
-              Доступно:{" "}
-              <TonAmount
-                amount={user ? formatTON(user.betting_balance) : "—"}
-                variant="brand"
-                iconClassName="h-4 w-4"
-              />
-              . Минимум к получению — 0.1 TON.
-            </p>
-            <Button
-              className="h-11 w-full rounded-xl"
-              variant="outline"
-              disabled={loading}
-              onClick={handleWithdraw}
-            >
-              {loading ? "Создаём заявку…" : "Вывести на кошелёк"}
-            </Button>
-          </div>
-        )}
 
-        {message && <WalletAlert message={message} />}
-      </div>
+              <Button
+                className="h-11 w-full rounded-xl shadow-[0_8px_24px_color-mix(in_srgb,var(--accent)_28%,transparent)]"
+                disabled={loading}
+                onClick={handleWithdraw}
+              >
+                <ArrowUpFromLine className="mr-2 h-4 w-4" />
+                {loading ? "Создаём заявку…" : "Вывести на кошелёк"}
+              </Button>
+            </div>
+          )}
+
+          {message && <WalletAlert message={message} />}
+        </div>
+      </section>
 
       {mode === "deposit" ? (
         <TransferHistory

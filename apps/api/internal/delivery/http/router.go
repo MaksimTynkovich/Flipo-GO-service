@@ -58,6 +58,7 @@ func NewRouter(deps Deps) *gin.Engine {
 		{
 			authed.GET("/me", deps.AuthHandler.Me)
 			authed.PATCH("/me/wallet", deps.AuthHandler.UpdateWallet)
+			authed.DELETE("/me/wallet", deps.AuthHandler.ClearWallet)
 
 			authed.GET("/inventory", deps.InventoryHandler.List)
 			authed.POST("/inventory/deposit", deps.InventoryHandler.Deposit)

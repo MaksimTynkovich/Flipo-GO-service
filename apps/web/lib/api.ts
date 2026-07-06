@@ -81,6 +81,12 @@ export async function updateWallet(wallet: string) {
   });
 }
 
+export async function clearWallet() {
+  return api<{ ok: boolean }>("/api/v1/me/wallet", {
+    method: "DELETE",
+  });
+}
+
 export async function getInventory() {
   return api<InventoryItem[]>("/api/v1/inventory");
 }

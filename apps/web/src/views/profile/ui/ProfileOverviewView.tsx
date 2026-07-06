@@ -6,6 +6,7 @@ import { PageShell } from "@/components/PageShell";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { formatTON } from "@/lib/api";
+import { shortenTonWalletAddress } from "@/lib/wallet";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
@@ -48,8 +49,10 @@ export function ProfileOverviewView() {
         </div>
         <div className="stat-tile">
           <p className="text-[11px] text-muted">Кошелёк</p>
-          <p className="mt-1 truncate text-sm font-semibold text-foreground">
-            {user?.ton_wallet ? "Подключён" : "Не подключён"}
+          <p className="mt-1 truncate font-mono text-sm font-semibold text-foreground">
+            {user?.ton_wallet?.trim()
+              ? shortenTonWalletAddress(user.ton_wallet)
+              : "Не подключён"}
           </p>
         </div>
       </div>

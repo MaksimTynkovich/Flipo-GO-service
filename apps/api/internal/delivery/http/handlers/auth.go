@@ -88,3 +88,12 @@ func (h *AuthHandler) UpdateWallet(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"wallet": wallet})
 }
+
+func (h *AuthHandler) ClearWallet(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if err := h.auth.ClearWallet(c.Request.Context(), userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}

@@ -1,4 +1,4 @@
-import { beginCell } from "@ton/core";
+import { beginCell, Address } from "@ton/core";
 
 /** Encode a text comment for a TON transfer payload (base64 BOC). */
 export function encodeTonCommentPayload(comment: string): string {
@@ -18,6 +18,34 @@ export function newIdempotencyKey(prefix: string): string {
     return `${prefix}_${crypto.randomUUID()}`;
   }
   return `${prefix}_${Date.now()}`;
+}
+
+export function formatTonWalletAddress(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  if (value.startsWith("UQ") || value.startsWith("EQ") || value.startsWith("kQ")) {
+    return value;
+  }
+  try {
+    return Address.parse(value).toString({ bounceable: false });
+  } catch {
+    return value;
+  }
+}
+
+export function shortenTonWalletAddress(raw: string): string {
+  const friendly = formatTonWalletAddress(raw);
+  if (friendly.length <= 16) return friendly;
+  return `${friendly.slice(0, 6)}…${friendly.slice(-4)}`;
+}
+
+export function tonWalletAddressesEqual(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  try {
+    return Address.parse(a).equals(Address.parse(b));
+  } catch {
+    return formatTonWalletAddress(a) === formatTonWalletAddress(b);
+  }
 }
 
 /** Platform withdrawal fee in nanoton (keep in sync with TON_WITHDRAW_FEE_NANOTON). */
