@@ -23,6 +23,7 @@ type User struct {
 	PhotoURL       string         `gorm:"size:512" json:"photo_url"`
 	TonWallet      string         `gorm:"size:66;index" json:"ton_wallet"`
 	BettingBalance int64          `gorm:"not null;default:0" json:"betting_balance"`
+	ReferrerID     *uuid.UUID     `gorm:"type:uuid;index" json:"referrer_id,omitempty"`
 	StakingTier    StakingTier    `gorm:"type:varchar(16);not null;default:'base'" json:"staking_tier"`
 	LastLoginAt    *time.Time     `json:"last_login_at,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`

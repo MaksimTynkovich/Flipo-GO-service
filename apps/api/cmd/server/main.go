@@ -27,6 +27,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
+	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
@@ -71,7 +72,9 @@ func main() {
 	gameRepo := postgres.NewGameRepo(db)
 	pvpRepo := postgres.NewPvPRepo(db)
 
-	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry,
+	referralSvc := referral.NewService(userRepo)
+
+	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
 	balanceSvc := balance.NewService(userRepo)
@@ -136,6 +139,7 @@ func main() {
 		StakingHandler:   handlers.NewStakingHandler(stakeSvc),
 		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc),
 		MarketHandler:    handlers.NewMarketHandler(marketSvc),
+		ReferralHandler:  handlers.NewReferralHandler(referralSvc),
 		Hub:              hub,
 	})
 

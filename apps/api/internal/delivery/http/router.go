@@ -19,6 +19,7 @@ type Deps struct {
 	StakingHandler   *handlers.StakingHandler
 	GameHandler      *handlers.GameHandler
 	MarketHandler    *handlers.MarketHandler
+	ReferralHandler  *handlers.ReferralHandler
 	Hub              *websocket.Hub
 }
 
@@ -72,6 +73,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/staking/positions", deps.StakingHandler.ListPositions)
 			authed.POST("/staking/stake", deps.StakingHandler.Stake)
 			authed.POST("/staking/unstake/:id", deps.StakingHandler.Unstake)
+
+			authed.GET("/referrals/stats", deps.ReferralHandler.Stats)
 
 			authed.GET("/games/roulette/current", deps.GameHandler.RouletteCurrent)
 			authed.GET("/games/roulette/history", deps.GameHandler.RouletteHistory)

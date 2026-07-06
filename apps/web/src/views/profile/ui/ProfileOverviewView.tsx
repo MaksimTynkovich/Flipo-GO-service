@@ -103,7 +103,7 @@ export function ProfileOverviewView() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold">Рефералы</p>
-              <p className="mt-0.5 text-xs text-muted">Приглашай друзей и получай бонусы</p>
+              <p className="mt-0.5 text-xs text-muted">0.5% с дохода стейкинга приглашённых</p>
             </div>
             <div className="flex shrink-0 items-center gap-1 text-accent">
               <span className="text-xs font-semibold">Открыть</span>

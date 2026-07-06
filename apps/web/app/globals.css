@@ -10,12 +10,35 @@
   --surface-raised: #2b3949;
   --border: rgba(255, 255, 255, 0.06);
   --muted: #708499;
-  --accent: #5288c1;
-  --accent-subtle: color-mix(in srgb, #5288c1 14%, transparent);
-  --link: #6ab2f2;
-  --primary: #5288c1;
+  --accent: #8774e1;
+  --accent-subtle: color-mix(in srgb, #8774e1 14%, transparent);
+  --link: #9d8fe8;
+  --primary: #8774e1;
   --success: #4fae4e;
   --danger: #e56555;
+  --app-safe-top: max(
+    env(safe-area-inset-top, 0px),
+    calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px))
+  );
+  --app-safe-bottom: max(
+    env(safe-area-inset-bottom, 0px),
+    calc(var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px))
+  );
+  --app-safe-left: max(
+    env(safe-area-inset-left, 0px),
+    calc(var(--tg-safe-area-inset-left, 0px) + var(--tg-content-safe-area-inset-left, 0px))
+  );
+  --app-safe-right: max(
+    env(safe-area-inset-right, 0px),
+    calc(var(--tg-safe-area-inset-right, 0px) + var(--tg-content-safe-area-inset-right, 0px))
+  );
+  --app-header-height: 3.5rem;
+  --app-tabbar-height: 3.25rem;
+  --app-content-gap: 1rem;
+  --app-header-offset: calc(
+    var(--app-safe-top) + var(--app-header-height) + var(--app-content-gap)
+  );
+  --app-tabbar-offset: calc(var(--app-safe-bottom) + var(--app-tabbar-height));
 }
 
 body {

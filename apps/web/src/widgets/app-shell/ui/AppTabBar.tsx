@@ -13,7 +13,7 @@ export function AppTabBar() {
   return (
     <nav
       aria-label="Основная навигация"
-      className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-2xl hairline-top"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] backdrop-blur-2xl hairline-top"
     >
       <div className="app-container grid h-[3.25rem] grid-cols-4 items-stretch">
         {MAIN_TABS.map(({ href, label, icon: Icon, match }) => {

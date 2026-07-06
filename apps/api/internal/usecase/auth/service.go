@@ -7,8 +7,10 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
+	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Claims struct {
@@ -19,6 +21,7 @@ type Claims struct {
 
 type Service struct {
 	users               domain.UserRepository
+	referrals           *referral.Service
 	botToken            string
 	jwtSecret           []byte
 	jwtExpiry           time.Duration
@@ -28,9 +31,10 @@ type Service struct {
 	debugInitialBalance int64
 }
 
-func NewService(users domain.UserRepository, botToken string, jwtSecret string, jwtExpiry time.Duration, opts ...ServiceOption) *Service {
+func NewService(users domain.UserRepository, botToken string, jwtSecret string, jwtExpiry time.Duration, referrals *referral.Service, opts ...ServiceOption) *Service {
 	s := &Service{
 		users:     users,
+		referrals: referrals,
 		botToken:  botToken,
 		jwtSecret: []byte(jwtSecret),
 		jwtExpiry: jwtExpiry,
@@ -56,32 +60,46 @@ func (s *Service) DebugAuthEnabled() bool {
 	return s.debugAuthEnabled
 }
 
-func (s *Service) Authenticate(ctx context.Context, initData string) (string, *domain.User, error) {
+func (s *Service) Authenticate(ctx context.Context, initData string, referralCode string) (string, *domain.User, error) {
 	parsed, err := telegram.ValidateInitData(initData, s.botToken, 24*time.Hour)
 	if err != nil {
 		return "", nil, err
 	}
 
+	code := referralCode
+	if code == "" {
+		code = parsed.StartParam
+	}
+
 	user := &domain.User{
-		ID:         uuid.New(),
-		TelegramID: parsed.User.ID,
-		Username:   parsed.User.Username,
-		FirstName:  parsed.User.FirstName,
-		LastName:   parsed.User.LastName,
-		PhotoURL:   parsed.User.PhotoURL,
+		ID:          uuid.New(),
+		TelegramID:  parsed.User.ID,
+		Username:    parsed.User.Username,
+		FirstName:   parsed.User.FirstName,
+		LastName:    parsed.User.LastName,
+		PhotoURL:    parsed.User.PhotoURL,
 		StakingTier: domain.TierBase,
 	}
 
-	existing, err := s.users.FindByTelegramID(ctx, parsed.User.ID)
-	if err == nil && existing != nil {
+	existing, findErr := s.users.FindByTelegramID(ctx, parsed.User.ID)
+	isNew := errors.Is(findErr, gorm.ErrRecordNotFound)
+	if findErr != nil && !isNew {
+		return "", nil, findErr
+	}
+	if existing != nil {
 		user.ID = existing.ID
 		user.BettingBalance = existing.BettingBalance
 		user.StakingTier = existing.StakingTier
 		user.TonWallet = existing.TonWallet
+		user.ReferrerID = existing.ReferrerID
 	}
 
 	if err := s.users.Upsert(ctx, user); err != nil {
 		return "", nil, err
+	}
+
+	if isNew && s.referrals != nil && code != "" {
+		_ = s.referrals.TryAssignReferrer(ctx, user.ID, code)
 	}
 
 	token, err := s.issueToken(user)

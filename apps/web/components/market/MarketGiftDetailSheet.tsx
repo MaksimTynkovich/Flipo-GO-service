@@ -7,7 +7,6 @@ import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, MarketListing } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { formatCollectionSlug, giftImageUrl, traitValue } from "@/lib/gifts";
-import { cn } from "@/lib/utils";
 
 type Props = {
   listing: MarketListing;
@@ -144,10 +143,7 @@ export function MarketGiftDetailSheet({
             <p className="py-2 text-center text-sm text-muted">Это ваш лот</p>
           ) : (
             <Button
-              className={cn(
-                "h-12 w-full rounded-2xl text-[15px] font-semibold text-white active:opacity-90",
-                "bg-[#8774e1] hover:bg-[#8774e1]",
-              )}
+              className="h-12 w-full rounded-2xl text-[15px] font-semibold"
               disabled={!canBuy || buying}
               onClick={onBuy}
             >

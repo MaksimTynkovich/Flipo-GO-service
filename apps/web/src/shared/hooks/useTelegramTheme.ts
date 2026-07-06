@@ -5,6 +5,7 @@ import {
   applyTelegramThemeToDocument,
   getTelegramWebApp,
   readTelegramTheme,
+  resolveThemeTokens,
   TELEGRAM_THEME_DEFAULTS,
 } from "@/src/shared/lib/twa";
 
@@ -25,11 +26,12 @@ export function useTelegramTheme(): TelegramTheme {
 
     const syncTheme = () => {
       const nextTheme = readTelegramTheme();
+      const tokens = resolveThemeTokens(nextTheme);
 
       setTheme(nextTheme);
       applyTelegramThemeToDocument(nextTheme);
-      webApp?.setBackgroundColor?.(nextTheme.bgColor);
-      webApp?.setHeaderColor?.(nextTheme.bgColor);
+      webApp?.setBackgroundColor?.(tokens.background);
+      webApp?.setHeaderColor?.(tokens.surface);
     };
 
     syncTheme();

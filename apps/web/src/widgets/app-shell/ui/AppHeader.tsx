@@ -14,7 +14,7 @@ export function AppHeader() {
   const haptics = useTelegramHaptics();
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 bg-background/88 pt-[env(safe-area-inset-top)] backdrop-blur-2xl hairline-bottom">
+    <header className="fixed left-0 right-0 top-0 z-50 bg-background/88 pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)] backdrop-blur-2xl hairline-bottom">
       <div className="app-container flex h-14 items-center justify-between gap-3">
         <Link
           href={APP_ROUTES.profile}

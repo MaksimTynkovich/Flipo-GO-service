@@ -8,7 +8,6 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { formatCollectionSlug, giftImageUrl, giftValuationNanoton, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
-import { cn } from "@/lib/utils";
 
 type Props = {
   item: InventoryItem;
@@ -135,10 +134,7 @@ export function InventoryGiftDetailSheet({
           {item.status === "available" && (
             <div className="mb-1 flex items-start justify-between gap-3">
               <Button
-                className={cn(
-                  "h-12 min-w-0 flex-1 rounded-2xl px-2 text-[14px] font-semibold text-white active:opacity-90 sm:text-[15px]",
-                  "bg-[#8774e1] hover:bg-[#8774e1]",
-                )}
+                className="h-12 min-w-0 flex-1 rounded-2xl px-2 text-[14px] font-semibold sm:text-[15px]"
                 disabled={liquidating || withdrawing}
                 onClick={onLiquidate}
               >

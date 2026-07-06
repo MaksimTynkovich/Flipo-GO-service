@@ -15,6 +15,9 @@ type UserRepository interface {
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (int64, error)
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
+	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
+	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
 }
 
 type InventoryRepository interface {

@@ -53,10 +53,13 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json();
 }
 
-export async function authTelegram(initData: string) {
+export async function authTelegram(initData: string, referralCode?: string) {
   return api<{ token: string; user: User }>("/api/v1/auth/telegram", {
     method: "POST",
-    body: JSON.stringify({ init_data: initData }),
+    body: JSON.stringify({
+      init_data: initData,
+      referral_code: referralCode || undefined,
+    }),
   });
 }
 
@@ -290,4 +293,16 @@ export async function cancelMarketListing(id: string) {
 
 export async function buyMarketListing(id: string) {
   return api<{ balance: number }>(`/api/v1/market/listings/${id}/buy`, { method: "POST" });
+}
+
+export type ReferralStats = {
+  referral_count: number;
+  total_earned_nanoton: number;
+  share_percent: number;
+  share_percent_weekly: number;
+  example_weekly_per_referral_ton: string;
+};
+
+export async function getReferralStats() {
+  return api<ReferralStats>("/api/v1/referrals/stats");
 }

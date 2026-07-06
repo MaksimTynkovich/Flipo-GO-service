@@ -18,14 +18,15 @@ func NewAuthHandler(authSvc *auth.Service) *AuthHandler {
 
 func (h *AuthHandler) TelegramAuth(c *gin.Context) {
 	var req struct {
-		InitData string `json:"init_data" binding:"required"`
+		InitData     string `json:"init_data" binding:"required"`
+		ReferralCode string `json:"referral_code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	token, user, err := h.auth.Authenticate(c.Request.Context(), req.InitData)
+	token, user, err := h.auth.Authenticate(c.Request.Context(), req.InitData, req.ReferralCode)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

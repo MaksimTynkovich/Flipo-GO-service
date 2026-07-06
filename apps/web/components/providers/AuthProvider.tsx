@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { authDebug, authTelegram, DEBUG_AUTH, getMe, User } from "@/lib/api";
+import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
+import { getTelegramWebApp, initTelegramWebApp } from "@/src/shared/lib/twa";
 
 type AuthState = {
   user: User | null;
@@ -22,11 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function init() {
       try {
-        const tg = window.Telegram?.WebApp;
-        if (tg) {
-          tg.ready();
-          tg.expand();
-        }
+        initTelegramWebApp();
 
         const token = localStorage.getItem("flipo_token");
         if (token) {
@@ -38,9 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        const initData = tg?.initData;
+        const initData = getTelegramWebApp()?.initData;
         if (initData) {
-          const { token: newToken, user: authUser } = await authTelegram(initData);
+          const startParam = readReferralCodeFromTelegram();
+          if (startParam) storePendingReferral(startParam);
+          const referralCode = startParam || takePendingReferral() || undefined;
+          const { token: newToken, user: authUser } = await authTelegram(initData, referralCode);
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
           return;

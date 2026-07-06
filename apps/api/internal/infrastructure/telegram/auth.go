@@ -24,10 +24,11 @@ type WebAppUser struct {
 }
 
 type InitData struct {
-	User      *WebAppUser
-	AuthDate  time.Time
-	QueryID   string
-	Raw       string
+	User       *WebAppUser
+	AuthDate   time.Time
+	QueryID    string
+	StartParam string
+	Raw        string
 }
 
 var (
@@ -81,9 +82,10 @@ func ValidateInitData(initData, botToken string, maxAge time.Duration) (*InitDat
 	}
 
 	result := &InitData{
-		AuthDate: authDate,
-		QueryID:  values.Get("query_id"),
-		Raw:      initData,
+		AuthDate:   authDate,
+		QueryID:    values.Get("query_id"),
+		StartParam: values.Get("start_param"),
+		Raw:        initData,
 	}
 
 	if userJSON := values.Get("user"); userJSON != "" {

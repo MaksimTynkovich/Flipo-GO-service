@@ -99,6 +99,33 @@ func (r *UserRepo) UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier
 	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("staking_tier", tier).Error
 }
 
+func (r *UserRepo) SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error {
+	res := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("id = ? AND referrer_id IS NULL AND id != ?", userID, referrerID).
+		Update("referrer_id", referrerID)
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
+}
+
+func (r *UserRepo) CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("referrer_id = ?", referrerID).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *UserRepo) SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("user_id = ? AND type = ?", userID, domain.LedgerReferralBonus).
+		Select("COALESCE(SUM(amount_nanoton), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
 var _ domain.UserRepository = (*UserRepo)(nil)
 
 type InventoryRepo struct {
