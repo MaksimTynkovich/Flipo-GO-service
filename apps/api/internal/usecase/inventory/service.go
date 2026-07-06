@@ -170,6 +170,9 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) error 
 		if errors.Is(err, telegram.ErrGiftNotOnAccount) {
 			return fmt.Errorf("gift is not available for withdrawal")
 		}
+		if errors.Is(err, telegram.ErrInsufficientStars) {
+			return fmt.Errorf("deposit account has insufficient Telegram Stars for gift transfer")
+		}
 		return err
 	}
 

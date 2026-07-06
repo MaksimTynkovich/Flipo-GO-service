@@ -8,6 +8,5 @@ bin/
 !.env.example
 apps/web/.env.local
 ngrok.log
-data/telegram/
-session.json
+apps/api/data/telegram/
 .DS_Store

@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	ErrGiftNotOnAccount = errors.New("gift not found on deposit account")
-	ErrGiftTransfer     = errors.New("gift transfer failed")
+	ErrGiftNotOnAccount  = errors.New("gift not found on deposit account")
+	ErrGiftTransfer      = errors.New("gift transfer failed")
+	ErrInsufficientStars = errors.New("insufficient stars on deposit account")
 )
 
 type GiftTransferService struct {
@@ -21,8 +22,9 @@ func NewGiftTransferService(cfg MTProtoConfig) *GiftTransferService {
 	return &GiftTransferService{cfg: cfg}
 }
 
-// SendGift transfers a collectible gift from the deposit MTProto account back to the user
-// via payments.transferStarGift.
+// SendGift transfers a collectible gift from the deposit MTProto account back to the user.
+// Paid transfers go through payments.getPaymentForm + payments.sendStarsForm; free transfers
+// use payments.transferStarGift when Telegram reports NO_PAYMENT_NEEDED.
 func (s *GiftTransferService) SendGift(ctx context.Context, slug string, recipient ScanTarget) error {
 	if !s.cfg.Enabled() {
 		return ErrMTProtoNotConfigured
@@ -47,15 +49,72 @@ func (s *GiftTransferService) SendGift(ctx context.Context, slug string, recipie
 			return fmt.Errorf("%w: recipient peer: %v", ErrGiftTransfer, err)
 		}
 
-		_, err = api.PaymentsTransferStarGift(ctx, &tg.PaymentsTransferStarGiftRequest{
-			Stargift: stargift,
-			ToID:     toPeer,
-		})
-		if err != nil {
-			return fmt.Errorf("%w: %v", ErrGiftTransfer, err)
+		if err := transferStarGift(ctx, api, stargift, toPeer); err != nil {
+			return err
 		}
 		return nil
 	})
+}
+
+func transferStarGift(ctx context.Context, api *tg.Client, stargift tg.InputSavedStarGiftClass, toPeer tg.InputPeerClass) error {
+	invoice := &tg.InputInvoiceStarGiftTransfer{
+		Stargift: stargift,
+		ToID:     toPeer,
+	}
+
+	form, err := api.PaymentsGetPaymentForm(ctx, &tg.PaymentsGetPaymentFormRequest{
+		Invoice: invoice,
+	})
+	if err != nil {
+		if tg.IsNoPaymentNeeded(err) {
+			return transferStarGiftFree(ctx, api, stargift, toPeer)
+		}
+		return mapGiftTransferRPCError(err)
+	}
+
+	formID, err := paymentFormID(form)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrGiftTransfer, err)
+	}
+
+	if _, err := api.PaymentsSendStarsForm(ctx, &tg.PaymentsSendStarsFormRequest{
+		FormID:  formID,
+		Invoice: invoice,
+	}); err != nil {
+		return mapGiftTransferRPCError(err)
+	}
+	return nil
+}
+
+func transferStarGiftFree(ctx context.Context, api *tg.Client, stargift tg.InputSavedStarGiftClass, toPeer tg.InputPeerClass) error {
+	_, err := api.PaymentsTransferStarGift(ctx, &tg.PaymentsTransferStarGiftRequest{
+		Stargift: stargift,
+		ToID:     toPeer,
+	})
+	if err != nil {
+		return mapGiftTransferRPCError(err)
+	}
+	return nil
+}
+
+func paymentFormID(form tg.PaymentsPaymentFormClass) (int64, error) {
+	switch f := form.(type) {
+	case *tg.PaymentsPaymentForm:
+		return f.FormID, nil
+	case *tg.PaymentsPaymentFormStars:
+		return f.FormID, nil
+	case *tg.PaymentsPaymentFormStarGift:
+		return f.FormID, nil
+	default:
+		return 0, fmt.Errorf("unsupported payment form type %T", form)
+	}
+}
+
+func mapGiftTransferRPCError(err error) error {
+	if tg.IsBalanceTooLow(err) {
+		return ErrInsufficientStars
+	}
+	return fmt.Errorf("%w: %v", ErrGiftTransfer, err)
 }
 
 func findOwnedGiftInput(ctx context.Context, api *tg.Client, slug string) (tg.InputSavedStarGiftClass, error) {
