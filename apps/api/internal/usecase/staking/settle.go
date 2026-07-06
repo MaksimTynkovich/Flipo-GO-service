@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
-	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/google/uuid"
 )
 
@@ -42,36 +41,6 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 		}
 	}
 
-	for userID, total := range userYield {
-		if total <= 0 {
-			continue
-		}
-		if _, err := s.users.UpdateBalance(ctx, userID, total, domain.LedgerStakeYield, "staking_epoch", epoch.ID); err != nil {
-			slog.Warn("staking epoch payout failed", "user_id", userID, "error", err)
-			continue
-		}
-	}
-
-	referrerBonuses := make(map[uuid.UUID]int64)
-	for userID, total := range userYield {
-		if total <= 0 {
-			continue
-		}
-		user, err := s.users.FindByID(ctx, userID)
-		if err != nil || user.ReferrerID == nil {
-			continue
-		}
-		bonus := referral.BonusFromYield(total)
-		if bonus > 0 {
-			referrerBonuses[*user.ReferrerID] += bonus
-		}
-	}
-	for referrerID, bonus := range referrerBonuses {
-		if _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, "staking_epoch", epoch.ID); err != nil {
-			slog.Warn("referral bonus payout failed", "referrer_id", referrerID, "error", err)
-		}
-	}
-
 	if s.notifier != nil {
 		for userID, total := range userYield {
 			user, err := s.users.FindByID(ctx, userID)
@@ -82,7 +51,6 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 				slog.Warn("weekly staking notify failed", "user_id", userID, "error", err)
 			}
 		}
-		// Notify stakers with zero yield too if they had positions
 		notified := make(map[uuid.UUID]bool, len(userYield))
 		for uid := range userYield {
 			notified[uid] = true

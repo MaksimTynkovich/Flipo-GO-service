@@ -102,13 +102,13 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
               </p>
             )}
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              Доход выплатится на баланс после завершения недели
+              Доход зачисляется на баланс каждый день
             </p>
           </div>
         ) : (
           <p className="rounded-xl bg-surface-raised px-3 py-3 text-center text-xs leading-relaxed text-muted">
             Ставка {stats.monthly_rate_percent}% в месяц от стоимости подарка.
-            Выплата на баланс — в конце недели.
+            Доход зачисляется на баланс каждый день.
           </p>
         )}
       </div>

@@ -28,7 +28,7 @@ export function StakingEpochBanner({ endsAt }: Props) {
       <div className="flex items-center gap-2 rounded-xl bg-surface-raised px-3 py-2.5">
         <Wallet className="h-3.5 w-3.5 shrink-0 text-accent" />
         <p className="text-xs leading-snug text-muted">
-          Доход начисляется каждый день, выплата на баланс — в конце недели
+          Доход начисляется каждый день и сразу поступает на баланс
         </p>
       </div>
     </div>

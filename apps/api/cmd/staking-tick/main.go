@@ -79,7 +79,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "settle: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("weekly settlement done — stakes released, balance credited, check Telegram")
+		fmt.Println("weekly settlement done — stakes released, check Telegram")
 	}
 }
 

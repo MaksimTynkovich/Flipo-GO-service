@@ -1,5 +1,5 @@
 /** L1 share of referral monthly staking yield (matches backend). */
-export const REFERRAL_L1_MONTHLY_SHARE = 0.005;
+export const REFERRAL_L1_MONTHLY_SHARE = 0.03;
 
 const DAYS_PER_MONTH = 30;
 const DAYS_PER_WEEK = 7;
@@ -23,7 +23,7 @@ export function referralWeeklyFromPrincipal(
 /** Monthly share as percent string for UI. */
 export const REFERRAL_MONTHLY_SHARE_PERCENT = REFERRAL_L1_MONTHLY_SHARE * 100;
 
-/** Effective weekly share of referral yield (0.5% × 7/30). */
+/** Effective weekly share of referral yield (3% × 7/30). */
 export const REFERRAL_WEEKLY_SHARE_PERCENT =
   REFERRAL_L1_MONTHLY_SHARE * (DAYS_PER_WEEK / DAYS_PER_MONTH) * 100;
 

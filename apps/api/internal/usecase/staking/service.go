@@ -3,12 +3,14 @@ package staking
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
+	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/google/uuid"
 )
 
@@ -127,6 +129,7 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 	msk := MoscowLocation()
 	now := time.Now().In(msk)
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, msk)
+	payoutRefID := dailyPayoutRefID(todayStart)
 
 	userYield := make(map[uuid.UUID]int64)
 
@@ -160,19 +163,65 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 		userYield[pos.UserID] += dailyYield
 	}
 
+	for userID, yield := range userYield {
+		if yield <= 0 {
+			continue
+		}
+		if _, err := s.users.UpdateBalance(ctx, userID, yield, domain.LedgerStakeYield, "staking_daily", payoutRefID); err != nil {
+			slog.Warn("daily staking payout failed", "user_id", userID, "error", err)
+			continue
+		}
+	}
+
+	referrerBonuses := make(map[uuid.UUID]int64)
+	for userID, yield := range userYield {
+		if yield <= 0 {
+			continue
+		}
+		user, err := s.users.FindByID(ctx, userID)
+		if err != nil || user.ReferrerID == nil {
+			continue
+		}
+		bonus := referral.BonusFromYield(yield)
+		if bonus > 0 {
+			referrerBonuses[*user.ReferrerID] += bonus
+		}
+	}
+	for referrerID, bonus := range referrerBonuses {
+		if _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, "referral_daily", payoutRefID); err != nil {
+			slog.Warn("daily referral payout failed", "referrer_id", referrerID, "error", err)
+		}
+	}
+
 	if s.notifier != nil {
-		for userID, yield := range userYield {
+		notifyUsers := make(map[uuid.UUID]struct{}, len(userYield)+len(referrerBonuses))
+		for userID := range userYield {
+			notifyUsers[userID] = struct{}{}
+		}
+		for referrerID := range referrerBonuses {
+			notifyUsers[referrerID] = struct{}{}
+		}
+		for userID := range notifyUsers {
+			yield := userYield[userID]
+			bonus := referrerBonuses[userID]
+			if yield <= 0 && bonus <= 0 {
+				continue
+			}
 			user, err := s.users.FindByID(ctx, userID)
 			if err != nil {
 				continue
 			}
-			if err := s.notifier.SendDailyStakingYield(ctx, user.TelegramID, yield); err != nil {
+			if err := s.notifier.SendDailyStakingYield(ctx, user.TelegramID, yield, bonus); err != nil {
 				continue
 			}
 		}
 	}
 
 	return nil
+}
+
+func dailyPayoutRefID(day time.Time) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("staking-daily:"+day.Format("2006-01-02")))
 }
 
 func isProfileItem(item domain.InventoryItem) bool {

@@ -7,7 +7,7 @@ import (
 )
 
 // L1ShareOfMonthlyYield is the referrer's share of a referral's monthly staking income.
-const L1ShareOfMonthlyYield = 0.005 // 0.5%
+const L1ShareOfMonthlyYield = 0.03 // 3%
 
 // DaysPerMonth matches staking accrual (see staking.DaysPerMonth).
 const DaysPerMonth = 30
@@ -16,7 +16,7 @@ const DaysPerMonth = 30
 const DaysPerWeek = 7
 
 // BonusFromYield returns the L1 referrer bonus for a referral's staking yield payout.
-// 0.5% of monthly income equals 0.5% of any pro-rated payout (daily or weekly).
+// 3% of monthly income equals 3% of any pro-rated payout (daily or weekly).
 func BonusFromYield(yieldNanoton int64) int64 {
 	if yieldNanoton <= 0 {
 		return 0

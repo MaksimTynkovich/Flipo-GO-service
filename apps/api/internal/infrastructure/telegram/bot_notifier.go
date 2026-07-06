@@ -36,12 +36,22 @@ func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int6
 	return n.sendMessage(ctx, telegramUserID, text)
 }
 
-func (n *BotNotifier) SendDailyStakingYield(ctx context.Context, telegramUserID int64, yieldNanoton int64) error {
-	if !n.Enabled() || telegramUserID == 0 || yieldNanoton <= 0 {
+func (n *BotNotifier) SendDailyStakingYield(ctx context.Context, telegramUserID int64, yieldNanoton, referralBonusNanoton int64) error {
+	if !n.Enabled() || telegramUserID == 0 {
 		return nil
 	}
-	text := fmt.Sprintf("📈 За вчера стейкинг принёс %s TON", formatTON(yieldNanoton))
-	return n.sendMessage(ctx, telegramUserID, text)
+	if yieldNanoton <= 0 && referralBonusNanoton <= 0 {
+		return nil
+	}
+
+	var parts []string
+	if yieldNanoton > 0 {
+		parts = append(parts, fmt.Sprintf("📈 За вчера стейкинг принёс %s TON — зачислено на баланс", formatTON(yieldNanoton)))
+	}
+	if referralBonusNanoton > 0 {
+		parts = append(parts, fmt.Sprintf("👥 Ваши рефералы сегодня принесли вам: %s TON — зачислено на баланс", formatTON(referralBonusNanoton)))
+	}
+	return n.sendMessage(ctx, telegramUserID, strings.Join(parts, "\n\n"))
 }
 
 func (n *BotNotifier) SendWeeklyStakingComplete(ctx context.Context, telegramUserID int64, totalYieldNanoton int64) error {
@@ -50,7 +60,7 @@ func (n *BotNotifier) SendWeeklyStakingComplete(ctx context.Context, telegramUse
 	}
 	text := "✅ Недельный стейкинг завершён!\n\n"
 	if totalYieldNanoton > 0 {
-		text += fmt.Sprintf("Доход за неделю: %s TON — зачислен на баланс.\n\n", formatTON(totalYieldNanoton))
+		text += fmt.Sprintf("Доход за неделю: %s TON (уже на балансе).\n\n", formatTON(totalYieldNanoton))
 	} else {
 		text += "Доход за неделю: 0 TON.\n\n"
 	}

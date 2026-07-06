@@ -20,3 +20,25 @@ func TestFormatTON(t *testing.T) {
 		}
 	}
 }
+
+func TestDailyYieldMessageParts(t *testing.T) {
+	yield := int64(100_000_000)
+	bonus := int64(3_000_000)
+
+	var parts []string
+	if yield > 0 {
+		parts = append(parts, "staking:"+formatTON(yield))
+	}
+	if bonus > 0 {
+		parts = append(parts, "referral:"+formatTON(bonus))
+	}
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 parts, got %v", parts)
+	}
+	if parts[0] != "staking:0.1" {
+		t.Fatalf("unexpected staking part: %s", parts[0])
+	}
+	if parts[1] != "referral:0.003" {
+		t.Fatalf("unexpected referral part: %s", parts[1])
+	}
+}
