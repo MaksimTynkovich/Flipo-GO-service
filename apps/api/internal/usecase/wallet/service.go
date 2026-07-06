@@ -167,8 +167,8 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 	return toView(updated), balanceAfter, nil
 }
 
-func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, amountNanoton int64, idempotencyKey string) (*TransferView, int64, error) {
-	if amountNanoton < s.cfg.MinWithdrawNanoton {
+func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, receiveNanoton int64, idempotencyKey string) (*TransferView, int64, error) {
+	if receiveNanoton < s.cfg.MinWithdrawNanoton {
 		return nil, 0, domain.ErrInvalidAmount
 	}
 	if !s.chain.CanSend() {
@@ -177,7 +177,9 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, amoun
 	if idempotencyKey == "" {
 		return nil, 0, domain.ErrInvalidAmount
 	}
-	if amountNanoton <= s.cfg.WithdrawFeeNanoton {
+
+	debitNanoton := receiveNanoton + s.cfg.WithdrawFeeNanoton
+	if debitNanoton <= 0 {
 		return nil, 0, domain.ErrInvalidAmount
 	}
 
@@ -188,11 +190,14 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, amoun
 	if user.TonWallet == "" {
 		return nil, 0, domain.ErrWalletNotLinked
 	}
+	if user.BettingBalance < debitNanoton {
+		return nil, 0, domain.ErrInsufficientFunds
+	}
 
 	transfer, balanceAfter, err := s.transfers.CreateWithdrawalAtomic(
 		ctx,
 		userID,
-		amountNanoton,
+		debitNanoton,
 		s.cfg.WithdrawFeeNanoton,
 		user.TonWallet,
 		idempotencyKey,

@@ -14,7 +14,7 @@ import {
 } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { Button } from "@/components/ui/button";
-import { encodeTonCommentPayload, nanotonFromTonInput, newIdempotencyKey, sleep } from "@/lib/wallet";
+import { encodeTonCommentPayload, nanotonFromTonInput, newIdempotencyKey, sleep, WITHDRAW_FEE_NANOTON, withdrawDebitNanoton } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { ArrowDownToLine, ArrowUpFromLine, History, Wallet } from "lucide-react";
 
@@ -60,8 +60,8 @@ export function TonWalletPanel() {
     const addr = wallet?.account?.address;
     if (!addr || user?.ton_wallet === addr) return;
     updateWallet(addr)
-      .then(() => {
-        if (user) setUser({ ...user, ton_wallet: addr });
+      .then((res) => {
+        if (user) setUser({ ...user, ton_wallet: res.wallet });
       })
       .catch(() => {});
   }, [wallet?.account?.address, user, setUser]);
@@ -230,7 +230,7 @@ export function TonWalletPanel() {
         ) : (
           <div className="space-y-3">
             <label className="block space-y-2">
-              <span className="text-xs text-muted">Сумма вывода</span>
+              <span className="text-xs text-muted">Сколько получить на кошелёк</span>
               <input
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
@@ -239,6 +239,22 @@ export function TonWalletPanel() {
                 placeholder="1"
               />
             </label>
+            {nanotonFromTonInput(withdrawAmount) > 0 && (
+              <div className="surface-inset space-y-1 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
+                <p>
+                  Комиссия сервиса:{" "}
+                  <TonAmount amount={formatTON(WITHDRAW_FEE_NANOTON)} variant="brand" iconClassName="h-3.5 w-3.5" />
+                </p>
+                <p>
+                  С баланса спишется:{" "}
+                  <TonAmount
+                    amount={formatTON(withdrawDebitNanoton(nanotonFromTonInput(withdrawAmount)))}
+                    variant="brand"
+                    iconClassName="h-3.5 w-3.5"
+                  />
+                </p>
+              </div>
+            )}
             <p className="text-[11px] leading-relaxed text-muted">
               Доступно:{" "}
               <TonAmount
@@ -246,7 +262,6 @@ export function TonWalletPanel() {
                 variant="brand"
                 iconClassName="h-4 w-4"
               />
-              . Комиссия сети удерживается при выводе.
             </p>
             <Button
               className="h-11 w-full rounded-xl"
@@ -275,11 +290,16 @@ export function TonWalletPanel() {
                   <p className="text-sm font-semibold text-foreground">
                     {item.direction === "deposit" ? "Пополнение" : "Вывод"}
                   </p>
-                  <p className="mt-0.5 text-xs text-muted">{statusLabel(item.status)}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {statusLabel(item.status)}
+                    {item.direction === "withdraw" && item.fee_nanoton > 0
+                      ? ` · комиссия ${formatTON(item.fee_nanoton)}`
+                      : ""}
+                  </p>
                 </div>
                 <p className="text-sm font-semibold tabular-nums text-success">
-                  {item.direction === "deposit" ? "+" : "-"}
-                  {formatTON(item.amount_nanoton)}
+                  {item.direction === "deposit" ? "+" : "−"}
+                  {formatTON(item.direction === "withdraw" ? item.net_nanoton : item.amount_nanoton)}
                 </p>
               </div>
             ))}

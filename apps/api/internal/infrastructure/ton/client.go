@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xssnick/tonutils-go/address"
 	tonapi "github.com/xssnick/tonutils-go/ton"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/tlb"
@@ -133,7 +132,7 @@ func (c *Client) SendTON(ctx context.Context, toAddress string, amountNanoton in
 		return "", 0, err
 	}
 
-	addr, err := address.ParseAddr(toAddress)
+	addr, err := ParseAnyAddress(toAddress)
 	if err != nil {
 		return "", 0, fmt.Errorf("parse destination address: %w", err)
 	}
@@ -304,20 +303,14 @@ func (c *Client) ensureWallet(ctx context.Context) error {
 		}
 
 		api := tonapi.NewAPIClient(pool)
-		version := wallet.V3R2
-		switch strings.ToUpper(c.walletVersion) {
-		case "", "V3R2":
-			version = wallet.V3R2
-		case "V3":
-			version = wallet.V3
-		case "V4R2":
-			version = wallet.V4R2
-		default:
-			c.initErr = fmt.Errorf("unsupported TON wallet version: %s", c.walletVersion)
+		words := strings.Fields(c.seedPhrase)
+
+		version, err := ResolveWalletVersion(api, c.seedPhrase, c.walletVersion, c.depositAddress)
+		if err != nil {
+			c.initErr = err
 			return
 		}
 
-		words := strings.Fields(c.seedPhrase)
 		w, err := wallet.FromSeed(api, words, version)
 		if err != nil {
 			c.initErr = fmt.Errorf("init hot wallet from seed: %w", err)

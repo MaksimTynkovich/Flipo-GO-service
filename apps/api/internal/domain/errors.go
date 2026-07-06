@@ -11,6 +11,7 @@ var (
 	ErrForbidden         = errors.New("forbidden")
 	ErrAlreadyListed     = errors.New("item already listed")
 	ErrWalletNotLinked   = errors.New("wallet not linked")
+	ErrInvalidWallet     = errors.New("invalid wallet address")
 	ErrTransferPending   = errors.New("transfer already pending")
 	ErrTransferExpired   = errors.New("transfer expired")
 	ErrTransferNotFound  = errors.New("transfer not found")

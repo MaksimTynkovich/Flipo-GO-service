@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 )
@@ -75,9 +77,14 @@ func (h *AuthHandler) UpdateWallet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.auth.UpdateWallet(c.Request.Context(), userID, req.Wallet); err != nil {
+	wallet, err := h.auth.UpdateWallet(c.Request.Context(), userID, req.Wallet)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidWallet) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"wallet": req.Wallet})
+	c.JSON(http.StatusOK, gin.H{"wallet": wallet})
 }

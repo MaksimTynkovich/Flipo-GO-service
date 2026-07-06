@@ -7,6 +7,7 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -174,6 +175,13 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, 
 	return s.users.FindByID(ctx, userID)
 }
 
-func (s *Service) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error {
-	return s.users.UpdateWallet(ctx, userID, wallet)
+func (s *Service) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) (string, error) {
+	normalized, err := ton.NormalizeAddress(wallet)
+	if err != nil {
+		return "", domain.ErrInvalidWallet
+	}
+	if err := s.users.UpdateWallet(ctx, userID, normalized); err != nil {
+		return "", err
+	}
+	return normalized, nil
 }

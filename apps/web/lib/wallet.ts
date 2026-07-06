@@ -20,6 +20,14 @@ export function newIdempotencyKey(prefix: string): string {
   return `${prefix}_${Date.now()}`;
 }
 
+/** Platform withdrawal fee in nanoton (keep in sync with TON_WITHDRAW_FEE_NANOTON). */
+export const WITHDRAW_FEE_NANOTON = 50_000_000;
+
+export function withdrawDebitNanoton(receiveNanoton: number): number {
+  if (receiveNanoton <= 0) return 0;
+  return receiveNanoton + WITHDRAW_FEE_NANOTON;
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
