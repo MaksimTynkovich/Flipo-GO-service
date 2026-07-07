@@ -11,6 +11,7 @@ type Props = {
   players: PvpPlayer[];
   winnerId?: string;
   spinning?: boolean;
+  previewSpinning?: boolean;
   spinAt?: string;
   spinEndsAt?: string;
   dimmed?: boolean;
@@ -21,6 +22,7 @@ export function PvpAvatarStrip({
   players,
   winnerId,
   spinning = false,
+  previewSpinning = false,
   spinAt,
   spinEndsAt,
   dimmed = false,
@@ -65,8 +67,20 @@ export function PvpAvatarStrip({
       rafRef.current = null;
     }
 
-    if (!spinning || !winnerId || !spinAt || !spinEndsAt || players.length === 0 || viewportWidth === 0) {
-      strip.style.transform = "translateX(0px)";
+    if (players.length === 0 || viewportWidth === 0) {
+      centerSlotRef.current = -1;
+      setCenterSlot(-1);
+      return;
+    }
+
+    if (!spinning || !winnerId || !spinAt || !spinEndsAt) {
+      if (previewSpinning) {
+        const previewIndex = players.length * PVP_LAND_CYCLE;
+        const previewOffset = -(previewIndex * (SLOT_SIZE + SLOT_GAP)) + (viewportWidth / 2 - SLOT_SIZE / 2);
+        strip.style.transform = `translateX(${previewOffset}px)`;
+      } else {
+        strip.style.transform = "translateX(0px)";
+      }
       centerSlotRef.current = -1;
       setCenterSlot(-1);
       return;
@@ -114,7 +128,7 @@ export function PvpAvatarStrip({
         rafRef.current = null;
       }
     };
-  }, [spinning, winnerId, spinAt, spinEndsAt, viewportWidth, playerKey, players.length, extendedPlayers.length]);
+  }, [spinning, previewSpinning, winnerId, spinAt, spinEndsAt, viewportWidth, playerKey, players.length, extendedPlayers.length]);
 
   if (players.length === 0) {
     return null;
@@ -130,11 +144,11 @@ export function PvpAvatarStrip({
         ref={viewportRef}
         className={cn(
           "relative mt-4 overflow-hidden rounded-2xl bg-[linear-gradient(180deg,rgba(30,37,58,0.78),rgba(19,24,40,0.84))] py-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)]",
-          dimmed && "opacity-70",
+          dimmed && "opacity-40",
         )}
       >
         <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
-          {(spinning ? extendedPlayers : players).map((player, index) => {
+          {(spinning || previewSpinning ? extendedPlayers : players).map((player, index) => {
             const highlightStrength = spinning ? getHighlightStrength(index, centerSlot) : 0;
             return (
               <div

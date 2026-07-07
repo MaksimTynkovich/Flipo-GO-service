@@ -69,37 +69,37 @@ export function PvpOpenRoomCard({
 }
 
 export function PvpActiveRoomCard({ room }: { room: PvpRoom }) {
+  const isCountdown = room.status === "countdown";
   const isSpinning = room.status === "spinning";
-  const countdown = useCountdown(room.spin_at, room.status === "countdown");
+  const countdown = useCountdown(room.spin_at, isCountdown);
 
   return (
     <article className="panel overflow-hidden p-0">
       <div className="border-b border-[var(--border)] bg-surface-raised/40 px-4 py-2.5">
         <p className="text-center text-[11px] font-medium text-muted">
-          {room.status === "countdown" ? "До старта игры" : "Определяем победителя…"}
+          {isCountdown ? "До старта игры" : "Определяем победителя…"}
         </p>
       </div>
 
-      {isSpinning ? (
-        <div className="px-4 py-3">
-          <PvpAvatarStrip
-            players={room.players}
-            winnerId={room.winner_id}
-            spinning
-            spinAt={room.spin_at}
-            spinEndsAt={room.spin_ends_at}
-          />
-        </div>
-      ) : (
-        <div className="px-4 py-4">
-          <PvpDuelRow players={room.players} dimmed className="px-0 py-3" />
-          <div className="mt-2 flex items-center justify-center">
-            <span className="inline-flex min-w-12 items-center justify-center rounded-2xl bg-accent/15 px-4 py-2 text-lg font-semibold tabular-nums text-accent">
+      <div className="relative px-4 py-3">
+        <PvpAvatarStrip
+          players={room.players}
+          winnerId={room.winner_id}
+          spinning={isSpinning}
+          previewSpinning={isCountdown}
+          spinAt={room.spin_at}
+          spinEndsAt={room.spin_ends_at}
+          dimmed={isCountdown}
+        />
+
+        {isCountdown ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <span className="text-2xl font-semibold leading-none tabular-nums text-foreground/90">
               {countdown}
             </span>
           </div>
-        </div>
-      )}
+        ) : null}
+      </div>
     </article>
   );
 }
