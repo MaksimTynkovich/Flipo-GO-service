@@ -15,7 +15,7 @@ type DepositPayload = {
 };
 
 export function UserRealtimeProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
 
@@ -23,6 +23,14 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
     if (!user) return;
 
     return connectUserWS((msg) => {
+      if (msg.event === "balance.updated") {
+        const balance = (msg.payload as { betting_balance?: number })?.betting_balance;
+        if (balance != null) {
+          setUser({ ...user, betting_balance: balance });
+        }
+        return;
+      }
+
       if (msg.event !== "inventory.deposited") return;
 
       const payload = msg.payload as DepositPayload;

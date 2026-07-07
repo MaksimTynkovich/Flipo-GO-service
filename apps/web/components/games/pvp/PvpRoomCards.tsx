@@ -5,7 +5,6 @@ import { Plus, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { PvpAvatarStrip } from "@/components/games/pvp/PvpAvatarStrip";
-import { PvpDuelRow } from "@/components/games/pvp/PvpDuelRow";
 import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
 import { formatTON } from "@/lib/api";
 import { PvpRoom, pvpPlayerName, pvpWinner } from "@/lib/pvp";
@@ -25,41 +24,47 @@ export function PvpOpenRoomCard({
   const opponent = room.players.find((player) => player.user_id !== room.creator_id);
 
   return (
-    <article className="panel flex items-center gap-3 p-3">
-      {creator && <PvpPlayerAvatar player={creator} size={40} />}
+    <article className="panel p-3">
+      <div className="flex items-center gap-3">
+        <div className="size-10 shrink-0">
+          {creator ? <PvpPlayerAvatar player={creator} size={40} /> : null}
+        </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{pvpPlayerName(creator)}</p>
-        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground/85">
-          <TonAmount
-            amount={formatTON(room.bet_amount_nanoton)}
-            variant="brand"
-            iconClassName="h-3.5 w-3.5"
-          />
-        </p>
-      </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium leading-5">{pvpPlayerName(creator)}</p>
+          <p className="mt-1 text-sm font-semibold leading-5 tabular-nums text-foreground/85">
+            <TonAmount
+              amount={formatTON(room.bet_amount_nanoton)}
+              variant="brand"
+              iconClassName="h-3.5 w-3.5"
+            />
+          </p>
+        </div>
 
-      <div className="flex shrink-0 items-center gap-2.5">
-        {opponent ? (
-          <PvpPlayerAvatar player={opponent} size={36} />
-        ) : (
-          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--border)] bg-surface-raised/40 text-muted/70">
-            <Plus className="h-3.5 w-3.5" />
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="size-9 shrink-0">
+            {opponent ? (
+              <PvpPlayerAvatar player={opponent} size={36} />
+            ) : (
+              <span className="flex size-full items-center justify-center rounded-full border border-dashed border-[var(--border)] bg-surface-raised/40 text-muted/70">
+                <Plus className="h-3.5 w-3.5" />
+              </span>
+            )}
+          </div>
 
-        {canJoin ? (
-          <Button
-            variant="accent"
-            className="h-9 rounded-xl px-3.5 text-xs"
-            disabled={joining}
-            onClick={onJoin}
-          >
-            {joining ? "…" : "Войти"}
-          </Button>
-        ) : (
-          <span className="chip shrink-0">Ожидание</span>
-        )}
+          {canJoin ? (
+            <Button
+              variant="accent"
+              className="h-9 rounded-xl px-3.5 text-xs"
+              disabled={joining}
+              onClick={onJoin}
+            >
+              {joining ? "…" : "Войти"}
+            </Button>
+          ) : (
+            <span className="chip shrink-0 whitespace-nowrap">Ожидание</span>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -103,33 +108,47 @@ export function PvpActiveRoomCard({ room }: { room: PvpRoom }) {
 
 export function PvpResultRoomCard({ room }: { room: PvpRoom }) {
   const winner = pvpWinner(room);
+  const loser = room.players.find((player) => player.user_id !== room.winner_id);
   const payout = room.payout_nanoton ?? room.bet_amount_nanoton * room.player_count;
 
   return (
-    <article className="panel overflow-hidden p-0">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--border)] px-4 py-3.5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
-            <Trophy className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[11px] text-muted">Победитель игры</p>
-            <p className="truncate text-sm font-semibold text-[var(--link)]">
-              {winner ? pvpPlayerName(winner) : "—"}
-            </p>
+    <article className="panel p-3">
+      <div className="flex items-center gap-3">
+        <div className="relative size-10 shrink-0">
+          {winner ? (
+            <>
+              <PvpPlayerAvatar player={winner} size={40} highlight="winner" />
+              <span
+                className="absolute -bottom-0.5 -right-0.5 flex size-5 items-center justify-center rounded-full bg-accent text-white ring-2 ring-surface"
+                aria-hidden
+              >
+                <Trophy className="h-2.5 w-2.5" strokeWidth={2.5} />
+              </span>
+            </>
+          ) : null}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold leading-5 text-accent">
+            {winner ? pvpPlayerName(winner) : "—"}
+          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="chip chip-accent shrink-0">Победа</span>
+            <span className="min-w-0 truncate text-sm font-semibold leading-5 tabular-nums text-foreground/85">
+              <TonAmount
+                amount={formatTON(payout)}
+                variant="brand"
+                iconClassName="h-3.5 w-3.5"
+              />
+            </span>
           </div>
         </div>
 
-        <div className="shrink-0 text-right">
-          <p className="text-[11px] text-muted">Сумма выигрыша</p>
-          <p className="mt-0.5 text-sm font-bold text-success">
-            <TonAmount amount={formatTON(payout)} variant="brand" iconClassName="h-4 w-4" />
-          </p>
+        <div className="size-9 shrink-0">
+          {loser ? (
+            <PvpPlayerAvatar player={loser} size={36} className="opacity-40 grayscale" />
+          ) : null}
         </div>
-      </div>
-
-      <div className="bg-surface-raised/35 px-4">
-        <PvpDuelRow players={room.players} winnerId={room.winner_id} />
       </div>
     </article>
   );

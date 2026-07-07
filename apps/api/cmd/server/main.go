@@ -120,6 +120,7 @@ func main() {
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftTransfer, giftValuator, marketSvc)
 
 	hub := websocket.NewHub()
+	balanceSvc.SetNotifier(hub)
 	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)

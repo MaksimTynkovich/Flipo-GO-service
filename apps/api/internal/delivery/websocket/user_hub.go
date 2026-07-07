@@ -92,6 +92,12 @@ func (h *Hub) UnregisterUser(client *UserClient) {
 	client.closeSend()
 }
 
+func (h *Hub) BalanceUpdated(userID uuid.UUID, balanceNanoton int64) {
+	h.NotifyUser(userID, "balance.updated", map[string]interface{}{
+		"betting_balance": balanceNanoton,
+	})
+}
+
 func (h *Hub) NotifyUser(userID uuid.UUID, event string, payload interface{}) {
 	h.initUserHub()
 	select {

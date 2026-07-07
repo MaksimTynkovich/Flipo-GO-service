@@ -29,7 +29,7 @@ export function PvpPlayerAvatar({
   return (
     <span
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-full bg-surface-raised transition-[box-shadow,filter,opacity,transform] duration-150 ease-out",
+        "relative inline-flex shrink-0 overflow-hidden rounded-full bg-surface-raised transition-[box-shadow,filter,opacity,transform] duration-150 ease-out",
         highlight === "winner" &&
           "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_28%,transparent),0_0_24px_color-mix(in_srgb,var(--accent)_18%,transparent)]",
         className,
@@ -37,6 +37,8 @@ export function PvpPlayerAvatar({
       style={{
         width: size,
         height: size,
+        minWidth: size,
+        minHeight: size,
         opacity: dimOpacity,
         transform: `scale(${dimScale})`,
         filter:
@@ -54,7 +56,7 @@ export function PvpPlayerAvatar({
         <img
           src={player.photo_url}
           alt=""
-          className="h-full w-full object-cover"
+          className="block h-full w-full object-cover"
           onError={() => setImgError(true)}
         />
       ) : (
