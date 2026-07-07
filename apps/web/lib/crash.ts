@@ -11,6 +11,9 @@ export type CrashRoundState = {
   server_seed_hash?: string;
 };
 
+/** Must match backend CRASH_TICK_MS */
+export const CRASH_TICK_MS = Number(process.env.NEXT_PUBLIC_CRASH_TICK_MS ?? 100);
+
 /** Must match backend CRASH_GROWTH_PER_MS */
 export const CRASH_GROWTH_PER_MS = Number(
   process.env.NEXT_PUBLIC_CRASH_GROWTH_PER_MS ?? 0.00006,
@@ -59,13 +62,50 @@ export function multiplierAtElapsedMs(elapsedMs: number): number {
   return Math.exp(CRASH_GROWTH_PER_MS * elapsedMs);
 }
 
-export function multiplierAtElapsedMsFloored(elapsedMs: number): number {
-  const raw = multiplierAtElapsedMs(elapsedMs);
+/** Same floor as backend crash engine (math.Floor(raw*100)/100). */
+export function floorMultiplier(raw: number): number {
+  if (!Number.isFinite(raw) || raw < 1) return 1;
   return Math.floor(raw * 100) / 100;
 }
 
+export function multiplierAtElapsedMsFloored(elapsedMs: number): number {
+  return floorMultiplier(multiplierAtElapsedMs(elapsedMs));
+}
+
+/** Align client clock to a server multiplier sample. */
+export function calibrateClockOffsetMs(
+  runStartMs: number,
+  serverMultiplier: number,
+  atClientMs: number = Date.now(),
+): number {
+  return atClientMs - runStartMs - elapsedMsForMultiplier(Math.max(1, serverMultiplier));
+}
+
+/**
+ * Smooth local extrapolation with a soft server cap.
+ * Between ticks grows evenly; after a tick without update, won't run ahead.
+ */
+export function computeRunningMultiplier(params: {
+  runStartMs: number;
+  clockOffsetMs: number;
+  serverMultiplier: number;
+  lastTickAtMs: number;
+  nowMs?: number;
+}): number {
+  const now = params.nowMs ?? Date.now();
+  const sinceTick = Math.max(0, now - params.lastTickAtMs);
+  const elapsed = Math.max(0, now - params.clockOffsetMs - params.runStartMs);
+  const smooth = multiplierAtElapsedMsFloored(elapsed);
+
+  if (sinceTick <= CRASH_TICK_MS) {
+    return smooth;
+  }
+
+  return Math.min(smooth, Math.max(1, params.serverMultiplier));
+}
+
 export function liveMultiplier(elapsedMs: number): number {
-  return multiplierAtElapsedMs(elapsedMs);
+  return multiplierAtElapsedMsFloored(elapsedMs);
 }
 
 export function resolveRunStartMs(state: CrashRoundState): number {
@@ -87,7 +127,6 @@ export function chartProgress(mult: number): number {
 }
 
 export type CrashHistoryTier = {
-  chip: string;
   value: string;
   label: string;
 };
@@ -104,34 +143,29 @@ export function crashPlayerName(player: {
 export function historyTierStyle(mult: number): CrashHistoryTier {
   if (mult >= 10) {
     return {
-      chip: "bg-success/18",
       value: "text-success",
       label: "Мун",
     };
   }
   if (mult >= 5) {
     return {
-      chip: "chip-accent",
       value: "text-accent",
       label: "Высокий",
     };
   }
   if (mult >= 2) {
     return {
-      chip: "bg-surface",
       value: "text-foreground",
       label: "Средний",
     };
   }
   if (mult < 1.35) {
     return {
-      chip: "bg-danger/16",
       value: "text-danger",
       label: "Краш",
     };
   }
   return {
-    chip: "bg-surface-raised",
     value: "text-muted",
     label: "Низкий",
   };

@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   CrashRoundState,
+  calibrateClockOffsetMs,
   chartProgress,
+  computeRunningMultiplier,
   elapsedMsForMultiplier,
   formatMultiplier,
   formatMultiplierLive,
-  multiplierAtElapsedMs,
+  multiplierAtElapsedMsFloored,
   resolveRunStartMs,
   statusSubtext,
 } from "@/lib/crash";
@@ -19,6 +21,7 @@ const PAD = 14;
 const TIP_X = W - PAD - 6;
 const TIP_Y = PAD + 22;
 const START_X = PAD + 4;
+const CLOCK_SYNC_BLEND = 0.28;
 
 type Tip = { x: number; y: number };
 
@@ -51,7 +54,7 @@ function buildCurve(
 
   for (let i = 0; i <= steps; i++) {
     const t = (elapsedMs * i) / steps;
-    const m = Math.max(1, Math.min(multiplierAtElapsedMs(t), mult));
+    const m = Math.max(1, Math.min(multiplierAtElapsedMsFloored(t), mult));
     const p = chartProgress(m);
     const x = START_X + (TIP_X - START_X) * p;
     const y = bottomY - (bottomY - TIP_Y) * p;
@@ -95,6 +98,10 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
 
   const roundRef = useRef<string | null>(null);
   const runStartMs = useRef(0);
+  const clockOffsetMs = useRef(0);
+  const lastServerMult = useRef(1);
+  const lastTickAtMs = useRef(0);
+  const runningReadyRef = useRef(false);
   const stateRef = useRef(state);
   const onLiveRef = useRef(onLiveMultiplier);
   const areaRef = useRef<SVGPathElement>(null);
@@ -127,19 +134,41 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
 
     if (state.round_id !== roundRef.current) {
       roundRef.current = state.round_id;
+      runningReadyRef.current = false;
       runStartMs.current = 0;
+      clockOffsetMs.current = 0;
+      lastServerMult.current = 1;
+      lastTickAtMs.current = 0;
     }
 
     if (state.phase === "running") {
-      runStartMs.current = resolveRunStartMs(state);
+      const serverMult = Math.max(1, state.multiplier ?? 1);
+      const now = Date.now();
+
+      if (!runningReadyRef.current) {
+        runningReadyRef.current = true;
+        runStartMs.current = resolveRunStartMs(state);
+        clockOffsetMs.current = calibrateClockOffsetMs(runStartMs.current, serverMult, now);
+        lastServerMult.current = serverMult;
+        lastTickAtMs.current = now;
+      } else if (serverMult !== lastServerMult.current) {
+        const targetOffset = calibrateClockOffsetMs(runStartMs.current, serverMult, now);
+        clockOffsetMs.current +=
+          (targetOffset - clockOffsetMs.current) * CLOCK_SYNC_BLEND;
+        lastServerMult.current = serverMult;
+        lastTickAtMs.current = now;
+      }
     }
 
     if (state.phase === "crashed" && state.crash_point) {
-      const elapsedMs = elapsedMsForMultiplier(state.crash_point);
-      applyCurve(buildCurve(elapsedMs, state.crash_point), curveRefs);
-      setStaticMult(formatMultiplier(state.crash_point));
-      onLiveRef.current?.(state.crash_point);
+      runningReadyRef.current = false;
+      const crashMult = state.crash_point;
+      const elapsedMs = elapsedMsForMultiplier(crashMult);
+      applyCurve(buildCurve(elapsedMs, crashMult), curveRefs);
+      setStaticMult(formatMultiplier(crashMult));
+      onLiveRef.current?.(crashMult);
     } else if (!running) {
+      runningReadyRef.current = false;
       const mult = betting ? 1 : Math.max(1, state.multiplier ?? 1);
       setStaticMult(formatMultiplier(mult));
     }
@@ -147,10 +176,6 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
 
   useEffect(() => {
     if (!running) return;
-
-    if (!runStartMs.current && stateRef.current) {
-      runStartMs.current = resolveRunStartMs(stateRef.current);
-    }
 
     let frame: number;
 
@@ -161,13 +186,21 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
         return;
       }
 
-      const elapsedMs = Math.max(0, Date.now() - runStartMs.current);
-      const mult = multiplierAtElapsedMs(elapsedMs);
+      const now = Date.now();
+      const mult = computeRunningMultiplier({
+        runStartMs: runStartMs.current,
+        clockOffsetMs: clockOffsetMs.current,
+        serverMultiplier: lastServerMult.current,
+        lastTickAtMs: lastTickAtMs.current,
+        nowMs: now,
+      });
+      const elapsedMs = Math.max(0, now - clockOffsetMs.current - runStartMs.current);
 
       applyCurve(buildCurve(elapsedMs, mult), curveRefs);
 
+      const label = formatMultiplierLive(mult);
       if (multLabelRef.current) {
-        multLabelRef.current.textContent = formatMultiplierLive(mult);
+        multLabelRef.current.textContent = label;
       }
       onLiveRef.current?.(mult);
 
@@ -254,7 +287,7 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
                 crashed ? "text-danger" : "text-foreground",
               )}
             >
-              {running ? formatMultiplierLive(1) : staticMult}
+              {running ? null : staticMult}
             </span>
             <span className={cn("text-xs font-medium", crashed ? "text-danger/80" : "text-muted")}>
               {statusSubtext(phase)}

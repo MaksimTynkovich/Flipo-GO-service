@@ -121,7 +121,13 @@ export default function CrashPage() {
     activeBet.roundId === state.round_id &&
     !cashingOut;
 
-  const displayMult = state?.phase === "running" ? liveMult : (state?.multiplier ?? 1);
+  const displayMult =
+    state?.phase === "crashed"
+      ? (state.crash_point ?? state.multiplier ?? 1)
+      : state?.phase === "running"
+        ? liveMult
+        : (state?.multiplier ?? 1);
+  const cashoutMult = state?.phase === "running" ? (state.multiplier ?? liveMult) : displayMult;
   const potentialWin =
     activeBet && displayMult
       ? (activeBet.amountNanoton * displayMult) / 1_000_000_000
@@ -178,7 +184,7 @@ export default function CrashPage() {
 
     setCashingOut(true);
     try {
-      const mult = liveMult > 1 ? liveMult : (state.multiplier ?? 1);
+      const mult = cashoutMult > 1 ? cashoutMult : (state.multiplier ?? 1);
       const res = (await cashoutCrash(activeBet.id, mult)) as { payout_nanoton: number };
       showToast({
         variant: "success",
