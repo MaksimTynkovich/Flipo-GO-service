@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PvpPlayer, pvpPlayerName } from "@/lib/pvp";
 import { cn } from "@/lib/utils";
 import { User as UserIcon } from "lucide-react";
@@ -23,13 +23,14 @@ export function PvpPlayerAvatar({
   const [imgError, setImgError] = useState(false);
   const initial = (player.first_name?.[0] || player.username?.[0] || "?").toUpperCase();
   const activeStrength = Math.max(0, Math.min(1, highlightStrength));
-  const dimOpacity = highlight === "active" ? 0.52 + activeStrength * 0.48 : 1;
-  const dimScale = highlight === "active" ? 0.94 + activeStrength * 0.06 : 1;
+  const useCssVar = highlight === "active" && highlightStrength === 0;
+  const strength = useCssVar ? undefined : activeStrength;
 
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 overflow-hidden rounded-full bg-surface-raised transition-[box-shadow,filter,opacity,transform] duration-150 ease-out",
+        "pvp-player-avatar relative inline-flex shrink-0 overflow-hidden rounded-full bg-surface-raised",
+        highlight === "active" && "pvp-player-avatar--active",
         highlight === "winner" &&
           "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_28%,transparent),0_0_24px_color-mix(in_srgb,var(--accent)_18%,transparent)]",
         className,
@@ -39,16 +40,9 @@ export function PvpPlayerAvatar({
         height: size,
         minWidth: size,
         minHeight: size,
-        opacity: dimOpacity,
-        transform: `scale(${dimScale})`,
-        filter:
-          highlight === "active"
-            ? `saturate(${0.7 + activeStrength * 0.45}) brightness(${0.72 + activeStrength * 0.34})`
-            : undefined,
-        boxShadow:
-          highlight === "active"
-            ? `0 0 0 ${1 + activeStrength}px color-mix(in srgb, var(--accent) ${10 + activeStrength * 18}%, transparent), 0 0 ${14 + activeStrength * 22}px color-mix(in srgb, var(--accent) ${8 + activeStrength * 16}%, transparent)`
-            : undefined,
+        ...(highlight === "active" && !useCssVar
+          ? activeHighlightStyle(strength ?? 0)
+          : undefined),
       }}
       title={pvpPlayerName(player)}
     >
@@ -66,4 +60,13 @@ export function PvpPlayerAvatar({
       )}
     </span>
   );
+}
+
+function activeHighlightStyle(strength: number) {
+  return {
+    opacity: 0.52 + strength * 0.48,
+    transform: `scale(${0.94 + strength * 0.06})`,
+    filter: `saturate(${0.7 + strength * 0.45}) brightness(${0.72 + strength * 0.34})`,
+    boxShadow: `0 0 0 ${1 + strength}px color-mix(in srgb, var(--accent) ${10 + strength * 18}%, transparent), 0 0 ${14 + strength * 22}px color-mix(in srgb, var(--accent) ${8 + strength * 16}%, transparent)`,
+  };
 }

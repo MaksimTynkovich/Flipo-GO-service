@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { PvpPlayer } from "@/lib/pvp";
 import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
+import { highlightStrengthAtIndex } from "@/lib/pvp-highlight";
 import { computeSpinOffsets, PVP_LAND_CYCLE, spinOffsetAtTime, spinTimeProgress } from "@/lib/pvp-spin";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
@@ -30,10 +31,9 @@ export function PvpAvatarStrip({
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
   const rafRef = useRef<number | null>(null);
-  const centerSlotRef = useRef(-1);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [centerSlot, setCenterSlot] = useState(-1);
 
   const playerKey = useMemo(
     () => players.map((player) => player.user_id).join(":"),
@@ -68,8 +68,7 @@ export function PvpAvatarStrip({
     }
 
     if (players.length === 0 || viewportWidth === 0) {
-      centerSlotRef.current = -1;
-      setCenterSlot(-1);
+      clearSlotHighlights(slotRefs.current);
       return;
     }
 
@@ -81,8 +80,7 @@ export function PvpAvatarStrip({
       } else {
         strip.style.transform = "translateX(0px)";
       }
-      centerSlotRef.current = -1;
-      setCenterSlot(-1);
+      clearSlotHighlights(slotRefs.current);
       return;
     }
 
@@ -104,18 +102,12 @@ export function PvpAvatarStrip({
       const offset = spinOffsetAtTime(timeProgress, targetOffset);
       strip.style.transform = `translateX(${offset}px)`;
 
-      const nextCenterSlot = getCenteredSlotPosition(offset, viewportWidth, extendedPlayers.length);
-      if (Math.abs(nextCenterSlot - centerSlotRef.current) >= CENTER_SLOT_EPSILON) {
-        centerSlotRef.current = nextCenterSlot;
-        setCenterSlot(nextCenterSlot);
-      }
+      const centerPosition = getCenteredSlotPosition(offset, viewportWidth, extendedPlayers.length);
+      updateSlotHighlights(slotRefs.current, centerPosition);
 
       if (timeProgress < 1) {
         rafRef.current = requestAnimationFrame(frame);
       } else {
-        strip.style.transform = `translateX(${targetOffset}px)`;
-        centerSlotRef.current = winnerIndex + players.length * PVP_LAND_CYCLE;
-        setCenterSlot(centerSlotRef.current);
         rafRef.current = null;
       }
     };
@@ -148,22 +140,22 @@ export function PvpAvatarStrip({
         )}
       >
         <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
-          {(spinning || previewSpinning ? extendedPlayers : players).map((player, index) => {
-            const highlightStrength = spinning ? getHighlightStrength(index, centerSlot) : 0;
-            return (
-              <div
-                key={`${player.user_id}-${index}`}
-                className="relative flex h-[56px] w-[56px] items-center justify-center"
-              >
-                <PvpPlayerAvatar
-                  player={player}
-                  size={SLOT_SIZE}
-                  highlight={spinning ? "active" : "none"}
-                  highlightStrength={highlightStrength}
-                />
-              </div>
-            );
-          })}
+          {(spinning || previewSpinning ? extendedPlayers : players).map((player, index) => (
+            <div
+              key={`${player.user_id}-${index}`}
+              ref={(node) => {
+                slotRefs.current[index] = node;
+              }}
+              className="relative flex h-[56px] w-[56px] items-center justify-center"
+              style={{ "--hl": 0 } as CSSProperties}
+            >
+              <PvpPlayerAvatar
+                player={player}
+                size={SLOT_SIZE}
+                highlight={spinning ? "active" : "none"}
+              />
+            </div>
+          ))}
         </div>
 
         <div className="pointer-events-none absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-[rgba(19,24,40,0.98)] via-[rgba(19,24,40,0.7)] to-transparent" />
@@ -176,8 +168,6 @@ export function PvpAvatarStrip({
 const SLOT_SIZE = 44;
 const SLOT_GAP = 10;
 const STRIP_PADDING_X = 12;
-const CENTER_SLOT_EPSILON = 0.035;
-const HIGHLIGHT_RANGE_SLOTS = 1.15;
 
 function getCenteredSlotPosition(offset: number, viewportWidth: number, totalSlots: number): number {
   const centerX = viewportWidth / 2 - offset - STRIP_PADDING_X - SLOT_SIZE / 2;
@@ -185,9 +175,16 @@ function getCenteredSlotPosition(offset: number, viewportWidth: number, totalSlo
   return Math.max(0, Math.min(totalSlots - 1, slot));
 }
 
-function getHighlightStrength(index: number, centerSlot: number): number {
-  if (centerSlot < 0) return 0;
-  const distance = Math.abs(index - centerSlot);
-  if (distance >= HIGHLIGHT_RANGE_SLOTS) return 0;
-  return (1 - distance / HIGHLIGHT_RANGE_SLOTS) ** 1.8;
+function updateSlotHighlights(slots: (HTMLDivElement | null)[], centerPosition: number) {
+  for (let index = 0; index < slots.length; index++) {
+    const slot = slots[index];
+    if (!slot) continue;
+    slot.style.setProperty("--hl", highlightStrengthAtIndex(index, centerPosition).toFixed(3));
+  }
+}
+
+function clearSlotHighlights(slots: (HTMLDivElement | null)[]) {
+  for (const slot of slots) {
+    slot?.style.setProperty("--hl", "0");
+  }
 }

@@ -154,6 +154,20 @@ body {
   .hairline-bottom {
     border-bottom: 1px solid var(--border);
   }
+
+  .pvp-player-avatar--active {
+    opacity: calc(0.52 + var(--hl, 0) * 0.48);
+    transform: scale(calc(0.94 + var(--hl, 0) * 0.06));
+    filter: saturate(calc(0.7 + var(--hl, 0) * 0.45)) brightness(calc(0.72 + var(--hl, 0) * 0.34));
+    box-shadow:
+      0 0 0 calc(1px + var(--hl, 0) * 1px) color-mix(in srgb, var(--accent) calc(10% + var(--hl, 0) * 18%), transparent),
+      0 0 calc(14px + var(--hl, 0) * 22px) color-mix(in srgb, var(--accent) calc(8% + var(--hl, 0) * 16%), transparent);
+    transition:
+      opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+      filter 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
 }
 
 .scrollbar-none::-webkit-scrollbar {

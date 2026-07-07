@@ -1,5 +1,7 @@
 /** 15-секторная рулетка (0–14) — порядок как на референсе */
 
+import { easeSpinWithSoftLanding } from "@/lib/spin-ease";
+
 export const WHEEL_ORDER = [0, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14] as const;
 
 export const ROULETTE_SEGMENTS = WHEEL_ORDER.length;
@@ -97,16 +99,10 @@ export function isLandingPause(state: RouletteRoundState): boolean {
 }
 
 /**
- * Имитация трения: сильный старт, затем длинный плавный выбег без рывков.
- * Чем выше k, тем агрессивнее начальный разгон.
+ * Имитация трения: сильный старт, затем мягкая посадка с нулевой скоростью в конце.
  */
-const SPIN_FRICTION = 5.4;
-
 export function easeSpinRoulette(t: number): number {
-  if (t <= 0) return 0;
-  if (t >= 1) return 1;
-  const k = SPIN_FRICTION;
-  return (1 - Math.exp(-k * t)) / (1 - Math.exp(-k));
+  return easeSpinWithSoftLanding(t);
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result" | "waiting";
