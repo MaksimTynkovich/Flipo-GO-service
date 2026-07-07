@@ -24,7 +24,7 @@ export function RouletteHistory({ history, roundNumber }: Props) {
         <span className="text-[11px] text-muted">Нет игр</span>
       ) : (
         <div className="flex min-w-0 items-center justify-end gap-1">
-          {recent.map((entry, i) => {
+          {recent.map((entry) => {
             const fill = rouletteFillStyle(entry.color);
             return (
               <div
@@ -33,9 +33,7 @@ export function RouletteHistory({ history, roundNumber }: Props) {
                 style={fill}
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white",
-                  entry.color === "black" && "ring-1 ring-inset ring-white/10",
                   !fill && "bg-surface-raised",
-                  i === 0 && "ring-1 ring-white/25",
                 )}
               >
                 {entry.number}

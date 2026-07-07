@@ -123,16 +123,16 @@ export default function RoulettePage() {
 
   return (
     <PageShell flush>
-      <div className="flex min-h-[calc(100dvh-var(--app-header-offset)-var(--app-tabbar-offset))] flex-col gap-2.5">
-        <div className="shrink-0 border-b border-border pb-2.5">
+      <div className="flex flex-col gap-2.5 pb-3">
+        <div className="border-b border-border pb-2.5">
           <RouletteHistory history={history} roundNumber={state?.round_number} />
         </div>
 
-        <div className="flex min-h-0 flex-1 items-center justify-center">
+        <div className="flex justify-center">
           <RouletteWheel state={state} />
         </div>
 
-        <div className="panel shrink-0 space-y-3">
+        <div className="panel space-y-3">
           <p className="section-label">Ставка</p>
 
           <div className="input-inset py-2.5">
