@@ -137,11 +137,11 @@ export function PvpAvatarStrip({
       <div
         ref={viewportRef}
         className={cn(
-          "relative mt-4 overflow-hidden rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(30,37,58,0.92),rgba(19,24,40,0.96))] py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.28)]",
+          "relative mt-4 overflow-hidden rounded-2xl bg-[linear-gradient(180deg,rgba(30,37,58,0.78),rgba(19,24,40,0.84))] py-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)]",
           dimmed && "opacity-70",
         )}
       >
-        <div className="pointer-events-none absolute inset-y-2 left-1/2 z-10 w-[72px] -translate-x-1/2 rounded-[20px] border border-accent/20 bg-[linear-gradient(180deg,rgba(255,191,120,0.12),rgba(255,191,120,0.04))] shadow-[0_0_30px_rgba(255,184,107,0.12)]" />
+        <div className="pointer-events-none absolute inset-y-2 left-1/2 z-10 w-[72px] -translate-x-1/2 rounded-[20px] bg-[linear-gradient(180deg,rgba(255,191,120,0.10),rgba(255,191,120,0.03))]" />
         <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-px -translate-x-1/2 bg-[linear-gradient(180deg,transparent,rgba(255,207,143,0.95),transparent)]" />
 
         <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
@@ -151,16 +151,14 @@ export function PvpAvatarStrip({
             return (
               <div key={`${player.user_id}-${index}`} className="relative flex h-[56px] w-[56px] items-center justify-center">
                 <PvpPlayerAvatar player={player} size={SLOT_SIZE} />
-                {showDivider && (
-                  <span className="pointer-events-none absolute -right-[5px] top-1/2 h-8 w-px -translate-y-1/2 bg-[color-mix(in_srgb,var(--foreground)_18%,transparent)]" />
-                )}
+                {showDivider && <span className="pointer-events-none absolute -right-[5px] top-1/2 h-8 w-px -translate-y-1/2 bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)]" />}
               </div>
             );
           })}
         </div>
 
         {spinning && (
-          <div className="pointer-events-none absolute bottom-2 right-3 rounded-full border border-white/8 bg-background/55 px-2.5 py-1 text-[10px] font-medium tracking-[0.02em] text-muted shadow-[0_8px_20px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+          <div className="pointer-events-none absolute bottom-2 right-3 rounded-full bg-background/45 px-2.5 py-1 text-[10px] font-medium tracking-[0.02em] text-muted shadow-[0_8px_20px_rgba(0,0,0,0.14)] backdrop-blur-sm">
             {timeLeftMs > 0 ? `Финиш через ${(timeLeftMs / 1000).toFixed(1)}с` : "Финиш"}
           </div>
         )}

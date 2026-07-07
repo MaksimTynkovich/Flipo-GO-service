@@ -19,9 +19,9 @@ export function PvpPlayerAvatar({ player, size = 40, className, highlight = "non
   return (
     <span
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-full bg-surface-raised ring-1 ring-[var(--border)]",
+        "relative shrink-0 overflow-hidden rounded-full bg-surface-raised",
         highlight === "winner" &&
-          "ring-2 ring-accent shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]",
+          "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_28%,transparent),0_0_24px_color-mix(in_srgb,var(--accent)_18%,transparent)]",
         className,
       )}
       style={{ width: size, height: size }}
