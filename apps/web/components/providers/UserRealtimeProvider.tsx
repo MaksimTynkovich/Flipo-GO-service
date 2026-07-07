@@ -5,6 +5,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { InventoryItem } from "@/lib/api";
 import { connectUserWS } from "@/lib/ws";
+import { emitBalanceWin } from "@/lib/balance-win";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 export const INVENTORY_DEPOSITED_EVENT = "flipo:inventory-deposited";
@@ -24,9 +25,17 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
 
     return connectUserWS((msg) => {
       if (msg.event === "balance.updated") {
-        const balance = (msg.payload as { betting_balance?: number })?.betting_balance;
-        if (balance != null) {
-          setUser({ ...user, betting_balance: balance });
+        const payload = msg.payload as {
+          betting_balance?: number;
+          delta_nanoton?: number;
+          ledger_type?: string;
+        };
+        if (payload.betting_balance != null) {
+          setUser({ ...user, betting_balance: payload.betting_balance });
+        }
+        if (payload.ledger_type === "win" && payload.delta_nanoton && payload.delta_nanoton > 0) {
+          emitBalanceWin(payload.delta_nanoton);
+          haptics.notificationOccurred("success");
         }
         return;
       }

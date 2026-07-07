@@ -13,9 +13,11 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { api } from "@/lib/api";
 import { PvpLobbyState } from "@/lib/pvp";
 import { connectGameWS } from "@/lib/ws";
+import { cn } from "@/lib/utils";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 const PVP_MAX_PLAYERS = 2;
+const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
 function mapPvpError(message: string): string {
   const lower = message.toLowerCase();
@@ -120,6 +122,22 @@ export function PvpHubView() {
           <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
         </div>
 
+        <div className="flex gap-2">
+          {QUICK_AMOUNTS.map((amount) => (
+            <button
+              key={amount}
+              type="button"
+              onClick={() => {
+                haptics.impactOccurred("light");
+                setBetAmount(amount);
+              }}
+              className={cn("quick-amount", betAmount === amount && "quick-amount-active")}
+            >
+              {amount}
+            </button>
+          ))}
+        </div>
+
         <Button className="h-11 w-full rounded-xl" variant="accent" disabled={creating} onClick={createRoom}>
           {creating ? "Создаём…" : "Создать комнату"}
         </Button>
@@ -138,18 +156,13 @@ export function PvpHubView() {
         </section>
       )}
 
-      <section className="space-y-2">
-        <div className="flex items-center justify-between px-0.5">
-          <p className="section-label">Открытые комнаты</p>
-          <span className="text-xs text-muted">{openRooms.length}</span>
-        </div>
-        {openRooms.length === 0 ? (
-          <div className="panel py-8 text-center">
-            <p className="text-sm text-muted">Комнат пока нет</p>
-            <p className="mt-1 text-xs text-muted/70">Создай первую или загляни позже</p>
+      {openRooms.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between px-0.5">
+            <p className="section-label">Открытые комнаты</p>
+            <span className="text-xs text-muted">{openRooms.length}</span>
           </div>
-        ) : (
-          openRooms.map((room) => {
+          {openRooms.map((room) => {
             const alreadyJoined = room.players.some((player) => player.user_id === userId);
             const isCreator = room.creator_id === userId;
             return (
@@ -161,9 +174,9 @@ export function PvpHubView() {
                 onJoin={() => joinRoom(room.id)}
               />
             );
-          })
-        )}
-      </section>
+          })}
+        </section>
+      )}
 
       {state.history.length > 0 && (
         <section className="space-y-2">

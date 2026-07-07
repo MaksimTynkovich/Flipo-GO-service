@@ -77,13 +77,7 @@ export function PvpActiveRoomCard({ room }: { room: PvpRoom }) {
 
   return (
     <article className="panel overflow-hidden p-0">
-      <div className="flex items-center justify-center px-4 py-2">
-        <span className="chip chip-accent">
-          {isCountdown ? "До старта" : "Определяем победителя…"}
-        </span>
-      </div>
-
-      <div className="relative px-4 pb-3">
+      <div className="relative px-4 py-3">
         <PvpAvatarStrip
           players={room.players}
           winnerId={room.winner_id}

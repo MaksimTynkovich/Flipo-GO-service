@@ -8,6 +8,7 @@ import { formatTON } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
+import { BalanceGainFx } from "@/src/widgets/app-shell/ui/BalanceGainFx";
 
 export function AppHeader() {
   const { user, loading } = useAuth();
@@ -25,22 +26,25 @@ export function AppHeader() {
           <UserAvatar user={user} size={36} />
         </Link>
 
-        <div className="flex min-w-0 items-center overflow-hidden rounded-full bg-surface-raised">
-          <div className="flex min-w-0 items-center gap-1 px-3 py-1.5">
-            <span className="truncate text-[15px] font-semibold tabular-nums leading-none text-foreground">
-              {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
-            </span>
-            <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
-          </div>
+        <div className="relative flex min-w-0 items-center overflow-visible">
+          <BalanceGainFx />
+          <div className="flex min-w-0 items-center overflow-visible rounded-full bg-surface-raised">
+            <div className="flex min-w-0 items-center gap-1 px-3 py-1.5">
+              <span className="truncate text-[15px] font-semibold tabular-nums leading-none text-foreground">
+                {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
+              </span>
+              <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
+            </div>
 
-          <Link
-            href={APP_ROUTES.deposit}
-            aria-label="Пополнить баланс"
-            onClick={() => haptics.impactOccurred("medium")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center border-l border-[var(--border)] text-muted transition-colors active:bg-surface active:text-foreground"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
-          </Link>
+            <Link
+              href={APP_ROUTES.deposit}
+              aria-label="Пополнить баланс"
+              onClick={() => haptics.impactOccurred("medium")}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-r-full border-l border-[var(--border)] text-muted transition-colors active:bg-surface active:text-foreground"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.5} />
+            </Link>
+          </div>
         </div>
       </div>
     </header>

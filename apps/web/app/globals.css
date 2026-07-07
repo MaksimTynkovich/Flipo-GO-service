@@ -96,6 +96,17 @@ body {
     @apply flex items-center rounded-xl bg-surface-raised px-4 py-3;
   }
 
+  .input-inset input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .input-inset input[type="number"]::-webkit-outer-spin-button,
+  .input-inset input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
   .section-label {
     @apply text-xs font-medium text-muted;
   }
@@ -151,6 +162,35 @@ body {
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+@keyframes balance-gain-rise {
+  0% {
+    opacity: 0;
+    transform: translate(10px, -50%) scale(0.94);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(0, -50%) scale(1);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-4px, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-12px, -58%) scale(1);
+  }
+}
+
+.balance-gain-fx {
+  color: var(--success);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  text-shadow: 0 1px 12px color-mix(in srgb, var(--success) 40%, transparent);
+  animation: balance-gain-rise 2.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes splash-spin {

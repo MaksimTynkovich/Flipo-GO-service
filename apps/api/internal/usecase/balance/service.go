@@ -8,7 +8,7 @@ import (
 )
 
 type BalanceNotifier interface {
-	BalanceUpdated(userID uuid.UUID, balanceNanoton int64)
+	BalanceUpdated(userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType)
 }
 
 type Service struct {
@@ -30,7 +30,7 @@ func (s *Service) Debit(ctx context.Context, userID uuid.UUID, amount int64, led
 	}
 	balanceAfter, err := s.users.UpdateBalance(ctx, userID, -amount, ledgerType, refType, refID)
 	if err == nil {
-		s.notifyBalance(userID, balanceAfter)
+		s.notifyBalance(userID, balanceAfter, -amount, ledgerType)
 	}
 	return balanceAfter, err
 }
@@ -41,16 +41,16 @@ func (s *Service) Credit(ctx context.Context, userID uuid.UUID, amount int64, le
 	}
 	balanceAfter, err := s.users.UpdateBalance(ctx, userID, amount, ledgerType, refType, refID)
 	if err == nil {
-		s.notifyBalance(userID, balanceAfter)
+		s.notifyBalance(userID, balanceAfter, amount, ledgerType)
 	}
 	return balanceAfter, err
 }
 
-func (s *Service) notifyBalance(userID uuid.UUID, balanceNanoton int64) {
+func (s *Service) notifyBalance(userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
 	if s.notifier == nil {
 		return
 	}
-	s.notifier.BalanceUpdated(userID, balanceNanoton)
+	s.notifier.BalanceUpdated(userID, balanceNanoton, deltaNanoton, ledgerType)
 }
 
 func (s *Service) GetBalance(ctx context.Context, userID uuid.UUID) (int64, error) {
