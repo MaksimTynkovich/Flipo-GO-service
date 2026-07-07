@@ -96,56 +96,17 @@ export function isLandingPause(state: RouletteRoundState): boolean {
   return Date.now() >= endMs;
 }
 
-/** Cubic-bezier как в CSS: быстрый старт, длинный плавный финиш без скачка скорости */
-const SPIN_BEZIER = { x1: 0.05, y1: 0.48, x2: 0.16, y2: 1 };
-
-function bezierSample(t: number, p0: number, p1: number, p2: number, p3: number): number {
-  const u = 1 - t;
-  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
-}
-
-function bezierX(s: number): number {
-  return bezierSample(s, 0, SPIN_BEZIER.x1, SPIN_BEZIER.x2, 1);
-}
-
-function bezierY(s: number): number {
-  return bezierSample(s, 0, SPIN_BEZIER.y1, SPIN_BEZIER.y2, 1);
-}
-
-function bezierDx(s: number): number {
-  const u = 1 - s;
-  return (
-    3 * u * u * SPIN_BEZIER.x1 +
-    6 * u * s * (SPIN_BEZIER.x2 - SPIN_BEZIER.x1) +
-    3 * s * s * (1 - SPIN_BEZIER.x2)
-  );
-}
-
 /**
- * Гладкий спин на всё ROULETTE_SPIN_SECONDS — одна непрерывная кривая,
- * без рывка на стыке «быстрой» и «медленной» фазы.
+ * Имитация трения: сильный старт, затем длинный плавный выбег без рывков.
+ * Чем выше k, тем агрессивнее начальный разгон.
  */
+const SPIN_FRICTION = 5.4;
+
 export function easeSpinRoulette(t: number): number {
   if (t <= 0) return 0;
   if (t >= 1) return 1;
-
-  let s = t;
-  for (let i = 0; i < 10; i++) {
-    const x = bezierX(s) - t;
-    const dx = bezierDx(s);
-    if (Math.abs(dx) < 1e-7) break;
-    s -= x / dx;
-    if (s <= 0) {
-      s = 0;
-      break;
-    }
-    if (s >= 1) {
-      s = 1;
-      break;
-    }
-  }
-
-  return bezierY(s);
+  const k = SPIN_FRICTION;
+  return (1 - Math.exp(-k * t)) / (1 - Math.exp(-k));
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result" | "waiting";

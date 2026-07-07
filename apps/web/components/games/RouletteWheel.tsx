@@ -172,7 +172,7 @@ export function RouletteWheel({ state }: Props) {
     const target = spinTargetRotation(
       rotationRef.current,
       wheelIndex,
-      8,
+      10,
       roundJitter.current,
     );
     const progress = spinProgress(state);
