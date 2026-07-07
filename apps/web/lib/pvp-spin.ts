@@ -1,13 +1,10 @@
 const SLOT_SIZE = 44;
 const SLOT_GAP = 10;
 export const PVP_SLOT_STEP = SLOT_SIZE + SLOT_GAP;
-export const PVP_LAND_CYCLE = 12;
+export const PVP_LAND_CYCLE = 30;
+export const PVP_REVEAL_DELAY_MS = 1000;
 
-/**
- * Higher value = more distance covered early, longer slow crawl at the end.
- * Velocity decreases smoothly from start to zero (no flat-speed phase).
- */
-const DECEL_RATE = 6.5;
+const DECEL_POWER = 5.4;
 
 export type SpinOffsets = {
   targetOffset: number;
@@ -25,24 +22,20 @@ export function computeSpinOffsets(
 }
 
 /**
- * Exponential ease-out: fast at the beginning, monotonically slowing until full stop.
- * Analogous to friction — speed is always proportional to remaining distance.
+ * One stable profile for the whole spin:
+ * fast start, then continuous smooth deceleration until stop.
  */
-function spinEase(t: number): number {
-  const progress = clamp01(t);
-  if (progress <= 0) return 0;
-  if (progress >= 1) return 1;
-  return (1 - Math.exp(-DECEL_RATE * progress)) / (1 - Math.exp(-DECEL_RATE));
-}
-
 export function spinOffsetAtTime(t: number, targetOffset: number): number {
-  return targetOffset * spinEase(t);
+  const progress = clamp01(t);
+  const eased = 1 - (1 - progress) ** DECEL_POWER;
+  return targetOffset * eased;
 }
 
 export function spinTimeProgress(nowMs: number, spinAtMs: number, spinEndsAtMs: number): number {
-  const duration = spinEndsAtMs - spinAtMs;
-  if (duration <= 0) return 1;
-  return clamp01((nowMs - spinAtMs) / duration);
+  const totalDuration = spinEndsAtMs - spinAtMs;
+  const animationDuration = Math.max(0, totalDuration - PVP_REVEAL_DELAY_MS);
+  if (animationDuration <= 0) return 1;
+  return clamp01((nowMs - spinAtMs) / animationDuration);
 }
 
 function clamp01(value: number): number {

@@ -6,6 +6,7 @@ import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
 import {
   computeSpinOffsets,
   PVP_LAND_CYCLE,
+  PVP_REVEAL_DELAY_MS,
   spinOffsetAtTime,
   spinTimeProgress,
 } from "@/lib/pvp-spin";
@@ -127,14 +128,25 @@ export function PvpAvatarStrip({
         )}
       >
         <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
-          {(spinning ? extendedPlayers : players).map((player, index) => (
-            <PvpPlayerAvatar
-              key={`${player.user_id}-${index}`}
-              player={player}
-              size={SLOT_SIZE}
-            />
-          ))}
+          {(spinning ? extendedPlayers : players).map((player, index) => {
+            const showDivider = index < (spinning ? extendedPlayers.length : players.length) - 1;
+
+            return (
+              <div key={`${player.user_id}-${index}`} className="relative flex h-[56px] w-[56px] items-center justify-center">
+                <PvpPlayerAvatar player={player} size={SLOT_SIZE} />
+                {showDivider && (
+                  <span className="pointer-events-none absolute -right-[5px] top-1/2 h-8 w-px -translate-y-1/2 bg-[color-mix(in_srgb,var(--foreground)_18%,transparent)]" />
+                )}
+              </div>
+            );
+          })}
         </div>
+
+        {spinning && (
+          <div className="pointer-events-none absolute bottom-2 right-3 rounded-full bg-background/55 px-2 py-1 text-[10px] font-medium text-muted">
+            Победитель через {Math.round(PVP_REVEAL_DELAY_MS / 1000)}с
+          </div>
+        )}
 
         <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[var(--surface-raised)] to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[var(--surface-raised)] to-transparent" />
