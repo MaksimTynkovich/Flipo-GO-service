@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
@@ -67,7 +70,7 @@ func (h *GameHandler) RouletteBet(c *gin.Context) {
 	}
 	bet, err := h.roulette.PlaceBet(c.Request.Context(), userID, req.Color, req.AmountNanoton, req.IdempotencyKey)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeGameBetError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, bet)
@@ -106,7 +109,7 @@ func (h *GameHandler) CrashBet(c *gin.Context) {
 	}
 	bet, err := h.crash.PlaceBet(c.Request.Context(), userID, req.AmountNanoton, req.IdempotencyKey)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeGameBetError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, bet)
@@ -197,4 +200,27 @@ func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, room)
+}
+
+func writeGameBetError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, domain.ErrInvalidAmount):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Укажите корректную сумму ставки.",
+			"code":  "invalid_amount",
+		})
+	case errors.Is(err, domain.ErrInsufficientFunds),
+		strings.Contains(strings.ToLower(err.Error()), "insufficient balance"):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Недостаточно средств на балансе.",
+			"code":  "insufficient_funds",
+		})
+	case errors.Is(err, domain.ErrRoundNotOpen):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Ставки больше не принимаются.",
+			"code":  "round_not_open",
+		})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	}
 }

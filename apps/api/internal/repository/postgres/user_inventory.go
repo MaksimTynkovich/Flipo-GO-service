@@ -72,7 +72,7 @@ func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta in
 		}
 		newBalance := user.BettingBalance + delta
 		if newBalance < 0 {
-			return errors.New("insufficient balance")
+			return domain.ErrInsufficientFunds
 		}
 		if err := tx.Model(&user).Update("betting_balance", newBalance).Error; err != nil {
 			return err

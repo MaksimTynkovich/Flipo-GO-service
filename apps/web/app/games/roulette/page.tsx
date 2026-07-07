@@ -5,6 +5,8 @@ import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
+import { useAuth } from "@/components/providers/AuthProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { connectGameWS } from "@/lib/ws";
 import {
   getRouletteBets,
@@ -14,19 +16,23 @@ import {
   RouletteHistoryEntry,
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
+import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
 import { RouletteRoundState, rouletteFillStyle } from "@/lib/roulette";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
+import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
 export default function RoulettePage() {
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const haptics = useTelegramHaptics();
   const [state, setState] = useState<RouletteRoundState | null>(null);
   const [history, setHistory] = useState<RouletteHistoryEntry[]>([]);
   const [roundBets, setRoundBets] = useState<RouletteRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
   const [betting, setBetting] = useState(false);
-  const [betMsg, setBetMsg] = useState<string | null>(null);
   const lastPhase = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
@@ -70,20 +76,44 @@ export default function RoulettePage() {
   const canBet = state?.phase === "betting" && !betting;
 
   async function bet(color: string) {
-    if (!canBet) return;
-    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
-    if (nanotons <= 0) {
-      setBetMsg("Укажите сумму");
+    if (!canBet) {
+      showToast({
+        variant: "error",
+        title: roulettePhaseBetMessage(state?.phase),
+      });
+      haptics.notificationOccurred("error");
       return;
     }
+
+    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+    if (nanotons <= 0) {
+      showToast({
+        variant: "error",
+        title: "Укажите корректную сумму ставки.",
+      });
+      haptics.notificationOccurred("error");
+      return;
+    }
+
+    if (user && user.betting_balance < nanotons) {
+      showToast({
+        variant: "error",
+        title: "Недостаточно средств на балансе.",
+      });
+      haptics.notificationOccurred("error");
+      return;
+    }
+
     setBetting(true);
-    setBetMsg(null);
     try {
       await placeRouletteBet(color, nanotons, crypto.randomUUID());
-      setBetMsg("ok");
       loadRoundBets();
     } catch (e) {
-      setBetMsg(e instanceof Error ? e.message : "Ошибка");
+      showToast({
+        variant: "error",
+        title: formatGameBetError(e),
+      });
+      haptics.notificationOccurred("error");
     } finally {
       setBetting(false);
     }
@@ -182,10 +212,6 @@ export default function RoulettePage() {
               </span>
             </button>
           </div>
-
-          {betMsg && betMsg !== "ok" && (
-            <p className="text-center text-xs text-danger">{betMsg}</p>
-          )}
 
           <div className="hairline-top pt-3">
             <RouletteRoundBets data={roundBets} />
