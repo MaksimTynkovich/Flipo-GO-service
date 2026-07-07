@@ -10,23 +10,44 @@ type Props = {
   size?: number;
   className?: string;
   highlight?: "winner" | "active" | "none";
+  highlightStrength?: number;
 };
 
-export function PvpPlayerAvatar({ player, size = 40, className, highlight = "none" }: Props) {
+export function PvpPlayerAvatar({
+  player,
+  size = 40,
+  className,
+  highlight = "none",
+  highlightStrength = 0,
+}: Props) {
   const [imgError, setImgError] = useState(false);
   const initial = (player.first_name?.[0] || player.username?.[0] || "?").toUpperCase();
+  const activeStrength = Math.max(0, Math.min(1, highlightStrength));
+  const dimOpacity = highlight === "active" ? 0.52 + activeStrength * 0.48 : 1;
+  const dimScale = highlight === "active" ? 0.94 + activeStrength * 0.06 : 1;
 
   return (
     <span
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-full bg-surface-raised",
-        highlight === "active" &&
-          "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_16%,transparent),0_0_28px_color-mix(in_srgb,var(--accent)_20%,transparent)]",
+        "relative shrink-0 overflow-hidden rounded-full bg-surface-raised transition-[box-shadow,filter,opacity,transform] duration-150 ease-out",
         highlight === "winner" &&
           "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_28%,transparent),0_0_24px_color-mix(in_srgb,var(--accent)_18%,transparent)]",
         className,
       )}
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        opacity: dimOpacity,
+        transform: `scale(${dimScale})`,
+        filter:
+          highlight === "active"
+            ? `saturate(${0.7 + activeStrength * 0.45}) brightness(${0.72 + activeStrength * 0.34})`
+            : undefined,
+        boxShadow:
+          highlight === "active"
+            ? `0 0 0 ${1 + activeStrength}px color-mix(in srgb, var(--accent) ${10 + activeStrength * 18}%, transparent), 0 0 ${14 + activeStrength * 22}px color-mix(in srgb, var(--accent) ${8 + activeStrength * 16}%, transparent)`
+            : undefined,
+      }}
       title={pvpPlayerName(player)}
     >
       {player.photo_url && !imgError ? (

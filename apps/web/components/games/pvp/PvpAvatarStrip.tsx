@@ -29,9 +29,9 @@ export function PvpAvatarStrip({
   const viewportRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
-  const activeIndexRef = useRef(-1);
+  const centerSlotRef = useRef(-1);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const [centerSlot, setCenterSlot] = useState(-1);
 
   const playerKey = useMemo(
     () => players.map((player) => player.user_id).join(":"),
@@ -67,8 +67,8 @@ export function PvpAvatarStrip({
 
     if (!spinning || !winnerId || !spinAt || !spinEndsAt || players.length === 0 || viewportWidth === 0) {
       strip.style.transform = "translateX(0px)";
-      activeIndexRef.current = -1;
-      setActiveIndex(-1);
+      centerSlotRef.current = -1;
+      setCenterSlot(-1);
       return;
     }
 
@@ -90,18 +90,18 @@ export function PvpAvatarStrip({
       const offset = spinOffsetAtTime(timeProgress, targetOffset);
       strip.style.transform = `translateX(${offset}px)`;
 
-      const centeredIndex = getCenteredSlotIndex(offset, viewportWidth, extendedPlayers.length);
-      if (centeredIndex !== activeIndexRef.current) {
-        activeIndexRef.current = centeredIndex;
-        setActiveIndex(centeredIndex);
+      const nextCenterSlot = getCenteredSlotPosition(offset, viewportWidth, extendedPlayers.length);
+      if (Math.abs(nextCenterSlot - centerSlotRef.current) >= CENTER_SLOT_EPSILON) {
+        centerSlotRef.current = nextCenterSlot;
+        setCenterSlot(nextCenterSlot);
       }
 
       if (timeProgress < 1) {
         rafRef.current = requestAnimationFrame(frame);
       } else {
         strip.style.transform = `translateX(${targetOffset}px)`;
-        activeIndexRef.current = winnerIndex + players.length * PVP_LAND_CYCLE;
-        setActiveIndex(activeIndexRef.current);
+        centerSlotRef.current = winnerIndex + players.length * PVP_LAND_CYCLE;
+        setCenterSlot(centerSlotRef.current);
         rafRef.current = null;
       }
     };
@@ -135,16 +135,18 @@ export function PvpAvatarStrip({
       >
         <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
           {(spinning ? extendedPlayers : players).map((player, index) => {
-            const isActive = spinning && index === activeIndex;
+            const highlightStrength = spinning ? getHighlightStrength(index, centerSlot) : 0;
             return (
               <div
                 key={`${player.user_id}-${index}`}
-                className={cn(
-                  "relative flex h-[56px] w-[56px] items-center justify-center transition-transform duration-150",
-                  isActive && "scale-[1.08]",
-                )}
+                className="relative flex h-[56px] w-[56px] items-center justify-center"
               >
-                <PvpPlayerAvatar player={player} size={SLOT_SIZE} highlight={isActive ? "active" : "none"} />
+                <PvpPlayerAvatar
+                  player={player}
+                  size={SLOT_SIZE}
+                  highlight={spinning ? "active" : "none"}
+                  highlightStrength={highlightStrength}
+                />
               </div>
             );
           })}
@@ -160,9 +162,27 @@ export function PvpAvatarStrip({
 const SLOT_SIZE = 44;
 const SLOT_GAP = 10;
 const STRIP_PADDING_X = 12;
+const CENTER_SLOT_EPSILON = 0.035;
+const HIGHLIGHT_LEAD_SLOTS = 0.34;
+const HIGHLIGHT_TRAIL_SLOTS = 0.58;
 
-function getCenteredSlotIndex(offset: number, viewportWidth: number, totalSlots: number): number {
+function getCenteredSlotPosition(offset: number, viewportWidth: number, totalSlots: number): number {
   const centerX = viewportWidth / 2 - offset - STRIP_PADDING_X - SLOT_SIZE / 2;
-  const index = Math.round(centerX / (SLOT_SIZE + SLOT_GAP));
-  return Math.max(0, Math.min(totalSlots - 1, index));
+  const slot = centerX / (SLOT_SIZE + SLOT_GAP) + HIGHLIGHT_LEAD_SLOTS;
+  return Math.max(0, Math.min(totalSlots - 1, slot));
+}
+
+function getHighlightStrength(index: number, centerSlot: number): number {
+  if (centerSlot < 0) return 0;
+  const delta = index - centerSlot;
+
+  if (delta >= 0) {
+    if (delta >= 1.15) return 0;
+    return (1 - delta / 1.15) ** 1.8;
+  }
+
+  const trailingDistance = Math.abs(delta);
+  const trailingRange = 1.15 + HIGHLIGHT_TRAIL_SLOTS;
+  if (trailingDistance >= trailingRange) return 0;
+  return (1 - trailingDistance / trailingRange) ** 2.1;
 }
