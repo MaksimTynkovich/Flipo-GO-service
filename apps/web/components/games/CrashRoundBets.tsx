@@ -72,16 +72,11 @@ export function CrashRoundBets({ data }: Props) {
     return <p className="text-center text-xs text-muted">Пока нет ставок в раунде</p>;
   }
 
-  const cashed = bets.filter((b) => b.status === "cashed_out").length;
-
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="section-label">Игроки</p>
-        <span className="text-[10px] tabular-nums text-muted">
-          {bets.length}
-          {cashed > 0 ? ` · ${cashed} забрали` : ""}
-        </span>
+        <span className="text-[10px] tabular-nums text-muted">{bets.length}</span>
       </div>
 
       <div className="surface-inset space-y-0.5 px-2.5 py-1">

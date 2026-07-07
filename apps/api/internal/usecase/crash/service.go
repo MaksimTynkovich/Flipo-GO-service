@@ -188,12 +188,11 @@ func (s *Service) Cashout(ctx context.Context, userID, betID uuid.UUID, multipli
 	if err != nil || !ok {
 		return 0, domain.ErrRoundNotOpen
 	}
-	credited, err := s.balance.Credit(ctx, userID, payout, domain.LedgerWin, "game_bet", betID)
-	if err != nil {
+	if _, err := s.balance.Credit(ctx, userID, payout, domain.LedgerWin, "game_bet", betID); err != nil {
 		return 0, err
 	}
 	_ = s.PublishBets(ctx, state.RoundID)
-	return credited, nil
+	return payout, nil
 }
 
 func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {

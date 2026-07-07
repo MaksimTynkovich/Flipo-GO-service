@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   AUTH_SESSION_REFRESHED,
   authDebug,
@@ -18,7 +18,7 @@ type AuthState = {
   loading: boolean;
   ready: boolean;
   error: string | null;
-  setUser: (u: User) => void;
+  setUser: Dispatch<SetStateAction<User | null>>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);

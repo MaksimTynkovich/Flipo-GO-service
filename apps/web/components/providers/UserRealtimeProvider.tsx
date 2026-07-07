@@ -31,7 +31,9 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
           ledger_type?: string;
         };
         if (payload.betting_balance != null) {
-          setUser({ ...user, betting_balance: payload.betting_balance });
+          setUser((prev) =>
+            prev ? { ...prev, betting_balance: payload.betting_balance! } : prev,
+          );
         }
         if (payload.ledger_type === "win" && payload.delta_nanoton && payload.delta_nanoton > 0) {
           emitBalanceWin(payload.delta_nanoton);
