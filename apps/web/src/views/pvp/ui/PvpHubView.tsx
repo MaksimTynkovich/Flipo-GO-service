@@ -144,8 +144,9 @@ export function PvpHubView() {
           <span className="text-xs text-muted">{openRooms.length}</span>
         </div>
         {openRooms.length === 0 ? (
-          <div className="panel py-6 text-center text-sm text-muted">
-            Комнат пока нет. Создай первую или загляни позже.
+          <div className="panel py-8 text-center">
+            <p className="text-sm text-muted">Комнат пока нет</p>
+            <p className="mt-1 text-xs text-muted/70">Создай первую или загляни позже</p>
           </div>
         ) : (
           openRooms.map((room) => {

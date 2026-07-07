@@ -25,44 +25,41 @@ export function PvpOpenRoomCard({
   const opponent = room.players.find((player) => player.user_id !== room.creator_id);
 
   return (
-    <article className="panel overflow-hidden p-0">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-stretch bg-[linear-gradient(180deg,rgba(19,25,40,0.96),rgba(24,31,49,0.96))]">
-        <div className="flex min-w-0 items-center gap-3 border-r border-[var(--border)] px-4 py-4">
-          {creator && <PvpPlayerAvatar player={creator} size={44} />}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground/95">{pvpPlayerName(creator)}</p>
-            <div className="mt-1 text-[1.05rem] font-semibold tabular-nums text-[#d6a07f]">
-              <TonAmount amount={formatTON(room.bet_amount_nanoton)} variant="brand" iconClassName="h-4 w-4" />
-            </div>
-            <p className="mt-0.5 text-[11px] text-muted">Ставка в игру</p>
-          </div>
-        </div>
+    <article className="panel flex items-center gap-3 p-3">
+      {creator && <PvpPlayerAvatar player={creator} size={40} />}
 
-        <div className="flex items-center justify-center border-r border-[var(--border)] px-5 py-3">
-          {opponent ? (
-            <PvpPlayerAvatar player={opponent} size={44} />
-          ) : (
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-surface-raised/35 text-muted">
-              <Plus className="h-4 w-4" />
-            </span>
-          )}
-        </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{pvpPlayerName(creator)}</p>
+        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground/85">
+          <TonAmount
+            amount={formatTON(room.bet_amount_nanoton)}
+            variant="brand"
+            iconClassName="h-3.5 w-3.5"
+          />
+        </p>
+      </div>
 
-        <div className="flex items-center px-3 py-3">
-          {canJoin ? (
-            <Button
-              variant="accent"
-              className="h-11 rounded-2xl px-5 text-xs font-bold uppercase tracking-wide shadow-[0_0_20px_color-mix(in_srgb,var(--accent)_30%,transparent)]"
-              disabled={joining}
-              onClick={onJoin}
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              {joining ? "…" : "Войти"}
-            </Button>
-          ) : (
-            <span className="px-2 text-[11px] font-medium text-muted">Ожидание</span>
-          )}
-        </div>
+      <div className="flex shrink-0 items-center gap-2.5">
+        {opponent ? (
+          <PvpPlayerAvatar player={opponent} size={36} />
+        ) : (
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-dashed border-[var(--border)] bg-surface-raised/40 text-muted/70">
+            <Plus className="h-3.5 w-3.5" />
+          </span>
+        )}
+
+        {canJoin ? (
+          <Button
+            variant="accent"
+            className="h-9 rounded-xl px-3.5 text-xs"
+            disabled={joining}
+            onClick={onJoin}
+          >
+            {joining ? "…" : "Войти"}
+          </Button>
+        ) : (
+          <span className="chip shrink-0">Ожидание</span>
+        )}
       </div>
     </article>
   );
@@ -75,13 +72,13 @@ export function PvpActiveRoomCard({ room }: { room: PvpRoom }) {
 
   return (
     <article className="panel overflow-hidden p-0">
-      <div className="border-b border-[var(--border)] bg-surface-raised/40 px-4 py-2.5">
-        <p className="text-center text-[11px] font-medium text-muted">
-          {isCountdown ? "До старта игры" : "Определяем победителя…"}
-        </p>
+      <div className="flex items-center justify-center px-4 py-2">
+        <span className="chip chip-accent">
+          {isCountdown ? "До старта" : "Определяем победителя…"}
+        </span>
       </div>
 
-      <div className="relative px-4 py-3">
+      <div className="relative px-4 pb-3">
         <PvpAvatarStrip
           players={room.players}
           winnerId={room.winner_id}
