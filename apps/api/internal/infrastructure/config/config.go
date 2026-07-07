@@ -20,6 +20,7 @@ type Config struct {
 	RouletteResultDisplaySeconds int
 	CrashTickMs             int
 	CrashBettingSeconds     int
+	CrashGrowthPerMs        float64
 	PlatformFeeBps          int
 	BoostWagerThreshold     int64
 	TonDepositAddress       string
@@ -57,6 +58,7 @@ func Load() *Config {
 		RouletteResultDisplaySeconds: getEnvInt("ROULETTE_RESULT_DISPLAY_SECONDS", 1),
 		CrashTickMs:            getEnvInt("CRASH_TICK_MS", 100),
 		CrashBettingSeconds:    getEnvInt("CRASH_BETTING_SECONDS", 8),
+		CrashGrowthPerMs:       getEnvFloat("CRASH_GROWTH_PER_MS", 0.00006),
 		PlatformFeeBps:         getEnvInt("PLATFORM_FEE_BPS", 500),
 		BoostWagerThreshold:    int64(getEnvInt("BOOST_WAGER_THRESHOLD_NANOTON", 5_000_000_000)),
 		TonDepositAddress:      getEnv("TON_DEPOSIT_ADDRESS", ""),
@@ -101,6 +103,16 @@ func getEnvBool(key string, fallback bool) bool {
 		b, err := strconv.ParseBool(v)
 		if err == nil {
 			return b
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			return f
 		}
 	}
 	return fallback

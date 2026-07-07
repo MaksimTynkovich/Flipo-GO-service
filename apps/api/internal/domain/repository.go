@@ -81,6 +81,7 @@ type GameRepository interface {
 	FindBetByIdempotency(ctx context.Context, key string) (*GameBet, error)
 	ListPendingBetsByRound(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
 	ListPendingBetsByRoundWithUser(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
+	ListBetsByRoundWithUser(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
 	FindPendingBetByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) (*GameBet, error)
 	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
 }

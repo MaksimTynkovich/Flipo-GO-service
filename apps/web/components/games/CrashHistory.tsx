@@ -1,53 +1,47 @@
 "use client";
 
 import { CrashHistoryEntry } from "@/lib/api";
-import { formatMultiplierCompact, historyBadgeClass } from "@/lib/crash";
+import { formatMultiplierCompact, historyTierStyle } from "@/lib/crash";
 import { cn } from "@/lib/utils";
+
+const HISTORY_LIMIT = 14;
 
 type Props = {
   history: CrashHistoryEntry[];
-  embedded?: boolean;
 };
 
-export function CrashHistory({ history, embedded }: Props) {
-  if (history.length === 0) {
+export function CrashHistory({ history }: Props) {
+  const recent = history.slice(0, HISTORY_LIMIT);
+
+  if (recent.length === 0) {
     return (
-      <div className={cn("px-4 py-3", !embedded && "space-y-2")}>
-        {!embedded && <p className="section-label">История</p>}
-        <span className="text-xs text-muted">Пока нет результатов</span>
+      <div className="surface-inset flex h-10 items-center justify-center rounded-xl">
+        <span className="text-[11px] text-muted">История пуста</span>
       </div>
     );
   }
 
   return (
-    <div
-      className={cn(
-        embedded && "border-t border-white/[0.06] bg-black/20",
-        !embedded && "space-y-2",
-      )}
-    >
-      {!embedded && <p className="section-label px-0.5">История</p>}
-      <div
-        className={cn(
-          "scrollbar-none flex gap-2 overflow-x-auto",
-          embedded ? "px-3 py-3" : "px-0.5 pb-0.5",
-        )}
-      >
-        {history.map((entry, i) => (
-          <div
-            key={entry.round_number}
-            title={`Раунд #${entry.round_number}`}
-            className={cn(
-              "flex h-9 min-w-[64px] shrink-0 items-center justify-center rounded-xl border px-2.5",
-              "text-[11px] font-bold tabular-nums tracking-tight backdrop-blur-sm",
-              "transition-transform duration-200",
-              i === 0 && "scale-[1.02]",
-              historyBadgeClass(entry.crash_point),
-            )}
-          >
-            {formatMultiplierCompact(entry.crash_point)}×
-          </div>
-        ))}
+    <div className="surface-inset rounded-xl px-2 py-2">
+      <div className="scrollbar-none flex gap-1.5 overflow-x-auto">
+        {recent.map((entry, index) => {
+          const tier = historyTierStyle(entry.crash_point);
+          return (
+            <span
+              key={entry.round_number}
+              title={`Раунд #${entry.round_number}`}
+              className={cn(
+                "flex h-8 min-w-[3.25rem] shrink-0 flex-col items-center justify-center rounded-lg px-2",
+                tier.chip,
+                index === 0 && "ring-1 ring-inset ring-white/12",
+              )}
+            >
+              <span className={cn("text-[11px] font-bold tabular-nums leading-none", tier.value)}>
+                {formatMultiplierCompact(entry.crash_point)}×
+              </span>
+            </span>
+          );
+        })}
       </div>
     </div>
   );

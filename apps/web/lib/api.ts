@@ -222,6 +222,27 @@ export async function getRouletteBets() {
   return api<RouletteRoundBets>("/api/v1/games/roulette/bets");
 }
 
+export type CrashBetEntry = {
+  id: string;
+  user_id: string;
+  username: string;
+  first_name: string;
+  photo_url?: string;
+  amount_nanoton: number;
+  status: "pending" | "cashed_out" | "lost" | string;
+  cashout_multiplier?: number;
+  payout_nanoton?: number;
+};
+
+export type CrashRoundBets = {
+  round_id: string;
+  bets: CrashBetEntry[];
+};
+
+export async function getCrashBets() {
+  return api<CrashRoundBets>("/api/v1/games/crash/bets");
+}
+
 export async function placeCrashBet(amount: number, key: string) {
   return api("/api/v1/games/crash/bet", {
     method: "POST",

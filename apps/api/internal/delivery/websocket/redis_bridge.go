@@ -26,6 +26,7 @@ func (b *RedisBridge) Start(ctx context.Context) {
 		{"roulette", "pubsub:game:roulette", "tick"},
 		{"roulette", "pubsub:game:roulette:bets", "bets"},
 		{"crash", "pubsub:game:crash", "tick"},
+		{"crash", "pubsub:game:crash:bets", "bets"},
 	}
 
 	for _, g := range games {

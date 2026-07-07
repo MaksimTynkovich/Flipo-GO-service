@@ -21,7 +21,25 @@ type RoundState struct {
 	Multiplier     float64    `json:"multiplier"`
 	CrashPoint     float64    `json:"crash_point,omitempty"`
 	EndsAt         *time.Time `json:"ends_at,omitempty"`
+	RunningSince   *time.Time `json:"running_since,omitempty"`
 	ServerSeedHash string     `json:"server_seed_hash"`
+}
+
+type BetView struct {
+	ID                uuid.UUID `json:"id"`
+	UserID            uuid.UUID `json:"user_id"`
+	Username          string    `json:"username"`
+	FirstName         string    `json:"first_name"`
+	PhotoURL          string    `json:"photo_url"`
+	AmountNanoton     int64     `json:"amount_nanoton"`
+	Status            string    `json:"status"`
+	CashoutMultiplier *float64  `json:"cashout_multiplier,omitempty"`
+	PayoutNanoton     int64     `json:"payout_nanoton,omitempty"`
+}
+
+type RoundBetsState struct {
+	RoundID uuid.UUID `json:"round_id"`
+	Bets    []BetView `json:"bets"`
 }
 
 type TickNotifier interface {
@@ -137,6 +155,7 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, amount int64, 
 	if err := s.games.CreateBet(ctx, bet); err != nil {
 		return nil, err
 	}
+	_ = s.PublishBets(ctx, state.RoundID)
 	return bet, nil
 }
 
@@ -169,7 +188,12 @@ func (s *Service) Cashout(ctx context.Context, userID, betID uuid.UUID, multipli
 	if err != nil || !ok {
 		return 0, domain.ErrRoundNotOpen
 	}
-	return s.balance.Credit(ctx, userID, payout, domain.LedgerWin, "game_bet", betID)
+	credited, err := s.balance.Credit(ctx, userID, payout, domain.LedgerWin, "game_bet", betID)
+	if err != nil {
+		return 0, err
+	}
+	_ = s.PublishBets(ctx, state.RoundID)
+	return credited, nil
 }
 
 func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
@@ -180,7 +204,7 @@ func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
 	for _, bet := range bets {
 		_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
 	}
-	return nil
+	return s.PublishBets(ctx, roundID)
 }
 
 // PublishState updates in-memory state and WS clients immediately; Redis is best-effort async.
@@ -232,4 +256,70 @@ func (s *Service) GetHistory(ctx context.Context, limit int) ([]HistoryEntry, er
 		})
 	}
 	return entries, nil
+}
+
+func (s *Service) GetCurrentRoundBets(ctx context.Context) (*RoundBetsState, error) {
+	state, err := s.CurrentState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return emptyRoundBets(uuid.Nil), nil
+	}
+	return s.buildRoundBets(ctx, state.RoundID)
+}
+
+func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*RoundBetsState, error) {
+	bets, err := s.games.ListBetsByRoundWithUser(ctx, roundID)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]BetView, 0, len(bets))
+	for _, bet := range bets {
+		view := BetView{
+			ID:            bet.ID,
+			UserID:        bet.UserID,
+			AmountNanoton: bet.AmountNanoton,
+			Status:        string(bet.Status),
+			PayoutNanoton: bet.PayoutNanoton,
+		}
+		if bet.CashoutMultiplier != nil {
+			mult := *bet.CashoutMultiplier
+			view.CashoutMultiplier = &mult
+		}
+		if bet.User.ID != uuid.Nil {
+			view.Username = bet.User.Username
+			view.FirstName = bet.User.FirstName
+			view.PhotoURL = bet.User.PhotoURL
+		}
+		views = append(views, view)
+	}
+
+	return &RoundBetsState{
+		RoundID: roundID,
+		Bets:    views,
+	}, nil
+}
+
+func emptyRoundBets(roundID uuid.UUID) *RoundBetsState {
+	return &RoundBetsState{
+		RoundID: roundID,
+		Bets:    []BetView{},
+	}
+}
+
+func (s *Service) PublishBets(ctx context.Context, roundID uuid.UUID) error {
+	if s.cache == nil {
+		return nil
+	}
+	state, err := s.buildRoundBets(ctx, roundID)
+	if err != nil {
+		return err
+	}
+	data, err := jsonMarshal(state)
+	if err != nil {
+		return err
+	}
+	return s.cache.Publish(ctx, "pubsub:game:crash:bets", data)
 }

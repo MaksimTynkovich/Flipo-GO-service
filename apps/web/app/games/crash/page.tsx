@@ -1,23 +1,33 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CrashChart } from "@/components/games/CrashChart";
+import { CrashHistory } from "@/components/games/CrashHistory";
+import { CrashRoundBets } from "@/components/games/CrashRoundBets";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import {
   cashoutCrash,
   formatTON,
   getCrashActiveBet,
+  getCrashBets,
   getCrashHistory,
   getCrashState,
   placeCrashBet,
   CrashHistoryEntry,
+  CrashRoundBets as CrashRoundBetsData,
 } from "@/lib/api";
 import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { CrashRoundState, formatMultiplier } from "@/lib/crash";
+import {
+  crashCashoutMessage,
+  crashPhaseBetMessage,
+  formatGameBetError,
+} from "@/lib/game-errors";
 import { connectGameWS } from "@/lib/ws";
 import { cn } from "@/lib/utils";
+import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
@@ -29,15 +39,16 @@ type ActiveBet = {
 
 export default function CrashPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const haptics = useTelegramHaptics();
   const [state, setState] = useState<CrashRoundState | null>(null);
   const [history, setHistory] = useState<CrashHistoryEntry[]>([]);
+  const [roundBets, setRoundBets] = useState<CrashRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
   const [liveMult, setLiveMult] = useState(1);
   const [activeBet, setActiveBet] = useState<ActiveBet | null>(null);
   const [betting, setBetting] = useState(false);
   const [cashingOut, setCashingOut] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [winMsg, setWinMsg] = useState<ReactNode | null>(null);
   const lastPhase = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
@@ -65,23 +76,29 @@ export default function CrashPage() {
     }
   }, []);
 
+  const loadRoundBets = useCallback(async () => {
+    try {
+      setRoundBets(await getCrashBets());
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     getCrashState().then((s) => setState(s as CrashRoundState)).catch(() => {});
     loadHistory();
     loadActiveBet();
+    loadRoundBets();
     const disconnect = connectGameWS("crash", (msg) => {
       if (msg.event === "tick") setState(msg.payload as CrashRoundState);
+      if (msg.event === "bets") setRoundBets(msg.payload as CrashRoundBetsData);
     });
-    const poll = window.setInterval(() => {
-      getCrashState()
-        .then((s) => setState(s as CrashRoundState))
-        .catch(() => {});
-    }, 400);
-    return () => {
-      disconnect();
-      window.clearInterval(poll);
-    };
-  }, [loadHistory, loadActiveBet]);
+    return disconnect;
+  }, [loadHistory, loadActiveBet, loadRoundBets]);
+
+  useEffect(() => {
+    if (state?.round_id) loadRoundBets();
+  }, [state?.round_id, loadRoundBets]);
 
   useEffect(() => {
     if (state?.round_id) loadActiveBet();
@@ -92,12 +109,7 @@ export default function CrashPage() {
       loadHistory();
       if (activeBet && activeBet.roundId === state.round_id) {
         setActiveBet(null);
-        setWinMsg(null);
       }
-    }
-    if (state?.phase === "betting" && lastPhase.current === "crashed") {
-      setWinMsg(null);
-      setMsg(null);
     }
     lastPhase.current = state?.phase ?? null;
   }, [state?.phase, state?.round_id, activeBet, loadHistory]);
@@ -116,15 +128,26 @@ export default function CrashPage() {
       : null;
 
   async function bet() {
-    if (!canBet) return;
-    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
-    if (nanotons <= 0) {
-      setMsg("Укажите сумму");
+    if (!canBet) {
+      showToast({ variant: "error", title: crashPhaseBetMessage(state?.phase) });
+      haptics.notificationOccurred("error");
       return;
     }
+
+    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+    if (nanotons <= 0) {
+      showToast({ variant: "error", title: "Укажите корректную сумму ставки." });
+      haptics.notificationOccurred("error");
+      return;
+    }
+
+    if (user && user.betting_balance < nanotons) {
+      showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+      haptics.notificationOccurred("error");
+      return;
+    }
+
     setBetting(true);
-    setMsg(null);
-    setWinMsg(null);
     try {
       const res = (await placeCrashBet(nanotons, crypto.randomUUID())) as {
         id: string;
@@ -136,31 +159,40 @@ export default function CrashPage() {
         roundId: res.round_id,
         amountNanoton: res.amount_nanoton,
       });
-      setMsg("ok");
+      haptics.notificationOccurred("success");
+      loadRoundBets();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Ошибка");
+      showToast({ variant: "error", title: formatGameBetError(e) });
+      haptics.notificationOccurred("error");
     } finally {
       setBetting(false);
     }
   }
 
   async function cashout() {
-    if (!canCashout || !activeBet || !state) return;
+    if (!canCashout || !activeBet || !state) {
+      showToast({ variant: "error", title: crashCashoutMessage(state?.phase) });
+      haptics.notificationOccurred("error");
+      return;
+    }
+
     setCashingOut(true);
-    setMsg(null);
     try {
-      const mult = state.multiplier ?? liveMult;
+      const mult = liveMult > 1 ? liveMult : (state.multiplier ?? 1);
       const res = (await cashoutCrash(activeBet.id, mult)) as { payout_nanoton: number };
-      setWinMsg(
-        <span className="inline-flex items-center gap-1">
-          +{formatTON(res.payout_nanoton)}
-          <TonIcon className="h-[0.85em] w-[0.85em]" />
-          @ {formatMultiplier(mult)}
-        </span>,
-      );
+      showToast({
+        variant: "success",
+        title: `+${formatTON(res.payout_nanoton)} TON @ ${formatMultiplier(mult)}`,
+      });
+      haptics.notificationOccurred("success");
       setActiveBet(null);
+      loadRoundBets();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Не удалось забрать");
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : crashCashoutMessage(state?.phase),
+      });
+      haptics.notificationOccurred("error");
     } finally {
       setCashingOut(false);
     }
@@ -168,53 +200,40 @@ export default function CrashPage() {
 
   return (
     <PageShell flush>
-      <div className="space-y-4">
-        <p className="text-xs text-muted">Успей забрать до краша</p>
+      <div className="flex flex-col gap-2.5 pb-3">
+        <CrashHistory history={history} />
 
-        <CrashChart
-          state={state}
-          history={history}
-          balanceNanoton={user?.betting_balance}
-          onLiveMultiplier={setLiveMult}
-        />
+        <CrashChart state={state} onLiveMultiplier={setLiveMult} />
 
-        {activeBet && state?.phase === "running" && (
-          <div className="rounded-xl bg-success/10 px-4 py-3">
-            <div className="flex items-center justify-between">
+        <div className="panel space-y-3">
+          {activeBet && state?.phase === "running" && (
+            <div className="surface-inset flex items-center justify-between gap-3 px-3 py-2.5">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted">
-                  В игре
-                </p>
+                <p className="section-label">В игре</p>
                 <p className="text-sm font-semibold">
-                  <TonAmount amount={formatTON(activeBet.amountNanoton)} />
+                  <TonAmount amount={formatTON(activeBet.amountNanoton)} iconSize="sm" />
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted">
-                  Выигрыш
-                </p>
+                <p className="section-label">Выигрыш</p>
                 <p className="text-sm font-bold tabular-nums text-success">
                   {potentialWin != null ? (
-                    <TonAmount amount={potentialWin.toFixed(2)} iconClassName="text-success" />
+                    <TonAmount
+                      amount={potentialWin.toFixed(2)}
+                      iconSize="sm"
+                      iconClassName="text-success"
+                    />
                   ) : (
                     "—"
                   )}
                 </p>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {winMsg && (
-          <div className="rounded-xl bg-success/10 px-4 py-3 text-center text-sm font-semibold text-success">
-            {winMsg}
-          </div>
-        )}
-
-        <div className="panel space-y-3">
           <p className="section-label">Ставка</p>
 
-          <div className="input-inset">
+          <div className="input-inset py-2.5">
             <input
               type="number"
               step="0.01"
@@ -222,9 +241,10 @@ export default function CrashPage() {
               disabled={!canBet}
               value={amountTon}
               onChange={(e) => setAmountTon(e.target.value)}
-              className="w-full bg-transparent text-center text-lg font-bold tabular-nums outline-none disabled:opacity-40"
+              className="w-full bg-transparent text-center text-lg font-bold tabular-nums text-foreground outline-none disabled:opacity-40"
+              placeholder="0.00"
             />
-            <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
+            <TonIcon variant="brand" size="lg" title="TON" />
           </div>
 
           <div className="flex gap-2">
@@ -245,14 +265,13 @@ export default function CrashPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5 pt-1">
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               disabled={!canBet}
               onClick={bet}
               className={cn(
-                "flex h-12 items-center justify-center rounded-xl text-sm font-bold text-white",
-                "bg-accent",
+                "flex h-11 items-center justify-center rounded-xl bg-accent text-sm font-bold text-white transition-all active:scale-[0.98]",
                 !canBet && "opacity-40",
               )}
             >
@@ -263,8 +282,7 @@ export default function CrashPage() {
               disabled={!canCashout}
               onClick={cashout}
               className={cn(
-                "flex h-12 items-center justify-center rounded-xl text-sm font-bold text-white",
-                "bg-success",
+                "flex h-11 items-center justify-center rounded-xl bg-success text-sm font-bold text-white transition-all active:scale-[0.98]",
                 !canCashout && "opacity-40",
               )}
             >
@@ -272,9 +290,9 @@ export default function CrashPage() {
             </button>
           </div>
 
-          {msg && msg !== "ok" && (
-            <p className="text-center text-xs text-danger">{msg}</p>
-          )}
+          <div className="hairline-top pt-3">
+            <CrashRoundBets data={roundBets} />
+          </div>
         </div>
       </div>
     </PageShell>

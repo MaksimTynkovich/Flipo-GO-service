@@ -151,7 +151,7 @@ func main() {
 	}
 
 	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds, cfg.RouletteResultDisplaySeconds).Run(ctx)
-	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, cfg.CrashBettingSeconds).Run(ctx)
+	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, cfg.CrashBettingSeconds, cfg.CrashGrowthPerMs).Run(ctx)
 	go pvpworker.NewWorker(pvpSvc, 500*time.Millisecond).Run(ctx)
 
 	stakeWorker := stakingworker.NewWorker(stakeSvc)

@@ -11,9 +11,13 @@ export type CrashRoundState = {
   server_seed_hash?: string;
 };
 
+/** Must match backend CRASH_GROWTH_PER_MS */
 export const CRASH_GROWTH_PER_MS = Number(
   process.env.NEXT_PUBLIC_CRASH_GROWTH_PER_MS ?? 0.00006,
 );
+
+/** Диагональ графика: log-шкала до этого множителя (X и Y синхронно) */
+export const CRASH_CHART_LOG_MAX = 100;
 
 export const PHASE_LABEL: Record<string, string> = {
   betting: "Приём ставок",
@@ -41,8 +45,8 @@ export function formatMultiplier(value: number): string {
 
 export function formatMultiplierLive(value: number): string {
   if (!Number.isFinite(value) || value < 1) return "1.00×";
-  if (value < 3) return `${value.toFixed(3)}×`;
-  return `${value.toFixed(2)}×`;
+  if (value < 100) return `${value.toFixed(2)}×`;
+  return `${value.toFixed(1)}×`;
 }
 
 export function formatMultiplierCompact(value: number): string {
@@ -50,44 +54,26 @@ export function formatMultiplierCompact(value: number): string {
   return value.toFixed(2);
 }
 
-export function multiplierAtElapsedMsPrecise(elapsedMs: number): number {
+export function multiplierAtElapsedMs(elapsedMs: number): number {
   if (elapsedMs <= 0) return 1;
   return Math.exp(CRASH_GROWTH_PER_MS * elapsedMs);
 }
 
-export function multiplierAtElapsedMs(elapsedMs: number): number {
-  if (elapsedMs <= 0) return 1;
-  return Math.floor(multiplierAtElapsedMsPrecise(elapsedMs) * 100) / 100;
+export function multiplierAtElapsedMsFloored(elapsedMs: number): number {
+  const raw = multiplierAtElapsedMs(elapsedMs);
+  return Math.floor(raw * 100) / 100;
 }
 
-export function liveMultiplier(elapsedMs: number, serverCap?: number): number {
-  const precise = multiplierAtElapsedMsPrecise(elapsedMs);
-  if (serverCap == null) return precise;
-  return Math.min(precise, serverCap + 0.0005);
+export function liveMultiplier(elapsedMs: number): number {
+  return multiplierAtElapsedMs(elapsedMs);
 }
 
-export function elapsedMsForRunning(state: CrashRoundState | null): number {
-  if (!state?.running_since) return 0;
-  const start = new Date(state.running_since).getTime();
-  if (Number.isNaN(start)) return 0;
-  return Math.max(0, Date.now() - start);
-}
-
-export function historyBadgeClass(mult: number): string {
-  if (mult >= 8) {
-    return "border-transparent bg-accent text-[#1a1f26] shadow-[0_0_14px_rgba(241,196,15,0.28)]";
+export function resolveRunStartMs(state: CrashRoundState): number {
+  if (state.running_since) {
+    const t = new Date(state.running_since).getTime();
+    if (!Number.isNaN(t)) return t;
   }
-  if (mult < 1.35) {
-    return "border-white/15 bg-white/[0.03] text-danger";
-  }
-  return "border-white/20 bg-white/[0.05] text-foreground";
-}
-
-export type ChartViewport = { yMax: number; xMaxMs: number };
-
-/** Стартовый viewport — используется только до первого кадра running */
-export function initialChartViewport(): ChartViewport {
-  return chartViewportFor(1, 0);
+  return Date.now();
 }
 
 export function elapsedMsForMultiplier(mult: number): number {
@@ -95,51 +81,58 @@ export function elapsedMsForMultiplier(mult: number): number {
   return Math.log(mult) / CRASH_GROWTH_PER_MS;
 }
 
-/** Время для оси X — совпадает с capped-множителем, если сервер отстаёт от клиента */
-export function chartElapsedMs(elapsedMs: number, mult: number): number {
-  if (mult <= 1.001) return 0;
-  const predicted = multiplierAtElapsedMsPrecise(elapsedMs);
-  if (mult >= predicted * 0.999) return elapsedMs;
-  return elapsedMsForMultiplier(mult);
+export function chartProgress(mult: number): number {
+  if (mult <= 1) return 0;
+  return Math.min(1, Math.log(mult) / Math.log(CRASH_CHART_LOG_MAX));
 }
 
-export function timeToX(elapsedMs: number, xMaxMs: number, width: number, padding: number): number {
-  const innerW = width - padding * 2;
-  const norm = Math.min(1, Math.max(0, elapsedMs / Math.max(xMaxMs, 1)));
-  const x = padding + norm * innerW;
-  return Math.max(padding, Math.min(width - padding, x));
+export type CrashHistoryTier = {
+  chip: string;
+  value: string;
+  label: string;
+};
+
+export function crashPlayerName(player: {
+  first_name?: string;
+  username?: string;
+}): string {
+  if (player.first_name?.trim()) return player.first_name.trim();
+  if (player.username?.trim()) return `@${player.username.trim()}`;
+  return "Игрок";
 }
 
-/**
- * Viewport пропорционален текущему множителю и времени.
- * Кончик всегда в одной зоне экрана, без скачков при zoom-out.
- * Форма кривой (плоско → резко вверх) даёт ощущение ускорения.
- */
-export function chartViewportFor(mult: number, chartMs: number): ChartViewport {
-  const safeMult = Math.max(1, mult);
+export function historyTierStyle(mult: number): CrashHistoryTier {
+  if (mult >= 10) {
+    return {
+      chip: "bg-success/18",
+      value: "text-success",
+      label: "Мун",
+    };
+  }
+  if (mult >= 5) {
+    return {
+      chip: "chip-accent",
+      value: "text-accent",
+      label: "Высокий",
+    };
+  }
+  if (mult >= 2) {
+    return {
+      chip: "bg-surface",
+      value: "text-foreground",
+      label: "Средний",
+    };
+  }
+  if (mult < 1.35) {
+    return {
+      chip: "bg-danger/16",
+      value: "text-danger",
+      label: "Краш",
+    };
+  }
   return {
-    yMax: Math.max(1.55, safeMult * 1.1),
-    xMaxMs: Math.max(5000, chartMs > 0 ? chartMs / 0.94 : 5000),
+    chip: "bg-surface-raised",
+    value: "text-muted",
+    label: "Низкий",
   };
-}
-
-/** Y: pow < 1 — дольше полого в начале, резче в конце (как в crash) */
-export function multToY(mult: number, yMax: number, height: number, padding: number): number {
-  const linearNorm = Math.max(0, Math.min(1, (mult - 1) / Math.max(yMax - 1, 0.01)));
-  const norm = Math.pow(linearNorm, 0.82);
-  const innerH = height - padding * 2;
-  const y = height - padding - norm * innerH;
-  return Math.max(padding, Math.min(height - padding, y));
-}
-
-/** Подгоняет viewport под финальный crash_point */
-export function fitChartViewport(mult: number, chartMs: number): ChartViewport {
-  return chartViewportFor(mult, chartMs);
-}
-
-export function multToX(mult: number, xMax: number, width: number, padding: number): number {
-  const innerW = width - padding * 2;
-  const logMax = Math.log(Math.max(xMax, 1.01));
-  const norm = Math.log(Math.max(1, mult)) / logMax;
-  return padding + Math.min(1, norm) * innerW;
 }

@@ -17,20 +17,21 @@ import (
 )
 
 type Engine struct {
-	svc     *crashuc.Service
-	games   domain.GameRepository
-	chain   []string
-	chainIx int
-	tickMs  int
-	betS    int
+	svc         *crashuc.Service
+	games       domain.GameRepository
+	chain       []string
+	chainIx     int
+	tickMs      int
+	betS        int
+	growthPerMs float64
 }
 
-func NewEngine(svc *crashuc.Service, games domain.GameRepository, tickMs, betS int) *Engine {
+func NewEngine(svc *crashuc.Service, games domain.GameRepository, tickMs, betS int, growthPerMs float64) *Engine {
 	seedBytes := make([]byte, 32)
 	_, _ = rand.Read(seedBytes)
 	seed := hex.EncodeToString(seedBytes)
 	chain := provablyfair.HashChain(seed, 10000)
-	return &Engine{svc: svc, games: games, chain: chain, chainIx: 0, tickMs: tickMs, betS: betS}
+	return &Engine{svc: svc, games: games, chain: chain, chainIx: 0, tickMs: tickMs, betS: betS, growthPerMs: growthPerMs}
 }
 
 func (e *Engine) Run(ctx context.Context) {
@@ -172,17 +173,18 @@ func (e *Engine) runRound(ctx context.Context) {
 		ServerSeedHash: serverSeedHash,
 	}
 	_ = e.svc.PublishState(ctx, betState)
+	_ = e.svc.PublishBets(ctx, roundID)
 	time.Sleep(time.Duration(e.betS) * time.Second)
 
+	runStarted := time.Now().UTC()
 	multiplier := 1.0
-	centi := int64(100)
-	targetCenti := int64(math.Floor(crashPoint*100 + 1e-9))
 	tick := time.Duration(e.tickMs) * time.Millisecond
 	runState := &crashuc.RoundState{
 		RoundID:        roundID,
 		RoundNumber:    roundNum,
 		Phase:          "running",
 		Multiplier:     multiplier,
+		RunningSince:   &runStarted,
 		ServerSeedHash: serverSeedHash,
 	}
 	_ = e.svc.PublishState(ctx, runState)
@@ -190,16 +192,29 @@ func (e *Engine) runRound(ctx context.Context) {
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 
-	for centi < targetCenti {
+	for multiplier < crashPoint {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
-		centi++
-		multiplier = float64(centi) / 100
+
+		elapsedMs := time.Since(runStarted).Milliseconds()
+		raw := math.Exp(e.growthPerMs * float64(elapsedMs))
+		multiplier = math.Floor(raw*100) / 100
+		if multiplier < 1 {
+			multiplier = 1
+		}
+		if multiplier >= crashPoint {
+			multiplier = crashPoint
+		}
+
 		runState.Multiplier = multiplier
 		_ = e.svc.PublishState(ctx, runState)
+
+		if multiplier >= crashPoint {
+			break
+		}
 	}
 
 	crashState := &crashuc.RoundState{

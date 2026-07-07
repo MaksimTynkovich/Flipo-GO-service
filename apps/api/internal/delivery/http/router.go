@@ -90,6 +90,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/games/roulette/bet", deps.GameHandler.RouletteBet)
 			authed.GET("/games/crash/current", deps.GameHandler.CrashCurrent)
 			authed.GET("/games/crash/history", deps.GameHandler.CrashHistory)
+			authed.GET("/games/crash/bets", deps.GameHandler.CrashBets)
 			authed.GET("/games/crash/bet/active", deps.GameHandler.CrashActiveBet)
 			authed.POST("/games/crash/bet", deps.GameHandler.CrashBet)
 			authed.POST("/games/crash/bet/:id/cashout", deps.GameHandler.CrashCashout)

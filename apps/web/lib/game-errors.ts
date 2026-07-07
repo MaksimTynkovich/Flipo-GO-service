@@ -36,3 +36,22 @@ export function roulettePhaseBetMessage(phase?: string | null): string {
       return "Ставки больше не принимаются.";
   }
 }
+
+export function crashPhaseBetMessage(phase?: string | null): string {
+  switch (phase) {
+    case "running":
+      return "Раунд уже идёт — ставки закрыты.";
+    case "crashed":
+      return "Раунд завершён. Дождитесь следующего.";
+    case "waiting":
+      return "Ожидаем новый раунд.";
+    default:
+      return "Ставки больше не принимаются.";
+  }
+}
+
+export function crashCashoutMessage(phase?: string | null): string {
+  if (phase === "crashed") return "Раунд уже завершён.";
+  if (phase === "betting") return "Раунд ещё не начался.";
+  return "Не удалось забрать выигрыш.";
+}
