@@ -2,6 +2,7 @@ import { getTelegramWebApp } from "@/src/shared/lib/twa";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+const NGROK_API = API_URL.includes("ngrok-free.app") || API_URL.includes("ngrok.io");
 export const DEBUG_AUTH = process.env.NEXT_PUBLIC_DEBUG_AUTH === "true";
 export const AUTH_SESSION_REFRESHED = "flipo:auth-session-refreshed";
 
@@ -60,6 +61,7 @@ async function rawFetch(path: string, options: RequestInit = {}): Promise<Respon
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
+    ...(NGROK_API ? { "ngrok-skip-browser-warning": "1" } : {}),
     ...(options.headers || {}),
   };
   if (token) {

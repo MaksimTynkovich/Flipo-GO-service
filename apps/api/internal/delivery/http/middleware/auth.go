@@ -37,11 +37,19 @@ func GetUserID(c *gin.Context) uuid.UUID {
 	return uuid.Nil
 }
 
+func corsAllowHeaders(c *gin.Context) string {
+	headers := "Authorization, Content-Type, X-Telegram-Init-Data"
+	if strings.Contains(strings.ToLower(c.GetHeader("Access-Control-Request-Headers")), "ngrok-skip-browser-warning") {
+		headers += ", ngrok-skip-browser-warning"
+	}
+	return headers
+}
+
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Telegram-Init-Data")
+		c.Header("Access-Control-Allow-Headers", corsAllowHeaders(c))
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
