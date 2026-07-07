@@ -1,7 +1,7 @@
 "use client";
 
 import { RouletteHistoryEntry } from "@/lib/api";
-import { ROULETTE_COLOR_STYLES } from "@/lib/roulette";
+import { rouletteFillStyle } from "@/lib/roulette";
 import { cn } from "@/lib/utils";
 
 const HISTORY_LIMIT = 8;
@@ -25,15 +25,17 @@ export function RouletteHistory({ history, roundNumber }: Props) {
       ) : (
         <div className="flex min-w-0 items-center justify-end gap-1">
           {recent.map((entry, i) => {
-            const style = ROULETTE_COLOR_STYLES[entry.color as keyof typeof ROULETTE_COLOR_STYLES];
+            const fill = rouletteFillStyle(entry.color);
             return (
               <div
                 key={entry.round_number}
                 title={`#${entry.round_number}`}
+                style={fill}
                 className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white/90",
-                  style?.bg ?? "bg-surface-raised",
-                  i === 0 && "ring-1 ring-white/15",
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white",
+                  entry.color === "black" && "ring-1 ring-inset ring-white/10",
+                  !fill && "bg-surface-raised",
+                  i === 0 && "ring-1 ring-white/25",
                 )}
               >
                 {entry.number}

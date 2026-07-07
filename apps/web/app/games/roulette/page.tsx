@@ -14,7 +14,7 @@ import {
   RouletteHistoryEntry,
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
-import { RouletteRoundState, ROULETTE_COLOR_STYLES } from "@/lib/roulette";
+import { RouletteRoundState, rouletteFillStyle } from "@/lib/roulette";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 
@@ -140,9 +140,9 @@ export default function RoulettePage() {
               type="button"
               disabled={!canBet}
               onClick={() => bet("red")}
+              style={rouletteFillStyle("red")}
               className={cn(
                 "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
-                ROULETTE_COLOR_STYLES.red.bg,
                 !canBet && "opacity-40",
               )}
             >
@@ -155,9 +155,9 @@ export default function RoulettePage() {
               type="button"
               disabled={!canBet}
               onClick={() => bet("green")}
+              style={rouletteFillStyle("green")}
               className={cn(
                 "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
-                ROULETTE_COLOR_STYLES.green.bg,
                 !canBet && "opacity-40",
               )}
             >
@@ -170,9 +170,9 @@ export default function RoulettePage() {
               type="button"
               disabled={!canBet}
               onClick={() => bet("black")}
+              style={rouletteFillStyle("black")}
               className={cn(
-                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
-                ROULETTE_COLOR_STYLES.black.bg,
+                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 text-white transition-all active:scale-[0.98]",
                 !canBet && "opacity-40",
               )}
             >

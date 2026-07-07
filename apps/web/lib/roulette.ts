@@ -167,27 +167,40 @@ export const ROULETTE_WHEEL_COLORS = {
   black: "#181818",
 } as const;
 
+export function rouletteFillStyle(
+  color: string,
+): { backgroundColor: string } | undefined {
+  const key = color as keyof typeof ROULETTE_WHEEL_COLORS;
+  if (key in ROULETTE_WHEEL_COLORS) {
+    return { backgroundColor: ROULETTE_WHEEL_COLORS[key] };
+  }
+  return undefined;
+}
+
 export const ROULETTE_COLOR_STYLES = {
   red: {
     bg: "bg-[#c62828]",
-    bar: "bg-[#c62828]",
+    chip: "bg-[#c62828]",
+    tile: "bg-[#c62828]/14 border border-[#c62828]/30",
     dot: "bg-[#c62828]",
-    text: "text-danger",
+    text: "text-[#e57373]",
     label: "Красное",
     multiplier: "×2",
   },
   green: {
     bg: "bg-[#2e9b52]",
-    bar: "bg-[#2e9b52]",
+    chip: "bg-[#2e9b52]",
+    tile: "bg-[#2e9b52]/14 border border-[#2e9b52]/30",
     dot: "bg-[#2e9b52]",
-    text: "text-success",
+    text: "text-[#81c784]",
     label: "Зелёное",
     multiplier: "×14",
   },
   black: {
-    bg: "bg-[#181818] ring-1 ring-inset ring-white/[0.08]",
-    bar: "bg-[#181818]",
-    dot: "bg-[#181818]",
+    bg: "bg-[#181818]",
+    chip: "bg-[#181818] ring-1 ring-inset ring-white/[0.1]",
+    tile: "bg-[#181818]/50 border border-white/[0.1]",
+    dot: "bg-[#181818] ring-1 ring-inset ring-white/[0.12]",
     text: "text-foreground",
     label: "Чёрное",
     multiplier: "×2",

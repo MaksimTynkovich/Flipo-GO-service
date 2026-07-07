@@ -38,7 +38,14 @@ function BetRow({ bet }: { bet: RouletteRoundBetsData["bets"][number] }) {
         <p className="truncate text-sm leading-tight">{name}</p>
       </div>
 
-      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", style?.dot ?? "bg-muted")} />
+      <span
+        className={cn(
+          "shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white",
+          style?.bg ?? "bg-surface-raised",
+        )}
+      >
+        {style?.label ?? bet.color}
+      </span>
 
       <p className="shrink-0 text-sm font-medium tabular-nums">
         <TonAmount amount={formatTON(bet.amount_nanoton)} iconSize="sm" />
@@ -65,26 +72,29 @@ export function RouletteRoundBets({ data }: Props) {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        {COLORS.map((color) => (
-          <div key={color} className="glass-inset rounded-xl px-2.5 py-2">
-            <div className="flex items-center gap-1.5">
-              <span className={cn("h-1.5 w-1.5 rounded-full", ROULETTE_COLOR_STYLES[color].dot)} />
-              <span className="truncate text-[10px] text-muted">
-                {ROULETTE_COLOR_STYLES[color].label}
-              </span>
+        {COLORS.map((color) => {
+          const style = ROULETTE_COLOR_STYLES[color];
+          return (
+            <div key={color} className={cn("rounded-xl px-2.5 py-2", style.tile)}>
+              <div className="flex items-center gap-1.5">
+                <span className={cn("h-2 w-2 rounded-full", style.dot)} />
+                <span className={cn("truncate text-[10px] font-medium", style.text)}>
+                  {style.label}
+                </span>
+              </div>
+              <p className="mt-1 text-sm font-semibold tabular-nums leading-none text-foreground">
+                {totals[color] > 0 ? (
+                  <TonAmount amount={formatTON(totals[color])} iconSize="sm" />
+                ) : (
+                  "0"
+                )}
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted">
+                {counts[color] > 0 ? counts[color] : "—"}
+              </p>
             </div>
-            <p className="mt-1 text-sm font-semibold tabular-nums leading-none">
-              {totals[color] > 0 ? (
-                <TonAmount amount={formatTON(totals[color])} iconSize="sm" />
-              ) : (
-                "0"
-              )}
-            </p>
-            <p className="mt-0.5 text-[10px] text-muted">
-              {counts[color] > 0 ? counts[color] : "—"}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {bets.length === 0 ? (
