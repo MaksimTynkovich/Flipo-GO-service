@@ -11,24 +11,11 @@ import {
   placeRouletteBet,
   RouletteHistoryEntry,
 } from "@/lib/api";
-import { RouletteRoundState, isLandingPause } from "@/lib/roulette";
+import { RouletteRoundState } from "@/lib/roulette";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
-
-const PHASE_LABEL: Record<string, string> = {
-  betting: "Приём ставок",
-  spinning: "Крутим колесо",
-  result: "Результат",
-  waiting: "Ожидание",
-};
-
-function phaseLabel(state: RouletteRoundState | null): string {
-  if (!state?.phase) return "—";
-  if (isLandingPause(state)) return "Почти…";
-  return PHASE_LABEL[state.phase] ?? state.phase;
-}
 
 export default function RoulettePage() {
   const [state, setState] = useState<RouletteRoundState | null>(null);
@@ -37,7 +24,6 @@ export default function RoulettePage() {
   const [betting, setBetting] = useState(false);
   const [betMsg, setBetMsg] = useState<string | null>(null);
   const lastPhase = useRef<string | null>(null);
-  const [, setLandingTick] = useState(0);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -63,18 +49,7 @@ export default function RoulettePage() {
     lastPhase.current = state?.phase ?? null;
   }, [state?.phase, loadHistory]);
 
-  useEffect(() => {
-    if (!state || state.phase !== "spinning") return;
-    const endRaw = state.spin_ends_at || state.ends_at;
-    if (!endRaw) return;
-    const endMs = new Date(endRaw).getTime();
-    const delay = Math.max(0, endMs - Date.now());
-    const id = window.setTimeout(() => setLandingTick((n) => n + 1), delay);
-    return () => window.clearTimeout(id);
-  }, [state?.phase, state?.spin_ends_at, state?.ends_at, state?.round_id]);
-
   const canBet = state?.phase === "betting" && !betting;
-  const statusLabel = phaseLabel(state);
 
   async function bet(color: string) {
     if (!canBet) return;
@@ -98,9 +73,8 @@ export default function RoulettePage() {
   return (
     <PageShell flush>
       <div className="flex min-h-[calc(100dvh-var(--app-header-offset)-var(--app-tabbar-offset))] flex-col gap-2.5">
-        <div className="flex shrink-0 items-center justify-between gap-2">
-          <p className="text-xs text-muted">Красное / чёрное ×2 · зелёное ×14</p>
-          <span className="chip chip-accent shrink-0">{statusLabel}</span>
+        <div className="shrink-0 border-b border-border pb-2.5">
+          <RouletteHistory history={history} roundNumber={state?.round_number} />
         </div>
 
         <div className="flex min-h-0 flex-1 items-center justify-center">
@@ -193,13 +167,6 @@ export default function RoulettePage() {
           {betMsg && betMsg !== "ok" && (
             <p className="text-center text-xs text-danger">{betMsg}</p>
           )}
-        </div>
-
-        <div className="shrink-0 space-y-2 border-t border-border pt-2.5">
-          <RouletteHistory history={history} embedded />
-          <p className="text-[11px] tabular-nums text-muted">
-            Раунд #{state?.round_number ?? "—"}
-          </p>
         </div>
       </div>
     </PageShell>
