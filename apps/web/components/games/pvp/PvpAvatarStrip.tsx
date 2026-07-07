@@ -163,26 +163,17 @@ const SLOT_SIZE = 44;
 const SLOT_GAP = 10;
 const STRIP_PADDING_X = 12;
 const CENTER_SLOT_EPSILON = 0.035;
-const HIGHLIGHT_LEAD_SLOTS = 0.34;
-const HIGHLIGHT_TRAIL_SLOTS = 0.58;
+const HIGHLIGHT_RANGE_SLOTS = 1.15;
 
 function getCenteredSlotPosition(offset: number, viewportWidth: number, totalSlots: number): number {
   const centerX = viewportWidth / 2 - offset - STRIP_PADDING_X - SLOT_SIZE / 2;
-  const slot = centerX / (SLOT_SIZE + SLOT_GAP) + HIGHLIGHT_LEAD_SLOTS;
+  const slot = centerX / (SLOT_SIZE + SLOT_GAP);
   return Math.max(0, Math.min(totalSlots - 1, slot));
 }
 
 function getHighlightStrength(index: number, centerSlot: number): number {
   if (centerSlot < 0) return 0;
-  const delta = index - centerSlot;
-
-  if (delta >= 0) {
-    if (delta >= 1.15) return 0;
-    return (1 - delta / 1.15) ** 1.8;
-  }
-
-  const trailingDistance = Math.abs(delta);
-  const trailingRange = 1.15 + HIGHLIGHT_TRAIL_SLOTS;
-  if (trailingDistance >= trailingRange) return 0;
-  return (1 - trailingDistance / trailingRange) ** 2.1;
+  const distance = Math.abs(index - centerSlot);
+  if (distance >= HIGHLIGHT_RANGE_SLOTS) return 0;
+  return (1 - distance / HIGHLIGHT_RANGE_SLOTS) ** 1.8;
 }
