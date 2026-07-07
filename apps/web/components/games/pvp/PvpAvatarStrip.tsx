@@ -35,7 +35,9 @@ export function PvpAvatarStrip({
   const viewportRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
+  const displayedTimeRef = useRef(0);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [timeLeftMs, setTimeLeftMs] = useState(0);
 
   const playerKey = useMemo(
     () => players.map((player) => player.user_id).join(":"),
@@ -71,6 +73,8 @@ export function PvpAvatarStrip({
 
     if (!spinning || !winnerId || !spinAt || !spinEndsAt || players.length === 0 || viewportWidth === 0) {
       strip.style.transform = "translateX(0px)";
+      displayedTimeRef.current = 0;
+      setTimeLeftMs(0);
       return;
     }
 
@@ -90,12 +94,22 @@ export function PvpAvatarStrip({
       const now = Date.now();
       const timeProgress = spinTimeProgress(now, spinAtMs, spinEndsAtMs);
       const offset = spinOffsetAtTime(timeProgress, targetOffset);
+      const revealAtMs = Math.max(spinAtMs, spinEndsAtMs - PVP_REVEAL_DELAY_MS);
+      const nextTimeLeftMs = Math.max(0, revealAtMs - now);
+      const nextDisplayedTime = Math.ceil(nextTimeLeftMs / 100);
       strip.style.transform = `translateX(${offset}px)`;
+
+      if (nextDisplayedTime !== displayedTimeRef.current) {
+        displayedTimeRef.current = nextDisplayedTime;
+        setTimeLeftMs(nextDisplayedTime * 100);
+      }
 
       if (timeProgress < 1) {
         rafRef.current = requestAnimationFrame(frame);
       } else {
         strip.style.transform = `translateX(${targetOffset}px)`;
+        displayedTimeRef.current = 0;
+        setTimeLeftMs(0);
         rafRef.current = null;
       }
     };
@@ -116,17 +130,20 @@ export function PvpAvatarStrip({
 
   return (
     <div className={cn("relative w-full", className)}>
-      <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 text-accent">
+      <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 text-accent drop-shadow-[0_0_14px_color-mix(in_srgb,var(--accent)_55%,transparent)]">
         <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
       </div>
 
       <div
         ref={viewportRef}
         className={cn(
-          "relative mt-4 overflow-hidden rounded-xl bg-surface-raised/80 py-3.5",
+          "relative mt-4 overflow-hidden rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(30,37,58,0.92),rgba(19,24,40,0.96))] py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.28)]",
           dimmed && "opacity-70",
         )}
       >
+        <div className="pointer-events-none absolute inset-y-2 left-1/2 z-10 w-[72px] -translate-x-1/2 rounded-[20px] border border-accent/20 bg-[linear-gradient(180deg,rgba(255,191,120,0.12),rgba(255,191,120,0.04))] shadow-[0_0_30px_rgba(255,184,107,0.12)]" />
+        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-px -translate-x-1/2 bg-[linear-gradient(180deg,transparent,rgba(255,207,143,0.95),transparent)]" />
+
         <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
           {(spinning ? extendedPlayers : players).map((player, index) => {
             const showDivider = index < (spinning ? extendedPlayers.length : players.length) - 1;
@@ -143,13 +160,13 @@ export function PvpAvatarStrip({
         </div>
 
         {spinning && (
-          <div className="pointer-events-none absolute bottom-2 right-3 rounded-full bg-background/55 px-2 py-1 text-[10px] font-medium text-muted">
-            Победитель через {Math.round(PVP_REVEAL_DELAY_MS / 1000)}с
+          <div className="pointer-events-none absolute bottom-2 right-3 rounded-full border border-white/8 bg-background/55 px-2.5 py-1 text-[10px] font-medium tracking-[0.02em] text-muted shadow-[0_8px_20px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+            {timeLeftMs > 0 ? `Финиш через ${(timeLeftMs / 1000).toFixed(1)}с` : "Финиш"}
           </div>
         )}
 
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[var(--surface-raised)] to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[var(--surface-raised)] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-[rgba(19,24,40,0.98)] via-[rgba(19,24,40,0.7)] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-[rgba(19,24,40,0.98)] via-[rgba(19,24,40,0.7)] to-transparent" />
       </div>
     </div>
   );

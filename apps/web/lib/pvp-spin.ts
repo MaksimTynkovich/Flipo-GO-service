@@ -2,9 +2,9 @@ const SLOT_SIZE = 44;
 const SLOT_GAP = 10;
 export const PVP_SLOT_STEP = SLOT_SIZE + SLOT_GAP;
 export const PVP_LAND_CYCLE = 30;
-export const PVP_REVEAL_DELAY_MS = 1000;
+export const PVP_REVEAL_DELAY_MS = 300;
 
-const DECEL_POWER = 5.4;
+const DECEL_POWER = 2.35;
 
 export type SpinOffsets = {
   targetOffset: number;
@@ -21,10 +21,6 @@ export function computeSpinOffsets(
   return { targetOffset };
 }
 
-/**
- * One stable profile for the whole spin:
- * fast start, then continuous smooth deceleration until stop.
- */
 export function spinOffsetAtTime(t: number, targetOffset: number): number {
   const progress = clamp01(t);
   const eased = 1 - (1 - progress) ** DECEL_POWER;
