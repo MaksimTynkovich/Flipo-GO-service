@@ -155,6 +155,20 @@ body {
     border-bottom: 1px solid var(--border);
   }
 
+  .glass {
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+  }
+
+  .glass-inset {
+    background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+  }
+
   .pvp-player-avatar--active {
     opacity: calc(0.52 + var(--hl, 0) * 0.48);
     transform: scale(calc(0.94 + var(--hl, 0) * 0.06));

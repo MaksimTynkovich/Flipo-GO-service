@@ -1,13 +1,8 @@
 "use client";
 
 import { RouletteHistoryEntry } from "@/lib/api";
+import { ROULETTE_COLOR_STYLES } from "@/lib/roulette";
 import { cn } from "@/lib/utils";
-
-const CHIP = {
-  green: "bg-success",
-  red: "bg-danger",
-  black: "bg-surface-raised ring-1 ring-inset ring-white/[0.08]",
-};
 
 const HISTORY_LIMIT = 8;
 
@@ -29,19 +24,22 @@ export function RouletteHistory({ history, roundNumber }: Props) {
         <span className="text-[11px] text-muted">Нет игр</span>
       ) : (
         <div className="flex min-w-0 items-center justify-end gap-1">
-          {recent.map((entry, i) => (
-            <div
-              key={entry.round_number}
-              title={`#${entry.round_number}`}
-              className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white",
-                i === 0 && "ring-1 ring-accent/40",
-                CHIP[entry.color as keyof typeof CHIP] ?? "bg-surface-raised",
-              )}
-            >
-              {entry.number}
-            </div>
-          ))}
+          {recent.map((entry, i) => {
+            const style = ROULETTE_COLOR_STYLES[entry.color as keyof typeof ROULETTE_COLOR_STYLES];
+            return (
+              <div
+                key={entry.round_number}
+                title={`#${entry.round_number}`}
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white/90",
+                  style?.bg ?? "bg-surface-raised",
+                  i === 0 && "ring-1 ring-white/15",
+                )}
+              >
+                {entry.number}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

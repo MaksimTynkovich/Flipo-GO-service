@@ -150,3 +150,46 @@ export function payoutLabel(color: string): string {
       return "";
   }
 }
+
+export function roulettePlayerName(player: {
+  first_name?: string;
+  username?: string;
+}): string {
+  if (player.first_name?.trim()) return player.first_name.trim();
+  if (player.username?.trim()) return `@${player.username.trim()}`;
+  return "Игрок";
+}
+
+/** Классические цвета рулетки — насыщенные, но без неонового перебора */
+export const ROULETTE_WHEEL_COLORS = {
+  red: "#c62828",
+  green: "#2e9b52",
+  black: "#181818",
+} as const;
+
+export const ROULETTE_COLOR_STYLES = {
+  red: {
+    bg: "bg-[#c62828]",
+    bar: "bg-[#c62828]",
+    dot: "bg-[#c62828]",
+    text: "text-danger",
+    label: "Красное",
+    multiplier: "×2",
+  },
+  green: {
+    bg: "bg-[#2e9b52]",
+    bar: "bg-[#2e9b52]",
+    dot: "bg-[#2e9b52]",
+    text: "text-success",
+    label: "Зелёное",
+    multiplier: "×14",
+  },
+  black: {
+    bg: "bg-[#181818] ring-1 ring-inset ring-white/[0.08]",
+    bar: "bg-[#181818]",
+    dot: "bg-[#181818]",
+    text: "text-foreground",
+    label: "Чёрное",
+    multiplier: "×2",
+  },
+} as const;

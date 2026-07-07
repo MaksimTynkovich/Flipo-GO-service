@@ -9,19 +9,15 @@ import {
   ROULETTE_SEGMENTS,
   RouletteRoundState,
   resolveWheelIndex,
+  ROULETTE_WHEEL_COLORS,
   SEGMENT_ANGLE,
   SPIN_DURATION_MS,
   spinTargetRotation,
   WHEEL_ORDER,
 } from "@/lib/roulette";
 
-const SEGMENT_COLORS = {
-  green: "var(--success)",
-  red: "var(--danger)",
-  black: "var(--surface-raised)",
-};
+const SEGMENT_COLORS: Record<"green" | "red" | "black", string> = ROULETTE_WHEEL_COLORS;
 
-/** Короткий догон, только если опоздали с анимацией */
 const CATCHUP_MS = 250;
 
 function animateSpin(
@@ -203,87 +199,86 @@ export function RouletteWheel({ state }: Props) {
         <div
           className="mx-auto h-0 w-0"
           style={{
-            borderLeft: "7px solid transparent",
-            borderRight: "7px solid transparent",
-            borderTop: "12px solid var(--accent)",
-            filter: "drop-shadow(0 2px 6px color-mix(in srgb, var(--accent) 45%, transparent))",
+            borderLeft: "6px solid transparent",
+            borderRight: "6px solid transparent",
+            borderTop: "10px solid rgba(245, 245, 245, 0.7)",
           }}
         />
       </div>
 
-      <div className="relative h-full w-full rounded-full bg-surface p-[3px] shadow-[0_0_0_1px_var(--border),0_12px_40px_color-mix(in_srgb,var(--accent)_12%,transparent)]">
-        <div
-          ref={wheelRef}
-          className="relative h-full w-full overflow-hidden rounded-full will-change-transform"
-          style={{
-            transform: "rotate3d(0, 0, 1, 0deg)",
-            backfaceVisibility: "hidden",
-          }}
-        >
-          <svg viewBox="0 0 220 220" className="h-full w-full">
-            {Array.from({ length: ROULETTE_SEGMENTS }).map((_, i) => {
-              const num = WHEEL_ORDER[i];
-              const color = numberColor(num);
-              const startAngle = (i * SEGMENT_ANGLE - 90) * (Math.PI / 180);
-              const endAngle = ((i + 1) * SEGMENT_ANGLE - 90) * (Math.PI / 180);
-              const x1 = cx + rOuter * Math.cos(startAngle);
-              const y1 = cy + rOuter * Math.sin(startAngle);
-              const x2 = cx + rOuter * Math.cos(endAngle);
-              const y2 = cy + rOuter * Math.sin(endAngle);
-              const ix1 = cx + rInner * Math.cos(startAngle);
-              const iy1 = cy + rInner * Math.sin(startAngle);
-              const ix2 = cx + rInner * Math.cos(endAngle);
-              const iy2 = cy + rInner * Math.sin(endAngle);
-              const largeArc = SEGMENT_ANGLE > 180 ? 1 : 0;
+      <div className="glass relative h-full w-full rounded-full p-[3px] shadow-[0_8px_32px_rgba(0,0,0,0.18)]">
+        <div className="relative h-full w-full rounded-full bg-surface/40 p-[2px]">
+          <div
+            ref={wheelRef}
+            className="relative h-full w-full overflow-hidden rounded-full will-change-transform"
+            style={{
+              transform: "rotate3d(0, 0, 1, 0deg)",
+              backfaceVisibility: "hidden",
+            }}
+          >
+            <svg viewBox="0 0 220 220" className="h-full w-full">
+              {Array.from({ length: ROULETTE_SEGMENTS }).map((_, i) => {
+                const num = WHEEL_ORDER[i];
+                const color = numberColor(num);
+                const startAngle = (i * SEGMENT_ANGLE - 90) * (Math.PI / 180);
+                const endAngle = ((i + 1) * SEGMENT_ANGLE - 90) * (Math.PI / 180);
+                const x1 = cx + rOuter * Math.cos(startAngle);
+                const y1 = cy + rOuter * Math.sin(startAngle);
+                const x2 = cx + rOuter * Math.cos(endAngle);
+                const y2 = cy + rOuter * Math.sin(endAngle);
+                const ix1 = cx + rInner * Math.cos(startAngle);
+                const iy1 = cy + rInner * Math.sin(startAngle);
+                const ix2 = cx + rInner * Math.cos(endAngle);
+                const iy2 = cy + rInner * Math.sin(endAngle);
+                const largeArc = SEGMENT_ANGLE > 180 ? 1 : 0;
 
-              const midAngle = ((i + 0.5) * SEGMENT_ANGLE - 90) * (Math.PI / 180);
-              const tx = cx + 76 * Math.cos(midAngle);
-              const ty = cy + 76 * Math.sin(midAngle);
-              const textRotate = (i + 0.5) * SEGMENT_ANGLE;
+                const midAngle = ((i + 0.5) * SEGMENT_ANGLE - 90) * (Math.PI / 180);
+                const tx = cx + 76 * Math.cos(midAngle);
+                const ty = cy + 76 * Math.sin(midAngle);
+                const textRotate = (i + 0.5) * SEGMENT_ANGLE;
 
-              return (
-                <g key={`${num}-${i}`}>
-                  <path
-                    d={`M ${ix1} ${iy1} L ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${rInner} ${rInner} 0 ${largeArc} 0 ${ix1} ${iy1} Z`}
-                    fill={SEGMENT_COLORS[color]}
-                    stroke="var(--background)"
-                    strokeWidth="1"
-                  />
-                  <text
-                    x={tx}
-                    y={ty}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fill="#ffffff"
-                    fontSize="11"
-                    fontWeight="700"
-                    fontFamily="system-ui, -apple-system, sans-serif"
-                    transform={`rotate(${textRotate}, ${tx}, ${ty})`}
-                  >
-                    {num}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+                return (
+                  <g key={`${num}-${i}`}>
+                    <path
+                      d={`M ${ix1} ${iy1} L ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${rInner} ${rInner} 0 ${largeArc} 0 ${ix1} ${iy1} Z`}
+                      fill={SEGMENT_COLORS[color]}
+                      stroke="var(--background)"
+                      strokeWidth="0.75"
+                    />
+                    <text
+                      x={tx}
+                      y={ty}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="rgba(255,255,255,0.95)"
+                      fontSize="11"
+                      fontWeight="700"
+                      fontFamily="system-ui, -apple-system, sans-serif"
+                      transform={`rotate(${textRotate}, ${tx}, ${ty})`}
+                    >
+                      {num}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
         </div>
       </div>
 
-      <div
-        className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[47%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-white shadow-[0_0_0_3px_var(--surface),0_0_24px_color-mix(in_srgb,var(--accent)_35%,transparent)]"
-      >
+      <div className="glass-inset pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[44%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-foreground shadow-[0_0_0_3px_color-mix(in_srgb,var(--surface)_90%,transparent)]">
         {phase === "betting" && (
-          <span className="text-[1.75rem] font-bold tabular-nums leading-none">
+          <span className="text-[1.65rem] font-semibold tabular-nums leading-none tracking-tight">
             {countdown.toString().padStart(2, "0")}
           </span>
         )}
         {phase === "spinning" && (
-          <span className="px-1 text-center text-[11px] font-bold uppercase leading-tight tracking-wide">
-            Розыгрыш
+          <span className="px-1 text-center text-[10px] font-medium uppercase tracking-wider text-muted">
+            Крутим
           </span>
         )}
         {phase === "result" && state?.result_number != null && (
-          <span className="text-2xl font-bold tabular-nums leading-none">
+          <span className="text-[1.5rem] font-semibold tabular-nums leading-none">
             {state.result_number}
           </span>
         )}

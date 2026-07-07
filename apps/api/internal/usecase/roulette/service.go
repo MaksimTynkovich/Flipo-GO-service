@@ -26,6 +26,35 @@ type RoundState struct {
 	ServerSeed     string    `json:"server_seed,omitempty"`
 }
 
+type BetView struct {
+	ID            uuid.UUID `json:"id"`
+	UserID        uuid.UUID `json:"user_id"`
+	Username      string    `json:"username"`
+	FirstName     string    `json:"first_name"`
+	PhotoURL      string    `json:"photo_url"`
+	Color         string    `json:"color"`
+	AmountNanoton int64     `json:"amount_nanoton"`
+}
+
+type ColorTotals struct {
+	Red   int64 `json:"red"`
+	Green int64 `json:"green"`
+	Black int64 `json:"black"`
+}
+
+type ColorCounts struct {
+	Red   int `json:"red"`
+	Green int `json:"green"`
+	Black int `json:"black"`
+}
+
+type RoundBetsState struct {
+	RoundID uuid.UUID   `json:"round_id"`
+	Bets    []BetView   `json:"bets"`
+	Totals  ColorTotals `json:"totals"`
+	Counts  ColorCounts `json:"counts"`
+}
+
 type Service struct {
 	games    domain.GameRepository
 	balance  *balance.Service
@@ -87,6 +116,7 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, 
 	if err := s.games.CreateBet(ctx, bet); err != nil {
 		return nil, err
 	}
+	_ = s.PublishBets(ctx, state.RoundID)
 	return bet, nil
 }
 
@@ -134,6 +164,88 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 	return nil
 }
 
+func (s *Service) GetCurrentRoundBets(ctx context.Context) (*RoundBetsState, error) {
+	state, err := s.CurrentState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return emptyRoundBets(uuid.Nil), nil
+	}
+	return s.buildRoundBets(ctx, state.RoundID)
+}
+
+func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*RoundBetsState, error) {
+	bets, err := s.games.ListPendingBetsByRoundWithUser(ctx, roundID)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]BetView, 0, len(bets))
+	totals := ColorTotals{}
+	counts := ColorCounts{}
+
+	for _, bet := range bets {
+		var sel map[string]string
+		_ = json.Unmarshal(bet.Selection, &sel)
+		color := sel["color"]
+
+		view := BetView{
+			ID:            bet.ID,
+			UserID:        bet.UserID,
+			Color:         color,
+			AmountNanoton: bet.AmountNanoton,
+		}
+		if bet.User.ID != uuid.Nil {
+			view.Username = bet.User.Username
+			view.FirstName = bet.User.FirstName
+			view.PhotoURL = bet.User.PhotoURL
+		}
+
+		views = append(views, view)
+		switch color {
+		case "red":
+			totals.Red += bet.AmountNanoton
+			counts.Red++
+		case "green":
+			totals.Green += bet.AmountNanoton
+			counts.Green++
+		case "black":
+			totals.Black += bet.AmountNanoton
+			counts.Black++
+		}
+	}
+
+	return &RoundBetsState{
+		RoundID: roundID,
+		Bets:    views,
+		Totals:  totals,
+		Counts:  counts,
+	}, nil
+}
+
+func emptyRoundBets(roundID uuid.UUID) *RoundBetsState {
+	return &RoundBetsState{
+		RoundID: roundID,
+		Bets:    []BetView{},
+	}
+}
+
+func (s *Service) PublishBets(ctx context.Context, roundID uuid.UUID) error {
+	if s.cache == nil {
+		return nil
+	}
+	state, err := s.buildRoundBets(ctx, roundID)
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	return s.cache.Publish(ctx, "pubsub:game:roulette:bets", data)
+}
+
 func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 	data, err := json.Marshal(state)
 	if err != nil {
@@ -172,6 +284,7 @@ func (s *Service) CreateRound(ctx context.Context, serverSeed, serverSeedHash st
 	if err := s.PublishState(ctx, state); err != nil {
 		return nil, err
 	}
+	_ = s.PublishBets(ctx, round.ID)
 	return round, nil
 }
 

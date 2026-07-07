@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RouletteHistory } from "@/components/games/RouletteHistory";
+import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
 import { connectGameWS } from "@/lib/ws";
 import {
+  getRouletteBets,
   getRouletteHistory,
   getRouletteState,
   placeRouletteBet,
   RouletteHistoryEntry,
+  RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
-import { RouletteRoundState } from "@/lib/roulette";
+import { RouletteRoundState, ROULETTE_COLOR_STYLES } from "@/lib/roulette";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +23,7 @@ const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 export default function RoulettePage() {
   const [state, setState] = useState<RouletteRoundState | null>(null);
   const [history, setHistory] = useState<RouletteHistoryEntry[]>([]);
+  const [roundBets, setRoundBets] = useState<RouletteRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
   const [betting, setBetting] = useState(false);
   const [betMsg, setBetMsg] = useState<string | null>(null);
@@ -33,14 +37,28 @@ export default function RoulettePage() {
     }
   }, []);
 
+  const loadRoundBets = useCallback(async () => {
+    try {
+      setRoundBets(await getRouletteBets());
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     getRouletteState().then((s) => setState(s as RouletteRoundState)).catch(() => {});
     loadHistory();
+    loadRoundBets();
     const disconnect = connectGameWS("roulette", (msg) => {
       if (msg.event === "tick") setState(msg.payload as RouletteRoundState);
+      if (msg.event === "bets") setRoundBets(msg.payload as RouletteRoundBetsData);
     });
     return disconnect;
-  }, [loadHistory]);
+  }, [loadHistory, loadRoundBets]);
+
+  useEffect(() => {
+    loadRoundBets();
+  }, [state?.round_id, loadRoundBets]);
 
   useEffect(() => {
     if (state?.phase === "result" && lastPhase.current !== "result") {
@@ -63,6 +81,7 @@ export default function RoulettePage() {
     try {
       await placeRouletteBet(color, nanotons, crypto.randomUUID());
       setBetMsg("ok");
+      loadRoundBets();
     } catch (e) {
       setBetMsg(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -81,7 +100,7 @@ export default function RoulettePage() {
           <RouletteWheel state={state} />
         </div>
 
-        <div className="panel shrink-0 space-y-2.5">
+        <div className="panel shrink-0 space-y-3">
           <p className="section-label">Ставка</p>
 
           <div className="input-inset py-2.5">
@@ -95,7 +114,7 @@ export default function RoulettePage() {
               className="w-full bg-transparent text-center text-lg font-bold tabular-nums text-foreground outline-none disabled:opacity-40"
               placeholder="0.00"
             />
-            <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
+            <TonIcon variant="brand" size="lg" title="TON" />
           </div>
 
           <div className="flex gap-2">
@@ -122,13 +141,13 @@ export default function RoulettePage() {
               disabled={!canBet}
               onClick={() => bet("red")}
               className={cn(
-                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.97]",
-                "bg-danger",
+                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
+                ROULETTE_COLOR_STYLES.red.bg,
                 !canBet && "opacity-40",
               )}
             >
-              <span className="text-sm font-bold leading-none">×2</span>
-              <span className="text-[9px] font-medium uppercase tracking-wide opacity-80">
+              <span className="text-sm font-semibold leading-none">×2</span>
+              <span className="text-[9px] font-medium uppercase tracking-wide opacity-75">
                 Красное
               </span>
             </button>
@@ -137,13 +156,13 @@ export default function RoulettePage() {
               disabled={!canBet}
               onClick={() => bet("green")}
               className={cn(
-                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.97]",
-                "bg-success",
+                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
+                ROULETTE_COLOR_STYLES.green.bg,
                 !canBet && "opacity-40",
               )}
             >
-              <span className="text-sm font-bold leading-none">×14</span>
-              <span className="text-[9px] font-medium uppercase tracking-wide opacity-80">
+              <span className="text-sm font-semibold leading-none">×14</span>
+              <span className="text-[9px] font-medium uppercase tracking-wide opacity-75">
                 Зелёное
               </span>
             </button>
@@ -152,13 +171,13 @@ export default function RoulettePage() {
               disabled={!canBet}
               onClick={() => bet("black")}
               className={cn(
-                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/[0.08] text-white transition-all active:scale-[0.97]",
-                "bg-surface-raised",
+                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
+                ROULETTE_COLOR_STYLES.black.bg,
                 !canBet && "opacity-40",
               )}
             >
-              <span className="text-sm font-bold leading-none">×2</span>
-              <span className="text-[9px] font-medium uppercase tracking-wide opacity-80">
+              <span className="text-sm font-semibold leading-none">×2</span>
+              <span className="text-[9px] font-medium uppercase tracking-wide opacity-75">
                 Чёрное
               </span>
             </button>
@@ -167,6 +186,10 @@ export default function RoulettePage() {
           {betMsg && betMsg !== "ok" && (
             <p className="text-center text-xs text-danger">{betMsg}</p>
           )}
+
+          <div className="hairline-top pt-3">
+            <RouletteRoundBets data={roundBets} />
+          </div>
         </div>
       </div>
     </PageShell>

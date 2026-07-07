@@ -9,13 +9,31 @@ const CIRCLE_PATH =
 const SYMBOL_PATH =
   "M20.199 18.4844H35.9034C36.459 18.4844 37.0142 18.566 37.5944 18.8365C38.2899 19.1606 38.6587 19.6717 38.9171 20.0496C38.9372 20.079 38.956 20.1093 38.9734 20.1403C39.2772 20.6811 39.4338 21.265 39.4338 21.8931C39.4338 22.4899 39.2918 23.1401 38.9734 23.7068C38.9704 23.7122 38.9673 23.7176 38.9642 23.723L29.0424 40.7665C28.8236 41.1423 28.4209 41.3729 27.986 41.3714C27.5511 41.3698 27.15 41.1364 26.9339 40.759L17.1943 23.7518C17.1915 23.7473 17.1887 23.7426 17.1859 23.738C16.963 23.3707 16.6183 22.8027 16.558 22.0696C16.5026 21.3956 16.6541 20.7202 16.9928 20.1346C17.3315 19.5489 17.8414 19.0807 18.4547 18.7941C19.1123 18.4868 19.7787 18.4844 20.199 18.4844ZM26.7729 20.9192H20.199C19.7671 20.9192 19.6013 20.9458 19.4854 21C19.3251 21.0748 19.1905 21.1978 19.1005 21.3535C19.0105 21.5092 18.9698 21.6896 18.9846 21.8701C18.9931 21.9737 19.0353 22.0921 19.2842 22.5026C19.2894 22.5112 19.2945 22.5199 19.2995 22.5286L26.7729 35.5785V20.9192ZM29.2077 20.9192V35.643L36.8542 22.5079C36.9405 22.3511 36.999 22.1245 36.999 21.8931C36.999 21.7054 36.9601 21.5424 36.8731 21.3743C36.7818 21.2431 36.7262 21.1736 36.6797 21.126C36.6398 21.0853 36.6091 21.0635 36.5657 21.0433C36.3849 20.959 36.1999 20.9192 35.9034 20.9192H29.2077Z";
 
+export const TON_ICON_SIZES = {
+  xs: "h-3 w-3",
+  sm: "h-3.5 w-3.5",
+  md: "h-4 w-4",
+  lg: "h-5 w-5",
+  xl: "h-6 w-6",
+} as const;
+
+export type TonIconSize = keyof typeof TON_ICON_SIZES;
+
 type TonIconProps = {
   variant?: "brand" | "mono";
+  size?: TonIconSize;
   className?: string;
   title?: string;
 };
 
-export function TonIcon({ variant = "mono", className, title = "TON" }: TonIconProps) {
+export function TonIcon({
+  variant = "mono",
+  size,
+  className,
+  title = "TON",
+}: TonIconProps) {
+  const sizeClass = size ? TON_ICON_SIZES[size] : undefined;
+
   if (variant === "brand") {
     return (
       <svg
@@ -24,7 +42,7 @@ export function TonIcon({ variant = "mono", className, title = "TON" }: TonIconP
         xmlns="http://www.w3.org/2000/svg"
         role="img"
         aria-label={title}
-        className={cn("shrink-0", className)}
+        className={cn("shrink-0 drop-shadow-none", sizeClass, className)}
       >
         <path d={CIRCLE_PATH} fill="#0098EA" />
         <path fillRule="evenodd" clipRule="evenodd" d={SYMBOL_PATH} fill="white" />
@@ -38,7 +56,7 @@ export function TonIcon({ variant = "mono", className, title = "TON" }: TonIconP
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
-      className={cn("shrink-0", className)}
+      className={cn("shrink-0", sizeClass, className)}
     >
       <path fillRule="evenodd" clipRule="evenodd" d={SYMBOL_PATH} fill="currentColor" />
     </svg>
@@ -48,15 +66,38 @@ export function TonIcon({ variant = "mono", className, title = "TON" }: TonIconP
 type TonAmountProps = {
   amount: ReactNode;
   variant?: "brand" | "mono";
+  iconSize?: TonIconSize;
+  iconBadge?: boolean;
   className?: string;
   iconClassName?: string;
 };
 
-export function TonAmount({ amount, variant = "mono", className, iconClassName }: TonAmountProps) {
+export function TonAmount({
+  amount,
+  variant = "brand",
+  iconSize = "md",
+  iconBadge = false,
+  className,
+  iconClassName,
+}: TonAmountProps) {
+  const icon = (
+    <TonIcon
+      variant={variant}
+      size={iconSize}
+      className={cn(!iconBadge && !iconSize && "h-[1.05em] w-[1.05em]", iconClassName)}
+    />
+  );
+
   return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
+    <span className={cn("inline-flex items-center gap-1.5 tabular-nums", className)}>
       {amount}
-      <TonIcon variant={variant} className={cn("h-[1em] w-[1em]", iconClassName)} />
+      {iconBadge ? (
+        <span className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#0098EA]/12 p-0.5 ring-1 ring-inset ring-[#0098EA]/18">
+          {icon}
+        </span>
+      ) : (
+        icon
+      )}
     </span>
   );
 }

@@ -136,6 +136,16 @@ func (r *GameRepo) ListPendingBetsByRound(ctx context.Context, roundID uuid.UUID
 	return bets, err
 }
 
+func (r *GameRepo) ListPendingBetsByRoundWithUser(ctx context.Context, roundID uuid.UUID) ([]domain.GameBet, error) {
+	var bets []domain.GameBet
+	err := r.db.WithContext(ctx).
+		Preload("User").
+		Where("round_id = ? AND status = ?", roundID, domain.BetPending).
+		Order("created_at ASC").
+		Find(&bets).Error
+	return bets, err
+}
+
 func (r *GameRepo) FindPendingBetByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) (*domain.GameBet, error) {
 	var bet domain.GameBet
 	result := r.db.WithContext(ctx).

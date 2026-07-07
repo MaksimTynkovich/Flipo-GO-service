@@ -86,6 +86,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.GET("/games/roulette/current", deps.GameHandler.RouletteCurrent)
 			authed.GET("/games/roulette/history", deps.GameHandler.RouletteHistory)
+			authed.GET("/games/roulette/bets", deps.GameHandler.RouletteBets)
 			authed.POST("/games/roulette/bet", deps.GameHandler.RouletteBet)
 			authed.GET("/games/crash/current", deps.GameHandler.CrashCurrent)
 			authed.GET("/games/crash/history", deps.GameHandler.CrashHistory)

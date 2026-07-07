@@ -195,6 +195,33 @@ export async function getRouletteHistory() {
   return api<RouletteHistoryEntry[]>("/api/v1/games/roulette/history");
 }
 
+export type RouletteBetEntry = {
+  id: string;
+  user_id: string;
+  username: string;
+  first_name: string;
+  photo_url?: string;
+  color: "red" | "green" | "black" | string;
+  amount_nanoton: number;
+};
+
+export type RouletteColorTotals = {
+  red: number;
+  green: number;
+  black: number;
+};
+
+export type RouletteRoundBets = {
+  round_id: string;
+  bets: RouletteBetEntry[];
+  totals: RouletteColorTotals;
+  counts: RouletteColorTotals;
+};
+
+export async function getRouletteBets() {
+  return api<RouletteRoundBets>("/api/v1/games/roulette/bets");
+}
+
 export async function placeCrashBet(amount: number, key: string) {
   return api("/api/v1/games/crash/bet", {
     method: "POST",
