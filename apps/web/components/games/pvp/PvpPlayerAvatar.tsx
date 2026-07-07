@@ -9,7 +9,7 @@ type Props = {
   player: PvpPlayer;
   size?: number;
   className?: string;
-  highlight?: "winner" | "none";
+  highlight?: "winner" | "active" | "none";
 };
 
 export function PvpPlayerAvatar({ player, size = 40, className, highlight = "none" }: Props) {
@@ -20,6 +20,8 @@ export function PvpPlayerAvatar({ player, size = 40, className, highlight = "non
     <span
       className={cn(
         "relative shrink-0 overflow-hidden rounded-full bg-surface-raised",
+        highlight === "active" &&
+          "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_16%,transparent),0_0_28px_color-mix(in_srgb,var(--accent)_20%,transparent)]",
         highlight === "winner" &&
           "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_28%,transparent),0_0_24px_color-mix(in_srgb,var(--accent)_18%,transparent)]",
         className,

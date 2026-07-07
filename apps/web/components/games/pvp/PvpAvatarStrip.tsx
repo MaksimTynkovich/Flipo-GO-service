@@ -3,13 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PvpPlayer } from "@/lib/pvp";
 import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
-import {
-  computeSpinOffsets,
-  PVP_LAND_CYCLE,
-  PVP_REVEAL_DELAY_MS,
-  spinOffsetAtTime,
-  spinTimeProgress,
-} from "@/lib/pvp-spin";
+import { computeSpinOffsets, PVP_LAND_CYCLE, spinOffsetAtTime, spinTimeProgress } from "@/lib/pvp-spin";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 
@@ -35,7 +29,9 @@ export function PvpAvatarStrip({
   const viewportRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
+  const activeIndexRef = useRef(-1);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   const playerKey = useMemo(
     () => players.map((player) => player.user_id).join(":"),
@@ -71,6 +67,8 @@ export function PvpAvatarStrip({
 
     if (!spinning || !winnerId || !spinAt || !spinEndsAt || players.length === 0 || viewportWidth === 0) {
       strip.style.transform = "translateX(0px)";
+      activeIndexRef.current = -1;
+      setActiveIndex(-1);
       return;
     }
 
@@ -92,10 +90,18 @@ export function PvpAvatarStrip({
       const offset = spinOffsetAtTime(timeProgress, targetOffset);
       strip.style.transform = `translateX(${offset}px)`;
 
+      const centeredIndex = getCenteredSlotIndex(offset, viewportWidth, extendedPlayers.length);
+      if (centeredIndex !== activeIndexRef.current) {
+        activeIndexRef.current = centeredIndex;
+        setActiveIndex(centeredIndex);
+      }
+
       if (timeProgress < 1) {
         rafRef.current = requestAnimationFrame(frame);
       } else {
         strip.style.transform = `translateX(${targetOffset}px)`;
+        activeIndexRef.current = winnerIndex + players.length * PVP_LAND_CYCLE;
+        setActiveIndex(activeIndexRef.current);
         rafRef.current = null;
       }
     };
@@ -108,7 +114,7 @@ export function PvpAvatarStrip({
         rafRef.current = null;
       }
     };
-  }, [spinning, winnerId, spinAt, spinEndsAt, viewportWidth, playerKey, players.length]);
+  }, [spinning, winnerId, spinAt, spinEndsAt, viewportWidth, playerKey, players.length, extendedPlayers.length]);
 
   if (players.length === 0) {
     return null;
@@ -127,16 +133,18 @@ export function PvpAvatarStrip({
           dimmed && "opacity-70",
         )}
       >
-        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-px -translate-x-1/2 bg-[linear-gradient(180deg,transparent,rgba(255,207,143,0.95),transparent)]" />
-
         <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
           {(spinning ? extendedPlayers : players).map((player, index) => {
-            const showDivider = index < (spinning ? extendedPlayers.length : players.length) - 1;
-
+            const isActive = spinning && index === activeIndex;
             return (
-              <div key={`${player.user_id}-${index}`} className="relative flex h-[56px] w-[56px] items-center justify-center">
-                <PvpPlayerAvatar player={player} size={SLOT_SIZE} />
-                {showDivider && <span className="pointer-events-none absolute -right-[5px] top-1/2 h-8 w-px -translate-y-1/2 bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)]" />}
+              <div
+                key={`${player.user_id}-${index}`}
+                className={cn(
+                  "relative flex h-[56px] w-[56px] items-center justify-center transition-transform duration-150",
+                  isActive && "scale-[1.08]",
+                )}
+              >
+                <PvpPlayerAvatar player={player} size={SLOT_SIZE} highlight={isActive ? "active" : "none"} />
               </div>
             );
           })}
@@ -151,3 +159,10 @@ export function PvpAvatarStrip({
 
 const SLOT_SIZE = 44;
 const SLOT_GAP = 10;
+const STRIP_PADDING_X = 12;
+
+function getCenteredSlotIndex(offset: number, viewportWidth: number, totalSlots: number): number {
+  const centerX = viewportWidth / 2 - offset - STRIP_PADDING_X - SLOT_SIZE / 2;
+  const index = Math.round(centerX / (SLOT_SIZE + SLOT_GAP));
+  return Math.max(0, Math.min(totalSlots - 1, index));
+}
