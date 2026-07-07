@@ -15,6 +15,8 @@ import { RouletteRoundState, isLandingPause } from "@/lib/roulette";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 
+const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
+
 const PHASE_LABEL: Record<string, string> = {
   betting: "Приём ставок",
   spinning: "Крутим колесо",
@@ -61,7 +63,6 @@ export default function RoulettePage() {
     lastPhase.current = state?.phase ?? null;
   }, [state?.phase, loadHistory]);
 
-  // Обновляем подпись «Почти…» после остановки колеса
   useEffect(() => {
     if (!state || state.phase !== "spinning") return;
     const endRaw = state.spin_ends_at || state.ends_at;
@@ -96,24 +97,20 @@ export default function RoulettePage() {
 
   return (
     <PageShell flush>
-      <div className="space-y-5">
-        <div className="flex items-end justify-between">
-          <p className="text-sm text-muted">Раунд #{state?.round_number ?? "—"}</p>
-          <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-            {statusLabel}
-          </span>
+      <div className="flex min-h-[calc(100dvh-var(--app-header-offset)-var(--app-tabbar-offset))] flex-col gap-2.5">
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <p className="text-xs text-muted">Красное / чёрное ×2 · зелёное ×14</p>
+          <span className="chip chip-accent shrink-0">{statusLabel}</span>
         </div>
 
-        <RouletteHistory history={history} />
-
-        <div className="flex justify-center py-1">
+        <div className="flex min-h-0 flex-1 items-center justify-center">
           <RouletteWheel state={state} />
         </div>
 
-        <div className="space-y-3">
+        <div className="panel shrink-0 space-y-2.5">
           <p className="section-label">Ставка</p>
 
-          <div className="input-inset">
+          <div className="input-inset py-2.5">
             <input
               type="number"
               step="0.01"
@@ -121,25 +118,43 @@ export default function RoulettePage() {
               disabled={!canBet}
               value={amountTon}
               onChange={(e) => setAmountTon(e.target.value)}
-              className="w-full bg-transparent text-center text-base font-semibold tabular-nums text-foreground outline-none disabled:opacity-40"
+              className="w-full bg-transparent text-center text-lg font-bold tabular-nums text-foreground outline-none disabled:opacity-40"
               placeholder="0.00"
             />
             <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
           </div>
 
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="flex gap-2">
+            {QUICK_AMOUNTS.map((v) => (
+              <button
+                key={v}
+                type="button"
+                disabled={!canBet}
+                onClick={() => setAmountTon(v)}
+                className={cn(
+                  "quick-amount",
+                  amountTon === v && "quick-amount-active",
+                  !canBet && "opacity-40",
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               disabled={!canBet}
               onClick={() => bet("red")}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-xl py-3.5 text-white transition-all active:scale-[0.97]",
+                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.97]",
                 "bg-danger",
                 !canBet && "opacity-40",
               )}
             >
-              <span className="text-base font-bold">×2</span>
-              <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+              <span className="text-sm font-bold leading-none">×2</span>
+              <span className="text-[9px] font-medium uppercase tracking-wide opacity-80">
                 Красное
               </span>
             </button>
@@ -148,13 +163,13 @@ export default function RoulettePage() {
               disabled={!canBet}
               onClick={() => bet("green")}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-xl py-3.5 text-white transition-all active:scale-[0.97]",
+                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.97]",
                 "bg-success",
                 !canBet && "opacity-40",
               )}
             >
-              <span className="text-base font-bold">×14</span>
-              <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+              <span className="text-sm font-bold leading-none">×14</span>
+              <span className="text-[9px] font-medium uppercase tracking-wide opacity-80">
                 Зелёное
               </span>
             </button>
@@ -163,13 +178,13 @@ export default function RoulettePage() {
               disabled={!canBet}
               onClick={() => bet("black")}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-xl py-3.5 text-white transition-all active:scale-[0.97]",
-                "bg-[#3d4450]",
+                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/[0.08] text-white transition-all active:scale-[0.97]",
+                "bg-surface-raised",
                 !canBet && "opacity-40",
               )}
             >
-              <span className="text-base font-bold">×2</span>
-              <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+              <span className="text-sm font-bold leading-none">×2</span>
+              <span className="text-[9px] font-medium uppercase tracking-wide opacity-80">
                 Чёрное
               </span>
             </button>
@@ -178,6 +193,13 @@ export default function RoulettePage() {
           {betMsg && betMsg !== "ok" && (
             <p className="text-center text-xs text-danger">{betMsg}</p>
           )}
+        </div>
+
+        <div className="shrink-0 space-y-2 border-t border-border pt-2.5">
+          <RouletteHistory history={history} embedded />
+          <p className="text-[11px] tabular-nums text-muted">
+            Раунд #{state?.round_number ?? "—"}
+          </p>
         </div>
       </div>
     </PageShell>

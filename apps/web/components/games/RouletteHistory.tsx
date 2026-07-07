@@ -5,20 +5,21 @@ import { RouletteHistoryEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const CHIP = {
-  green: "bg-[#27ae60]",
-  red: "bg-[#c0392b]",
-  black: "bg-[#3d4450]",
+  green: "bg-success",
+  red: "bg-danger",
+  black: "bg-surface-raised ring-1 ring-inset ring-white/[0.08]",
 };
 
-const CHIP_W = 26;
-const CHIP_GAP = 5;
-const ELLIPSIS_W = 16;
+const CHIP_W = 24;
+const CHIP_GAP = 4;
+const ELLIPSIS_W = 14;
 
 type Props = {
   history: RouletteHistoryEntry[];
+  embedded?: boolean;
 };
 
-export function RouletteHistory({ history }: Props) {
+export function RouletteHistory({ history, embedded }: Props) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(history.length);
 
@@ -41,31 +42,30 @@ export function RouletteHistory({ history }: Props) {
   }, [history.length]);
 
   return (
-    <div className="space-y-2">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-        Последние игры
-      </p>
+    <div className={cn(!embedded && "space-y-2")}>
+      <p className={cn("section-label", embedded && "text-[10px]")}>Последние игры</p>
       {history.length === 0 ? (
-        <div className="flex h-7 items-center">
-          <span className="text-xs text-zinc-600">Пока нет результатов</span>
+        <div className="flex h-6 items-center">
+          <span className="text-xs text-muted">Пока нет результатов</span>
         </div>
       ) : (
-        <div ref={rowRef} className="flex h-7 w-full items-center gap-[5px] overflow-hidden">
-          {history.slice(0, visible).map((entry) => (
+        <div ref={rowRef} className="flex h-6 w-full items-center gap-1 overflow-hidden">
+          {history.slice(0, visible).map((entry, i) => (
             <div
               key={entry.round_number}
               title={`#${entry.round_number}`}
               style={{ width: CHIP_W, minWidth: CHIP_W }}
               className={cn(
-                "flex h-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white",
-                CHIP[entry.color as keyof typeof CHIP] ?? "bg-zinc-700",
+                "flex h-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white",
+                i === 0 && "ring-1 ring-accent/40",
+                CHIP[entry.color as keyof typeof CHIP] ?? "bg-surface-raised",
               )}
             >
               {entry.number}
             </div>
           ))}
           {visible < history.length && (
-            <span className="shrink-0 text-sm text-zinc-500">…</span>
+            <span className="shrink-0 text-xs text-muted">…</span>
           )}
         </div>
       )}

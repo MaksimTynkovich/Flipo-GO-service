@@ -15,14 +15,12 @@ import {
   WHEEL_ORDER,
 } from "@/lib/roulette";
 
-const COLORS = {
-  green: "#27ae60",
-  red: "#c0392b",
-  black: "#3d4450",
+const SEGMENT_COLORS = {
+  green: "var(--success)",
+  red: "var(--danger)",
+  black: "var(--surface-raised)",
 };
 
-const YELLOW = "#f1c40f";
-const WHEEL_SIZE = 340;
 /** Короткий догон, только если опоздали с анимацией */
 const CATCHUP_MS = 250;
 
@@ -198,25 +196,22 @@ export function RouletteWheel({ state }: Props) {
   const cy = 110;
   const rOuter = 100;
   const rInner = 52;
-  const hubSize = rInner * 2 * (WHEEL_SIZE / 220);
 
   return (
-    <div
-      className="relative mx-auto w-full max-w-[340px]"
-      style={{ width: WHEEL_SIZE, height: WHEEL_SIZE }}
-    >
-      <div className="absolute left-1/2 top-[-1px] z-30 -translate-x-1/2">
+    <div className="relative mx-auto aspect-square w-full max-w-[min(68vw,252px)]">
+      <div className="absolute left-1/2 top-0 z-30 -translate-x-1/2">
         <div
           className="mx-auto h-0 w-0"
           style={{
-            borderLeft: "8px solid transparent",
-            borderRight: "8px solid transparent",
-            borderTop: `13px solid ${YELLOW}`,
+            borderLeft: "7px solid transparent",
+            borderRight: "7px solid transparent",
+            borderTop: "12px solid var(--accent)",
+            filter: "drop-shadow(0 2px 6px color-mix(in srgb, var(--accent) 45%, transparent))",
           }}
         />
       </div>
 
-      <div className="relative h-full w-full rounded-full border-[3px] border-[#1a1f26]">
+      <div className="relative h-full w-full rounded-full bg-surface p-[3px] shadow-[0_0_0_1px_var(--border),0_12px_40px_color-mix(in_srgb,var(--accent)_12%,transparent)]">
         <div
           ref={wheelRef}
           className="relative h-full w-full overflow-hidden rounded-full will-change-transform"
@@ -250,8 +245,8 @@ export function RouletteWheel({ state }: Props) {
                 <g key={`${num}-${i}`}>
                   <path
                     d={`M ${ix1} ${iy1} L ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${rInner} ${rInner} 0 ${largeArc} 0 ${ix1} ${iy1} Z`}
-                    fill={COLORS[color]}
-                    stroke="#1a1f26"
+                    fill={SEGMENT_COLORS[color]}
+                    stroke="var(--background)"
                     strokeWidth="1"
                   />
                   <text
@@ -260,7 +255,7 @@ export function RouletteWheel({ state }: Props) {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     fill="#ffffff"
-                    fontSize="12"
+                    fontSize="11"
                     fontWeight="700"
                     fontFamily="system-ui, -apple-system, sans-serif"
                     transform={`rotate(${textRotate}, ${tx}, ${ty})`}
@@ -275,28 +270,20 @@ export function RouletteWheel({ state }: Props) {
       </div>
 
       <div
-        className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
-        style={{
-          width: hubSize,
-          height: hubSize,
-          background: YELLOW,
-        }}
+        className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[47%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-white shadow-[0_0_0_3px_var(--surface),0_0_24px_color-mix(in_srgb,var(--accent)_35%,transparent)]"
       >
         {phase === "betting" && (
-          <span
-            className="font-bold tabular-nums leading-none text-[#1a1f26]"
-            style={{ fontSize: "2.25rem" }}
-          >
+          <span className="text-[1.75rem] font-bold tabular-nums leading-none">
             {countdown.toString().padStart(2, "0")}
           </span>
         )}
         {phase === "spinning" && (
-          <span className="px-2 text-center text-[13px] font-bold uppercase leading-tight tracking-wide text-[#1a1f26]">
+          <span className="px-1 text-center text-[11px] font-bold uppercase leading-tight tracking-wide">
             Розыгрыш
           </span>
         )}
         {phase === "result" && state?.result_number != null && (
-          <span className="text-3xl font-bold tabular-nums leading-none text-[#1a1f26]">
+          <span className="text-2xl font-bold tabular-nums leading-none">
             {state.result_number}
           </span>
         )}
