@@ -9,7 +9,7 @@ import (
 
 const (
 	CountdownSeconds = 3
-	SpinSeconds      = 3
+	SpinSeconds      = 7
 	HistoryLimit     = 12
 )
 

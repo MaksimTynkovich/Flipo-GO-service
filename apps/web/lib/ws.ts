@@ -1,4 +1,4 @@
-import { getAuthToken, WS_URL } from "./api";
+import { AUTH_SESSION_REFRESHED, getAuthToken, silentReauth, WS_URL } from "./api";
 
 export type WSMessage = {
   event: string;
@@ -23,19 +23,36 @@ export function connectGameWS(
 }
 
 export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
-  const token = getAuthToken();
-  if (!token) {
-    return () => {};
-  }
-  const authToken = token;
-
   let ws: WebSocket | null = null;
   let closed = false;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let authRetryPending = false;
 
-  function connect() {
+  function scheduleReconnect(delayMs: number) {
     if (closed) return;
-    ws = new WebSocket(`${WS_URL}/ws/user?token=${encodeURIComponent(authToken)}`);
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(connect, delayMs);
+  }
+
+  async function connect() {
+    if (closed) return;
+
+    const token = getAuthToken();
+    if (!token) {
+      if (!authRetryPending) {
+        authRetryPending = true;
+        const user = await silentReauth();
+        authRetryPending = false;
+        if (user) {
+          connect();
+          return;
+        }
+      }
+      scheduleReconnect(3000);
+      return;
+    }
+
+    ws = new WebSocket(`${WS_URL}/ws/user?token=${encodeURIComponent(token)}`);
 
     ws.onmessage = (ev) => {
       try {
@@ -47,15 +64,23 @@ export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
 
     ws.onclose = () => {
       if (!closed) {
-        retryTimer = setTimeout(connect, 3000);
+        scheduleReconnect(3000);
       }
     };
   }
 
+  function onSessionRefreshed() {
+    ws?.close();
+    if (retryTimer) clearTimeout(retryTimer);
+    connect();
+  }
+
+  window.addEventListener(AUTH_SESSION_REFRESHED, onSessionRefreshed);
   connect();
 
   return () => {
     closed = true;
+    window.removeEventListener(AUTH_SESSION_REFRESHED, onSessionRefreshed);
     if (retryTimer) clearTimeout(retryTimer);
     ws?.close();
   };

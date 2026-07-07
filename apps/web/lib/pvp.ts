@@ -37,4 +37,4 @@ export function pvpWinner(room: PvpRoom): PvpPlayer | undefined {
 }
 
 export const PVP_COUNTDOWN_MS = 3000;
-export const PVP_SPIN_MS = 3000;
+export const PVP_SPIN_MS = 7000;

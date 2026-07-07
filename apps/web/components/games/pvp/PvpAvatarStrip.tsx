@@ -1,19 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PvpPlayer, PVP_SPIN_MS } from "@/lib/pvp";
+import { PvpPlayer } from "@/lib/pvp";
 import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
+import {
+  computeSpinOffsets,
+  PVP_LAND_CYCLE,
+  spinOffsetAtTime,
+  spinTimeProgress,
+} from "@/lib/pvp-spin";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
-
-const SLOT_SIZE = 40;
-const SLOT_GAP = 8;
-const SLOT_STEP = SLOT_SIZE + SLOT_GAP;
 
 type Props = {
   players: PvpPlayer[];
   winnerId?: string;
   spinning?: boolean;
+  spinAt?: string;
   spinEndsAt?: string;
   dimmed?: boolean;
   className?: string;
@@ -23,51 +26,88 @@ export function PvpAvatarStrip({
   players,
   winnerId,
   spinning = false,
+  spinAt,
   spinEndsAt,
   dimmed = false,
   className,
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState(0);
-  const [durationMs, setDurationMs] = useState(PVP_SPIN_MS);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+
+  const playerKey = useMemo(
+    () => players.map((player) => player.user_id).join(":"),
+    [players],
+  );
 
   const extendedPlayers = useMemo(() => {
     if (players.length === 0) return [];
-    const repeats = 14;
+    const repeats = PVP_LAND_CYCLE + 4;
     return Array.from({ length: repeats }, () => players).flat();
-  }, [players]);
+  }, [playerKey, players]);
 
   useEffect(() => {
-    if (!spinning || !winnerId || players.length === 0) {
-      setOffset(0);
+    const node = viewportRef.current;
+    if (!node) return;
+
+    const update = () => setViewportWidth(node.clientWidth);
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    if (!spinning || !winnerId || !spinAt || !spinEndsAt || players.length === 0 || viewportWidth === 0) {
+      strip.style.transform = "translateX(0px)";
       return;
     }
 
-    const viewportWidth = viewportRef.current?.clientWidth ?? 220;
     const winnerIndex = players.findIndex((player) => player.user_id === winnerId);
     if (winnerIndex < 0) return;
 
-    const landCycle = 10;
-    const landIndex = landCycle * players.length + winnerIndex;
-    const centerOffset = viewportWidth / 2 - SLOT_SIZE / 2;
-    const targetOffset = -(landIndex * SLOT_STEP) + centerOffset;
+    const { targetOffset } = computeSpinOffsets(
+      winnerIndex,
+      players.length,
+      viewportWidth,
+    );
 
-    const endsAt = spinEndsAt ? new Date(spinEndsAt).getTime() : Date.now() + 3000;
-    const remaining = Math.max(endsAt - Date.now(), 1200);
+    const spinAtMs = new Date(spinAt).getTime();
+    const spinEndsAtMs = new Date(spinEndsAt).getTime();
 
-    setDurationMs(remaining);
-    requestAnimationFrame(() => setOffset(targetOffset));
-  }, [spinning, winnerId, players, spinEndsAt]);
+    const frame = () => {
+      const now = Date.now();
+      const timeProgress = spinTimeProgress(now, spinAtMs, spinEndsAtMs);
+      const offset = spinOffsetAtTime(timeProgress, targetOffset);
+      strip.style.transform = `translateX(${offset}px)`;
 
-  const staticWinnerId = !spinning ? winnerId : undefined;
-  const staticOffset = useMemo(() => {
-    if (spinning || !winnerId || players.length === 0) return 0;
-    const winnerIndex = players.findIndex((player) => player.user_id === winnerId);
-    if (winnerIndex < 0) return 0;
-    const viewportWidth = 220;
-    const centerOffset = viewportWidth / 2 - SLOT_SIZE / 2;
-    return -(winnerIndex * SLOT_STEP) + centerOffset;
-  }, [spinning, winnerId, players]);
+      if (timeProgress < 1) {
+        rafRef.current = requestAnimationFrame(frame);
+      } else {
+        strip.style.transform = `translateX(${targetOffset}px)`;
+        rafRef.current = null;
+      }
+    };
+
+    frame();
+
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [spinning, winnerId, spinAt, spinEndsAt, viewportWidth, playerKey, players.length]);
 
   if (players.length === 0) {
     return null;
@@ -82,33 +122,26 @@ export function PvpAvatarStrip({
       <div
         ref={viewportRef}
         className={cn(
-          "relative mt-3 overflow-hidden rounded-xl bg-surface-raised/70 px-1 py-3",
+          "relative mt-4 overflow-hidden rounded-xl bg-surface-raised/80 py-3.5",
           dimmed && "opacity-70",
         )}
       >
-        <div
-          className="flex will-change-transform"
-          style={{
-            gap: SLOT_GAP,
-            transform: `translateX(${spinning ? offset : staticOffset}px)`,
-            transition: spinning ? `transform ${durationMs}ms cubic-bezier(0.12, 0.8, 0.18, 1)` : undefined,
-          }}
-        >
+        <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
           {(spinning ? extendedPlayers : players).map((player, index) => (
             <PvpPlayerAvatar
               key={`${player.user_id}-${index}`}
               player={player}
               size={SLOT_SIZE}
-              highlight={
-                staticWinnerId && player.user_id === staticWinnerId ? "winner" : "none"
-              }
             />
           ))}
         </div>
 
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--surface-raised)] to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--surface-raised)] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[var(--surface-raised)] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[var(--surface-raised)] to-transparent" />
       </div>
     </div>
   );
 }
+
+const SLOT_SIZE = 44;
+const SLOT_GAP = 10;

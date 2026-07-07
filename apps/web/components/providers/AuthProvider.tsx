@@ -1,7 +1,14 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { authDebug, authTelegram, DEBUG_AUTH, getMe, User } from "@/lib/api";
+import {
+  AUTH_SESSION_REFRESHED,
+  authDebug,
+  authTelegram,
+  DEBUG_AUTH,
+  getMe,
+  User,
+} from "@/lib/api";
 import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
 import { getTelegramWebApp, initTelegramWebApp } from "@/src/shared/lib/twa";
 import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
@@ -21,6 +28,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onSessionRefreshed = (event: Event) => {
+      const user = (event as CustomEvent<{ user: User }>).detail?.user;
+      if (user) setUser(user);
+    };
+    window.addEventListener(AUTH_SESSION_REFRESHED, onSessionRefreshed);
+    return () => window.removeEventListener(AUTH_SESSION_REFRESHED, onSessionRefreshed);
+  }, []);
 
   useEffect(() => {
     async function init() {

@@ -1,6 +1,12 @@
+import { getTelegramWebApp } from "@/src/shared/lib/twa";
+
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 export const DEBUG_AUTH = process.env.NEXT_PUBLIC_DEBUG_AUTH === "true";
+export const AUTH_SESSION_REFRESHED = "flipo:auth-session-refreshed";
+
+const TOKEN_KEY = "flipo_token";
+const AUTH_PATHS = new Set(["/api/v1/auth/telegram", "/api/v1/auth/debug"]);
 
 export type User = {
   id: string;
@@ -29,14 +35,28 @@ export type InventoryItem = {
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("flipo_token");
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function setToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
 }
 
 export function getAuthToken(): string | null {
   return getToken();
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+let reauthPromise: Promise<User | null> | null = null;
+
+function dispatchSessionRefreshed(user: User) {
+  window.dispatchEvent(new CustomEvent(AUTH_SESSION_REFRESHED, { detail: { user } }));
+}
+
+async function rawFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -45,7 +65,53 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (token) {
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  return fetch(`${API_URL}${path}`, { ...options, headers });
+}
+
+/** Re-authenticate via Telegram initData (or debug auth) without a full page reload. */
+export async function silentReauth(): Promise<User | null> {
+  if (reauthPromise) return reauthPromise;
+
+  reauthPromise = (async () => {
+    try {
+      clearToken();
+
+      const initData = getTelegramWebApp()?.initData;
+      if (initData) {
+        const { token, user } = await authTelegram(initData);
+        setToken(token);
+        dispatchSessionRefreshed(user);
+        return user;
+      }
+
+      if (DEBUG_AUTH) {
+        const { token, user } = await authDebug();
+        setToken(token);
+        dispatchSessionRefreshed(user);
+        return user;
+      }
+
+      return null;
+    } catch {
+      return null;
+    } finally {
+      reauthPromise = null;
+    }
+  })();
+
+  return reauthPromise;
+}
+
+export async function api<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
+  const res = await rawFetch(path, options);
+
+  if (res.status === 401 && !retried && !AUTH_PATHS.has(path)) {
+    const user = await silentReauth();
+    if (user) {
+      return api<T>(path, options, true);
+    }
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || "Request failed");
