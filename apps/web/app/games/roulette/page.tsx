@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButton";
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
@@ -17,7 +18,7 @@ import {
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
-import { RouletteRoundState, rouletteFillStyle } from "@/lib/roulette";
+import { RouletteRoundState } from "@/lib/roulette";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
@@ -74,6 +75,7 @@ export default function RoulettePage() {
   }, [state?.phase, loadHistory]);
 
   const canBet = state?.phase === "betting" && !betting;
+  const roundTotals = roundBets?.totals ?? { red: 0, green: 0, black: 0 };
 
   async function bet(color: string) {
     if (!canBet) {
@@ -166,51 +168,27 @@ export default function RoulettePage() {
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
+            <RouletteColorBetButton
+              color="red"
+              multiplier="×2"
+              roundTotal={roundTotals.red}
               disabled={!canBet}
               onClick={() => bet("red")}
-              style={rouletteFillStyle("red")}
-              className={cn(
-                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
-                !canBet && "opacity-40",
-              )}
-            >
-              <span className="text-sm font-semibold leading-none">×2</span>
-              <span className="text-[9px] font-medium uppercase tracking-wide opacity-75">
-                Красное
-              </span>
-            </button>
-            <button
-              type="button"
+            />
+            <RouletteColorBetButton
+              color="green"
+              multiplier="×14"
+              roundTotal={roundTotals.green}
               disabled={!canBet}
               onClick={() => bet("green")}
-              style={rouletteFillStyle("green")}
-              className={cn(
-                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl text-white transition-all active:scale-[0.98]",
-                !canBet && "opacity-40",
-              )}
-            >
-              <span className="text-sm font-semibold leading-none">×14</span>
-              <span className="text-[9px] font-medium uppercase tracking-wide opacity-75">
-                Зелёное
-              </span>
-            </button>
-            <button
-              type="button"
+            />
+            <RouletteColorBetButton
+              color="black"
+              multiplier="×2"
+              roundTotal={roundTotals.black}
               disabled={!canBet}
               onClick={() => bet("black")}
-              style={rouletteFillStyle("black")}
-              className={cn(
-                "flex h-11 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 text-white transition-all active:scale-[0.98]",
-                !canBet && "opacity-40",
-              )}
-            >
-              <span className="text-sm font-semibold leading-none">×2</span>
-              <span className="text-[9px] font-medium uppercase tracking-wide opacity-75">
-                Чёрное
-              </span>
-            </button>
+            />
           </div>
 
           <div className="hairline-top pt-3">
