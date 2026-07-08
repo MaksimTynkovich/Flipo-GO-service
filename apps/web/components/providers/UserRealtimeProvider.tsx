@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { InventoryItem } from "@/lib/api";
@@ -19,6 +19,7 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
   const { user, setUser } = useAuth();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
+  const recentDepositEventsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (!user) return;
@@ -53,6 +54,19 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
 
       const payload = msg.payload as DepositPayload;
       if (!payload?.item) return;
+
+      const dedupeKey = payload.item.id || payload.item.telegram_gift_id || payload.message;
+      const now = Date.now();
+      const lastSeen = recentDepositEventsRef.current.get(dedupeKey);
+      if (lastSeen && now-lastSeen < 5000) {
+        return;
+      }
+      recentDepositEventsRef.current.set(dedupeKey, now);
+      for (const [key, seenAt] of recentDepositEventsRef.current.entries()) {
+        if (now-seenAt >= 10000) {
+          recentDepositEventsRef.current.delete(key);
+        }
+      }
 
       window.dispatchEvent(
         new CustomEvent(INVENTORY_DEPOSITED_EVENT, { detail: payload }),

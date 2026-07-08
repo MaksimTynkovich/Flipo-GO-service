@@ -9,14 +9,8 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 function hexToInt(hexStr: string): number {
-  let val = 0;
-  for (const c of hexStr) {
-    val <<= 4;
-    if (c >= "0" && c <= "9") val |= c.charCodeAt(0) - 48;
-    else if (c >= "a" && c <= "f") val |= c.charCodeAt(0) - 97 + 10;
-    else if (c >= "A" && c <= "F") val |= c.charCodeAt(0) - 65 + 10;
-  }
-  return val;
+  const parsed = Number.parseInt(hexStr, 16);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 const WHEEL_ORDER = [0, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14];

@@ -95,13 +95,13 @@ export function computeRunningMultiplier(params: {
   const now = params.nowMs ?? Date.now();
   const sinceTick = Math.max(0, now - params.lastTickAtMs);
   const elapsed = Math.max(0, now - params.clockOffsetMs - params.runStartMs);
-  const smooth = multiplierAtElapsedMsFloored(elapsed);
+  const smooth = multiplierAtElapsedMs(elapsed);
 
   if (sinceTick <= CRASH_TICK_MS) {
-    return smooth;
+    return Math.max(1, smooth);
   }
 
-  return Math.min(smooth, Math.max(1, params.serverMultiplier));
+  return Math.min(Math.max(1, smooth), Math.max(1, params.serverMultiplier));
 }
 
 export function liveMultiplier(elapsedMs: number): number {

@@ -14,7 +14,9 @@ export function InventoryDepositGuide({ variant = "inventory" }: Props) {
         Отправь подарок боту {depositBotMention()} — он появится в инвентаре автоматически.
       </>
     ) : (
-      <>Отправь подарок боту {depositBotMention()} — он появится здесь автоматически.</>
+      <>
+        Отправь подарок боту {depositBotMention()} — он появится здесь автоматически.
+      </>
     );
 
   return (

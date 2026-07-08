@@ -56,7 +56,11 @@ func Load() *Config {
 		Env:                    getEnv("ENV", "development"),
 		JWTSecret:              getEnv("JWT_SECRET", "dev-secret-change-me"),
 		BotToken:               getEnv("BOT_TOKEN", ""),
-		BotUsername:            firstNonEmpty(getEnv("BOT_USERNAME", ""), getEnv("NEXT_PUBLIC_BOT_USERNAME", "")),
+		BotUsername:            firstNonEmpty(
+			getEnv("BOT_USERNAME", ""),
+			getEnv("NEXT_PUBLIC_GIFT_TRANSFER_BOT_USERNAME", ""),
+			getEnv("NEXT_PUBLIC_BOT_USERNAME", ""),
+		),
 		WebAppShortName:        firstNonEmpty(getEnv("WEBAPP_SHORT_NAME", ""), getEnv("NEXT_PUBLIC_WEBAPP_SHORT_NAME", "")),
 		WebAppURL:              firstNonEmpty(getEnv("TELEGRAM_WEBAPP_URL", ""), getEnv("WEBAPP_URL", "")),
 		TelegramWebhookURL:     getEnv("TELEGRAM_WEBHOOK_URL", ""),

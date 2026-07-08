@@ -9,7 +9,7 @@ import {
   elapsedMsForMultiplier,
   formatMultiplier,
   formatMultiplierLive,
-  multiplierAtElapsedMsFloored,
+  multiplierAtElapsedMs,
   resolveRunStartMs,
   statusSubtext,
 } from "@/lib/crash";
@@ -54,7 +54,7 @@ function buildCurve(
 
   for (let i = 0; i <= steps; i++) {
     const t = (elapsedMs * i) / steps;
-    const m = Math.max(1, Math.min(multiplierAtElapsedMsFloored(t), mult));
+    const m = Math.max(1, Math.min(multiplierAtElapsedMs(t), mult));
     const p = chartProgress(m);
     const x = START_X + (TIP_X - START_X) * p;
     const y = bottomY - (bottomY - TIP_Y) * p;

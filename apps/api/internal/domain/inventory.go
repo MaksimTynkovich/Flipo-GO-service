@@ -31,7 +31,7 @@ type InventoryItem struct {
 	ID                uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	UserID            uuid.UUID       `gorm:"type:uuid;not null;index" json:"user_id"`
 	Source            NFTSource       `gorm:"type:varchar(32);not null" json:"source"`
-	TelegramGiftID    string          `gorm:"size:128;uniqueIndex" json:"telegram_gift_id"`
+	TelegramGiftID    string          `gorm:"size:128;index" json:"telegram_gift_id"`
 	CollectionSlug    string          `gorm:"size:128" json:"collection_slug"`
 	TokenID           string          `gorm:"size:128" json:"token_id"`
 	Name              string          `gorm:"size:256" json:"name"`
@@ -41,7 +41,7 @@ type InventoryItem struct {
 	Status            InventoryStatus `gorm:"type:varchar(32);not null;index" json:"status"`
 	DepositedAt       time.Time       `gorm:"not null" json:"deposited_at"`
 	LiquidatedAt      *time.Time      `json:"liquidated_at,omitempty"`
-	TelegramTxRef     string          `gorm:"size:256" json:"telegram_tx_ref"`
+	TelegramTxRef     string          `gorm:"size:256;uniqueIndex:idx_inventory_items_telegram_tx_ref_unique,where:telegram_tx_ref <> ''" json:"telegram_tx_ref"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 

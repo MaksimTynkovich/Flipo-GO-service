@@ -59,7 +59,13 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 		return false, nil
 	}
 
-	if _, err := s.inventory.FindByGiftSlug(ctx, gift.Slug); err == nil {
+	if existing, err := s.inventory.FindActiveByGiftSlug(ctx, gift.Slug); err == nil {
+		slog.Info("gift deposit skipped: gift already active in inventory",
+			"slug", gift.Slug,
+			"existing_item_id", existing.ID,
+			"existing_user_id", existing.UserID,
+			"existing_status", existing.Status,
+		)
 		return false, nil
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, err

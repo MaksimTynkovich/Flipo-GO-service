@@ -9,11 +9,11 @@ import (
 	"strings"
 
 	"github.com/gotd/td/telegram"
-	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tg"
 )
 
 var ErrMTProtoNotConfigured = errors.New("mtproto gift scanner not configured")
+var ErrMTProtoUnauthorized = errors.New("mtproto session is not authorized")
 
 type MTProtoConfig struct {
 	AppID       int
@@ -299,13 +299,14 @@ func userPeer(target ScanTarget) (tg.InputPeerClass, error) {
 }
 
 func ensureAuthorized(ctx context.Context, client *telegram.Client) error {
-	flow := auth.NewFlow(
-		auth.Constant("", "", auth.CodeAuthenticatorFunc(func(context.Context, *tg.AuthSentCode) (string, error) {
-			return "", fmt.Errorf("telegram session not authorized; run: make tg-auth")
-		})),
-		auth.SendCodeOptions{},
-	)
-	return client.Auth().IfNecessary(ctx, flow)
+	status, err := client.Auth().Status(ctx)
+	if err != nil {
+		return fmt.Errorf("telegram auth status: %w", err)
+	}
+	if status.Authorized {
+		return nil
+	}
+	return fmt.Errorf("%w; run: make tg-auth", ErrMTProtoUnauthorized)
 }
 
 func rawGiftEntry(saved tg.SavedStarGift) RawGiftEntry {

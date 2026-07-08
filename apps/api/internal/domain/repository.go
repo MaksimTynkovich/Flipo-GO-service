@@ -28,6 +28,7 @@ type InventoryRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*InventoryItem, error)
 	FindByTelegramGiftID(ctx context.Context, userID uuid.UUID, giftID string) (*InventoryItem, error)
 	FindByGiftSlug(ctx context.Context, slug string) (*InventoryItem, error)
+	FindActiveByGiftSlug(ctx context.Context, slug string) (*InventoryItem, error)
 	Create(ctx context.Context, item *InventoryItem) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, from, to InventoryStatus) error
 	TransferOwnership(ctx context.Context, itemID, newUserID uuid.UUID, fromStatus InventoryStatus) error

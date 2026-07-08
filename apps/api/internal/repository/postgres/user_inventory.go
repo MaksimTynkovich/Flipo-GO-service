@@ -203,6 +203,7 @@ func (r *InventoryRepo) FindByTelegramGiftID(ctx context.Context, userID uuid.UU
 	var item domain.InventoryItem
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND telegram_gift_id = ?", userID, giftID).
+		Order("deposited_at DESC").
 		First(&item).Error
 	if err != nil {
 		return nil, err
@@ -214,6 +215,23 @@ func (r *InventoryRepo) FindByGiftSlug(ctx context.Context, slug string) (*domai
 	var item domain.InventoryItem
 	err := r.db.WithContext(ctx).
 		Where("telegram_gift_id = ?", slug).
+		Order("deposited_at DESC").
+		First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *InventoryRepo) FindActiveByGiftSlug(ctx context.Context, slug string) (*domain.InventoryItem, error) {
+	var item domain.InventoryItem
+	err := r.db.WithContext(ctx).
+		Where("telegram_gift_id = ? AND status IN ?", slug, []domain.InventoryStatus{
+			domain.InvAvailable,
+			domain.InvLocked,
+			domain.InvStaked,
+		}).
+		Order("deposited_at DESC").
 		First(&item).Error
 	if err != nil {
 		return nil, err
