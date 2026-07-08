@@ -38,7 +38,9 @@
   --app-header-offset: calc(
     var(--app-safe-top) + var(--app-header-height) + var(--app-content-gap)
   );
-  --app-tabbar-offset: calc(var(--app-safe-bottom) + var(--app-tabbar-height));
+  --app-tabbar-offset: calc(
+    var(--app-safe-bottom) + var(--app-tabbar-height) + var(--app-content-gap)
+  );
 }
 
 body {

@@ -9,20 +9,29 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import {
   activatePromoCode,
   formatTON,
+  getMe,
   getPromoStatus,
   type PromoStatus,
 } from "@/lib/api";
+import { hasPromoBalance, mainBalanceNanoton } from "@/lib/balance";
 import { shortenTonWalletAddress } from "@/lib/wallet";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
+function formatProfileTON(nanotons: number): string {
+  if (nanotons <= 0) return "0";
+  return (nanotons / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "");
+}
+
 export function ProfileOverviewView() {
-  const { user, loading } = useAuth();
+  const { user, loading, setUser } = useAuth();
   const haptics = useTelegramHaptics();
   const [promoCode, setPromoCode] = useState("");
   const [promoStatus, setPromoStatus] = useState<PromoStatus | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
+  const [promoMessage, setPromoMessage] = useState<string | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
 
   useEffect(() => {
     getPromoStatus()
@@ -33,11 +42,26 @@ export function ProfileOverviewView() {
   async function activatePromo() {
     if (!promoCode.trim()) return;
     setPromoLoading(true);
+    setPromoMessage(null);
+    setPromoError(null);
     try {
       const status = await activatePromoCode(promoCode.trim());
       setPromoStatus(status);
       setPromoCode("");
+      try {
+        setUser(await getMe());
+      } catch {
+        // WS balance update may still refresh balances.
+      }
+      setPromoMessage(
+        status.replaced_promo_code
+          ? `Активирован. ${status.replaced_promo_code} отменён`
+          : "Промокод активирован",
+      );
       haptics.notificationOccurred("success");
+    } catch (e) {
+      setPromoError(e instanceof Error ? e.message : "Не удалось активировать");
+      haptics.notificationOccurred("error");
     } finally {
       setPromoLoading(false);
     }
@@ -59,10 +83,10 @@ export function ProfileOverviewView() {
 
       <div className="grid grid-cols-2 gap-2">
         <div className="stat-tile">
-          <p className="text-[11px] text-muted">Баланс</p>
+          <p className="text-[11px] text-muted">Основной</p>
           <div className="mt-1 flex items-center justify-between gap-1.5">
             <span className="inline-flex min-w-0 items-center gap-1 truncate text-sm font-semibold tabular-nums text-foreground">
-              {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
+              {loading ? "…" : user ? formatProfileTON(mainBalanceNanoton(user)) : "—"}
               <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
             </span>
             <Link
@@ -75,14 +99,24 @@ export function ProfileOverviewView() {
             </Link>
           </div>
         </div>
-        <div className="stat-tile">
-          <p className="text-[11px] text-muted">Кошелёк</p>
-          <p className="mt-1 truncate font-mono text-sm font-semibold text-foreground">
-            {user?.ton_wallet?.trim()
-              ? shortenTonWalletAddress(user.ton_wallet)
-              : "Не подключён"}
-          </p>
+        <div className="stat-tile border border-accent/20 bg-accent/5">
+          <p className="text-[11px] text-accent">Бонус</p>
+          <div className="mt-1 flex min-w-0 items-center gap-1">
+            <span className="truncate text-sm font-semibold tabular-nums text-accent">
+              {loading ? "…" : user && hasPromoBalance(user) ? formatProfileTON(user.promo_balance ?? 0) : "0"}
+            </span>
+            <TonIcon variant="brand" className="h-4 w-4 shrink-0 opacity-80" />
+          </div>
         </div>
+      </div>
+
+      <div className="stat-tile">
+        <p className="text-[11px] text-muted">Кошелёк</p>
+        <p className="mt-1 truncate font-mono text-sm font-semibold text-foreground">
+          {user?.ton_wallet?.trim()
+            ? shortenTonWalletAddress(user.ton_wallet)
+            : "Не подключён"}
+        </p>
       </div>
 
       <section className="panel space-y-3">
@@ -90,7 +124,11 @@ export function ProfileOverviewView() {
         <div className="flex gap-2">
           <input
             value={promoCode}
-            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+            onChange={(e) => {
+              setPromoCode(e.target.value.toUpperCase());
+              if (promoError) setPromoError(null);
+              if (promoMessage) setPromoMessage(null);
+            }}
             className="input-field h-10 flex-1"
             placeholder="Введите код"
           />
@@ -102,14 +140,19 @@ export function ProfileOverviewView() {
             {promoLoading ? "…" : "Активировать"}
           </button>
         </div>
+        {promoError ? <p className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{promoError}</p> : null}
+        {promoMessage ? (
+          <p className="rounded-xl bg-[color:var(--success)]/10 px-3 py-2 text-xs text-[color:var(--success)]">
+            {promoMessage}
+          </p>
+        ) : null}
         {promoStatus?.active ? (
           <p className="text-xs text-muted">
-            Активен {promoStatus.promo_code}: бонус {formatTON(promoStatus.bonus_nanoton ?? 0)} TON ·
-            вейджер {formatTON(promoStatus.wager_progress_nanoton ?? 0)} /{" "}
-            {formatTON(promoStatus.wager_required_nanoton ?? 0)} TON
+            {promoStatus.promo_code}: {formatProfileTON(promoStatus.wager_progress_nanoton ?? 0)} /{" "}
+            {formatProfileTON(promoStatus.wager_required_nanoton ?? 0)} TON вейджер
           </p>
         ) : (
-          <p className="text-xs text-muted">Бонусные коды с вейджером на ставки.</p>
+          <p className="text-xs text-muted">Бонус только на ставки. Новый код заменит текущий.</p>
         )}
       </section>
 
@@ -180,7 +223,7 @@ export function ProfileOverviewView() {
                 <Shield className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-semibold">Админка</p>
+                <p className="text-[15px] font-semibold">Система</p>
                 <p className="mt-0.5 text-xs text-muted">Финансы, риски, RTP и управление проектом</p>
               </div>
               <div className="flex shrink-0 items-center gap-1 text-accent">

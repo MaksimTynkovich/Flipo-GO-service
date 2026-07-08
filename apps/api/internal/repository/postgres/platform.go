@@ -99,6 +99,26 @@ func (r *PlatformRepo) UpsertPromoCode(ctx context.Context, promo *domain.PromoC
 	return r.db.WithContext(ctx).Save(promo).Error
 }
 
+func (r *PlatformRepo) DeletePromoCode(ctx context.Context, code string) error {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&domain.PromoRedemption{}).
+		Where("promo_code = ?", code).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return domain.ErrPromoInUse
+	}
+	res := r.db.WithContext(ctx).Delete(&domain.PromoCode{}, "code = ?", code)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 func (r *PlatformRepo) GetBotSettings(ctx context.Context) (*domain.TelegramBotSettings, error) {
 	var settings domain.TelegramBotSettings
 	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
@@ -177,6 +197,14 @@ func (r *PlatformRepo) GetActiveRedemption(ctx context.Context, userID uuid.UUID
 	return &redemption, err
 }
 
+func (r *PlatformRepo) HasRedeemedPromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.PromoRedemption{}).
+		Where("user_id = ? AND promo_code = ?", userID, code).
+		Count(&count).Error
+	return count > 0, err
+}
+
 func (r *PlatformRepo) CreateRedemption(ctx context.Context, redemption *domain.PromoRedemption) error {
 	if redemption.CreatedAt.IsZero() {
 		redemption.CreatedAt = time.Now().UTC()
@@ -195,7 +223,7 @@ func (r *PlatformRepo) UpdateRedemptionProgress(ctx context.Context, redemptionI
 		"wager_progress_nanoton": progress,
 		"status":                   status,
 	}
-	if status == "completed" {
+	if status == "completed" || status == "forfeited" {
 		now := time.Now().UTC()
 		updates["completed_at"] = now
 	}

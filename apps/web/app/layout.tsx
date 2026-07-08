@@ -112,7 +112,7 @@ const tgThemeBootstrap = `
       const minTop = mobileHeaderInset(webApp.platform);
       if (minTop > 0) inset.top = Math.max(inset.top, minTop);
       const headerOffset = inset.top + 56 + 16;
-      const tabbarOffset = inset.bottom + 52;
+      const tabbarOffset = inset.bottom + 52 + 16;
       document.documentElement.style.setProperty("--app-safe-top", inset.top + "px");
       document.documentElement.style.setProperty("--app-safe-bottom", inset.bottom + "px");
       document.documentElement.style.setProperty("--app-safe-left", inset.left + "px");

@@ -74,7 +74,24 @@ func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta in
 		if newBalance < 0 {
 			return domain.ErrInsufficientFunds
 		}
-		if err := tx.Model(&user).Update("betting_balance", newBalance).Error; err != nil {
+
+		updates := map[string]interface{}{
+			"betting_balance": newBalance,
+		}
+		newPromoBalance := user.PromoBalance
+		if delta > 0 && ledgerType == domain.LedgerPromoBonus {
+			newPromoBalance += delta
+			updates["promo_balance"] = newPromoBalance
+		}
+		if delta < 0 {
+			promoConsumed := min(-delta, user.PromoBalance)
+			if promoConsumed > 0 {
+				newPromoBalance -= promoConsumed
+				updates["promo_balance"] = newPromoBalance
+			}
+		}
+
+		if err := tx.Model(&user).Updates(updates).Error; err != nil {
 			return err
 		}
 		ledger := domain.BalanceLedger{
@@ -93,6 +110,12 @@ func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta in
 		return nil
 	})
 	return balanceAfter, err
+}
+
+func (r *UserRepo) ReleasePromoBalance(ctx context.Context, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("id = ? AND promo_balance > 0", userID).
+		Update("promo_balance", 0).Error
 }
 
 func (r *UserRepo) UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier domain.StakingTier) error {

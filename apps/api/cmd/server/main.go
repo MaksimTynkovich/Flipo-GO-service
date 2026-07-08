@@ -124,7 +124,7 @@ func main() {
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
 	balanceSvc := balance.NewService(userRepo)
-	promoSvc := promo.NewService(platformRepo, gameRepo, balanceSvc)
+	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
 	if mtprotoCfg.Enabled() {

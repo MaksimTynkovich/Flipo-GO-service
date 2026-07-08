@@ -140,11 +140,7 @@ func VerifyRound(gameType string, serverSeedHash, serverSeed string, nonce int64
 		if !ok {
 			return false
 		}
-		chain := HashChain(serverSeed, int(nonce)+1)
-		if int(nonce) < 0 || int(nonce) >= len(chain) {
-			return false
-		}
-		return CrashPoint(chain[nonce]) == crash
+		return CrashPoint(serverSeed) == crash
 	case "pvp":
 		var payload map[string]any
 		if err := json.Unmarshal(resultPayload, &payload); err != nil {

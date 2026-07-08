@@ -138,13 +138,13 @@ func (s *Service) CancelListing(ctx context.Context, userID, listingID uuid.UUID
 	return s.market.CancelListing(ctx, listingID, userID)
 }
 
-func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (int64, error) {
+func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (*domain.User, error) {
 	listing, err := s.market.FindByID(ctx, listingID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if listing.Status != domain.ListingActive {
-		return 0, domain.ErrNotFound
+		return nil, domain.ErrNotFound
 	}
 
 	price := listing.PriceNanoton
@@ -153,14 +153,14 @@ func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (i
 
 	_, err = s.market.Purchase(ctx, listingID, buyerID, price, sellerProceeds, s.feeBps)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	user, err := s.users.FindByID(ctx, buyerID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return user.BettingBalance, nil
+	return user, nil
 }
 
 // BuybackFromUser pays the seller and lists the gift on the market under the bot account.

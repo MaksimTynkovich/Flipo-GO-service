@@ -16,6 +16,7 @@ type Props = {
   isOwnListing: boolean;
   isLoggedIn: boolean;
   insufficientFunds: boolean;
+  promoRestricted?: boolean;
   onClose: () => void;
   onBuy: () => void;
 };
@@ -44,6 +45,7 @@ export function MarketGiftDetailSheet({
   isOwnListing,
   isLoggedIn,
   insufficientFunds,
+  promoRestricted = false,
   onClose,
   onBuy,
 }: Props) {
@@ -149,9 +151,11 @@ export function MarketGiftDetailSheet({
             >
               {buying
                 ? "Покупка…"
-                : insufficientFunds
-                  ? "Недостаточно средств"
-                  : (
+                : promoRestricted
+                  ? "Бонус нельзя тратить"
+                  : insufficientFunds
+                    ? "Недостаточно средств"
+                    : (
                       <span className="inline-flex items-center justify-center gap-1">
                         Купить · {formatTON(listing.price_nanoton)}
                         <TonIcon variant="brand" className="h-5 w-5" />

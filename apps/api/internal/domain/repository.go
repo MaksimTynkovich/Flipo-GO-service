@@ -13,6 +13,7 @@ type UserRepository interface {
 	Upsert(ctx context.Context, user *User) error
 	UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (int64, error)
+	ReleasePromoBalance(ctx context.Context, userID uuid.UUID) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
@@ -104,10 +105,12 @@ type PlatformRepository interface {
 	ListSeedHistory(ctx context.Context, gameType GameType, limit int) ([]ProvablyFairSeedSession, error)
 	ListPromoCodes(ctx context.Context) ([]PromoCode, error)
 	UpsertPromoCode(ctx context.Context, promo *PromoCode) error
+	DeletePromoCode(ctx context.Context, code string) error
 	GetBotSettings(ctx context.Context) (*TelegramBotSettings, error)
 	UpdateBotSettings(ctx context.Context, settings *TelegramBotSettings) error
 	GetPromoCode(ctx context.Context, code string) (*PromoCode, error)
 	GetActiveRedemption(ctx context.Context, userID uuid.UUID) (*PromoRedemption, error)
+	HasRedeemedPromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
 	CreateRedemption(ctx context.Context, redemption *PromoRedemption) error
 	IncrementPromoUsed(ctx context.Context, code string) error
 	UpdateRedemptionProgress(ctx context.Context, redemptionID uuid.UUID, progress int64, status string) error

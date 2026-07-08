@@ -5,6 +5,7 @@ import { MarketGiftCard, MarketGiftCardSkeleton } from "@/components/market/Mark
 import { MarketGiftDetailSheet } from "@/components/market/MarketGiftDetailSheet";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { buyMarketListing, getMarketListings, MarketListing } from "@/lib/api";
+import { mainBalanceNanoton } from "@/lib/balance";
 import { Gift } from "lucide-react";
 
 type Props = {
@@ -37,8 +38,8 @@ export function MarketSection({ onPurchased }: Props) {
     setBuying(true);
     setError(null);
     try {
-      const { balance } = await buyMarketListing(selected.id);
-      setUser({ ...user, betting_balance: balance });
+      const { balance, promo_balance } = await buyMarketListing(selected.id);
+      setUser({ ...user, betting_balance: balance, promo_balance });
       setSelected(null);
       await load();
       onPurchased?.();
@@ -49,11 +50,18 @@ export function MarketSection({ onPurchased }: Props) {
     }
   }
 
+  const availableBalance = user ? mainBalanceNanoton(user) : 0;
   const canBuy =
     !!user &&
     !!selected &&
-    user.betting_balance >= selected.price_nanoton &&
+    availableBalance >= selected.price_nanoton &&
     selected.seller.id !== user.id;
+  const insufficientFunds = !!user && availableBalance < (selected?.price_nanoton ?? 0);
+  const promoRestricted =
+    !!user &&
+    !!selected &&
+    user.betting_balance >= selected.price_nanoton &&
+    availableBalance < selected.price_nanoton;
 
   return (
     <>
@@ -81,7 +89,8 @@ export function MarketSection({ onPurchased }: Props) {
           canBuy={canBuy}
           isOwnListing={!!user && selected.seller.id === user.id}
           isLoggedIn={!!user}
-          insufficientFunds={!!user && user.betting_balance < selected.price_nanoton}
+          insufficientFunds={insufficientFunds}
+          promoRestricted={promoRestricted}
           onClose={() => {
             setSelected(null);
             setError(null);

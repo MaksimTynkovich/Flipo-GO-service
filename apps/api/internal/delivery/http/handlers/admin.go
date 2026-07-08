@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -237,8 +239,37 @@ func (h *AdminHandler) UpsertPromoCode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if strings.TrimSpace(promo.Code) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Введите промокод"})
+		return
+	}
 	if err := h.admin.UpsertPromoCode(c.Request.Context(), adminID, promo); err != nil {
+		if errors.Is(err, domain.ErrPromoInvalid) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Введите промокод"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) DeletePromoCode(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	code := strings.ToUpper(strings.TrimSpace(c.Param("code")))
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Укажите код"})
+		return
+	}
+	if err := h.admin.DeletePromoCode(c.Request.Context(), adminID, code); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Промокод не найден"})
+		case errors.Is(err, domain.ErrPromoInUse):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Есть активации"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

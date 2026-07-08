@@ -5,6 +5,7 @@ import { PageShell } from "@/components/PageShell";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   formatTON,
+  deleteAdminPromoCode,
   getAdminPromoCodes,
   getReferralStats,
   upsertAdminPromoCode,
@@ -26,6 +27,8 @@ export default function AdminMarketingPage() {
   const [promos, setPromos] = useState<AdminPromoCode[]>([]);
   const [draft, setDraft] = useState<AdminPromoCode>(EMPTY_PROMO);
   const [referral, setReferral] = useState<ReferralStats | null>(null);
+  const [deletingCode, setDeletingCode] = useState<string | null>(null);
+  const promoCode = draft.code.trim();
 
   async function load() {
     const [promoData, referralData] = await Promise.all([getAdminPromoCodes(), getReferralStats()]);
@@ -36,6 +39,24 @@ export default function AdminMarketingPage() {
   useEffect(() => {
     load().catch(() => {});
   }, []);
+
+  async function handleDelete(code: string) {
+    if (!window.confirm(`Удалить промокод ${code}?`)) return;
+    setDeletingCode(code);
+    try {
+      await deleteAdminPromoCode(code);
+      showToast({ variant: "success", title: "Промокод удалён" });
+      if (draft.code === code) setDraft(EMPTY_PROMO);
+      await load();
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось удалить",
+      });
+    } finally {
+      setDeletingCode(null);
+    }
+  }
 
   return (
     <PageShell title="Маркетинг" description="Промокоды с вейджером и реферальная система.">
@@ -52,15 +73,27 @@ export default function AdminMarketingPage() {
         <p className="text-base font-semibold">Промокоды</p>
         {promos.map((promo) => (
           <div key={promo.code} className="rounded-xl bg-surface-raised/50 px-3 py-2 text-sm">
-            <div className="flex justify-between">
-              <span className="font-semibold">{promo.code}</span>
-              <span>
-                +{formatTON(promo.bonus_nanoton)} TON · x{promo.wager_multiplier} wager
-              </span>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold">{promo.code}</span>
+                  <span>
+                    +{formatTON(promo.bonus_nanoton)} TON · x{promo.wager_multiplier} wager
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  {promo.used_count}/{promo.max_uses || "∞"} · {promo.active ? "active" : "off"}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg px-2 py-1 text-xs text-red-300 transition-colors active:bg-red-500/10 disabled:opacity-50"
+                disabled={deletingCode === promo.code}
+                onClick={() => handleDelete(promo.code).catch(() => {})}
+              >
+                {deletingCode === promo.code ? "…" : "Удалить"}
+              </button>
             </div>
-            <p className="mt-1 text-xs text-muted">
-              {promo.used_count}/{promo.max_uses || "∞"} · {promo.active ? "active" : "off"}
-            </p>
           </div>
         ))}
 
@@ -95,8 +128,13 @@ export default function AdminMarketingPage() {
         </div>
         <button
           className="quick-amount quick-amount-active"
+          disabled={!promoCode}
           onClick={async () => {
-            await upsertAdminPromoCode(draft);
+            if (!promoCode) {
+              showToast({ variant: "error", title: "Введите промокод" });
+              return;
+            }
+            await upsertAdminPromoCode({ ...draft, code: promoCode.toUpperCase() });
             showToast({ variant: "success", title: "Промокод сохранён" });
             setDraft(EMPTY_PROMO);
             await load();

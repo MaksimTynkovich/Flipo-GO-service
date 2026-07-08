@@ -24,7 +24,10 @@ func (h *PromoHandler) Activate(c *gin.Context) {
 		Code string `json:"code" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Введите промокод",
+			"code":  "promo_required",
+		})
 		return
 	}
 	status, err := h.promo.Activate(c.Request.Context(), userID, req.Code)
@@ -48,13 +51,25 @@ func (h *PromoHandler) Status(c *gin.Context) {
 func writePromoError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrPromoInvalid):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Промокод не найден", "code": "promo_invalid"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Промокод недействителен",
+			"code":  "promo_invalid",
+		})
 	case errors.Is(err, domain.ErrPromoExpired):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Промокод истёк", "code": "promo_expired"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Промокод истёк",
+			"code":  "promo_expired",
+		})
 	case errors.Is(err, domain.ErrPromoExhausted):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Промокод исчерпан", "code": "promo_exhausted"})
-	case errors.Is(err, domain.ErrPromoAlreadyUsed):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "У вас уже активен промокод", "code": "promo_active"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Промокод исчерпан",
+			"code":  "promo_exhausted",
+		})
+	case errors.Is(err, domain.ErrPromoAlreadyRedeemed):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Промокод уже использован",
+			"code":  "promo_already_redeemed",
+		})
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	}

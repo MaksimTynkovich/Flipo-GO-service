@@ -93,9 +93,10 @@ func (h *Hub) UnregisterUser(client *UserClient) {
 	client.closeSend()
 }
 
-func (h *Hub) BalanceUpdated(userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
+func (h *Hub) BalanceUpdated(userID uuid.UUID, balanceNanoton, promoBalanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
 	h.NotifyUser(userID, "balance.updated", map[string]interface{}{
 		"betting_balance": balanceNanoton,
+		"promo_balance":   promoBalanceNanoton,
 		"delta_nanoton":   deltaNanoton,
 		"ledger_type":     string(ledgerType),
 	})

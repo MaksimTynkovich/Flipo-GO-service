@@ -27,16 +27,6 @@ function rouletteColor(n: number): string {
   return "black";
 }
 
-async function hashChain(seed: string, length: number): Promise<string[]> {
-  const chain = new Array<string>(length);
-  let current = seed;
-  for (let i = length - 1; i >= 0; i--) {
-    current = await sha256Hex(current);
-    chain[i] = current;
-  }
-  return chain;
-}
-
 async function crashPointFromHash(hash: string): Promise<number> {
   const inner = await sha256Hex(hash);
   const h = hexToInt(inner.slice(0, 8));
@@ -58,8 +48,7 @@ export async function verifyRoundProof(proof: RoundProof): Promise<boolean> {
   }
 
   if (proof.game_type === "crash") {
-    const chain = await hashChain(proof.server_seed, proof.nonce + 1);
-    const point = await crashPointFromHash(chain[proof.nonce] ?? "");
+    const point = await crashPointFromHash(proof.server_seed);
     const target = Number(proof.result);
     return Math.abs(point - target) < 0.001;
   }

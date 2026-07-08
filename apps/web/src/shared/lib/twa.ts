@@ -204,7 +204,7 @@ export function getAppHeaderOffset(topInset: number) {
 }
 
 export function getAppTabbarOffset(bottomInset: number) {
-  return bottomInset + APP_TABBAR_HEIGHT_PX;
+  return bottomInset + APP_TABBAR_HEIGHT_PX + APP_CONTENT_GAP_PX;
 }
 
 /** Apply Telegram content/safe area insets (required in fullscreen under native controls). */

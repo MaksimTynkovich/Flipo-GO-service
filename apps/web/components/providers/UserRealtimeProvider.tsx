@@ -27,12 +27,19 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
       if (msg.event === "balance.updated") {
         const payload = msg.payload as {
           betting_balance?: number;
+          promo_balance?: number;
           delta_nanoton?: number;
           ledger_type?: string;
         };
         if (payload.betting_balance != null) {
           setUser((prev) =>
-            prev ? { ...prev, betting_balance: payload.betting_balance! } : prev,
+            prev
+              ? {
+                  ...prev,
+                  betting_balance: payload.betting_balance!,
+                  promo_balance: payload.promo_balance ?? prev.promo_balance ?? 0,
+                }
+              : prev,
           );
         }
         if (payload.ledger_type === "win" && payload.delta_nanoton && payload.delta_nanoton > 0) {

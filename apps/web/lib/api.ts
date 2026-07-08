@@ -16,6 +16,7 @@ export type User = {
   first_name: string;
   photo_url?: string;
   betting_balance: number;
+  promo_balance?: number;
   staking_tier: "base" | "boost";
   ton_wallet?: string;
   is_admin?: boolean;
@@ -417,7 +418,9 @@ export async function cancelMarketListing(id: string) {
 }
 
 export async function buyMarketListing(id: string) {
-  return api<{ balance: number }>(`/api/v1/market/listings/${id}/buy`, { method: "POST" });
+  return api<{ balance: number; promo_balance: number }>(`/api/v1/market/listings/${id}/buy`, {
+    method: "POST",
+  });
 }
 
 export type ReferralStats = {
@@ -692,6 +695,12 @@ export async function upsertAdminPromoCode(promo: AdminPromoCode) {
   });
 }
 
+export async function deleteAdminPromoCode(code: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/marketing/promos/${encodeURIComponent(code)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getAdminBotSettings() {
   return api<AdminBotSettings>("/api/v1/admin/telegram/settings");
 }
@@ -730,6 +739,7 @@ export type PromoStatus = {
   wager_required_nanoton?: number;
   wager_progress_nanoton?: number;
   remaining_nanoton?: number;
+  replaced_promo_code?: string;
 };
 
 export async function activatePromoCode(code: string) {

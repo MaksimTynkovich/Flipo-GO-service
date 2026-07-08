@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/google/uuid"
@@ -111,10 +112,21 @@ func (s *Service) ListPromoCodes(ctx context.Context) ([]domain.PromoCode, error
 }
 
 func (s *Service) UpsertPromoCode(ctx context.Context, adminID uuid.UUID, promo domain.PromoCode) error {
+	promo.Code = strings.ToUpper(strings.TrimSpace(promo.Code))
+	if promo.Code == "" {
+		return domain.ErrPromoInvalid
+	}
 	if err := s.platform.UpsertPromoCode(ctx, &promo); err != nil {
 		return err
 	}
 	return s.audit(ctx, adminID, "promo_code_upserted", "promo_code", promo.Code, nil)
+}
+
+func (s *Service) DeletePromoCode(ctx context.Context, adminID uuid.UUID, code string) error {
+	if err := s.platform.DeletePromoCode(ctx, code); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "promo_code_deleted", "promo_code", code, nil)
 }
 
 func (s *Service) GetBotSettings(ctx context.Context) (*domain.TelegramBotSettings, error) {

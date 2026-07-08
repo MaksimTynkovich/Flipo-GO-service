@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { formatTON } from "@/lib/api";
+import { hasPromoBalance, mainBalanceNanoton } from "@/lib/balance";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
@@ -13,6 +14,8 @@ import { BalanceGainFx } from "@/src/widgets/app-shell/ui/BalanceGainFx";
 export function AppHeader() {
   const { user, loading } = useAuth();
   const haptics = useTelegramHaptics();
+  const promoBalance = user?.promo_balance ?? 0;
+  const mainBalance = user ? mainBalanceNanoton(user) : 0;
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 bg-background/88 pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)] backdrop-blur-2xl hairline-bottom">
@@ -29,11 +32,16 @@ export function AppHeader() {
         <div className="relative flex min-w-0 items-center overflow-visible">
           <BalanceGainFx />
           <div className="flex min-w-0 items-center overflow-visible rounded-full bg-surface-raised">
-            <div className="flex min-w-0 items-center gap-1 px-3 py-1.5">
+            <div className="flex min-w-0 items-center gap-1.5 px-3 py-1.5">
               <span className="truncate text-[15px] font-semibold tabular-nums leading-none text-foreground">
-                {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
+                {loading ? "…" : user ? formatTON(mainBalance) : "—"}
               </span>
               <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
+              {!loading && user && hasPromoBalance(user) ? (
+                <span className="shrink-0 text-[11px] font-medium tabular-nums leading-none text-accent">
+                  +{formatTON(promoBalance)}
+                </span>
+              ) : null}
             </div>
 
             <Link

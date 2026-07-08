@@ -13,11 +13,12 @@ import (
 type Service struct {
 	platform domain.PlatformRepository
 	games    domain.GameRepository
+	users    domain.UserRepository
 	balance  *balance.Service
 }
 
-func NewService(platform domain.PlatformRepository, games domain.GameRepository, balance *balance.Service) *Service {
-	return &Service{platform: platform, games: games, balance: balance}
+func NewService(platform domain.PlatformRepository, games domain.GameRepository, users domain.UserRepository, balance *balance.Service) *Service {
+	return &Service{platform: platform, games: games, users: users, balance: balance}
 }
 
 type StatusView struct {
@@ -27,6 +28,7 @@ type StatusView struct {
 	WagerRequiredNanoton int64  `json:"wager_required_nanoton,omitempty"`
 	WagerProgressNanoton int64  `json:"wager_progress_nanoton,omitempty"`
 	RemainingNanoton     int64  `json:"remaining_nanoton,omitempty"`
+	ReplacedPromoCode    string `json:"replaced_promo_code,omitempty"`
 }
 
 func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (*StatusView, error) {
@@ -35,12 +37,12 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 		return nil, domain.ErrPromoInvalid
 	}
 
-	active, err := s.platform.GetActiveRedemption(ctx, userID)
+	redeemed, err := s.platform.HasRedeemedPromoCode(ctx, userID, code)
 	if err != nil {
 		return nil, err
 	}
-	if active != nil {
-		return nil, domain.ErrPromoAlreadyUsed
+	if redeemed {
+		return nil, domain.ErrPromoAlreadyRedeemed
 	}
 
 	promo, err := s.platform.GetPromoCode(ctx, code)
@@ -55,6 +57,25 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 	}
 	if promo.MaxUses > 0 && promo.UsedCount >= promo.MaxUses {
 		return nil, domain.ErrPromoExhausted
+	}
+
+	var replacedCode string
+	active, err := s.platform.GetActiveRedemption(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if active != nil {
+		progress, err := s.games.SumUserBetsSince(ctx, userID, active.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.platform.UpdateRedemptionProgress(ctx, active.ID, progress, "forfeited"); err != nil {
+			return nil, err
+		}
+		if err := s.users.ReleasePromoBalance(ctx, userID); err != nil {
+			return nil, err
+		}
+		replacedCode = active.PromoCode
 	}
 
 	wagerRequired := int64(float64(promo.BonusNanoton) * promo.WagerMultiplier)
@@ -80,7 +101,12 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 	}
 	_ = s.platform.IncrementPromoUsed(ctx, promo.Code)
 
-	return s.Status(ctx, userID)
+	status, err := s.Status(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	status.ReplacedPromoCode = replacedCode
+	return status, nil
 }
 
 func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, error) {
@@ -98,6 +124,7 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, er
 	}
 	if progress >= redemption.WagerRequiredNanoton && redemption.Status == "active" {
 		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "completed")
+		_ = s.users.ReleasePromoBalance(ctx, userID)
 		redemption.Status = "completed"
 	} else if progress != redemption.WagerProgressNanoton {
 		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "active")

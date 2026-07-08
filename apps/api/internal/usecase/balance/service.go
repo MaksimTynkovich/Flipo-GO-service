@@ -8,7 +8,7 @@ import (
 )
 
 type BalanceNotifier interface {
-	BalanceUpdated(userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType)
+	BalanceUpdated(userID uuid.UUID, balanceNanoton, promoBalanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType)
 }
 
 type Service struct {
@@ -30,7 +30,7 @@ func (s *Service) Debit(ctx context.Context, userID uuid.UUID, amount int64, led
 	}
 	balanceAfter, err := s.users.UpdateBalance(ctx, userID, -amount, ledgerType, refType, refID)
 	if err == nil {
-		s.notifyBalance(userID, balanceAfter, -amount, ledgerType)
+		s.notifyBalance(ctx, userID, balanceAfter, -amount, ledgerType)
 	}
 	return balanceAfter, err
 }
@@ -41,16 +41,20 @@ func (s *Service) Credit(ctx context.Context, userID uuid.UUID, amount int64, le
 	}
 	balanceAfter, err := s.users.UpdateBalance(ctx, userID, amount, ledgerType, refType, refID)
 	if err == nil {
-		s.notifyBalance(userID, balanceAfter, amount, ledgerType)
+		s.notifyBalance(ctx, userID, balanceAfter, amount, ledgerType)
 	}
 	return balanceAfter, err
 }
 
-func (s *Service) notifyBalance(userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
+func (s *Service) notifyBalance(ctx context.Context, userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
 	if s.notifier == nil {
 		return
 	}
-	s.notifier.BalanceUpdated(userID, balanceNanoton, deltaNanoton, ledgerType)
+	promoBalance := int64(0)
+	if user, err := s.users.FindByID(ctx, userID); err == nil {
+		promoBalance = user.PromoBalance
+	}
+	s.notifier.BalanceUpdated(userID, balanceNanoton, promoBalance, deltaNanoton, ledgerType)
 }
 
 func (s *Service) GetBalance(ctx context.Context, userID uuid.UUID) (int64, error) {
