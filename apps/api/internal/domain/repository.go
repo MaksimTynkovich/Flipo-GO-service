@@ -18,6 +18,8 @@ type UserRepository interface {
 	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
+	ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error)
+	CountUsers(ctx context.Context) (int64, error)
 }
 
 type InventoryRepository interface {
@@ -84,6 +86,50 @@ type GameRepository interface {
 	ListBetsByRoundWithUser(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
 	FindPendingBetByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) (*GameBet, error)
 	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
+	SumUserWinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	SumUserBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	SumRoundBets(ctx context.Context, roundID uuid.UUID) (int64, error)
+	GameStats(ctx context.Context) ([]AdminGameStat, error)
+}
+
+type PlatformRepository interface {
+	GetGameConfig(ctx context.Context, gameType GameType) (*GameConfig, error)
+	ListGameConfigs(ctx context.Context) ([]GameConfig, error)
+	UpsertGameConfig(ctx context.Context, cfg *GameConfig) error
+	GetRiskSettings(ctx context.Context) (*PlatformRiskSettings, error)
+	UpdateRiskSettings(ctx context.Context, settings *PlatformRiskSettings) error
+	GetActiveSeed(ctx context.Context, gameType GameType) (*ProvablyFairSeedSession, error)
+	CreateSeedSession(ctx context.Context, session *ProvablyFairSeedSession) error
+	DeactivateSeeds(ctx context.Context, gameType GameType) error
+	ListSeedHistory(ctx context.Context, gameType GameType, limit int) ([]ProvablyFairSeedSession, error)
+	ListPromoCodes(ctx context.Context) ([]PromoCode, error)
+	UpsertPromoCode(ctx context.Context, promo *PromoCode) error
+	GetBotSettings(ctx context.Context) (*TelegramBotSettings, error)
+	UpdateBotSettings(ctx context.Context, settings *TelegramBotSettings) error
+	GetPromoCode(ctx context.Context, code string) (*PromoCode, error)
+	GetActiveRedemption(ctx context.Context, userID uuid.UUID) (*PromoRedemption, error)
+	CreateRedemption(ctx context.Context, redemption *PromoRedemption) error
+	IncrementPromoUsed(ctx context.Context, code string) error
+	UpdateRedemptionProgress(ctx context.Context, redemptionID uuid.UUID, progress int64, status string) error
+	CreateBroadcast(ctx context.Context, broadcast *TelegramBroadcast) error
+	GetBroadcast(ctx context.Context, id uuid.UUID) (*TelegramBroadcast, error)
+	UpdateBroadcast(ctx context.Context, broadcast *TelegramBroadcast) error
+	ListBroadcasts(ctx context.Context, limit int) ([]TelegramBroadcast, error)
+	ListQueuedBroadcasts(ctx context.Context, limit int) ([]TelegramBroadcast, error)
+	CreateSweep(ctx context.Context, sweep *TreasurySweep) error
+	ListSweeps(ctx context.Context, limit int) ([]TreasurySweep, error)
+	EnsureDefaults(ctx context.Context) error
+}
+
+type AdminRepository interface {
+	RevenueSummary(ctx context.Context) (*RevenueSummary, error)
+	RevenueTimeseries(ctx context.Context, days int) ([]RevenueTimeseriesPoint, error)
+	ListLedger(ctx context.Context, limit int) ([]BalanceLedger, error)
+	ListRiskUsers(ctx context.Context, limit int) ([]AdminRiskUser, error)
+	ListAuditLogs(ctx context.Context, limit int) ([]AdminAuditLog, error)
+	CreateAuditLog(ctx context.Context, log *AdminAuditLog) error
+	ListUsers(ctx context.Context, query string, limit int) ([]User, error)
+	CountUserBets(ctx context.Context, userID uuid.UUID, limit int) ([]GameBet, error)
 }
 
 type PvPRepository interface {
@@ -126,8 +172,15 @@ type TonTransferRepository interface {
 		userID uuid.UUID,
 		amountNanoton, feeNanoton int64,
 		walletAddress, idempotencyKey string,
+		initialStatus TonTransferStatus,
+		riskScore int,
+		riskFlags []string,
+		reviewReason *string,
 	) (*TonTransfer, int64, error)
 	CompleteDepositAtomic(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) (int64, error)
 	FailWithdrawalAtomic(ctx context.Context, transferID uuid.UUID, errMsg string) (int64, error)
 	CompleteWithdrawal(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) error
+	ListAll(ctx context.Context, limit int) ([]TonTransfer, error)
+	ApproveWithdrawal(ctx context.Context, transferID, adminID uuid.UUID) error
+	RejectWithdrawalAtomic(ctx context.Context, transferID, adminID uuid.UUID, reason string) (int64, error)
 }

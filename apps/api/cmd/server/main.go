@@ -11,8 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
-
 	httpx "github.com/flipo/flipo/apps/api/internal/delivery/http"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/handlers"
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
@@ -23,26 +21,33 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
 	redisrepo "github.com/flipo/flipo/apps/api/internal/repository/redis"
+	"github.com/flipo/flipo/apps/api/internal/usecase/admin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
+	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
+	"github.com/flipo/flipo/apps/api/internal/usecase/promo"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
+	"github.com/flipo/flipo/apps/api/internal/usecase/risk"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
+	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
+	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
 	"github.com/flipo/flipo/apps/api/internal/usecase/wallet"
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
 	pvpworker "github.com/flipo/flipo/apps/api/internal/worker/pvp"
+	treasuryworker "github.com/flipo/flipo/apps/api/internal/worker/treasury"
 	walletworker "github.com/flipo/flipo/apps/api/internal/worker/wallet"
 )
 
 func main() {
-	_ = godotenv.Load(".env", "../.env", "../../.env")
+	config.LoadDotEnv()
 
 	migrateOnly := flag.Bool("migrate-only", false, "run migrations and exit")
 	flag.Parse()
@@ -81,6 +86,12 @@ func main() {
 	tonTransferRepo := postgres.NewTonTransferRepo(db)
 	gameRepo := postgres.NewGameRepo(db)
 	pvpRepo := postgres.NewPvPRepo(db)
+	platformRepo := postgres.NewPlatformRepo(db)
+	adminRepo := postgres.NewAdminRepo(db)
+
+	if err := platformRepo.EnsureDefaults(ctx); err != nil {
+		slog.Warn("platform defaults seed failed", "error", err)
+	}
 
 	referralSvc := referral.NewService(userRepo)
 	tonClient := ton.NewClient(
@@ -100,11 +111,20 @@ func main() {
 		DepositTTL:         time.Duration(cfg.TonDepositTTLMinutes) * time.Minute,
 		ChainDevMode:       cfg.TonChainDevMode,
 	})
+	riskSvc := risk.NewService(platformRepo, gameRepo, userRepo)
+	walletSvc.SetRiskEvaluator(risk.WalletEvaluator{Service: riskSvc})
+	fairnessSvc := fairness.NewService(platformRepo, gameRepo)
+	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, tonTransferRepo)
+	treasurySvc := treasury.NewService(platformRepo, tonClient)
+	botAPI := telegram.NewBotAPI(cfg.BotToken)
+	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
+		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
 	balanceSvc := balance.NewService(userRepo)
+	promoSvc := promo.NewService(platformRepo, gameRepo, balanceSvc)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
 	if mtprotoCfg.Enabled() {
@@ -142,7 +162,7 @@ func main() {
 	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
 	crashSvc := crash.NewService(gameRepo, balanceSvc, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
-	pvpSvc := pvp.NewService(pvpRepo, userRepo, balanceSvc, cfg.PlatformFeeBps)
+	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, cfg.PlatformFeeBps)
 	pvpSvc.SetTickNotifier(hub)
 
 	if cache != nil {
@@ -165,16 +185,33 @@ func main() {
 	walletWorker.Start(ctx)
 	defer walletWorker.Stop()
 
+	treasuryWorker := treasuryworker.NewWorker(treasurySvc, telegramAdminSvc)
+	treasuryWorker.Start(ctx)
+	defer treasuryWorker.Stop()
+
+	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName)
+	if cfg.TelegramWebhookURL != "" {
+		if err := botAPI.SetWebhook(ctx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
+			slog.Warn("telegram webhook registration failed", "error", err)
+		} else {
+			slog.Info("telegram webhook registered", "url", cfg.TelegramWebhookURL)
+		}
+	}
+
 	router := httpx.NewRouter(httpx.Deps{
 		DB:               db,
 		Auth:             authSvc,
 		AuthHandler:      handlers.NewAuthHandler(authSvc),
 		InventoryHandler: handlers.NewInventoryHandler(invSvc, stakeSvc),
 		StakingHandler:   handlers.NewStakingHandler(stakeSvc),
-		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc),
+		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc),
 		MarketHandler:    handlers.NewMarketHandler(marketSvc),
 		ReferralHandler:  handlers.NewReferralHandler(referralSvc),
+		PromoHandler:     handlers.NewPromoHandler(promoSvc),
 		WalletHandler:    handlers.NewWalletHandler(walletSvc),
+		TelegramHandler:  handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
+		AdminHandler:     handlers.NewAdminHandler(adminSvc, fairnessSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress),
+		AdminTelegramIDs: cfg.AdminTelegramIDs,
 		Hub:              hub,
 	})
 

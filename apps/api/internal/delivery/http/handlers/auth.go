@@ -14,6 +14,18 @@ type AuthHandler struct {
 	auth *auth.Service
 }
 
+type userView struct {
+	ID             string              `json:"id"`
+	TelegramID     int64               `json:"telegram_id"`
+	Username       string              `json:"username"`
+	FirstName      string              `json:"first_name"`
+	PhotoURL       string              `json:"photo_url,omitempty"`
+	BettingBalance int64               `json:"betting_balance"`
+	StakingTier    domain.StakingTier  `json:"staking_tier"`
+	TonWallet      string              `json:"ton_wallet,omitempty"`
+	IsAdmin        bool                `json:"is_admin"`
+}
+
 func NewAuthHandler(authSvc *auth.Service) *AuthHandler {
 	return &AuthHandler{auth: authSvc}
 }
@@ -36,7 +48,7 @@ func (h *AuthHandler) TelegramAuth(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
-		"user":  user,
+		"user":  toUserView(h.auth, user),
 	})
 }
 
@@ -54,7 +66,7 @@ func (h *AuthHandler) DebugAuth(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
-		"user":  user,
+		"user":  toUserView(h.auth, user),
 	})
 }
 
@@ -65,7 +77,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, toUserView(h.auth, user))
 }
 
 func (h *AuthHandler) UpdateWallet(c *gin.Context) {
@@ -96,4 +108,18 @@ func (h *AuthHandler) ClearWallet(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func toUserView(authSvc *auth.Service, user *domain.User) userView {
+	return userView{
+		ID:             user.ID.String(),
+		TelegramID:     user.TelegramID,
+		Username:       user.Username,
+		FirstName:      user.FirstName,
+		PhotoURL:       user.PhotoURL,
+		BettingBalance: user.BettingBalance,
+		StakingTier:    user.StakingTier,
+		TonWallet:      user.TonWallet,
+		IsAdmin:        authSvc.IsAdmin(user.TelegramID),
+	}
 }

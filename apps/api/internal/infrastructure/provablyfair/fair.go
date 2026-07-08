@@ -3,8 +3,12 @@ package provablyfair
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
+
+	"github.com/google/uuid"
 )
 
 func HashSHA256(data string) string {
@@ -76,6 +80,24 @@ func CrashPoint(hash string) float64 {
 	return math.Max(1.0, math.Floor((100.0/(1.0-e))/100.0*100)/100)
 }
 
+// PvPWinnerIndex picks a deterministic winner among sorted player IDs.
+func PvPWinnerIndex(serverSeed string, nonce int64, playerIDs []uuid.UUID) int {
+	if len(playerIDs) == 0 {
+		return 0
+	}
+	ids := append([]uuid.UUID(nil), playerIDs...)
+	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
+	clientSeed := ""
+	for i, id := range ids {
+		if i > 0 {
+			clientSeed += ","
+		}
+		clientSeed += id.String()
+	}
+	h := HashSHA256(fmt.Sprintf("%s:%s:%d", serverSeed, clientSeed, nonce))
+	return int(hexToInt(h[:8]) % int64(len(ids)))
+}
+
 func hexToInt(hexStr string) int64 {
 	var val int64
 	for _, c := range hexStr {
@@ -90,4 +112,64 @@ func hexToInt(hexStr string) int64 {
 		}
 	}
 	return val
+}
+
+// VerifyRound checks that a finished round's result matches committed server seed hash.
+func VerifyRound(gameType string, serverSeedHash, serverSeed string, nonce int64, resultPayload []byte) bool {
+	if serverSeedHash == "" || serverSeed == "" {
+		return false
+	}
+	if HashSHA256(serverSeed) != serverSeedHash {
+		return false
+	}
+
+	switch gameType {
+	case "roulette":
+		var payload map[string]any
+		if err := json.Unmarshal(resultPayload, &payload); err != nil {
+			return false
+		}
+		color, _ := payload["color"].(string)
+		return RouletteResult(serverSeed, nonce) == color
+	case "crash":
+		var payload map[string]any
+		if err := json.Unmarshal(resultPayload, &payload); err != nil {
+			return false
+		}
+		crash, ok := payload["crash_point"].(float64)
+		if !ok {
+			return false
+		}
+		chain := HashChain(serverSeed, int(nonce)+1)
+		if int(nonce) < 0 || int(nonce) >= len(chain) {
+			return false
+		}
+		return CrashPoint(chain[nonce]) == crash
+	case "pvp":
+		var payload map[string]any
+		if err := json.Unmarshal(resultPayload, &payload); err != nil {
+			return false
+		}
+		winnerStr, _ := payload["winner_id"].(string)
+		rawIDs, ok := payload["player_ids"].([]any)
+		if !ok || winnerStr == "" {
+			return false
+		}
+		playerIDs := make([]uuid.UUID, 0, len(rawIDs))
+		for _, raw := range rawIDs {
+			idStr, _ := raw.(string)
+			id, err := uuid.Parse(idStr)
+			if err != nil {
+				return false
+			}
+			playerIDs = append(playerIDs, id)
+		}
+		idx := PvPWinnerIndex(serverSeed, nonce, playerIDs)
+		if idx < 0 || idx >= len(playerIDs) {
+			return false
+		}
+		return playerIDs[idx].String() == winnerStr
+	default:
+		return false
+	}
 }

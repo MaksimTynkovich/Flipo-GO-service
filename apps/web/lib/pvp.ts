@@ -20,6 +20,8 @@ export type PvpRoom = {
   spin_ends_at?: string;
   finished_at?: string;
   created_at: string;
+  game_round_id?: string;
+  server_seed_hash?: string;
 };
 
 export type PvpLobbyState = {

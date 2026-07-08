@@ -21,6 +21,10 @@ type Deps struct {
 	MarketHandler    *handlers.MarketHandler
 	ReferralHandler  *handlers.ReferralHandler
 	WalletHandler    *handlers.WalletHandler
+	TelegramHandler  *handlers.TelegramHandler
+	PromoHandler     *handlers.PromoHandler
+	AdminHandler     *handlers.AdminHandler
+	AdminTelegramIDs []int64
 	Hub              *websocket.Hub
 }
 
@@ -49,9 +53,11 @@ func NewRouter(deps Deps) *gin.Engine {
 	{
 		v1.POST("/auth/telegram", deps.AuthHandler.TelegramAuth)
 		v1.POST("/auth/debug", deps.AuthHandler.DebugAuth)
+		v1.POST("/telegram/webhook", deps.TelegramHandler.Webhook)
 
 		v1.GET("/market/listings", deps.MarketHandler.List)
 		v1.GET("/market/listings/:id", deps.MarketHandler.Get)
+		v1.GET("/games/:game/rounds/:id/proof", deps.GameHandler.RoundProof)
 
 		authed := v1.Group("")
 		authed.Use(middleware.JWTAuth(deps.Auth))
@@ -78,6 +84,9 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.GET("/referrals/stats", deps.ReferralHandler.Stats)
 
+			authed.POST("/promos/activate", deps.PromoHandler.Activate)
+			authed.GET("/promos/status", deps.PromoHandler.Status)
+
 			authed.POST("/wallet/deposit/intent", deps.WalletHandler.CreateDepositIntent)
 			authed.POST("/wallet/deposit/:id/confirm", deps.WalletHandler.ConfirmDeposit)
 			authed.POST("/wallet/withdraw", deps.WalletHandler.RequestWithdrawal)
@@ -97,6 +106,35 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/games/pvp/rooms", deps.GameHandler.PvPListRooms)
 			authed.POST("/games/pvp/rooms", deps.GameHandler.PvPCreateRoom)
 			authed.POST("/games/pvp/rooms/:id/join", deps.GameHandler.PvPJoinRoom)
+		}
+
+		admin := v1.Group("/admin")
+		admin.Use(middleware.AdminAuth(deps.Auth, deps.AdminTelegramIDs))
+		{
+			admin.GET("/revenue/summary", deps.AdminHandler.RevenueSummary)
+			admin.GET("/revenue/timeseries", deps.AdminHandler.RevenueTimeseries)
+			admin.GET("/transfers", deps.AdminHandler.Transfers)
+			admin.POST("/transfers/:id/review", deps.AdminHandler.ReviewTransfer)
+			admin.GET("/ledger", deps.AdminHandler.Ledger)
+			admin.GET("/games/stats", deps.AdminHandler.GameStats)
+			admin.GET("/games/configs", deps.AdminHandler.ListGameConfigs)
+			admin.PATCH("/games/configs", deps.AdminHandler.UpdateGameConfig)
+			admin.POST("/games/:game/rotate-seed", deps.AdminHandler.RotateSeed)
+			admin.GET("/games/:game/seeds", deps.AdminHandler.SeedHistory)
+			admin.GET("/risk/users", deps.AdminHandler.RiskUsers)
+			admin.GET("/risk/settings", deps.AdminHandler.GetRiskSettings)
+			admin.PATCH("/risk/settings", deps.AdminHandler.UpdateRiskSettings)
+			admin.GET("/treasury/status", deps.AdminHandler.TreasuryStatus)
+			admin.GET("/users", deps.AdminHandler.ListUsers)
+			admin.GET("/users/:id/bets", deps.AdminHandler.UserBets)
+			admin.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)
+			admin.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
+			admin.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
+			admin.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
+			admin.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
+			admin.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
+			admin.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)
+			admin.GET("/audit", deps.AdminHandler.AuditLogs)
 		}
 	}
 

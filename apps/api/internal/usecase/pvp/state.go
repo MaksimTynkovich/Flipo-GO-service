@@ -39,6 +39,9 @@ type RoomView struct {
 	SpinEndsAt       *time.Time  `json:"spin_ends_at,omitempty"`
 	FinishedAt       *time.Time  `json:"finished_at,omitempty"`
 	CreatedAt        time.Time   `json:"created_at"`
+	GameRoundID      *uuid.UUID  `json:"game_round_id,omitempty"`
+	ServerSeedHash   string      `json:"server_seed_hash,omitempty"`
+	ServerSeed       string      `json:"server_seed,omitempty"`
 }
 
 type LobbyState struct {

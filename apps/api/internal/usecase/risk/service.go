@@ -1,0 +1,164 @@
+package risk
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/google/uuid"
+)
+
+type Service struct {
+	platform domain.PlatformRepository
+	games    domain.GameRepository
+	users    domain.UserRepository
+}
+
+func NewService(platform domain.PlatformRepository, games domain.GameRepository, users domain.UserRepository) *Service {
+	return &Service{platform: platform, games: games, users: users}
+}
+
+type BetCheckInput struct {
+	UserID    uuid.UUID
+	GameType  domain.GameType
+	RoundID   uuid.UUID
+	Amount    int64
+	MaxPayout int64
+}
+
+func (s *Service) ValidateBet(ctx context.Context, in BetCheckInput) error {
+	user, err := s.users.FindByID(ctx, in.UserID)
+	if err != nil {
+		return err
+	}
+	if user.IsBanned {
+		return domain.ErrUserBanned
+	}
+
+	cfg, err := s.platform.GetGameConfig(ctx, in.GameType)
+	if err != nil {
+		return err
+	}
+	if !cfg.Enabled {
+		return domain.ErrGameDisabled
+	}
+	if in.Amount < cfg.MinBetNanoton || in.Amount > cfg.MaxBetNanoton {
+		return domain.ErrBetLimitExceeded
+	}
+	if in.MaxPayout > cfg.MaxPayoutNanoton {
+		return domain.ErrBetLimitExceeded
+	}
+
+	settings, err := s.platform.GetRiskSettings(ctx)
+	if err != nil {
+		return err
+	}
+	_ = settings
+
+	if in.RoundID != uuid.Nil {
+		exposure, err := s.games.SumRoundBets(ctx, in.RoundID)
+		if err != nil {
+			return err
+		}
+		if exposure+in.Amount > settings.MaxRoundExposureNanoton {
+			return domain.ErrBetLimitExceeded
+		}
+	}
+
+	since := time.Now().UTC().Truncate(24 * time.Hour)
+	dailyWins, err := s.games.SumUserWinsSince(ctx, in.UserID, since)
+	if err != nil {
+		return err
+	}
+	if dailyWins >= settings.MaxDailyWinNanoton {
+		return domain.ErrDailyWinCap
+	}
+
+	return nil
+}
+
+type WithdrawalRisk struct {
+	Score        int
+	Flags        []string
+	ReviewReason *string
+	NeedsReview  bool
+}
+
+func (s *Service) EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netNanoton int64) (WithdrawalRisk, error) {
+	settings, err := s.platform.GetRiskSettings(ctx)
+	if err != nil {
+		return WithdrawalRisk{}, err
+	}
+
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return WithdrawalRisk{}, err
+	}
+
+	flags := make([]string, 0, 4)
+	score := 0
+	if user.IsBanned {
+		flags = append(flags, "banned_user")
+		score += 100
+	}
+	flags = append(flags, user.RiskFlags...)
+
+	if netNanoton >= settings.AutoReviewWithdrawNanoton {
+		flags = append(flags, "large_withdrawal")
+		score += 50
+	}
+
+	since := time.Now().UTC().Truncate(24 * time.Hour)
+	dailyWins, err := s.games.SumUserWinsSince(ctx, userID, since)
+	if err != nil {
+		return WithdrawalRisk{}, err
+	}
+	if dailyWins >= settings.MaxDailyWinNanoton/2 {
+		flags = append(flags, "high_daily_wins")
+		score += 30
+	}
+
+	needsReview := netNanoton >= settings.AutoReviewWithdrawNanoton || score >= 50
+	var reason *string
+	if needsReview {
+		msg := fmt.Sprintf("auto review: score=%d net=%d", score, netNanoton)
+		reason = &msg
+	}
+
+	return WithdrawalRisk{
+		Score:        score,
+		Flags:        dedupe(flags),
+		ReviewReason: reason,
+		NeedsReview:  needsReview,
+	}, nil
+}
+
+func dedupe(items []string) []string {
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
+}
+
+// WalletEvaluator adapts risk scoring for the wallet service.
+type WalletEvaluator struct {
+	*Service
+}
+
+func (w WalletEvaluator) EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netNanoton int64) (int, []string, *string, bool, error) {
+	result, err := w.Service.EvaluateWithdrawal(ctx, userID, netNanoton)
+	if err != nil {
+		return 0, nil, nil, false, err
+	}
+	return result.Score, result.Flags, result.ReviewReason, result.NeedsReview, nil
+}

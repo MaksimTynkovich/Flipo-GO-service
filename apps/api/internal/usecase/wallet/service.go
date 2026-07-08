@@ -22,11 +22,16 @@ type Config struct {
 	ChainDevMode        bool
 }
 
+type WithdrawalRiskEvaluator interface {
+	EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netNanoton int64) (score int, flags []string, reviewReason *string, needsReview bool, err error)
+}
+
 type Service struct {
 	users    domain.UserRepository
 	transfers domain.TonTransferRepository
 	chain    *ton.Client
 	cfg      Config
+	risk     WithdrawalRiskEvaluator
 }
 
 func NewService(users domain.UserRepository, transfers domain.TonTransferRepository, chain *ton.Client, cfg Config) *Service {
@@ -38,6 +43,10 @@ func NewService(users domain.UserRepository, transfers domain.TonTransferReposit
 	}
 }
 
+func (s *Service) SetRiskEvaluator(r WithdrawalRiskEvaluator) {
+	s.risk = r
+}
+
 type DepositIntentView struct {
 	ID            string `json:"id"`
 	ToAddress     string `json:"to_address"`
@@ -47,17 +56,20 @@ type DepositIntentView struct {
 }
 
 type TransferView struct {
-	ID            string  `json:"id"`
-	Direction     string  `json:"direction"`
-	Status        string  `json:"status"`
-	AmountNanoton int64   `json:"amount_nanoton"`
-	FeeNanoton    int64   `json:"fee_nanoton"`
-	NetNanoton    int64   `json:"net_nanoton"`
-	WalletAddress string  `json:"wallet_address"`
-	TxHash        *string `json:"tx_hash,omitempty"`
-	ErrorMessage  *string `json:"error_message,omitempty"`
-	CreatedAt     string  `json:"created_at"`
-	ConfirmedAt   *string `json:"confirmed_at,omitempty"`
+	ID            string   `json:"id"`
+	Direction     string   `json:"direction"`
+	Status        string   `json:"status"`
+	AmountNanoton int64    `json:"amount_nanoton"`
+	FeeNanoton    int64    `json:"fee_nanoton"`
+	NetNanoton    int64    `json:"net_nanoton"`
+	WalletAddress string   `json:"wallet_address"`
+	TxHash        *string  `json:"tx_hash,omitempty"`
+	ErrorMessage  *string  `json:"error_message,omitempty"`
+	RiskScore     int      `json:"risk_score,omitempty"`
+	RiskFlags     []string `json:"risk_flags,omitempty"`
+	ReviewReason  *string  `json:"review_reason,omitempty"`
+	CreatedAt     string   `json:"created_at"`
+	ConfirmedAt   *string  `json:"confirmed_at,omitempty"`
 }
 
 func (s *Service) CreateDepositIntent(ctx context.Context, userID uuid.UUID, amountNanoton int64) (*DepositIntentView, error) {
@@ -194,6 +206,21 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 		return nil, 0, domain.ErrInsufficientFunds
 	}
 
+	initialStatus := domain.TonStatusQueued
+	riskScore := 0
+	var riskFlags []string
+	var reviewReason *string
+	if s.risk != nil {
+		var needsReview bool
+		riskScore, riskFlags, reviewReason, needsReview, err = s.risk.EvaluateWithdrawal(ctx, userID, receiveNanoton)
+		if err != nil {
+			return nil, 0, err
+		}
+		if needsReview {
+			initialStatus = domain.TonStatusPendingReview
+		}
+	}
+
 	transfer, balanceAfter, err := s.transfers.CreateWithdrawalAtomic(
 		ctx,
 		userID,
@@ -201,6 +228,10 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 		s.cfg.WithdrawFeeNanoton,
 		user.TonWallet,
 		idempotencyKey,
+		initialStatus,
+		riskScore,
+		riskFlags,
+		reviewReason,
 	)
 	if err != nil {
 		return nil, 0, err
@@ -330,6 +361,9 @@ func toView(transfer *domain.TonTransfer) *TransferView {
 		WalletAddress: transfer.WalletAddress,
 		TxHash:        transfer.TxHash,
 		ErrorMessage:  transfer.ErrorMessage,
+		RiskScore:     transfer.RiskScore,
+		RiskFlags:     transfer.RiskFlagList(),
+		ReviewReason:  transfer.ReviewReason,
 		CreatedAt:     transfer.CreatedAt.Format(time.RFC3339),
 		ConfirmedAt:   confirmedAt,
 	}

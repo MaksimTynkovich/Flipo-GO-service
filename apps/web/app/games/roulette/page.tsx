@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButton";
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
@@ -34,6 +35,7 @@ export default function RoulettePage() {
   const [roundBets, setRoundBets] = useState<RouletteRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
   const [betting, setBetting] = useState(false);
+  const [proofRoundId, setProofRoundId] = useState<string | null>(null);
   const lastPhase = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
@@ -125,7 +127,11 @@ export default function RoulettePage() {
     <PageShell flush>
       <div className="flex flex-col gap-2.5 pb-3">
         <div className="border-b border-border pb-2.5">
-          <RouletteHistory history={history} roundNumber={state?.round_number} />
+          <RouletteHistory
+            history={history}
+            roundNumber={state?.round_number}
+            onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
+          />
         </div>
 
         <div className="flex justify-center">
@@ -196,6 +202,15 @@ export default function RoulettePage() {
           </div>
         </div>
       </div>
+
+      {proofRoundId ? (
+        <ProofModal
+          roundId={proofRoundId}
+          gameType="roulette"
+          title="Проверка рулетки"
+          onClose={() => setProofRoundId(null)}
+        />
+      ) : null}
     </PageShell>
   );
 }

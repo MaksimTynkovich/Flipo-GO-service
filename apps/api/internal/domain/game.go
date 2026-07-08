@@ -93,6 +93,7 @@ const (
 	LedgerWin        LedgerType = "win"
 	LedgerStakeYield    LedgerType = "stake_yield"
 	LedgerReferralBonus LedgerType = "referral_bonus"
+	LedgerPromoBonus    LedgerType = "promo_bonus"
 	LedgerWithdraw   LedgerType = "withdraw"
 	LedgerRefund     LedgerType = "refund"
 	LedgerMarketBuy  LedgerType = "market_buy"

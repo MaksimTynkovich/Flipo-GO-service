@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,11 @@ type Config struct {
 	Env                     string
 	JWTSecret               string
 	BotToken                string
+	BotUsername             string
+	WebAppShortName         string
+	WebAppURL               string
+	TelegramWebhookURL      string
+	TelegramWebhookSecret   string
 	DatabaseURL             string
 	RedisURL                string
 	JWTExpiry               time.Duration
@@ -41,6 +47,7 @@ type Config struct {
 	TelegramAPIID           int
 	TelegramAPIHash         string
 	TelegramSessionPath     string
+	AdminTelegramIDs        []int64
 }
 
 func Load() *Config {
@@ -49,6 +56,11 @@ func Load() *Config {
 		Env:                    getEnv("ENV", "development"),
 		JWTSecret:              getEnv("JWT_SECRET", "dev-secret-change-me"),
 		BotToken:               getEnv("BOT_TOKEN", ""),
+		BotUsername:            firstNonEmpty(getEnv("BOT_USERNAME", ""), getEnv("NEXT_PUBLIC_BOT_USERNAME", "")),
+		WebAppShortName:        firstNonEmpty(getEnv("WEBAPP_SHORT_NAME", ""), getEnv("NEXT_PUBLIC_WEBAPP_SHORT_NAME", "")),
+		WebAppURL:              firstNonEmpty(getEnv("TELEGRAM_WEBAPP_URL", ""), getEnv("WEBAPP_URL", "")),
+		TelegramWebhookURL:     getEnv("TELEGRAM_WEBHOOK_URL", ""),
+		TelegramWebhookSecret:  getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 		DatabaseURL:            getEnv("DATABASE_URL", "postgres://flipo:flipo@localhost:5432/flipo?sslmode=disable"),
 		RedisURL:               getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTExpiry:              15 * time.Minute,
@@ -79,7 +91,29 @@ func Load() *Config {
 		TelegramAPIID:          getEnvInt("TELEGRAM_API_ID", 0),
 		TelegramAPIHash:        getEnv("TELEGRAM_API_HASH", ""),
 		TelegramSessionPath:    getEnv("TELEGRAM_SESSION_PATH", "data/telegram/session.json"),
+		AdminTelegramIDs:       parseAdminTelegramIDs(getEnv("ADMIN_TELEGRAM_IDS", "")),
 	}
+}
+
+func parseAdminTelegramIDs(raw string) []int64 {
+	if raw == "" {
+		if debugID := int64(getEnvInt("DEBUG_TELEGRAM_ID", 0)); debugID > 0 {
+			return []int64{debugID}
+		}
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]int64, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if id, err := strconv.ParseInt(part, 10, 64); err == nil {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func getEnv(key, fallback string) string {
@@ -106,6 +140,15 @@ func getEnvBool(key string, fallback bool) bool {
 		}
 	}
 	return fallback
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func getEnvFloat(key string, fallback float64) float64 {

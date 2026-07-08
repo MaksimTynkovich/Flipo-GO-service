@@ -18,6 +18,7 @@ export type User = {
   betting_balance: number;
   staking_tier: "base" | "boost";
   ton_wallet?: string;
+  is_admin?: boolean;
 };
 
 export type InventoryItem = {
@@ -186,6 +187,7 @@ export async function getRouletteState() {
 }
 
 export type RouletteHistoryEntry = {
+  round_id: string;
   round_number: number;
   number: number;
   color: string;
@@ -255,6 +257,7 @@ export async function getCrashState() {
 }
 
 export type CrashHistoryEntry = {
+  round_id: string;
   round_number: number;
   crash_point: number;
 };
@@ -447,6 +450,9 @@ export type WalletTransfer = {
   wallet_address: string;
   tx_hash?: string;
   error_message?: string;
+  risk_score?: number;
+  risk_flags?: string[];
+  review_reason?: string;
   created_at: string;
   confirmed_at?: string;
 };
@@ -478,6 +484,297 @@ export async function requestWalletWithdraw(amountNanoton: number, idempotencyKe
   });
 }
 
+// --- Admin API ---
+
+export type AdminRevenueSummary = {
+  net_revenue_nanoton: number;
+  deposits_nanoton: number;
+  withdrawals_nanoton: number;
+  pending_liability_nanoton: number;
+  withdrawal_fees_nanoton: number;
+  market_fees_nanoton: number;
+  pvp_fees_nanoton: number;
+  game_bets_nanoton: number;
+  game_wins_nanoton: number;
+  referral_expense_nanoton: number;
+  staking_expense_nanoton: number;
+  hot_wallet_exposure_nanoton: number;
+  active_users_24h: number;
+  ggr_nanoton: number;
+  ngr_nanoton: number;
+};
+
+export type AdminRevenuePoint = {
+  period: string;
+  revenue_nanoton: number;
+  deposits_nanoton: number;
+  game_bets_nanoton: number;
+};
+
+export type AdminGameStat = {
+  game_type: string;
+  rounds: number;
+  bet_volume_nanoton: number;
+  payout_nanoton: number;
+  ggr_nanoton: number;
+  theoretical_rtp_bps: number;
+  actual_rtp_bps: number;
+};
+
+export type AdminRiskUser = {
+  user_id: string;
+  username: string;
+  first_name: string;
+  withdrawal_volume_nanoton: number;
+  daily_win_nanoton: number;
+  risk_flags: string[];
+};
+
+export type AdminLedgerEntry = {
+  id: string;
+  user_id: string;
+  type: string;
+  amount_nanoton: number;
+  balance_after: number;
+  reference_type: string;
+  reference_id: string;
+  created_at: string;
+};
+
+export type AdminAuditLog = {
+  id: string;
+  admin_user_id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  created_at: string;
+};
+
+export type AdminGameConfig = {
+  game_type: string;
+  enabled: boolean;
+  min_bet_nanoton: number;
+  max_bet_nanoton: number;
+  max_payout_nanoton: number;
+  house_edge_bps: number;
+  rtp_bps: number;
+  platform_fee_bps: number;
+};
+
+export type AdminRiskSettings = {
+  max_daily_win_nanoton: number;
+  max_round_exposure_nanoton: number;
+  whale_bet_threshold_nanoton: number;
+  auto_review_withdraw_nanoton: number;
+  hot_wallet_max_balance_nanoton: number;
+  hot_wallet_sweep_threshold_nanoton: number;
+  cold_wallet_address: string;
+};
+
+export type AdminTreasuryStatus = {
+  hot_wallet_address: string;
+  cold_wallet_address: string;
+  hot_wallet_max_nanoton: number;
+  hot_balance_nanoton?: number;
+  sweep_threshold_nanoton: number;
+  pending_liability_nanoton: number;
+  requires_sweep: boolean;
+};
+
+export type AdminPromoCode = {
+  code: string;
+  bonus_nanoton: number;
+  wager_multiplier: number;
+  max_uses: number;
+  used_count: number;
+  active: boolean;
+  expires_at?: string;
+};
+
+export type AdminBotSettings = {
+  broadcast_enabled: boolean;
+  spam_protection_level: number;
+  webapp_url: string;
+};
+
+export type AdminUser = {
+  id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  betting_balance: number;
+  is_banned: boolean;
+  risk_flags: string[];
+};
+
+export async function getAdminRevenueSummary() {
+  return api<AdminRevenueSummary>("/api/v1/admin/revenue/summary");
+}
+
+export async function getAdminRevenueTimeseries(days = 7) {
+  return api<AdminRevenuePoint[]>(`/api/v1/admin/revenue/timeseries?days=${days}`);
+}
+
+export async function getAdminTransfers() {
+  return api<WalletTransfer[]>("/api/v1/admin/transfers");
+}
+
+export async function reviewAdminTransfer(id: string, approve: boolean, note: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/transfers/${id}/review`, {
+    method: "POST",
+    body: JSON.stringify({ approve, note }),
+  });
+}
+
+export async function getAdminLedger() {
+  return api<AdminLedgerEntry[]>("/api/v1/admin/ledger");
+}
+
+export async function getAdminGameStats() {
+  return api<AdminGameStat[]>("/api/v1/admin/games/stats");
+}
+
+export async function getAdminRiskUsers() {
+  return api<AdminRiskUser[]>("/api/v1/admin/risk/users");
+}
+
+export async function getAdminAuditLogs() {
+  return api<AdminAuditLog[]>("/api/v1/admin/audit");
+}
+
+export async function getAdminGameConfigs() {
+  return api<AdminGameConfig[]>("/api/v1/admin/games/configs");
+}
+
+export async function updateAdminGameConfig(config: AdminGameConfig) {
+  return api<{ ok: boolean }>("/api/v1/admin/games/configs", {
+    method: "PATCH",
+    body: JSON.stringify(config),
+  });
+}
+
+export async function rotateAdminGameSeed(game: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/games/${game}/rotate-seed`, { method: "POST" });
+}
+
+export async function getAdminRiskSettings() {
+  return api<AdminRiskSettings>("/api/v1/admin/risk/settings");
+}
+
+export async function updateAdminRiskSettings(settings: AdminRiskSettings) {
+  return api<{ ok: boolean }>("/api/v1/admin/risk/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
+}
+
+export async function getAdminTreasuryStatus() {
+  return api<AdminTreasuryStatus>("/api/v1/admin/treasury/status");
+}
+
+export async function getAdminUsers(query = "") {
+  const q = query ? `?q=${encodeURIComponent(query)}` : "";
+  return api<AdminUser[]>(`/api/v1/admin/users${q}`);
+}
+
+export async function getAdminUserBets(userId: string) {
+  return api<unknown[]>(`/api/v1/admin/users/${userId}/bets`);
+}
+
+export async function getAdminPromoCodes() {
+  return api<AdminPromoCode[]>("/api/v1/admin/marketing/promos");
+}
+
+export async function upsertAdminPromoCode(promo: AdminPromoCode) {
+  return api<{ ok: boolean }>("/api/v1/admin/marketing/promos", {
+    method: "PUT",
+    body: JSON.stringify(promo),
+  });
+}
+
+export async function getAdminBotSettings() {
+  return api<AdminBotSettings>("/api/v1/admin/telegram/settings");
+}
+
+export async function updateAdminBotSettings(settings: AdminBotSettings) {
+  return api<{ ok: boolean }>("/api/v1/admin/telegram/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
+}
+
 export async function getWalletTransfers() {
   return api<WalletTransfer[]>("/api/v1/wallet/transfers");
+}
+
+export type RoundProof = {
+  round_id: string;
+  game_type: string;
+  round_number: number;
+  server_seed_hash: string;
+  server_seed?: string;
+  client_seed?: string;
+  nonce: number;
+  result?: string;
+  verified: boolean;
+};
+
+export async function getRoundProof(game: string, roundId: string) {
+  return api<RoundProof>(`/api/v1/games/${game}/rounds/${roundId}/proof`);
+}
+
+export type PromoStatus = {
+  active: boolean;
+  promo_code?: string;
+  bonus_nanoton?: number;
+  wager_required_nanoton?: number;
+  wager_progress_nanoton?: number;
+  remaining_nanoton?: number;
+};
+
+export async function activatePromoCode(code: string) {
+  return api<PromoStatus>("/api/v1/promos/activate", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function getPromoStatus() {
+  return api<PromoStatus>("/api/v1/promos/status");
+}
+
+export type TelegramBroadcast = {
+  id: string;
+  message: string;
+  status: string;
+  total_users: number;
+  sent_count: number;
+  failed_count: number;
+  created_at: string;
+  finished_at?: string;
+};
+
+export async function createAdminBroadcast(message: string) {
+  return api<TelegramBroadcast>("/api/v1/admin/telegram/broadcast", {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+}
+
+export async function getAdminBroadcasts() {
+  return api<TelegramBroadcast[]>("/api/v1/admin/telegram/broadcasts");
+}
+
+export type TreasurySweep = {
+  id: string;
+  amount_nanoton: number;
+  cold_wallet_address: string;
+  hot_balance_before: number;
+  tx_hash?: string;
+  status: string;
+  created_at: string;
+};
+
+export async function getAdminTreasurySweeps() {
+  return api<TreasurySweep[]>("/api/v1/admin/treasury/sweeps");
 }

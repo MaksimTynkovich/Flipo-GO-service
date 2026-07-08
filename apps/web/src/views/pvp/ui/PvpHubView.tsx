@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
+import { ProofModal } from "@/components/provably-fair/ProofModal";
 import {
   PvpActiveRoomCard,
   PvpOpenRoomCard,
@@ -36,6 +37,7 @@ export function PvpHubView() {
   const [creating, setCreating] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [proofRoundId, setProofRoundId] = useState<string | null>(null);
 
   const loadState = useCallback(async () => {
     try {
@@ -182,10 +184,23 @@ export function PvpHubView() {
         <section className="space-y-2">
           <p className="section-label px-0.5">Недавние игры</p>
           {state.history.map((room) => (
-            <PvpResultRoomCard key={room.id} room={room} />
+            <PvpResultRoomCard
+              key={room.id}
+              room={room}
+              onProof={room.game_round_id ? () => setProofRoundId(room.game_round_id!) : undefined}
+            />
           ))}
         </section>
       )}
+
+      {proofRoundId ? (
+        <ProofModal
+          roundId={proofRoundId}
+          gameType="pvp"
+          title="Проверка PvP"
+          onClose={() => setProofRoundId(null)}
+        />
+      ) : null}
     </PageShell>
   );
 }

@@ -37,7 +37,7 @@ web:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/web && PORT=$${WEB_PORT:-3000} npm run dev
 
 migrate:
-	cd apps/api && go run ./cmd/server --migrate-only
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/server --migrate-only
 
 tg-auth:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/tgauth

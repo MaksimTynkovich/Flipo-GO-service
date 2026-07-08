@@ -7,6 +7,7 @@ export const APP_ROUTES = {
   crash: "/games/crash",
   roulette: "/games/roulette",
   pvp: "/games/pvp",
+  admin: "/admin",
   market: "/market",
   inventory: "/inventory",
   deposit: "/deposit",

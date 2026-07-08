@@ -25,6 +25,8 @@ type User struct {
 	BettingBalance int64          `gorm:"not null;default:0" json:"betting_balance"`
 	ReferrerID     *uuid.UUID     `gorm:"type:uuid;index" json:"referrer_id,omitempty"`
 	StakingTier    StakingTier    `gorm:"type:varchar(16);not null;default:'base'" json:"staking_tier"`
+	IsBanned       bool           `gorm:"not null;default:false" json:"is_banned"`
+	RiskFlags      []string       `gorm:"type:jsonb;serializer:json" json:"risk_flags,omitempty"`
 	LastLoginAt    *time.Time     `json:"last_login_at,omitempty"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`

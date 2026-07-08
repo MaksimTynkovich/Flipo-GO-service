@@ -1,11 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Gift, Plus, Sparkles, Users } from "lucide-react";
+import { ChevronRight, Gift, Plus, Shield, Sparkles, Users } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { formatTON } from "@/lib/api";
+import {
+  activatePromoCode,
+  formatTON,
+  getPromoStatus,
+  type PromoStatus,
+} from "@/lib/api";
 import { shortenTonWalletAddress } from "@/lib/wallet";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
@@ -14,6 +20,28 @@ import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 export function ProfileOverviewView() {
   const { user, loading } = useAuth();
   const haptics = useTelegramHaptics();
+  const [promoCode, setPromoCode] = useState("");
+  const [promoStatus, setPromoStatus] = useState<PromoStatus | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+
+  useEffect(() => {
+    getPromoStatus()
+      .then(setPromoStatus)
+      .catch(() => {});
+  }, []);
+
+  async function activatePromo() {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    try {
+      const status = await activatePromoCode(promoCode.trim());
+      setPromoStatus(status);
+      setPromoCode("");
+      haptics.notificationOccurred("success");
+    } finally {
+      setPromoLoading(false);
+    }
+  }
 
   return (
     <PageShell flush>
@@ -56,6 +84,34 @@ export function ProfileOverviewView() {
           </p>
         </div>
       </div>
+
+      <section className="panel space-y-3">
+        <p className="section-label px-0.5">Промокод</p>
+        <div className="flex gap-2">
+          <input
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+            className="input-field h-10 flex-1"
+            placeholder="Введите код"
+          />
+          <button
+            className="quick-amount quick-amount-active h-10 px-4"
+            disabled={promoLoading}
+            onClick={() => activatePromo().catch(() => {})}
+          >
+            {promoLoading ? "…" : "Активировать"}
+          </button>
+        </div>
+        {promoStatus?.active ? (
+          <p className="text-xs text-muted">
+            Активен {promoStatus.promo_code}: бонус {formatTON(promoStatus.bonus_nanoton ?? 0)} TON ·
+            вейджер {formatTON(promoStatus.wager_progress_nanoton ?? 0)} /{" "}
+            {formatTON(promoStatus.wager_required_nanoton ?? 0)} TON
+          </p>
+        ) : (
+          <p className="text-xs text-muted">Бонусные коды с вейджером на ставки.</p>
+        )}
+      </section>
 
       <section className="space-y-2">
         <p className="section-label px-0.5">Разделы</p>
@@ -113,6 +169,26 @@ export function ProfileOverviewView() {
               <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
             </div>
           </Link>
+
+          {user?.is_admin ? (
+            <Link
+              href={APP_ROUTES.admin}
+              onClick={() => haptics.impactOccurred("medium")}
+              className="panel flex items-center gap-3.5 transition-transform active:scale-[0.99]"
+            >
+              <div className="icon-box h-11 w-11">
+                <Shield className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold">Админка</p>
+                <p className="mt-0.5 text-xs text-muted">Финансы, риски, RTP и управление проектом</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1 text-accent">
+                <span className="text-xs font-semibold">Открыть</span>
+                <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+              </div>
+            </Link>
+          ) : null}
         </div>
       </section>
     </PageShell>

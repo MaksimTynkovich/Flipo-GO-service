@@ -8,7 +8,9 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
+	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
+	"github.com/flipo/flipo/apps/api/internal/usecase/risk"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -18,10 +20,12 @@ type GameHandler struct {
 	roulette *roulette.Service
 	crash    *crash.Service
 	pvp      *pvp.Service
+	risk     *risk.Service
+	fairness *fairness.Service
 }
 
-func NewGameHandler(r *roulette.Service, c *crash.Service, p *pvp.Service) *GameHandler {
-	return &GameHandler{roulette: r, crash: c, pvp: p}
+func NewGameHandler(r *roulette.Service, c *crash.Service, p *pvp.Service, riskSvc *risk.Service, fairnessSvc *fairness.Service) *GameHandler {
+	return &GameHandler{roulette: r, crash: c, pvp: p, risk: riskSvc, fairness: fairnessSvc}
 }
 
 func (h *GameHandler) RouletteCurrent(c *gin.Context) {
@@ -66,6 +70,22 @@ func (h *GameHandler) RouletteBet(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	state, _ := h.roulette.CurrentState(c.Request.Context())
+	roundID := uuid.Nil
+	if state != nil {
+		roundID = state.RoundID
+	}
+	maxPayout := req.AmountNanoton * 14
+	if req.Color == "red" || req.Color == "black" {
+		maxPayout = req.AmountNanoton * 2
+	}
+	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
+		UserID: userID, GameType: domain.GameRoulette, RoundID: roundID,
+		Amount: req.AmountNanoton, MaxPayout: maxPayout,
+	}); err != nil {
+		writeGameBetError(c, err)
 		return
 	}
 	bet, err := h.roulette.PlaceBet(c.Request.Context(), userID, req.Color, req.AmountNanoton, req.IdempotencyKey)
@@ -117,6 +137,18 @@ func (h *GameHandler) CrashBet(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	state, _ := h.crash.CurrentState(c.Request.Context())
+	roundID := uuid.Nil
+	if state != nil {
+		roundID = state.RoundID
+	}
+	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
+		UserID: userID, GameType: domain.GameCrash, RoundID: roundID,
+		Amount: req.AmountNanoton, MaxPayout: req.AmountNanoton * 100,
+	}); err != nil {
+		writeGameBetError(c, err)
 		return
 	}
 	bet, err := h.crash.PlaceBet(c.Request.Context(), userID, req.AmountNanoton, req.IdempotencyKey)
@@ -191,6 +223,13 @@ func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "pvp rooms support exactly 2 players"})
 		return
 	}
+	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
+		UserID: userID, GameType: domain.GamePvP,
+		Amount: req.BetAmountNanoton, MaxPayout: req.BetAmountNanoton * 2,
+	}); err != nil {
+		writeGameBetError(c, err)
+		return
+	}
 	room, err := h.pvp.CreateRoom(c.Request.Context(), userID, req.BetAmountNanoton, req.MaxPlayers)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -214,6 +253,20 @@ func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
 	c.JSON(http.StatusOK, room)
 }
 
+func (h *GameHandler) RoundProof(c *gin.Context) {
+	roundID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid round id"})
+		return
+	}
+	proof, err := h.fairness.RoundProof(c.Request.Context(), roundID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, proof)
+}
+
 func writeGameBetError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidAmount):
@@ -231,6 +284,26 @@ func writeGameBetError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Ставки больше не принимаются.",
 			"code":  "round_not_open",
+		})
+	case errors.Is(err, domain.ErrBetLimitExceeded):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Ставка превышает лимит.",
+			"code":  "bet_limit_exceeded",
+		})
+	case errors.Is(err, domain.ErrDailyWinCap):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Достигнут дневной лимит выигрыша.",
+			"code":  "daily_win_cap",
+		})
+	case errors.Is(err, domain.ErrUserBanned):
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Аккаунт заблокирован.",
+			"code":  "user_banned",
+		})
+	case errors.Is(err, domain.ErrGameDisabled):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Игра временно недоступна.",
+			"code":  "game_disabled",
 		})
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

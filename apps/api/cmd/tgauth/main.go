@@ -10,17 +10,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/joho/godotenv"
-
 	tgclient "github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tg"
 
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	flipotg "github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 )
 
 func main() {
-	_ = godotenv.Load(".env", "../.env", "../../.env")
+	config.LoadDotEnv()
 
 	appID := flipotg.ParseTelegramAppID(os.Getenv("TELEGRAM_API_ID"))
 	appHash := os.Getenv("TELEGRAM_API_HASH")

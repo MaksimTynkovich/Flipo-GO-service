@@ -9,9 +9,10 @@ const HISTORY_LIMIT = 8;
 type Props = {
   history: RouletteHistoryEntry[];
   roundNumber?: number | null;
+  onSelectRound?: (entry: RouletteHistoryEntry) => void;
 };
 
-export function RouletteHistory({ history, roundNumber }: Props) {
+export function RouletteHistory({ history, roundNumber, onSelectRound }: Props) {
   const recent = history.slice(0, HISTORY_LIMIT);
 
   return (
@@ -26,18 +27,23 @@ export function RouletteHistory({ history, roundNumber }: Props) {
         <div className="flex min-w-0 items-center justify-end gap-1">
           {recent.map((entry) => {
             const fill = rouletteFillStyle(entry.color);
+            const clickable = !!entry.round_id && !!onSelectRound;
             return (
-              <div
-                key={entry.round_number}
-                title={`#${entry.round_number}`}
+              <button
+                key={entry.round_id || entry.round_number}
+                type="button"
+                title={`#${entry.round_number} — проверить честность`}
+                onClick={() => onSelectRound?.(entry)}
+                disabled={!clickable}
                 style={fill}
                 className={cn(
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white",
                   !fill && "bg-surface-raised",
+                  clickable && "transition active:scale-95",
                 )}
               >
                 {entry.number}
-              </div>
+              </button>
             );
           })}
         </div>

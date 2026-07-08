@@ -3,18 +3,23 @@ package pvp
 import (
 	"context"
 	"crypto/rand"
-	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 )
 
 type Service struct {
 	pvp      domain.PvPRepository
+	games    domain.GameRepository
 	users    domain.UserRepository
 	balance  *balance.Service
 	feeBps   int
@@ -22,8 +27,8 @@ type Service struct {
 	roomMu   sync.Map
 }
 
-func NewService(pvp domain.PvPRepository, users domain.UserRepository, balance *balance.Service, feeBps int) *Service {
-	return &Service{pvp: pvp, users: users, balance: balance, feeBps: feeBps}
+func NewService(pvp domain.PvPRepository, games domain.GameRepository, users domain.UserRepository, balance *balance.Service, feeBps int) *Service {
+	return &Service{pvp: pvp, games: games, users: users, balance: balance, feeBps: feeBps}
 }
 
 func (s *Service) SetTickNotifier(notifier TickNotifier) {
@@ -189,15 +194,53 @@ func (s *Service) scheduleSpin(ctx context.Context, room *domain.PvPRoom) error 
 		return nil
 	}
 
-	winnerIdx := randomInt(len(players))
-	winner := players[winnerIdx]
+	playerIDs := make([]uuid.UUID, len(players))
+	for i, p := range players {
+		playerIDs[i] = p.UserID
+	}
+	sort.Slice(playerIDs, func(i, j int) bool {
+		return playerIDs[i].String() < playerIDs[j].String()
+	})
+
+	seedBytes := make([]byte, 32)
+	if _, err := rand.Read(seedBytes); err != nil {
+		return err
+	}
+	serverSeed := hex.EncodeToString(seedBytes)
+	serverSeedHash := provablyfair.HashSHA256(serverSeed)
+	clientSeed := room.ID.String()
+
+	roundNumber, err := s.games.GetNextRoundNumber(ctx, domain.GamePvP)
+	if err != nil {
+		return err
+	}
 
 	now := time.Now().UTC()
+	gameRound := &domain.GameRound{
+		ID:             uuid.New(),
+		GameType:       domain.GamePvP,
+		RoundNumber:    roundNumber,
+		Status:         "active",
+		StartedAt:      now,
+		ServerSeedHash: serverSeedHash,
+		ServerSeed:     serverSeed,
+		ClientSeed:     clientSeed,
+		Nonce:          roundNumber,
+		CreatedAt:      now,
+	}
+	if err := s.games.CreateRound(ctx, gameRound); err != nil {
+		return err
+	}
+
+	winnerIdx := provablyfair.PvPWinnerIndex(serverSeed, roundNumber, playerIDs)
+	winner := players[winnerIdx]
+
 	spinAt := now.Add(CountdownSeconds * time.Second)
 	spinEndsAt := spinAt.Add(SpinSeconds * time.Second)
 
 	room.Status = "countdown"
 	room.WinnerID = &winner.UserID
+	room.GameRoundID = &gameRound.ID
 	room.SpinAt = &spinAt
 	room.SpinEndsAt = &spinEndsAt
 	return s.pvp.UpdateRoom(ctx, room)
@@ -239,6 +282,25 @@ func (s *Service) finishGame(ctx context.Context, room *domain.PvPRoom) error {
 	latest.FinishedAt = &now
 	if err := s.pvp.UpdateRoom(ctx, latest); err != nil {
 		return err
+	}
+
+		if latest.GameRoundID != nil && latest.WinnerID != nil {
+		players, _ := s.pvp.ListPlayers(ctx, latest.ID)
+		playerIDs := make([]string, 0, len(players))
+		for _, p := range players {
+			playerIDs = append(playerIDs, p.UserID.String())
+		}
+		sort.Strings(playerIDs)
+		resultJSON, _ := json.Marshal(map[string]interface{}{
+			"winner_id":  latest.WinnerID.String(),
+			"player_ids": playerIDs,
+		})
+		if round, err := s.games.GetRoundByID(ctx, *latest.GameRoundID); err == nil && round != nil {
+			round.Status = "finished"
+			round.EndedAt = &now
+			round.ResultPayload = datatypes.JSON(resultJSON)
+			_ = s.games.UpdateRound(ctx, round)
+		}
 	}
 
 	if _, err := s.balance.Credit(ctx, *latest.WinnerID, payout, domain.LedgerWin, "pvp_room", latest.ID); err != nil {
@@ -313,6 +375,16 @@ func (s *Service) roomView(ctx context.Context, room *domain.PvPRoom) (*RoomView
 		SpinEndsAt:       room.SpinEndsAt,
 		FinishedAt:       room.FinishedAt,
 		CreatedAt:        room.CreatedAt,
+		GameRoundID:      room.GameRoundID,
+	}
+
+	if room.GameRoundID != nil {
+		if round, err := s.games.GetRoundByID(ctx, *room.GameRoundID); err == nil && round != nil {
+			view.ServerSeedHash = round.ServerSeedHash
+			if room.Status == "finished" {
+				view.ServerSeed = round.ServerSeed
+			}
+		}
 	}
 
 	if room.Status == "spinning" || room.Status == "finished" {
@@ -334,11 +406,3 @@ func (s *Service) broadcast(ctx context.Context) {
 	s.notifier.NotifyGameTick("pvp", state.Marshal())
 }
 
-func randomInt(max int) int {
-	if max <= 0 {
-		return 0
-	}
-	var b [8]byte
-	_, _ = rand.Read(b[:])
-	return int(binary.BigEndian.Uint64(b[:]) % uint64(max))
-}

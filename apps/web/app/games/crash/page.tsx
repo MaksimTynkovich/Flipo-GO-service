@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CrashChart } from "@/components/games/CrashChart";
 import { CrashHistory } from "@/components/games/CrashHistory";
 import { CrashRoundBets } from "@/components/games/CrashRoundBets";
+import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -48,6 +49,7 @@ export default function CrashPage() {
   const [liveMult, setLiveMult] = useState(1);
   const [activeBet, setActiveBet] = useState<ActiveBet | null>(null);
   const [betting, setBetting] = useState(false);
+  const [proofRoundId, setProofRoundId] = useState<string | null>(null);
   const [cashingOut, setCashingOut] = useState(false);
   const lastPhase = useRef<string | null>(null);
 
@@ -207,7 +209,10 @@ export default function CrashPage() {
   return (
     <PageShell flush>
       <div className="flex flex-col gap-2.5 pb-3">
-        <CrashHistory history={history} />
+        <CrashHistory
+          history={history}
+          onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
+        />
 
         <CrashChart state={state} onLiveMultiplier={setLiveMult} />
 
@@ -301,6 +306,15 @@ export default function CrashPage() {
           </div>
         </div>
       </div>
+
+      {proofRoundId ? (
+        <ProofModal
+          roundId={proofRoundId}
+          gameType="crash"
+          title="Проверка Crash"
+          onClose={() => setProofRoundId(null)}
+        />
+      ) : null}
     </PageShell>
   );
 }

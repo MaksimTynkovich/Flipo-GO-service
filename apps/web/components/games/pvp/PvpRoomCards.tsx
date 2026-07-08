@@ -100,7 +100,13 @@ export function PvpActiveRoomCard({ room }: { room: PvpRoom }) {
   );
 }
 
-export function PvpResultRoomCard({ room }: { room: PvpRoom }) {
+export function PvpResultRoomCard({
+  room,
+  onProof,
+}: {
+  room: PvpRoom;
+  onProof?: () => void;
+}) {
   const winner = pvpWinner(room);
   const loser = room.players.find((player) => player.user_id !== room.winner_id);
   const payout = room.payout_nanoton ?? room.bet_amount_nanoton * room.player_count;
@@ -144,6 +150,11 @@ export function PvpResultRoomCard({ room }: { room: PvpRoom }) {
           ) : null}
         </div>
       </div>
+      {room.game_round_id && onProof ? (
+        <button type="button" className="mt-2 text-xs text-accent" onClick={onProof}>
+          Проверить честность
+        </button>
+      ) : null}
     </article>
   );
 }

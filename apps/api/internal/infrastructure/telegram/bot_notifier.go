@@ -2,29 +2,20 @@ package telegram
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"net/url"
 	"strings"
-	"time"
 )
 
 type BotNotifier struct {
-	token      string
-	httpClient *http.Client
+	api *BotAPI
 }
 
 func NewBotNotifier(token string) *BotNotifier {
-	return &BotNotifier{
-		token:      token,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
-	}
+	return &BotNotifier{api: NewBotAPI(token)}
 }
 
 func (n *BotNotifier) Enabled() bool {
-	return n.token != ""
+	return n.api.Enabled()
 }
 
 func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int64, giftName string) error {
@@ -33,7 +24,7 @@ func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int6
 	}
 
 	text := fmt.Sprintf("🎁 Подарок «%s» зачислен в инвентарь!", giftName)
-	return n.sendMessage(ctx, telegramUserID, text)
+	return n.api.sendMessage(ctx, telegramUserID, text, nil)
 }
 
 func (n *BotNotifier) SendDailyStakingYield(ctx context.Context, telegramUserID int64, yieldNanoton, referralBonusNanoton int64) error {
@@ -51,7 +42,7 @@ func (n *BotNotifier) SendDailyStakingYield(ctx context.Context, telegramUserID 
 	if referralBonusNanoton > 0 {
 		parts = append(parts, fmt.Sprintf("👥 Ваши рефералы сегодня принесли вам: %s TON — зачислено на баланс", formatTON(referralBonusNanoton)))
 	}
-	return n.sendMessage(ctx, telegramUserID, strings.Join(parts, "\n\n"))
+	return n.api.sendMessage(ctx, telegramUserID, strings.Join(parts, "\n\n"), nil)
 }
 
 func (n *BotNotifier) SendWeeklyStakingComplete(ctx context.Context, telegramUserID int64, totalYieldNanoton int64) error {
@@ -65,7 +56,7 @@ func (n *BotNotifier) SendWeeklyStakingComplete(ctx context.Context, telegramUse
 		text += "Доход за неделю: 0 TON.\n\n"
 	}
 	text += "Пора добавить подарки в новый стейкинг."
-	return n.sendMessage(ctx, telegramUserID, text)
+	return n.api.sendMessage(ctx, telegramUserID, text, nil)
 }
 
 func formatTON(nanoton int64) string {
@@ -80,37 +71,4 @@ func formatTON(nanoton int64) string {
 		prec = 4
 	}
 	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.*f", prec, ton), "0"), ".")
-}
-
-func (n *BotNotifier) sendMessage(ctx context.Context, chatID int64, text string) error {
-	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", n.token)
-	form := url.Values{}
-	form.Set("chat_id", fmt.Sprintf("%d", chatID))
-	form.Set("text", text)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := n.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("telegram sendMessage: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var body struct {
-			Description string `json:"description"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&body)
-		if strings.Contains(strings.ToLower(body.Description), "chat not found") ||
-			strings.Contains(strings.ToLower(body.Description), "bot was blocked") {
-			slog.Warn("telegram notify skipped", "chat_id", chatID, "reason", body.Description)
-			return nil
-		}
-		return fmt.Errorf("telegram sendMessage status %d: %s", resp.StatusCode, body.Description)
-	}
-	return nil
 }

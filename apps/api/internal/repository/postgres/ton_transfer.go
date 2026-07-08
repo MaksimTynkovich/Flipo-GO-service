@@ -81,17 +81,21 @@ func (r *TonTransferRepo) ListByStatus(ctx context.Context, statuses []domain.To
 	return items, q.Find(&items).Error
 }
 
+func (r *TonTransferRepo) ListAll(ctx context.Context, limit int) ([]domain.TonTransfer, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var items []domain.TonTransfer
+	return items, r.db.WithContext(ctx).Order("created_at DESC").Limit(limit).Find(&items).Error
+}
+
 func (r *TonTransferRepo) HasActiveWithdrawal(ctx context.Context, userID uuid.UUID) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
 		Where("user_id = ? AND direction = ? AND status IN ?",
 			userID,
 			domain.TonDirectionWithdraw,
-			[]domain.TonTransferStatus{
-				domain.TonStatusQueued,
-				domain.TonStatusBroadcasting,
-				domain.TonStatusPaymentSeen,
-			},
+			activeWithdrawalStatuses(),
 		).Count(&count).Error
 	return count > 0, err
 }
@@ -116,6 +120,10 @@ func (r *TonTransferRepo) CreateWithdrawalAtomic(
 	userID uuid.UUID,
 	amountNanoton, feeNanoton int64,
 	walletAddress, idempotencyKey string,
+	initialStatus domain.TonTransferStatus,
+	riskScore int,
+	riskFlags []string,
+	reviewReason *string,
 ) (*domain.TonTransfer, int64, error) {
 	if existing, err := r.FindByIdempotencyKey(ctx, idempotencyKey); err != nil {
 		return nil, 0, err
@@ -155,11 +163,14 @@ func (r *TonTransferRepo) CreateWithdrawalAtomic(
 			ID:             uuid.New(),
 			UserID:         userID,
 			Direction:      domain.TonDirectionWithdraw,
-			Status:         domain.TonStatusQueued,
+			Status:         initialStatus,
 			AmountNanoton:  amountNanoton,
 			FeeNanoton:     feeNanoton,
 			WalletAddress:  walletAddress,
 			IdempotencyKey: &idempotencyKey,
+			RiskScore:      riskScore,
+			RiskFlags:      riskFlags,
+			ReviewReason:   reviewReason,
 			CreatedAt:      now,
 			UpdatedAt:      now,
 		}
@@ -322,6 +333,85 @@ func (r *TonTransferRepo) CompleteWithdrawal(ctx context.Context, transferID uui
 		}).Error
 }
 
+func (r *TonTransferRepo) ApproveWithdrawal(ctx context.Context, transferID, adminID uuid.UUID) error {
+	now := time.Now().UTC()
+	res := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+		Where("id = ? AND direction = ? AND status = ?", transferID, domain.TonDirectionWithdraw, domain.TonStatusPendingReview).
+		Updates(map[string]interface{}{
+			"status":      domain.TonStatusQueued,
+			"reviewed_by": adminID,
+			"reviewed_at": now,
+			"updated_at":  now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrTransferNotFound
+	}
+	return nil
+}
+
+func (r *TonTransferRepo) RejectWithdrawalAtomic(ctx context.Context, transferID, adminID uuid.UUID, reason string) (int64, error) {
+	var balanceAfter int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var transfer domain.TonTransfer
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&transfer, "id = ?", transferID).Error; err != nil {
+			return err
+		}
+		if transfer.Direction != domain.TonDirectionWithdraw || transfer.Status != domain.TonStatusPendingReview {
+			return domain.ErrTransferNotFound
+		}
+
+		var user domain.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&user, "id = ?", transfer.UserID).Error; err != nil {
+			return err
+		}
+
+		newBalance := user.BettingBalance + transfer.AmountNanoton
+		now := time.Now().UTC()
+		if err := tx.Model(&user).Update("betting_balance", newBalance).Error; err != nil {
+			return err
+		}
+		ledger := domain.BalanceLedger{
+			UserID:        transfer.UserID,
+			Type:          domain.LedgerRefund,
+			AmountNanoton: transfer.AmountNanoton,
+			BalanceAfter:  newBalance,
+			ReferenceType: "ton_withdraw_rejected",
+			ReferenceID:   transfer.ID,
+			CreatedAt:     now,
+		}
+		if err := tx.Create(&ledger).Error; err != nil {
+			return err
+		}
+
+		transfer.Status = domain.TonStatusRejected
+		transfer.ErrorMessage = &reason
+		transfer.ReviewedBy = &adminID
+		transfer.ReviewedAt = &now
+		transfer.UpdatedAt = now
+		if err := tx.Save(&transfer).Error; err != nil {
+			return err
+		}
+		balanceAfter = newBalance
+		return nil
+	})
+	return balanceAfter, err
+}
+
+func activeWithdrawalStatuses() []domain.TonTransferStatus {
+	return []domain.TonTransferStatus{
+		domain.TonStatusPendingReview,
+		domain.TonStatusApproved,
+		domain.TonStatusQueued,
+		domain.TonStatusBroadcasting,
+		domain.TonStatusPaymentSeen,
+	}
+}
+
 func (r *TonTransferRepo) getUserBalance(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var user domain.User
 	if err := r.db.WithContext(ctx).Select("betting_balance").First(&user, "id = ?", userID).Error; err != nil {
@@ -336,11 +426,7 @@ func (r *TonTransferRepo) hasActiveWithdrawalTx(tx *gorm.DB, userID uuid.UUID) (
 		Where("user_id = ? AND direction = ? AND status IN ?",
 			userID,
 			domain.TonDirectionWithdraw,
-			[]domain.TonTransferStatus{
-				domain.TonStatusQueued,
-				domain.TonStatusBroadcasting,
-				domain.TonStatusPaymentSeen,
-			},
+			activeWithdrawalStatuses(),
 		).Count(&count).Error
 	return count > 0, err
 }

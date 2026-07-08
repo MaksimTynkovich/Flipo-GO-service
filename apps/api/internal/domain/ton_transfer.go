@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,10 +19,13 @@ type TonTransferStatus string
 const (
 	TonStatusAwaitingPayment TonTransferStatus = "awaiting_payment"
 	TonStatusPaymentSeen     TonTransferStatus = "payment_seen"
+	TonStatusPendingReview   TonTransferStatus = "pending_review"
+	TonStatusApproved        TonTransferStatus = "approved"
 	TonStatusQueued          TonTransferStatus = "queued"
 	TonStatusBroadcasting    TonTransferStatus = "broadcasting"
 	TonStatusCompleted       TonTransferStatus = "completed"
 	TonStatusFailed          TonTransferStatus = "failed"
+	TonStatusRejected        TonTransferStatus = "rejected"
 	TonStatusExpired         TonTransferStatus = "expired"
 )
 
@@ -38,10 +42,37 @@ type TonTransfer struct {
 	TxLT           *int64               `json:"tx_lt,omitempty"`
 	IdempotencyKey *string              `gorm:"size:128;uniqueIndex" json:"idempotency_key,omitempty"`
 	ErrorMessage   *string              `gorm:"type:text" json:"error_message,omitempty"`
+	RiskScore      int                  `gorm:"not null;default:0" json:"risk_score"`
+	RiskFlags      []string             `gorm:"type:jsonb;serializer:json" json:"risk_flags,omitempty"`
+	ReviewReason   *string              `gorm:"type:text" json:"review_reason,omitempty"`
+	ReviewedBy     *uuid.UUID           `gorm:"type:uuid" json:"reviewed_by,omitempty"`
+	ReviewedAt     *time.Time           `json:"reviewed_at,omitempty"`
 	ExpiresAt      *time.Time           `json:"expires_at,omitempty"`
 	ConfirmedAt    *time.Time           `json:"confirmed_at,omitempty"`
 	CreatedAt      time.Time            `json:"created_at"`
 	UpdatedAt      time.Time            `json:"updated_at"`
+}
+
+func (t *TonTransfer) RiskFlagList() []string {
+	if len(t.RiskFlags) == 0 {
+		return nil
+	}
+	return t.RiskFlags
+}
+
+func (t *TonTransfer) SetRiskFlags(flags []string) {
+	t.RiskFlags = flags
+}
+
+func ParseRiskFlags(raw []byte) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var flags []string
+	if err := json.Unmarshal(raw, &flags); err != nil {
+		return nil
+	}
+	return flags
 }
 
 func (TonTransfer) TableName() string { return "ton_transfers" }
@@ -55,7 +86,16 @@ func (t *TonTransfer) NetAmountNanoton() int64 {
 
 func (t *TonTransfer) IsTerminal() bool {
 	switch t.Status {
-	case TonStatusCompleted, TonStatusFailed, TonStatusExpired:
+	case TonStatusCompleted, TonStatusFailed, TonStatusExpired, TonStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *TonTransfer) IsPendingWithdrawal() bool {
+	switch t.Status {
+	case TonStatusPendingReview, TonStatusApproved, TonStatusQueued, TonStatusBroadcasting:
 		return true
 	default:
 		return false

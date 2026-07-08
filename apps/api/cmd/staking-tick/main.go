@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/joho/godotenv"
 	"gorm.io/gorm"
 
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
@@ -26,7 +25,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	_ = godotenv.Load(".env", "../.env", "../../.env")
+	config.LoadDotEnv()
 	cfg := config.Load()
 	if cfg.Env == "production" {
 		fmt.Fprintln(os.Stderr, "staking-tick is disabled when ENV=production")

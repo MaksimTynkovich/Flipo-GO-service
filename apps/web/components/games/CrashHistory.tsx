@@ -8,9 +8,10 @@ const HISTORY_LIMIT = 14;
 
 type Props = {
   history: CrashHistoryEntry[];
+  onSelectRound?: (entry: CrashHistoryEntry) => void;
 };
 
-export function CrashHistory({ history }: Props) {
+export function CrashHistory({ history, onSelectRound }: Props) {
   const recent = history.slice(0, HISTORY_LIMIT);
 
   if (recent.length === 0) {
@@ -26,17 +27,22 @@ export function CrashHistory({ history }: Props) {
       <div className="scrollbar-none flex gap-2.5 overflow-x-auto">
         {recent.map((entry) => {
           const tier = historyTierStyle(entry.crash_point);
+          const clickable = !!entry.round_id && !!onSelectRound;
           return (
-            <span
-              key={entry.round_number}
-              title={`Раунд #${entry.round_number}`}
+            <button
+              key={entry.round_id || entry.round_number}
+              type="button"
+              title={`Раунд #${entry.round_number} — проверить честность`}
+              onClick={() => onSelectRound?.(entry)}
+              disabled={!clickable}
               className={cn(
                 "shrink-0 text-[11px] font-bold tabular-nums leading-none",
                 tier.value,
+                clickable && "transition active:opacity-70",
               )}
             >
               {formatMultiplierCompact(entry.crash_point)}×
-            </span>
+            </button>
           );
         })}
       </div>

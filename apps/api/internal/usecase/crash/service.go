@@ -229,6 +229,7 @@ func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 }
 
 type HistoryEntry struct {
+	RoundID     string  `json:"round_id"`
 	RoundNumber int64   `json:"round_number"`
 	CrashPoint  float64 `json:"crash_point"`
 }
@@ -250,6 +251,7 @@ func (s *Service) GetHistory(ctx context.Context, limit int) ([]HistoryEntry, er
 			continue
 		}
 		entries = append(entries, HistoryEntry{
+			RoundID:     round.ID.String(),
 			RoundNumber: round.RoundNumber,
 			CrashPoint:  payload.CrashPoint,
 		})

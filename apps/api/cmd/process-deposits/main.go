@@ -8,8 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
-
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
@@ -18,7 +16,7 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load(".env", "../.env", "../../.env")
+	config.LoadDotEnv()
 
 	cfg := config.Load()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

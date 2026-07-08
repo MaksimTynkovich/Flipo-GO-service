@@ -41,6 +41,15 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.BalanceLedger{},
 		&domain.MarketListing{},
 		&domain.TonTransfer{},
+		&domain.GameConfig{},
+		&domain.PlatformRiskSettings{},
+		&domain.ProvablyFairSeedSession{},
+		&domain.AdminAuditLog{},
+		&domain.PromoCode{},
+		&domain.TelegramBotSettings{},
+		&domain.PromoRedemption{},
+		&domain.TelegramBroadcast{},
+		&domain.TreasurySweep{},
 	)
 }
 

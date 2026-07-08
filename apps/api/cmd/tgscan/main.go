@@ -10,14 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
-
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	flipotg "github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	flipogifts "github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 )
 
 func main() {
-	_ = godotenv.Load(".env", "../.env", "../../.env")
+	config.LoadDotEnv()
 
 	var (
 		telegramID = flag.Int64("telegram-id", 0, "Telegram user id to scan (same as user.telegram_id in API)")

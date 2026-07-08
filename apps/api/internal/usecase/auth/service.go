@@ -26,6 +26,7 @@ type Service struct {
 	botToken            string
 	jwtSecret           []byte
 	jwtExpiry           time.Duration
+	adminTelegramIDs    map[int64]struct{}
 	debugAuthEnabled    bool
 	debugTelegramID     int64
 	debugUsername       string
@@ -54,6 +55,17 @@ func WithDebugAuth(enabled bool, telegramID int64, username string, initialBalan
 		s.debugTelegramID = telegramID
 		s.debugUsername = username
 		s.debugInitialBalance = initialBalance
+	}
+}
+
+func WithAdminTelegramIDs(ids []int64) ServiceOption {
+	return func(s *Service) {
+		if s.adminTelegramIDs == nil {
+			s.adminTelegramIDs = make(map[int64]struct{}, len(ids))
+		}
+		for _, id := range ids {
+			s.adminTelegramIDs[id] = struct{}{}
+		}
 	}
 }
 
@@ -173,6 +185,14 @@ func (s *Service) ParseToken(tokenStr string) (*Claims, error) {
 
 func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	return s.users.FindByID(ctx, userID)
+}
+
+func (s *Service) IsAdmin(telegramID int64) bool {
+	if len(s.adminTelegramIDs) == 0 {
+		return false
+	}
+	_, ok := s.adminTelegramIDs[telegramID]
+	return ok
 }
 
 func (s *Service) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) (string, error) {

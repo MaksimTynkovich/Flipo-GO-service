@@ -293,6 +293,7 @@ func (s *Service) UpdatePhase(ctx context.Context, state *RoundState) error {
 }
 
 type HistoryEntry struct {
+	RoundID     string `json:"round_id"`
 	RoundNumber int64  `json:"round_number"`
 	Number      int    `json:"number"`
 	Color       string `json:"color"`
@@ -316,6 +317,7 @@ func (s *Service) GetHistory(ctx context.Context, limit int) ([]HistoryEntry, er
 			continue
 		}
 		entries = append(entries, HistoryEntry{
+			RoundID:     round.ID.String(),
 			RoundNumber: round.RoundNumber,
 			Number:      payload.Number,
 			Color:       payload.Color,

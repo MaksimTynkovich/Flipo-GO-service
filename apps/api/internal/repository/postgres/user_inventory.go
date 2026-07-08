@@ -126,6 +126,28 @@ func (r *UserRepo) SumReferralEarnings(ctx context.Context, userID uuid.UUID) (i
 	return total, err
 }
 
+func (r *UserRepo) ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var ids []int64
+	err := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("deleted_at IS NULL AND telegram_id > 0").
+		Order("created_at ASC").
+		Limit(limit).
+		Offset(offset).
+		Pluck("telegram_id", &ids).Error
+	return ids, err
+}
+
+func (r *UserRepo) CountUsers(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("deleted_at IS NULL AND telegram_id > 0").
+		Count(&count).Error
+	return count, err
+}
+
 var _ domain.UserRepository = (*UserRepo)(nil)
 
 type InventoryRepo struct {

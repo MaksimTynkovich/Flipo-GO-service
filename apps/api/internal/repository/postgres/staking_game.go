@@ -210,6 +210,64 @@ func (r *GameRepo) ListRecentFinishedRounds(ctx context.Context, gameType domain
 	return rounds, err
 }
 
+func (r *GameRepo) SumUserWinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ? AND status IN ? AND settled_at >= ?",
+			userID, []domain.BetStatus{domain.BetWon, domain.BetCashedOut}, since).
+		Select("COALESCE(SUM(payout_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *GameRepo) SumUserBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ? AND created_at >= ?", userID, since).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *GameRepo) SumRoundBets(ctx context.Context, roundID uuid.UUID) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("round_id = ?", roundID).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *GameRepo) GameStats(ctx context.Context) ([]domain.AdminGameStat, error) {
+	gameTypes := []domain.GameType{domain.GameRoulette, domain.GameCrash, domain.GamePvP}
+	out := make([]domain.AdminGameStat, 0, len(gameTypes))
+	for _, gt := range gameTypes {
+		var stat domain.AdminGameStat
+		stat.GameType = gt
+
+		r.db.WithContext(ctx).Model(&domain.GameRound{}).
+			Where("game_type = ? AND status = ?", gt, "finished").
+			Count(&stat.Rounds)
+
+		r.db.WithContext(ctx).Model(&domain.GameBet{}).
+			Where("game_type = ?", gt).
+			Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&stat.BetVolumeNanoton)
+
+		r.db.WithContext(ctx).Model(&domain.GameBet{}).
+			Where("game_type = ? AND status IN ?", gt, []domain.BetStatus{domain.BetWon, domain.BetCashedOut}).
+			Select("COALESCE(SUM(payout_nanoton), 0)").Scan(&stat.PayoutNanoton)
+
+		stat.GGRNanoton = stat.BetVolumeNanoton - stat.PayoutNanoton
+		if stat.BetVolumeNanoton > 0 {
+			stat.ActualRTPBps = int(stat.PayoutNanoton * 10000 / stat.BetVolumeNanoton)
+		}
+
+		var cfg domain.GameConfig
+		if err := r.db.WithContext(ctx).First(&cfg, "game_type = ?", gt).Error; err == nil {
+			stat.TheoreticalRTPBps = cfg.RTPBps
+		}
+		out = append(out, stat)
+	}
+	return out, nil
+}
+
 var _ domain.GameRepository = (*GameRepo)(nil)
 
 type PvPRepo struct {

@@ -34,6 +34,7 @@ type Verifier interface {
 
 type Sender interface {
 	SendTON(ctx context.Context, toAddress string, amountNanoton int64, comment string) (txHash string, lt int64, err error)
+	GetWalletBalance(ctx context.Context) (int64, error)
 	Enabled() bool
 }
 
@@ -152,6 +153,24 @@ func (c *Client) SendTON(ctx context.Context, toAddress string, amountNanoton in
 		lt = int64(tx.LT)
 	}
 	return txHash, lt, nil
+}
+
+func (c *Client) GetWalletBalance(ctx context.Context) (int64, error) {
+	if c.devMode {
+		return 10_000_000_000_000, nil
+	}
+	if err := c.ensureWallet(ctx); err != nil {
+		return 0, err
+	}
+	block, err := c.api.CurrentMasterchainInfo(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get masterchain info: %w", err)
+	}
+	balance, err := c.hotWallet.GetBalance(ctx, block)
+	if err != nil {
+		return 0, fmt.Errorf("get wallet balance: %w", err)
+	}
+	return balance.NanoTON().Int64(), nil
 }
 
 func (c *Client) getTransactions(ctx context.Context, address string, limit int) ([]IncomingTransfer, error) {
