@@ -7,7 +7,7 @@ source "$ROOT/scripts/lib/ngrok-env.sh"
 
 if ! ngrok_is_running; then
   echo "ngrok is not running."
-  echo "Start it once in a separate terminal: make tunnel"
+  echo "Start tunnels with: make dev-tunnel"
   exit 1
 fi
 

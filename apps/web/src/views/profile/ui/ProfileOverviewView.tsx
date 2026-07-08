@@ -19,11 +19,6 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
-function formatProfileTON(nanotons: number): string {
-  if (nanotons <= 0) return "0";
-  return (nanotons / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "");
-}
-
 export function ProfileOverviewView() {
   const { user, loading, setUser } = useAuth();
   const haptics = useTelegramHaptics();
@@ -86,7 +81,7 @@ export function ProfileOverviewView() {
           <p className="text-[11px] text-muted">Основной</p>
           <div className="mt-1 flex items-center justify-between gap-1.5">
             <span className="inline-flex min-w-0 items-center gap-1 truncate text-sm font-semibold tabular-nums text-foreground">
-              {loading ? "…" : user ? formatProfileTON(mainBalanceNanoton(user)) : "—"}
+              {loading ? "…" : user ? formatTON(mainBalanceNanoton(user)) : "—"}
               <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
             </span>
             <Link
@@ -103,7 +98,7 @@ export function ProfileOverviewView() {
           <p className="text-[11px] text-accent">Бонус</p>
           <div className="mt-1 flex min-w-0 items-center gap-1">
             <span className="truncate text-sm font-semibold tabular-nums text-accent">
-              {loading ? "…" : user && hasPromoBalance(user) ? formatProfileTON(user.promo_balance ?? 0) : "0"}
+              {loading ? "…" : user && hasPromoBalance(user) ? formatTON(user.promo_balance ?? 0) : "0.00"}
             </span>
             <TonIcon variant="brand" className="h-4 w-4 shrink-0 opacity-80" />
           </div>
@@ -148,8 +143,8 @@ export function ProfileOverviewView() {
         ) : null}
         {promoStatus?.active ? (
           <p className="text-xs text-muted">
-            {promoStatus.promo_code}: {formatProfileTON(promoStatus.wager_progress_nanoton ?? 0)} /{" "}
-            {formatProfileTON(promoStatus.wager_required_nanoton ?? 0)} TON вейджер
+            {promoStatus.promo_code}: {formatTON(promoStatus.wager_progress_nanoton ?? 0)} /{" "}
+            {formatTON(promoStatus.wager_required_nanoton ?? 0)} TON вейджер
           </p>
         ) : (
           <p className="text-xs text-muted">Бонус только на ставки. Новый код заменит текущий.</p>

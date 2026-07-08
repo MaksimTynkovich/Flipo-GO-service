@@ -60,7 +60,7 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 	}
 
 	if existing, err := s.inventory.FindActiveByGiftSlug(ctx, gift.Slug); err == nil {
-		slog.Info("gift deposit skipped: gift already active in inventory",
+		slog.Debug("gift deposit skipped: gift already active in inventory",
 			"slug", gift.Slug,
 			"existing_item_id", existing.ID,
 			"existing_user_id", existing.UserID,

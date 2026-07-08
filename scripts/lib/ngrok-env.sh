@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 
+_NGROK_ENV_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_NGROK_ENV_ROOT="$(cd "$_NGROK_ENV_LIB_DIR/../.." && pwd)"
+
 NGROK_API="${NGROK_API:-http://127.0.0.1:4040/api/tunnels}"
 
 ngrok_root() {
-  cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd
+  echo "$_NGROK_ENV_ROOT"
 }
 
 ngrok_env_file() {
-  echo "$(ngrok_root)/.env"
+  echo "$_NGROK_ENV_ROOT/.env"
 }
 
 ngrok_project_config() {
-  echo "$(ngrok_root)/deploy/ngrok.endpoints.yml"
+  echo "$_NGROK_ENV_ROOT/deploy/ngrok.endpoints.yml"
 }
 
 detect_ngrok_user_config() {
@@ -24,17 +27,6 @@ detect_ngrok_user_config() {
 
 ngrok_is_running() {
   curl -sf "$NGROK_API" >/dev/null 2>&1
-}
-
-wait_for_ngrok_tunnels() {
-  echo "Waiting for ngrok tunnels (web:3000, api:8080)..."
-  for _ in $(seq 1 30); do
-    if ngrok_is_running && read_ngrok_tunnel_urls >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
 }
 
 read_ngrok_tunnel_urls() {
@@ -58,51 +50,23 @@ print(web, api)
 "
 }
 
-sync_env_from_ngrok() {
-  local env_file web_url api_url ws_url
-  env_file="$(ngrok_env_file)"
+read_ngrok_web_url() {
+  read_ngrok_tunnel_urls | awk '{print $1}'
+}
 
-  if [[ ! -f "$env_file" ]]; then
-    echo "Missing $env_file"
-    return 1
-  fi
+read_ngrok_api_url() {
+  read_ngrok_tunnel_urls | awk '{print $2}'
+}
 
-  if ! ngrok_is_running; then
-    echo "ngrok is not running. Start it with: make tunnel"
-    return 1
-  fi
-
-  read -r web_url api_url <<< "$(read_ngrok_tunnel_urls)"
-  ws_url="${api_url/https:/wss:}"
-
-  WEB_URL="$web_url" API_URL="$api_url" WS_URL="$ws_url" ENV_FILE="$env_file" python3 <<'PY'
-import os
-import re
-from pathlib import Path
-
-path = Path(os.environ["ENV_FILE"])
-text = path.read_text()
-
-def set_var(name: str, value: str) -> None:
-    global text
-    pattern = rf"^{re.escape(name)}=.*$"
-    line = f"{name}={value}"
-    if re.search(pattern, text, flags=re.M):
-        text = re.sub(pattern, line, text, flags=re.M)
-    else:
-        text = text.rstrip() + f"\n{line}\n"
-
-set_var("NEXT_PUBLIC_API_URL", os.environ["API_URL"])
-set_var("NEXT_PUBLIC_WS_URL", os.environ["WS_URL"])
-set_var("NEXT_PUBLIC_DEBUG_AUTH", "false")
-set_var("DEBUG_AUTH_ENABLED", "false")
-
-path.write_text(text)
-PY
-
-  echo "Web (BotFather): $web_url"
-  echo "API:             $api_url"
-  echo "WS:              $ws_url"
+wait_for_ngrok_tunnels() {
+  echo "Waiting for ngrok tunnels (web:3000, api:8080)..."
+  for _ in $(seq 1 30); do
+    if ngrok_is_running && read_ngrok_tunnel_urls >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 start_ngrok_detached() {
@@ -129,4 +93,61 @@ start_ngrok_detached() {
   nohup ngrok start --all --config "$project_config,$user_config" --log=stdout \
     > "$(ngrok_root)/ngrok.log" 2>&1 &
   echo "ngrok log: $(ngrok_root)/ngrok.log"
+}
+
+sync_env_from_ngrok() {
+  local env_file web_url api_url ws_url webhook_url
+  env_file="$(ngrok_env_file)"
+
+  if [[ ! -f "$env_file" ]]; then
+    echo "Missing $env_file"
+    return 1
+  fi
+
+  if ! ngrok_is_running; then
+    echo "ngrok is not running. Start it with: make dev-tunnel"
+    return 1
+  fi
+
+  read -r web_url api_url <<< "$(read_ngrok_tunnel_urls)"
+  ws_url="${api_url/https:/wss:}"
+  webhook_url="${api_url}/api/v1/telegram/webhook"
+
+  WEB_URL="$web_url" API_URL="$api_url" WS_URL="$ws_url" WEBHOOK_URL="$webhook_url" ENV_FILE="$env_file" python3 <<'PY'
+import os
+import re
+from pathlib import Path
+
+path = Path(os.environ["ENV_FILE"])
+text = path.read_text()
+
+def set_var(name: str, value: str) -> None:
+    global text
+    pattern = rf"^{re.escape(name)}=.*$"
+    line = f"{name}={value}"
+    if re.search(pattern, text, flags=re.M):
+        text = re.sub(pattern, line, text, flags=re.M)
+    else:
+        text = text.rstrip() + f"\n{line}\n"
+
+web_url = os.environ["WEB_URL"]
+api_url = os.environ["API_URL"]
+ws_url = os.environ["WS_URL"]
+webhook_url = os.environ["WEBHOOK_URL"]
+
+set_var("NEXT_PUBLIC_API_URL", api_url)
+set_var("NEXT_PUBLIC_WS_URL", ws_url)
+set_var("NEXT_PUBLIC_APP_URL", web_url)
+set_var("TELEGRAM_WEBAPP_URL", web_url)
+set_var("TELEGRAM_WEBHOOK_URL", webhook_url)
+set_var("NEXT_PUBLIC_DEBUG_AUTH", "false")
+set_var("DEBUG_AUTH_ENABLED", "false")
+
+path.write_text(text)
+PY
+
+  echo "Web (BotFather): $web_url"
+  echo "API:             $api_url"
+  echo "WS:              $ws_url"
+  echo "Webhook:         $webhook_url"
 }

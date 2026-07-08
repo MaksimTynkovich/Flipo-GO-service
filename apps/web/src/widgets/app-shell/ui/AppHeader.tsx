@@ -11,12 +11,6 @@ import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { BalanceGainFx } from "@/src/widgets/app-shell/ui/BalanceGainFx";
 
-function formatHeaderTON(nanotons: number): string {
-  if (nanotons <= 0) return "0";
-  const ton = nanotons / 1_000_000_000;
-  return ton.toFixed(2).replace(/\.?0+$/, "");
-}
-
 export function AppHeader() {
   const { user, loading } = useAuth();
   const haptics = useTelegramHaptics();
@@ -40,12 +34,12 @@ export function AppHeader() {
           <div className="flex min-w-0 items-center overflow-visible rounded-full bg-surface-raised">
             <div className="flex min-w-0 items-center gap-1.5 px-3 py-1.5">
               <span className="truncate text-[15px] font-semibold tabular-nums leading-none text-foreground">
-                {loading ? "…" : user ? formatHeaderTON(mainBalance) : "—"}
+                {loading ? "…" : user ? formatTON(mainBalance) : "—"}
               </span>
               <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
               {!loading && user && hasPromoBalance(user) ? (
                 <span className="shrink-0 text-[11px] font-medium tabular-nums leading-none text-accent">
-                  +{formatHeaderTON(promoBalance)}
+                  +{formatTON(promoBalance)}
                 </span>
               ) : null}
             </div>

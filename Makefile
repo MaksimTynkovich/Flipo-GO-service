@@ -1,4 +1,4 @@
-.PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate api web test lint
+.PHONY: dev dev-tunnel dev-remote up down migrate api web test lint
 
 up:
 	docker compose -f deploy/docker-compose.yml up -d postgres redis
@@ -11,20 +11,12 @@ dev: up
 	$(MAKE) -j2 api web
 
 dev-tunnel:
-	@chmod +x scripts/dev-tunnel.sh scripts/dev-remote.sh scripts/tunnel.sh scripts/sync-tunnel-env.sh
+	@chmod +x scripts/dev-tunnel.sh scripts/dev-remote.sh
 	@./scripts/dev-tunnel.sh
 
-tunnel:
-	@chmod +x scripts/tunnel.sh scripts/sync-tunnel-env.sh
-	@./scripts/tunnel.sh
-
 dev-remote:
-	@chmod +x scripts/dev-remote.sh scripts/sync-tunnel-env.sh
+	@chmod +x scripts/dev-remote.sh
 	@./scripts/dev-remote.sh
-
-sync-tunnel-env:
-	@chmod +x scripts/sync-tunnel-env.sh
-	@./scripts/sync-tunnel-env.sh
 
 api:
 	@-lsof -ti :$${API_PORT:-8080} | xargs kill -9 2>/dev/null || true

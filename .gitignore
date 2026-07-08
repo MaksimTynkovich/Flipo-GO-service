@@ -8,7 +8,5 @@ bin/
 !.env.example
 apps/web/.env.local
 ngrok.log
-localtunnel.log
-localtunnel.pid
 apps/api/data/telegram/
 .DS_Store
