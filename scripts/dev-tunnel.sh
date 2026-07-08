@@ -35,8 +35,8 @@ fi
 echo ""
 sync_env_from_ngrok
 echo ""
-echo "👉 BotFather Web App URL: $(read_ngrok_web_url)"
-echo "👉 Telegram webhook:     $(read_ngrok_api_url)/api/v1/telegram/webhook"
+echo "👉 BotFather Web App URL: $(read_ngrok_public_url)"
+echo "👉 Telegram webhook:     $(read_ngrok_public_url)/api/v1/telegram/webhook"
 echo "   (регистрируется при старте API, если TELEGRAM_WEBHOOK_URL задан в .env)"
 echo ""
 echo "ngrok will keep running after you stop API/Web."

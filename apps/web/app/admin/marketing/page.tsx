@@ -65,7 +65,7 @@ export default function AdminMarketingPage() {
           <Stat label="Рефералов" value={String(referral.referral_count)} />
           <Stat label="Заработано" value={`${formatTON(referral.total_earned_nanoton)} TON`} />
           <Stat label="Share %" value={`${referral.share_percent}%`} />
-          <Stat label="Weekly share" value={`${referral.share_percent_weekly}%`} />
+          <Stat label="Weekly share" value={`${referral.share_percent_weekly.toFixed(2)}%`} />
         </section>
       ) : null}
 

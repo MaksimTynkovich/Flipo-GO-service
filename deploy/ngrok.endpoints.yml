@@ -1,11 +1,10 @@
-# Project ngrok endpoints (merged with your global ngrok config that holds authtoken).
-# Used by: make dev-tunnel
+# Project ngrok endpoint (merged with your global ngrok config that holds authtoken).
+# Used by: make dev-tunnel, make tunnel
+#
+# Public URL -> Next.js (:3000). API (:8080) is proxied via Next rewrites.
 version: 3
 
 endpoints:
   - name: web
     upstream:
       url: 3000
-  - name: api
-    upstream:
-      url: 8080

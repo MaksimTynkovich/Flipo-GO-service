@@ -11,9 +11,19 @@ if (parsed) {
   }
 }
 
+const apiUpstream = process.env.API_UPSTREAM || "http://127.0.0.1:8080";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  async rewrites() {
+    return [
+      { source: "/api/v1/:path*", destination: `${apiUpstream}/api/v1/:path*` },
+      { source: "/health", destination: `${apiUpstream}/health` },
+      { source: "/ready", destination: `${apiUpstream}/ready` },
+      { source: "/ws/:path*", destination: `${apiUpstream}/ws/:path*` },
+    ];
+  },
 };
 
 module.exports = nextConfig;

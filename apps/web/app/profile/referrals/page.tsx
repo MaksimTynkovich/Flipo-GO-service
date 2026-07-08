@@ -8,7 +8,8 @@ import { TonAmount } from "@/components/icons/TonIcon";
 import { formatTON, getReferralStats, ReferralStats } from "@/lib/api";
 import { referralTelegramUrl } from "@/lib/bot";
 import { REFERRAL_MONTHLY_SHARE_PERCENT } from "@/lib/referral";
-import { ArrowUpRight, Copy, Sparkles, TrendingUp, Users, Wallet } from "lucide-react";
+import { openTelegramShare } from "@/src/shared/lib/twa";
+import { ArrowUpRight, Copy, Send, Sparkles, TrendingUp, Users, Wallet } from "lucide-react";
 
 export default function ProfileReferralsPage() {
   const { user } = useAuth();
@@ -16,7 +17,11 @@ export default function ProfileReferralsPage() {
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const referralLink = user ? referralTelegramUrl(user.id) : referralTelegramUrl("");
+  const referralLink = user ? referralTelegramUrl(user.telegram_id) : "";
+  const shareText = [
+    "Присоединяйся ко мне в Flipo!",
+    "Играй, стейкай подарки и получай пассивный доход в TON.",
+  ].join("\n");
 
   useEffect(() => {
     getReferralStats()
@@ -27,6 +32,16 @@ export default function ProfileReferralsPage() {
 
   async function handleCopy() {
     await navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleShare() {
+    if (!referralLink) return;
+    if (openTelegramShare({ url: referralLink, text: shareText })) {
+      return;
+    }
+    await navigator.clipboard.writeText(`${referralLink}\n\n${shareText}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -143,10 +158,16 @@ export default function ProfileReferralsPage() {
             </div>
           </div>
 
-          <Button className="h-11 w-full rounded-xl" variant="outline" onClick={handleCopy}>
-            <Copy className="mr-2 h-4 w-4" />
-            {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
-          </Button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button className="h-11 w-full rounded-xl" onClick={handleShare}>
+              <Send className="mr-2 h-4 w-4" />
+              Поделиться
+            </Button>
+            <Button className="h-11 w-full rounded-xl" variant="outline" onClick={handleCopy}>
+              <Copy className="mr-2 h-4 w-4" />
+              {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
+            </Button>
+          </div>
         </div>
       </section>
     </PageShell>

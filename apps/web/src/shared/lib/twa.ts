@@ -44,6 +44,7 @@ export type TelegramWebApp = {
   offEvent?: (eventType: string, callback: () => void) => void;
   setHeaderColor?: (color: string) => void;
   setBackgroundColor?: (color: string) => void;
+  openTelegramLink?: (url: string) => void;
   BackButton?: TelegramBackButton;
   HapticFeedback?: {
     selectionChanged?: () => void;
@@ -81,6 +82,25 @@ export function getTelegramWebApp(): TelegramWebApp | null {
   }
 
   return window.Telegram?.WebApp ?? null;
+}
+
+/** Open a t.me / tg:// link inside Telegram (not external browser). */
+export function openTelegramLink(url: string): boolean {
+  const webApp = getTelegramWebApp();
+  if (!webApp?.openTelegramLink) {
+    return false;
+  }
+  webApp.openTelegramLink(url);
+  return true;
+}
+
+/** Open Telegram share sheet with link preview on top and text below. */
+export function openTelegramShare(opts: { url: string; text?: string }): boolean {
+  let shareUrl = `https://t.me/share/url?url=${encodeURIComponent(opts.url)}`;
+  if (opts.text?.trim()) {
+    shareUrl += `&text=${encodeURIComponent(opts.text.trim())}`;
+  }
+  return openTelegramLink(shareUrl);
 }
 
 export function isTelegramMobilePlatform(platform?: string) {

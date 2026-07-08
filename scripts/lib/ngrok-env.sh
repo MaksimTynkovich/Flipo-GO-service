@@ -29,7 +29,7 @@ ngrok_is_running() {
   curl -sf "$NGROK_API" >/dev/null 2>&1
 }
 
-read_ngrok_tunnel_urls() {
+read_ngrok_public_url() {
   curl -sf "$NGROK_API" | python3 -c "
 import json, sys
 
@@ -37,31 +37,40 @@ def port_from_addr(addr: str) -> str:
     return addr.rsplit(':', 1)[-1].split('/')[0]
 
 data = json.load(sys.stdin)
-by_port = {}
-for t in data.get('tunnels', []):
-    by_port[port_from_addr(t['config']['addr'])] = t['public_url']
-
-web = by_port.get('3000', '')
-api = by_port.get('8080', '')
-if not web or not api:
+tunnels = data.get('tunnels', [])
+if not tunnels:
     sys.exit(1)
 
-print(web, api)
+by_port = {}
+for t in tunnels:
+    by_port[port_from_addr(t['config']['addr'])] = t['public_url']
+
+if '3000' in by_port:
+    print(by_port['3000'])
+    sys.exit(0)
+
+print(tunnels[0]['public_url'])
 "
 }
 
 read_ngrok_web_url() {
-  read_ngrok_tunnel_urls | awk '{print $1}'
+  read_ngrok_public_url
 }
 
 read_ngrok_api_url() {
-  read_ngrok_tunnel_urls | awk '{print $2}'
+  read_ngrok_public_url
+}
+
+read_ngrok_tunnel_urls() {
+  local url
+  url="$(read_ngrok_public_url)"
+  echo "$url $url"
 }
 
 wait_for_ngrok_tunnels() {
-  echo "Waiting for ngrok tunnels (web:3000, api:8080)..."
+  echo "Waiting for ngrok tunnel (web:3000)..."
   for _ in $(seq 1 30); do
-    if ngrok_is_running && read_ngrok_tunnel_urls >/dev/null 2>&1; then
+    if ngrok_is_running && read_ngrok_public_url >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -89,14 +98,14 @@ start_ngrok_detached() {
     return 0
   fi
 
-  echo "Starting ngrok in background..."
-  nohup ngrok start --all --config "$project_config,$user_config" --log=stdout \
+  echo "Starting ngrok in background (web -> :3000)..."
+  nohup ngrok start web --config "$project_config,$user_config" --log=stdout \
     > "$(ngrok_root)/ngrok.log" 2>&1 &
   echo "ngrok log: $(ngrok_root)/ngrok.log"
 }
 
 sync_env_from_ngrok() {
-  local env_file web_url api_url ws_url webhook_url
+  local env_file public_url ws_url webhook_url bot_username
   env_file="$(ngrok_env_file)"
 
   if [[ ! -f "$env_file" ]]; then
@@ -109,11 +118,13 @@ sync_env_from_ngrok() {
     return 1
   fi
 
-  read -r web_url api_url <<< "$(read_ngrok_tunnel_urls)"
-  ws_url="${api_url/https:/wss:}"
-  webhook_url="${api_url}/api/v1/telegram/webhook"
+  public_url="$(read_ngrok_public_url)"
+  ws_url="${public_url/https:/wss:}"
+  webhook_url="${public_url}/api/v1/telegram/webhook"
+  bot_username="$(grep -E '^NEXT_PUBLIC_BOT_NAME=' "$env_file" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+  bot_username="${bot_username#@}"
 
-  WEB_URL="$web_url" API_URL="$api_url" WS_URL="$ws_url" WEBHOOK_URL="$webhook_url" ENV_FILE="$env_file" python3 <<'PY'
+  PUBLIC_URL="$public_url" WS_URL="$ws_url" WEBHOOK_URL="$webhook_url" BOT_USERNAME="$bot_username" ENV_FILE="$env_file" python3 <<'PY'
 import os
 import re
 from pathlib import Path
@@ -130,24 +141,30 @@ def set_var(name: str, value: str) -> None:
     else:
         text = text.rstrip() + f"\n{line}\n"
 
-web_url = os.environ["WEB_URL"]
-api_url = os.environ["API_URL"]
+public_url = os.environ["PUBLIC_URL"]
 ws_url = os.environ["WS_URL"]
 webhook_url = os.environ["WEBHOOK_URL"]
+bot_username = os.environ.get("BOT_USERNAME", "").strip()
 
-set_var("NEXT_PUBLIC_API_URL", api_url)
+set_var("NEXT_PUBLIC_API_URL", public_url)
 set_var("NEXT_PUBLIC_WS_URL", ws_url)
-set_var("NEXT_PUBLIC_APP_URL", web_url)
-set_var("TELEGRAM_WEBAPP_URL", web_url)
+set_var("NEXT_PUBLIC_APP_URL", public_url)
+set_var("TELEGRAM_WEBAPP_URL", public_url)
 set_var("TELEGRAM_WEBHOOK_URL", webhook_url)
 set_var("NEXT_PUBLIC_DEBUG_AUTH", "false")
 set_var("DEBUG_AUTH_ENABLED", "false")
 
+if bot_username:
+    set_var("BOT_USERNAME", bot_username)
+    set_var("NEXT_PUBLIC_BOT_USERNAME", bot_username)
+    set_var("WEBAPP_SHORT_NAME", "app")
+    set_var("NEXT_PUBLIC_WEBAPP_SHORT_NAME", "app")
+
 path.write_text(text)
 PY
 
-  echo "Web (BotFather): $web_url"
-  echo "API:             $api_url"
-  echo "WS:              $ws_url"
+  echo "Public URL:      $public_url"
+  echo "API (proxied):   $public_url/api/v1"
+  echo "WS (proxied):    $ws_url/ws"
   echo "Webhook:         $webhook_url"
 }

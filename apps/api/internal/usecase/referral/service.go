@@ -49,11 +49,23 @@ func (s *Service) GetStats(ctx context.Context, userID uuid.UUID) (*Stats, error
 
 func (s *Service) TryAssignReferrer(ctx context.Context, userID uuid.UUID, code string) error {
 	referrerID, ok := ParseReferrerID(code)
-	if !ok || referrerID == userID {
+	if ok {
+		if referrerID == userID {
+			return nil
+		}
+		if _, err := s.users.FindByID(ctx, referrerID); err != nil {
+			return nil
+		}
+		return s.users.SetReferrerIfEmpty(ctx, userID, referrerID)
+	}
+
+	referrerTelegramID, ok := ParseReferrerTelegramID(code)
+	if !ok {
 		return nil
 	}
-	if _, err := s.users.FindByID(ctx, referrerID); err != nil {
+	referrer, err := s.users.FindByTelegramID(ctx, referrerTelegramID)
+	if err != nil || referrer == nil || referrer.ID == userID {
 		return nil
 	}
-	return s.users.SetReferrerIfEmpty(ctx, userID, referrerID)
+	return s.users.SetReferrerIfEmpty(ctx, userID, referrer.ID)
 }

@@ -1,6 +1,7 @@
 package referral
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -39,13 +40,24 @@ func ParseReferrerID(code string) (uuid.UUID, bool) {
 	if code == "" {
 		return uuid.Nil, false
 	}
-	const prefix = "ref_"
-	if strings.HasPrefix(code, prefix) {
-		code = strings.TrimPrefix(code, prefix)
-	}
+	code = strings.TrimPrefix(code, "ref_")
 	id, err := uuid.Parse(code)
 	if err != nil {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// ParseReferrerTelegramID extracts a referrer Telegram id from ref_<base36|decimal telegram_id>.
+func ParseReferrerTelegramID(code string) (int64, bool) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return 0, false
+	}
+	code = strings.TrimPrefix(strings.ToLower(code), "ref_")
+	telegramID, err := strconv.ParseInt(code, 36, 64)
+	if err != nil || telegramID <= 0 {
+		return 0, false
+	}
+	return telegramID, true
 }
