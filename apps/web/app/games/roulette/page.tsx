@@ -23,6 +23,7 @@ import { RouletteRoundState } from "@/lib/roulette";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { cn } from "@/lib/utils";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
+import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
@@ -37,6 +38,7 @@ export default function RoulettePage() {
   const [betting, setBetting] = useState(false);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
   const lastPhase = useRef<string | null>(null);
+  const betAmountInput = useAnalyticsInput("roulette_bet_amount", "roulette");
 
   const loadHistory = useCallback(async () => {
     try {
@@ -109,6 +111,7 @@ export default function RoulettePage() {
     }
 
     setBetting(true);
+    betAmountInput.complete();
     try {
       await placeRouletteBet(color, nanotons, crypto.randomUUID());
       loadRoundBets();
@@ -148,7 +151,9 @@ export default function RoulettePage() {
               min="0"
               disabled={!canBet}
               value={amountTon}
-              onChange={(e) => setAmountTon(e.target.value)}
+              {...betAmountInput.bind({
+                onChange: (e) => setAmountTon(e.target.value),
+              })}
               className="w-full bg-transparent text-center text-lg font-bold tabular-nums text-foreground outline-none disabled:opacity-40"
               placeholder="0.00"
             />

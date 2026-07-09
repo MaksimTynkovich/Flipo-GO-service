@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 	"github.com/gin-gonic/gin"
@@ -13,10 +14,11 @@ import (
 type InventoryHandler struct {
 	inventory *inventory.Service
 	staking   *staking.Service
+	analytics *analyticsuc.Service
 }
 
-func NewInventoryHandler(inv *inventory.Service, stake *staking.Service) *InventoryHandler {
-	return &InventoryHandler{inventory: inv, staking: stake}
+func NewInventoryHandler(inv *inventory.Service, stake *staking.Service, analyticsSvc *analyticsuc.Service) *InventoryHandler {
+	return &InventoryHandler{inventory: inv, staking: stake, analytics: analyticsSvc}
 }
 
 func (h *InventoryHandler) List(c *gin.Context) {
@@ -40,9 +42,11 @@ func (h *InventoryHandler) Deposit(c *gin.Context) {
 	}
 	item, err := h.inventory.Deposit(c.Request.Context(), userID, req.TxRef)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_deposit_completed", "error", "deposit_failed", err.Error(), map[string]any{"tx_ref": req.TxRef})
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_deposit_completed", "success", "", "", map[string]any{"item_id": item.ID.String(), "tx_ref": req.TxRef})
 	c.JSON(http.StatusCreated, item)
 }
 
@@ -55,9 +59,11 @@ func (h *InventoryHandler) Liquidate(c *gin.Context) {
 	}
 	balance, err := h.inventory.Liquidate(c.Request.Context(), userID, itemID)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_liquidated", "error", "liquidate_failed", err.Error(), map[string]any{"item_id": itemID.String()})
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_liquidated", "success", "", "", map[string]any{"item_id": itemID.String(), "balance_after": balance})
 	c.JSON(http.StatusOK, gin.H{"balance": balance})
 }
 
@@ -69,9 +75,11 @@ func (h *InventoryHandler) Withdraw(c *gin.Context) {
 		return
 	}
 	if err := h.inventory.Withdraw(c.Request.Context(), userID, itemID); err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "error", "withdraw_failed", err.Error(), map[string]any{"item_id": itemID.String()})
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "success", "", "", map[string]any{"item_id": itemID.String()})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

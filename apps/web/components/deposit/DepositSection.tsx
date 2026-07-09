@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGuide";
 import { TonWalletPanel } from "@/components/deposit/TonWalletPanel";
+import { trackFlowViewed } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Gift, Wallet } from "lucide-react";
 
@@ -10,6 +11,10 @@ type Tab = "ton" | "gifts";
 
 export function DepositSection() {
   const [tab, setTab] = useState<Tab>("ton");
+
+  useEffect(() => {
+    trackFlowViewed("deposit_flow", "wallet");
+  }, []);
 
   const tabs: { id: Tab; label: string; icon: typeof Wallet }[] = [
     { id: "ton", label: "TON кошелёк", icon: Wallet },

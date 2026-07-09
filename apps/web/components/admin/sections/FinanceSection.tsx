@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/PageShell";
+import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
@@ -54,7 +55,7 @@ export default function FinanceSection() {
   );
 
   return (
-    <PageShell title="Финансы" description="TON транзакции, hot/cold кошельки и ручная проверка выводов.">
+    <PageShell title="Финансы" description="Кошельки проекта, журнал операций и ручная проверка выводов.">
       {treasury ? (
         <section className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Hot balance" value={`${formatTON(treasury.hot_balance_nanoton ?? 0)} TON`} hint="Сколько TON сейчас лежит в горячем кошельке для быстрых депозитов и выводов." />
@@ -90,9 +91,8 @@ export default function FinanceSection() {
                     {transfer.review_reason || transfer.risk_flags?.join(", ")}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    className="quick-amount quick-amount-active"
+                <AdminToolbar className="shrink-0">
+                  <AdminButton
                     onClick={async () => {
                       await reviewAdminTransfer(transfer.id, true, note);
                       showToast({ variant: "success", title: "Вывод одобрен" });
@@ -100,9 +100,9 @@ export default function FinanceSection() {
                     }}
                   >
                     Approve
-                  </button>
-                  <button
-                    className="quick-amount"
+                  </AdminButton>
+                  <AdminButton
+                    variant="secondary"
                     onClick={async () => {
                       await reviewAdminTransfer(transfer.id, false, note);
                       showToast({ variant: "success", title: "Вывод отклонён" });
@@ -110,8 +110,8 @@ export default function FinanceSection() {
                     }}
                   >
                     Reject
-                  </button>
-                </div>
+                  </AdminButton>
+                </AdminToolbar>
               </div>
             </div>
           ))

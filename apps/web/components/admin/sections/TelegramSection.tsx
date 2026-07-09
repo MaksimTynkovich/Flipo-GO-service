@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AdminButton, AdminField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { PageShell } from "@/components/PageShell";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS: AdminBotSettings = {
   broadcast_enabled: false,
   spam_protection_level: 2,
   webapp_url: "",
+  webapp_button_text: "",
 };
 
 export default function TelegramSection() {
@@ -26,6 +28,7 @@ export default function TelegramSection() {
   const [message, setMessage] = useState("");
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [broadcastsLoading, setBroadcastsLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
   async function loadSettings() {
     setSettingsLoading(true);
@@ -60,20 +63,29 @@ export default function TelegramSection() {
     });
   }, []);
 
+  useEffect(() => {
+    const active = broadcasts.some((item) => item.status === "queued" || item.status === "running");
+    if (!active) return;
+    const timer = window.setInterval(() => {
+      loadBroadcasts().catch(() => {});
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [broadcasts]);
+
   const formSettings = settings ?? DEFAULT_SETTINGS;
 
   return (
     <PageShell title="Telegram-бот" description="WebApp, рассылки и защита от спама.">
-      <section className="panel space-y-3">
+      <AdminPanel title="Настройки бота" description="Параметры бота и массовых рассылок.">
         {settingsLoading && !settings ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="h-4 w-40 animate-pulse rounded bg-surface-raised" />
             <div className="h-10 w-full animate-pulse rounded bg-surface-raised" />
             <div className="h-10 w-full animate-pulse rounded bg-surface-raised" />
           </div>
         ) : (
-          <>
-            <label className="flex items-center gap-2 text-sm">
+          <div className="space-y-4">
+            <label className="flex items-center gap-2.5 text-sm">
               <input
                 type="checkbox"
                 checked={formSettings.broadcast_enabled}
@@ -84,10 +96,9 @@ export default function TelegramSection() {
               Массовые рассылки включены
             </label>
 
-            <label className="block text-sm">
-              <span className="text-muted">Уровень anti-spam (1–3)</span>
+            <AdminField label="Уровень anti-spam (1–3)" hint="Чем выше — тем быстрее рассылка, но выше риск лимитов Telegram.">
               <input
-                className="input-field mt-1"
+                className="input-field"
                 type="number"
                 min={1}
                 max={3}
@@ -99,83 +110,158 @@ export default function TelegramSection() {
                   })
                 }
               />
-            </label>
+            </AdminField>
 
-            <label className="block text-sm">
-              <span className="text-muted">WebApp URL</span>
+            <AdminField
+              label="WebApp URL"
+              hint="Кнопка в рассылке. Можно указать https://t.me/ваш_бот/app или прямой HTTPS. Если пусто — возьмём ссылку из BOT_USERNAME и WEBAPP_SHORT_NAME."
+            >
               <input
-                className="input-field mt-1"
+                className="input-field"
                 value={formSettings.webapp_url}
                 onChange={(e) => setSettings({ ...formSettings, webapp_url: e.target.value })}
                 placeholder="https://..."
               />
-            </label>
+            </AdminField>
 
-            <button
-              className="quick-amount quick-amount-active"
-              disabled={settingsLoading && !settings}
+            <AdminField
+              label="Текст кнопки"
+              hint="Подпись на кнопке открытия приложения в рассылке и в /start. Если пусто — «🚀 Открыть Flipo»."
+            >
+              <input
+                className="input-field"
+                value={formSettings.webapp_button_text}
+                onChange={(e) =>
+                  setSettings({ ...formSettings, webapp_button_text: e.target.value })
+                }
+                placeholder="🚀 Открыть Flipo"
+                maxLength={64}
+              />
+            </AdminField>
+
+            <AdminToolbar>
+              <AdminButton
+                disabled={settingsLoading && !settings}
+                onClick={async () => {
+                  try {
+                    await updateAdminBotSettings(formSettings);
+                    setSettings(formSettings);
+                    primeCache("admin:telegram:settings", formSettings);
+                    showToast({ variant: "success", title: "Настройки бота сохранены" });
+                  } catch (error) {
+                    showToast({
+                      variant: "error",
+                      title: "Не удалось сохранить настройки",
+                      subtitle: error instanceof Error ? error.message : undefined,
+                    });
+                  }
+                }}
+              >
+                Сохранить настройки
+              </AdminButton>
+            </AdminToolbar>
+          </div>
+        )}
+      </AdminPanel>
+
+      <AdminPanel title="Массовая рассылка" description="Сообщение уйдёт всем игрокам с привязанным Telegram.">
+        <div className="space-y-4">
+          <AdminField label="Текст сообщения">
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="input-field min-h-28"
+              placeholder="Текст сообщения для всех игроков"
+            />
+          </AdminField>
+
+          <AdminToolbar>
+            <AdminButton
+              disabled={!message.trim() || sending}
               onClick={async () => {
-                await updateAdminBotSettings(formSettings);
-                setSettings(formSettings);
-                showToast({ variant: "success", title: "Настройки бота сохранены" });
+                const text = message.trim();
+                if (!text) return;
+
+                setSending(true);
+                try {
+                  const nextSettings = { ...formSettings, broadcast_enabled: true };
+                  if (!formSettings.broadcast_enabled) {
+                    setSettings(nextSettings);
+                  }
+                  await updateAdminBotSettings(nextSettings);
+                  primeCache("admin:telegram:settings", nextSettings);
+                  setSettings(nextSettings);
+
+                  await createAdminBroadcast(text);
+                  setMessage("");
+                  showToast({ variant: "success", title: "Рассылка запущена" });
+                  await loadBroadcasts();
+                } catch (error) {
+                  showToast({
+                    variant: "error",
+                    title: "Не удалось запустить рассылку",
+                    subtitle: error instanceof Error ? error.message : undefined,
+                  });
+                } finally {
+                  setSending(false);
+                }
               }}
             >
-              Сохранить настройки
-            </button>
-          </>
-        )}
-      </section>
+              {sending ? "Отправка…" : "Отправить рассылку"}
+            </AdminButton>
+          </AdminToolbar>
 
-      <section className="panel space-y-3">
-        <p className="text-base font-semibold">Массовая рассылка</p>
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          className="input-field min-h-28"
-          placeholder="Текст сообщения для всех игроков"
-        />
-        <button
-          className="quick-amount quick-amount-active"
-          disabled={!message.trim() || !formSettings.broadcast_enabled}
-          onClick={async () => {
-            await createAdminBroadcast(message.trim());
-            setMessage("");
-            showToast({ variant: "success", title: "Рассылка поставлена в очередь" });
-            await loadBroadcasts();
-          }}
-        >
-          Отправить рассылку
-        </button>
-        {!formSettings.broadcast_enabled ? (
-          <p className="text-xs text-muted">Сначала включите массовые рассылки.</p>
-        ) : null}
-      </section>
+          {!formSettings.broadcast_enabled ? (
+            <p className="text-xs text-muted">
+              Рассылки выключены — при отправке включим автоматически и сохраним настройки.
+            </p>
+          ) : null}
+          {!formSettings.webapp_url.trim() ? (
+            <p className="text-xs text-muted">
+              WebApp URL не задан — к рассылке добавится кнопка t.me из настроек бота, если они есть в .env.
+            </p>
+          ) : null}
+        </div>
+      </AdminPanel>
 
-      <section className="panel space-y-2">
-        <p className="text-base font-semibold">История рассылок</p>
+      <AdminPanel title="История рассылок">
         {broadcastsLoading && broadcasts.length === 0 ? (
-          Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="rounded-xl bg-surface-raised/50 px-3 py-2">
-              <div className="h-3 w-16 animate-pulse rounded bg-surface-raised" />
-              <div className="mt-2 h-4 w-full animate-pulse rounded bg-surface-raised" />
-            </div>
-          ))
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="rounded-xl bg-surface-raised/50 px-3 py-2">
+                <div className="h-3 w-16 animate-pulse rounded bg-surface-raised" />
+                <div className="mt-2 h-4 w-full animate-pulse rounded bg-surface-raised" />
+              </div>
+            ))}
+          </div>
         ) : broadcasts.length === 0 ? (
           <p className="text-sm text-muted">Рассылок пока не было.</p>
         ) : (
-          broadcasts.map((item) => (
-            <div key={item.id} className="rounded-xl bg-surface-raised/50 px-3 py-2 text-sm">
-              <div className="flex justify-between gap-3">
-                <span className="uppercase text-[10px] text-muted">{item.status}</span>
-                <span className="text-xs text-muted">
-                  {item.sent_count}/{item.total_users}
-                </span>
+          <div className="space-y-2">
+            {broadcasts.map((item) => (
+              <div key={item.id} className="rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="uppercase text-[10px] text-muted">
+                    {item.status === "queued"
+                      ? "в очереди"
+                      : item.status === "running"
+                        ? "отправляется"
+                        : item.status === "completed"
+                          ? "завершена"
+                          : item.status === "failed"
+                            ? "ошибка"
+                            : item.status}
+                  </span>
+                  <span className="text-xs text-muted">
+                    {item.sent_count}/{item.total_users}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2">{item.message}</p>
               </div>
-              <p className="mt-1 line-clamp-2">{item.message}</p>
-            </div>
-          ))
+            ))}
+          </div>
         )}
-      </section>
+      </AdminPanel>
     </PageShell>
   );
 }

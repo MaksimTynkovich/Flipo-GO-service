@@ -12,6 +12,7 @@ import {
 import { TonIcon } from "@/components/icons/TonIcon";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { api } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { PvpLobbyState } from "@/lib/pvp";
 import { connectGameWS } from "@/lib/ws";
 import { cn } from "@/lib/utils";
@@ -81,8 +82,22 @@ export function PvpHubView() {
         method: "POST",
         body: JSON.stringify({ bet_amount_nanoton: nanotons, max_players: PVP_MAX_PLAYERS }),
       });
+      trackEvent({
+        event_name: "pvp_room_created",
+        event_category: "pvp",
+        status: "success",
+        properties: { mode: "pvp", amount_nanoton: nanotons },
+      });
       await loadState();
     } catch (e) {
+      trackEvent({
+        event_name: "pvp_room_created",
+        event_category: "pvp",
+        status: "error",
+        error_code: "create_failed",
+        error_message: e instanceof Error ? e.message : "create_failed",
+        properties: { mode: "pvp", amount_nanoton: nanotons },
+      });
       setError(mapPvpError(e instanceof Error ? e.message : "Не удалось создать комнату"));
     } finally {
       setCreating(false);
@@ -95,8 +110,22 @@ export function PvpHubView() {
     try {
       haptics.impactOccurred("medium");
       await api(`/api/v1/games/pvp/rooms/${id}/join`, { method: "POST" });
+      trackEvent({
+        event_name: "pvp_room_joined",
+        event_category: "pvp",
+        status: "success",
+        properties: { mode: "pvp", room_id: id },
+      });
       await loadState();
     } catch (e) {
+      trackEvent({
+        event_name: "pvp_room_joined",
+        event_category: "pvp",
+        status: "error",
+        error_code: "join_failed",
+        error_message: e instanceof Error ? e.message : "join_failed",
+        properties: { mode: "pvp", room_id: id },
+      });
       setError(mapPvpError(e instanceof Error ? e.message : "Не удалось войти в комнату"));
     } finally {
       setJoiningId(null);

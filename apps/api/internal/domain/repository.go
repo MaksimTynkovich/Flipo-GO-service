@@ -138,6 +138,12 @@ type AdminRepository interface {
 	CountUserBets(ctx context.Context, userID uuid.UUID, limit int) ([]GameBet, error)
 }
 
+type AnalyticsRepository interface {
+	RecordEvents(ctx context.Context, events []AnalyticsEventCreate) error
+	GetOverview(ctx context.Context, since time.Time, filter AnalyticsOverviewFilter) (*AnalyticsOverview, error)
+	GetUserDrilldown(ctx context.Context, userID uuid.UUID, limit int, sessionID string) (*AnalyticsUserDrilldown, error)
+}
+
 type PvPRepository interface {
 	CreateRoom(ctx context.Context, room *PvPRoom) error
 	GetRoom(ctx context.Context, id uuid.UUID) (*PvPRoom, error)

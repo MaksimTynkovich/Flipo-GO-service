@@ -32,6 +32,10 @@ func (b *BotAPI) SendMessage(ctx context.Context, chatID int64, text string) err
 	return b.sendMessage(ctx, chatID, text, nil)
 }
 
+func (b *BotAPI) SendMessageWithMarkup(ctx context.Context, chatID int64, text string, replyMarkup any) error {
+	return b.sendMessage(ctx, chatID, text, replyMarkup)
+}
+
 func (b *BotAPI) sendMessage(ctx context.Context, chatID int64, text string, replyMarkup any) error {
 	if !b.Enabled() || chatID == 0 {
 		return nil

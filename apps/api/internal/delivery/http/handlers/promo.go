@@ -6,16 +6,18 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/promo"
 	"github.com/gin-gonic/gin"
 )
 
 type PromoHandler struct {
-	promo *promo.Service
+	promo     *promo.Service
+	analytics *analyticsuc.Service
 }
 
-func NewPromoHandler(promoSvc *promo.Service) *PromoHandler {
-	return &PromoHandler{promo: promoSvc}
+func NewPromoHandler(promoSvc *promo.Service, analyticsSvc *analyticsuc.Service) *PromoHandler {
+	return &PromoHandler{promo: promoSvc, analytics: analyticsSvc}
 }
 
 func (h *PromoHandler) Activate(c *gin.Context) {
@@ -24,6 +26,7 @@ func (h *PromoHandler) Activate(c *gin.Context) {
 		Code string `json:"code" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "promo", "promo_activated", "error", "promo_required", "Введите промокод", nil)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Введите промокод",
 			"code":  "promo_required",
@@ -32,9 +35,11 @@ func (h *PromoHandler) Activate(c *gin.Context) {
 	}
 	status, err := h.promo.Activate(c.Request.Context(), userID, req.Code)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "promo", "promo_activated", "error", "promo_failed", err.Error(), map[string]any{"code": req.Code})
 		writePromoError(c, err)
 		return
 	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "promo", "promo_activated", "success", "", "", map[string]any{"code": req.Code, "bonus_nanoton": status.BonusNanoton})
 	c.JSON(http.StatusOK, status)
 }
 

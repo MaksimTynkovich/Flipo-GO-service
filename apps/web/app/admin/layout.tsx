@@ -2,6 +2,7 @@
 
 import { AdminSectionHost } from "@/components/admin/AdminSectionHost";
 import { ADMIN_NAV, resolveAdminSection } from "@/components/admin/admin-sections";
+import { cn } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 
@@ -13,7 +14,7 @@ function AdminNav({
   onNavigate: (href: string) => void;
 }) {
   return (
-    <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+    <nav className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-1">
       {ADMIN_NAV.map((item) => {
         const isActive = activeSection === item.id;
         return (
@@ -21,14 +22,15 @@ function AdminNav({
             key={item.href}
             type="button"
             onClick={() => onNavigate(item.href)}
-            className={`rounded-xl px-3 py-2 text-left text-sm transition-colors duration-150 ${
+            className={cn(
+              "w-full rounded-xl px-3 py-2.5 text-left transition-colors",
               isActive
-                ? "bg-accent/15 font-semibold text-foreground ring-1 ring-inset ring-accent/30"
-                : "bg-surface-raised/60 text-muted hover:bg-surface-raised/80 hover:text-foreground"
-            }`}
+                ? "bg-accent/15 font-medium text-foreground ring-1 ring-inset ring-accent/30"
+                : "bg-surface-raised/50 text-muted hover:text-foreground",
+            )}
           >
-            <span className="block">{item.label}</span>
-            <span className="mt-0.5 block text-[10px] opacity-70">{item.hint}</span>
+            <span className="block text-sm">{item.label}</span>
+            <span className="mt-0.5 hidden text-[11px] leading-snug text-muted lg:block">{item.hint}</span>
           </button>
         );
       })}
@@ -59,10 +61,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="space-y-4">
-      <AdminNav activeSection={activeSection} onNavigate={navigate} />
-      <AdminSectionHost active={activeSection} />
-      {children}
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
+      <aside className="w-full shrink-0 lg:sticky lg:top-[calc(var(--app-header-offset)+0.5rem)] lg:w-56">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Разделы</p>
+        <AdminNav activeSection={activeSection} onNavigate={navigate} />
+      </aside>
+      <div className="min-w-0 flex-1 space-y-4">
+        <AdminSectionHost active={activeSection} />
+        {children}
+      </div>
     </div>
   );
 }

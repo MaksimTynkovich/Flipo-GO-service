@@ -7,6 +7,7 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,11 +15,12 @@ import (
 )
 
 type MarketHandler struct {
-	market *market.Service
+	market    *market.Service
+	analytics *analyticsuc.Service
 }
 
-func NewMarketHandler(svc *market.Service) *MarketHandler {
-	return &MarketHandler{market: svc}
+func NewMarketHandler(svc *market.Service, analyticsSvc *analyticsuc.Service) *MarketHandler {
+	return &MarketHandler{market: svc, analytics: analyticsSvc}
 }
 
 func (h *MarketHandler) List(c *gin.Context) {
@@ -79,6 +81,10 @@ func (h *MarketHandler) Create(c *gin.Context) {
 
 	listing, err := h.market.CreateListing(c.Request.Context(), userID, itemID, req.PriceNanoton)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "market", "market_listing_created", "error", "create_failed", err.Error(), map[string]any{
+			"item_id":       req.ItemID,
+			"price_nanoton": req.PriceNanoton,
+		})
 		status := http.StatusBadRequest
 		if errors.Is(err, domain.ErrForbidden) {
 			status = http.StatusForbidden
@@ -86,6 +92,11 @@ func (h *MarketHandler) Create(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "market", "market_listing_created", "success", "", "", map[string]any{
+		"listing_id":    listing.ID,
+		"item_id":       req.ItemID,
+		"price_nanoton": req.PriceNanoton,
+	})
 	c.JSON(http.StatusCreated, listing)
 }
 
@@ -97,9 +108,11 @@ func (h *MarketHandler) Cancel(c *gin.Context) {
 		return
 	}
 	if err := h.market.CancelListing(c.Request.Context(), userID, id); err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "market", "market_listing_cancelled", "error", "cancel_failed", err.Error(), map[string]any{"listing_id": id.String()})
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "market", "market_listing_cancelled", "success", "", "", map[string]any{"listing_id": id.String()})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -113,6 +126,7 @@ func (h *MarketHandler) Buy(c *gin.Context) {
 
 	balance, err := h.market.Purchase(c.Request.Context(), userID, id)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "market", "market_purchase_completed", "error", "purchase_failed", err.Error(), map[string]any{"listing_id": id.String()})
 		status := http.StatusBadRequest
 		if errors.Is(err, domain.ErrInsufficientFunds) {
 			status = http.StatusPaymentRequired
@@ -132,6 +146,11 @@ func (h *MarketHandler) Buy(c *gin.Context) {
 		c.JSON(status, gin.H{"error": msg})
 		return
 	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "market", "market_purchase_completed", "success", "", "", map[string]any{
+		"listing_id":    id.String(),
+		"balance_after": balance.BettingBalance,
+		"promo_balance": balance.PromoBalance,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"balance":       balance.BettingBalance,
 		"promo_balance": balance.PromoBalance,

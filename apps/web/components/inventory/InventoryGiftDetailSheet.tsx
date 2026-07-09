@@ -64,7 +64,7 @@ export function InventoryGiftDetailSheet({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} analyticsModalId="inventory_gift_detail">
       <div
         role="dialog"
         aria-modal="true"

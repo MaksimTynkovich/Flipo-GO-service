@@ -12,6 +12,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 )
 
@@ -45,6 +46,7 @@ func main() {
 	invRepo := postgres.NewInventoryRepo(db)
 	userRepo := postgres.NewUserRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
+	analyticsRepo := postgres.NewAnalyticsRepo(db)
 	valuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo)
 	stakeSvc := staking.NewService(
 		stakeRepo,
@@ -56,6 +58,7 @@ func main() {
 		telegram.NewBotNotifier(cfg.BotToken),
 		cfg.BoostWagerThreshold,
 	)
+	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))
 
 	if *daily {
 		if err := backdateForDailyAccrual(db); err != nil {

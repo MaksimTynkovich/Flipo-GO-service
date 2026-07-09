@@ -17,6 +17,7 @@ import {
   stakeGift,
 } from "@/lib/api";
 import { pluralizeGifts, weeklyYieldNanoton } from "@/lib/staking-ui";
+import { trackFlowViewed } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Gift } from "lucide-react";
 import Link from "next/link";
@@ -68,6 +69,7 @@ export function StakingSection() {
 
   useEffect(() => {
     load();
+    trackFlowViewed("staking_flow", "staking");
   }, []);
 
   const unstakedGifts = useMemo(() => gifts.filter((g) => !g.is_staked), [gifts]);

@@ -2,7 +2,10 @@ package telegramadmin
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -11,22 +14,48 @@ import (
 )
 
 type Service struct {
-	platform domain.PlatformRepository
-	users    domain.UserRepository
-	bot      *telegram.BotAPI
+	platform        domain.PlatformRepository
+	users           domain.UserRepository
+	bot             *telegram.BotAPI
+	botUsername     string
+	webAppShortName string
+	envWebAppURL    string
+	processMu       sync.Mutex
 }
 
-func NewService(platform domain.PlatformRepository, users domain.UserRepository, bot *telegram.BotAPI) *Service {
-	return &Service{platform: platform, users: users, bot: bot}
+func NewService(
+	platform domain.PlatformRepository,
+	users domain.UserRepository,
+	bot *telegram.BotAPI,
+	botUsername string,
+	webAppShortName string,
+	envWebAppURL string,
+) *Service {
+	return &Service{
+		platform:        platform,
+		users:           users,
+		bot:             bot,
+		botUsername:     botUsername,
+		webAppShortName: webAppShortName,
+		envWebAppURL:    strings.TrimRight(strings.TrimSpace(envWebAppURL), "/"),
+	}
 }
 
 func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, message string) (*domain.TelegramBroadcast, error) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return nil, fmt.Errorf("message is required")
+	}
+
 	settings, err := s.platform.GetBotSettings(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !settings.BroadcastEnabled {
-		return nil, domain.ErrForbidden
+		return nil, fmt.Errorf("массовые рассылки выключены в настройках бота")
+	}
+	if s.bot == nil || !s.bot.Enabled() {
+		return nil, fmt.Errorf("BOT_TOKEN не настроен")
 	}
 
 	total, err := s.users.CountUsers(ctx)
@@ -44,6 +73,15 @@ func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, messag
 	if err := s.platform.CreateBroadcast(ctx, broadcast); err != nil {
 		return nil, err
 	}
+
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
+		defer cancel()
+		if err := s.ProcessQueued(bgCtx); err != nil {
+			slog.Warn("broadcast process after create failed", "error", err)
+		}
+	}()
+
 	return broadcast, nil
 }
 
@@ -52,8 +90,11 @@ func (s *Service) ListBroadcasts(ctx context.Context) ([]domain.TelegramBroadcas
 }
 
 func (s *Service) ProcessQueued(ctx context.Context) error {
+	s.processMu.Lock()
+	defer s.processMu.Unlock()
+
 	if s.bot == nil || !s.bot.Enabled() {
-		return nil
+		return fmt.Errorf("BOT_TOKEN is not configured")
 	}
 
 	items, err := s.platform.ListQueuedBroadcasts(ctx, 1)
@@ -63,6 +104,10 @@ func (s *Service) ProcessQueued(ctx context.Context) error {
 	for i := range items {
 		if err := s.runBroadcast(ctx, &items[i]); err != nil {
 			slog.Warn("broadcast failed", "id", items[i].ID, "error", err)
+			items[i].Status = "failed"
+			now := time.Now().UTC()
+			items[i].FinishedAt = &now
+			_ = s.platform.UpdateBroadcast(ctx, &items[i])
 		}
 	}
 	return nil
@@ -74,7 +119,14 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 		return err
 	}
 
-	settings, _ := s.platform.GetBotSettings(ctx)
+	settings, err := s.platform.GetBotSettings(ctx)
+	if err != nil {
+		return err
+	}
+	markup := s.broadcastMarkup(*settings)
+	if markup == nil {
+		slog.Warn("broadcast without open-app button", "broadcast_id", broadcast.ID, "hint", "set webapp_url in admin or BOT_USERNAME/WEBAPP_SHORT_NAME in env")
+	}
 	delay := time.Duration(50-settings.SpamProtectionLevel*10) * time.Millisecond
 	if delay < 35*time.Millisecond {
 		delay = 35 * time.Millisecond
@@ -90,7 +142,7 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 			break
 		}
 		for _, chatID := range ids {
-			if err := s.bot.SendMessage(ctx, chatID, broadcast.Message); err != nil {
+			if err := s.bot.SendMessageWithMarkup(ctx, chatID, broadcast.Message, markup); err != nil {
 				broadcast.FailedCount++
 			} else {
 				broadcast.SentCount++
@@ -104,4 +156,17 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 	broadcast.Status = "completed"
 	broadcast.FinishedAt = &now
 	return s.platform.UpdateBroadcast(ctx, broadcast)
+}
+
+func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings) map[string]any {
+	webAppURL := strings.TrimSpace(settings.WebAppURL)
+	if webAppURL == "" {
+		webAppURL = s.envWebAppURL
+	}
+	return telegram.OpenAppButtonMarkup(telegram.OpenAppButtonOptions{
+		WebAppURL:       webAppURL,
+		BotUsername:     s.botUsername,
+		WebAppShortName: s.webAppShortName,
+		ButtonText:      settings.WebAppButtonText,
+	})
 }

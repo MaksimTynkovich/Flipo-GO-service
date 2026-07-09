@@ -32,7 +32,7 @@ export function readCached<T>(key: string): T | null {
 }
 
 export function invalidateCached(prefix: string) {
-  for (const key of cache.keys()) {
+  for (const key of Array.from(cache.keys())) {
     if (key.startsWith(prefix)) {
       cache.delete(key);
     }

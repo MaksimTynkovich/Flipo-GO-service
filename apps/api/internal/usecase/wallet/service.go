@@ -9,17 +9,18 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type Config struct {
-	DepositAddress      string
-	MinDepositNanoton   int64
-	MinWithdrawNanoton  int64
-	WithdrawFeeNanoton  int64
-	DepositTTL          time.Duration
-	ChainDevMode        bool
+	DepositAddress     string
+	MinDepositNanoton  int64
+	MinWithdrawNanoton int64
+	WithdrawFeeNanoton int64
+	DepositTTL         time.Duration
+	ChainDevMode       bool
 }
 
 type WithdrawalRiskEvaluator interface {
@@ -27,11 +28,12 @@ type WithdrawalRiskEvaluator interface {
 }
 
 type Service struct {
-	users    domain.UserRepository
+	users     domain.UserRepository
 	transfers domain.TonTransferRepository
-	chain    *ton.Client
-	cfg      Config
-	risk     WithdrawalRiskEvaluator
+	chain     *ton.Client
+	cfg       Config
+	risk      WithdrawalRiskEvaluator
+	analytics *analyticsuc.Service
 }
 
 func NewService(users domain.UserRepository, transfers domain.TonTransferRepository, chain *ton.Client, cfg Config) *Service {
@@ -45,6 +47,10 @@ func NewService(users domain.UserRepository, transfers domain.TonTransferReposit
 
 func (s *Service) SetRiskEvaluator(r WithdrawalRiskEvaluator) {
 	s.risk = r
+}
+
+func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
+	s.analytics = analyticsSvc
 }
 
 type DepositIntentView struct {
@@ -106,6 +112,19 @@ func (s *Service) CreateDepositIntent(ctx context.Context, userID uuid.UUID, amo
 	if err := s.transfers.Create(ctx, transfer); err != nil {
 		return nil, err
 	}
+	s.analytics.Track(ctx, analyticsuc.EventInput{
+		UserID:        &userID,
+		ReferrerID:    user.ReferrerID,
+		TelegramID:    &user.TelegramID,
+		Source:        "api",
+		EventName:     "deposit_intent_created",
+		EventCategory: "wallet",
+		Status:        "success",
+		StakingTier:   string(user.StakingTier),
+		Properties: map[string]any{
+			"amount_nanoton": amountNanoton,
+		},
+	})
 
 	return &DepositIntentView{
 		ID:            transfer.ID.String(),
@@ -147,6 +166,7 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 			return nil, 0, err
 		}
 		updated, _ := s.transfers.FindByID(ctx, transferID)
+		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
 		return toView(updated), balanceAfter, nil
 	}
 
@@ -157,6 +177,7 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 			return nil, 0, err
 		}
 		updated, _ := s.transfers.FindByID(ctx, transferID)
+		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
 		return toView(updated), balanceAfter, nil
 	}
 
@@ -176,6 +197,7 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 		return nil, 0, err
 	}
 	updated, _ := s.transfers.FindByID(ctx, transferID)
+	s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
 	return toView(updated), balanceAfter, nil
 }
 
@@ -236,7 +258,63 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 	if err != nil {
 		return nil, 0, err
 	}
+	s.analytics.Track(ctx, analyticsuc.EventInput{
+		UserID:        &userID,
+		ReferrerID:    user.ReferrerID,
+		TelegramID:    &user.TelegramID,
+		Source:        "api",
+		EventName:     "withdraw_requested",
+		EventCategory: "wallet",
+		Status:        "success",
+		StakingTier:   string(user.StakingTier),
+		ErrorCode:     "",
+		Properties: map[string]any{
+			"amount_nanoton":  receiveNanoton,
+			"fee_nanoton":     s.cfg.WithdrawFeeNanoton,
+			"risk_score":      riskScore,
+			"risk_flags":      riskFlags,
+			"review_required": initialStatus == domain.TonStatusPendingReview,
+		},
+	})
+	if initialStatus == domain.TonStatusPendingReview {
+		s.analytics.Track(ctx, analyticsuc.EventInput{
+			UserID:        &userID,
+			ReferrerID:    user.ReferrerID,
+			TelegramID:    &user.TelegramID,
+			Source:        "api",
+			EventName:     "withdraw_review_required",
+			EventCategory: "wallet",
+			Status:        "success",
+			StakingTier:   string(user.StakingTier),
+			Properties: map[string]any{
+				"amount_nanoton": receiveNanoton,
+				"risk_score":     riskScore,
+				"risk_flags":     riskFlags,
+			},
+		})
+	}
 	return toView(transfer), balanceAfter, nil
+}
+
+func (s *Service) trackDepositConfirmed(ctx context.Context, userID uuid.UUID, amountNanoton int64, wallet string) {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return
+	}
+	s.analytics.Track(ctx, analyticsuc.EventInput{
+		UserID:        &userID,
+		ReferrerID:    user.ReferrerID,
+		TelegramID:    &user.TelegramID,
+		Source:        "api",
+		EventName:     "deposit_confirmed",
+		EventCategory: "wallet",
+		Status:        "success",
+		StakingTier:   string(user.StakingTier),
+		Properties: map[string]any{
+			"amount_nanoton": amountNanoton,
+			"wallet_address": wallet,
+		},
+	})
 }
 
 func (s *Service) ListTransfers(ctx context.Context, userID uuid.UUID, limit int) ([]TransferView, error) {

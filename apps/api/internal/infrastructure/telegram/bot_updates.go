@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"context"
-	"net/url"
 	"strings"
 )
 
@@ -21,11 +20,16 @@ type Chat struct {
 	ID int64 `json:"id"`
 }
 
+type WebAppURLResolver func(ctx context.Context) string
+type WebAppButtonTextResolver func(ctx context.Context) string
+
 type BotUpdates struct {
-	api             *BotAPI
-	webAppURL       string
-	botUsername     string
-	webAppShortName string
+	api                    *BotAPI
+	webAppURL              string
+	botUsername            string
+	webAppShortName        string
+	webAppURLResolver      WebAppURLResolver
+	webAppButtonTextResolver WebAppButtonTextResolver
 }
 
 func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName string) *BotUpdates {
@@ -35,6 +39,14 @@ func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName string) 
 		botUsername:     strings.TrimPrefix(botUsername, "@"),
 		webAppShortName: strings.Trim(webAppShortName, "/"),
 	}
+}
+
+func (h *BotUpdates) SetWebAppURLResolver(resolver WebAppURLResolver) {
+	h.webAppURLResolver = resolver
+}
+
+func (h *BotUpdates) SetWebAppButtonTextResolver(resolver WebAppButtonTextResolver) {
+	h.webAppButtonTextResolver = resolver
 }
 
 func (h *BotUpdates) Enabled() bool {
@@ -62,37 +74,31 @@ func (h *BotUpdates) sendStartWelcome(ctx context.Context, chatID int64, startPa
 		"💰 TON депозиты и вывод\n\n" +
 		"Нажмите кнопку ниже, чтобы открыть приложение."
 
-	return h.api.sendMessage(ctx, chatID, text, h.openAppMarkup(startPayload))
+	return h.api.sendMessage(ctx, chatID, text, h.openAppMarkup(ctx, startPayload))
 }
 
-func (h *BotUpdates) openAppMarkup(startPayload string) map[string]any {
-	button := map[string]any{
-		"text": "🚀 Открыть Flipo",
-	}
-
-	if h.botUsername != "" && h.webAppShortName != "" {
-		appURL := "https://t.me/" + h.botUsername + "/" + h.webAppShortName
-		if startPayload != "" {
-			appURL += "?startapp=" + urlQueryEscape(startPayload)
+func (h *BotUpdates) resolvedWebAppURL(ctx context.Context) string {
+	if h.webAppURLResolver != nil {
+		if url := strings.TrimSpace(h.webAppURLResolver(ctx)); url != "" {
+			return strings.TrimRight(url, "/")
 		}
-		button["url"] = appURL
-	} else if h.webAppURL != "" {
-		appURL := h.webAppURL
-		if startPayload != "" {
-			sep := "?"
-			if strings.Contains(appURL, "?") {
-				sep = "&"
-			}
-			appURL += sep + "tgWebAppStartParam=" + urlQueryEscape(startPayload)
-		}
-		button["web_app"] = map[string]string{"url": appURL}
 	}
-
-	return map[string]any{
-		"inline_keyboard": [][]map[string]any{{button}},
-	}
+	return h.webAppURL
 }
 
-func urlQueryEscape(value string) string {
-	return url.QueryEscape(value)
+func (h *BotUpdates) resolvedButtonText(ctx context.Context) string {
+	if h.webAppButtonTextResolver != nil {
+		return strings.TrimSpace(h.webAppButtonTextResolver(ctx))
+	}
+	return ""
+}
+
+func (h *BotUpdates) openAppMarkup(ctx context.Context, startPayload string) map[string]any {
+	return OpenAppButtonMarkup(OpenAppButtonOptions{
+		WebAppURL:       h.resolvedWebAppURL(ctx),
+		BotUsername:     h.botUsername,
+		WebAppShortName: h.webAppShortName,
+		StartPayload:    startPayload,
+		ButtonText:      h.resolvedButtonText(ctx),
+	})
 }

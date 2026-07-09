@@ -1,10 +1,14 @@
 import { cn } from "@/lib/utils";
 import { ButtonHTMLAttributes, forwardRef } from "react";
+import { trackDisabledClick } from "@/lib/analytics";
 
 export const Button = forwardRef<
   HTMLButtonElement,
-  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "default" | "outline" | "danger" | "accent" }
->(({ className, variant = "default", ...props }, ref) => {
+  ButtonHTMLAttributes<HTMLButtonElement> & {
+    variant?: "default" | "outline" | "danger" | "accent";
+    analyticsAction?: string;
+  }
+>(({ className, variant = "default", analyticsAction, onPointerDown, disabled, ...props }, ref) => {
   const variants = {
     default: "bg-accent text-white active:opacity-90",
     outline: "bg-surface-raised text-foreground active:opacity-80",
@@ -14,6 +18,13 @@ export const Button = forwardRef<
   return (
     <button
       ref={ref}
+      disabled={disabled}
+      onPointerDown={(event) => {
+        if (disabled) {
+          trackDisabledClick(analyticsAction || props.id || "button");
+        }
+        onPointerDown?.(event);
+      }}
       className={cn(
         "inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium transition-opacity disabled:opacity-40",
         variants[variant],

@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/admin"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
@@ -17,20 +19,22 @@ import (
 )
 
 type AdminHandler struct {
-	admin    *admin.Service
-	fairness *fairness.Service
-	treasury *treasury.Service
-	telegram *telegramadmin.Service
-	hotAddr  string
+	admin     *admin.Service
+	analytics *analyticsuc.Service
+	fairness  *fairness.Service
+	treasury  *treasury.Service
+	telegram  *telegramadmin.Service
+	hotAddr   string
 }
 
-func NewAdminHandler(adminSvc *admin.Service, fairnessSvc *fairness.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
+func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
 	return &AdminHandler{
-		admin:    adminSvc,
-		fairness: fairnessSvc,
-		treasury: treasurySvc,
-		telegram: telegramSvc,
-		hotAddr:  hotAddr,
+		admin:     adminSvc,
+		analytics: analyticsSvc,
+		fairness:  fairnessSvc,
+		treasury:  treasurySvc,
+		telegram:  telegramSvc,
+		hotAddr:   hotAddr,
 	}
 }
 
@@ -96,6 +100,40 @@ func (h *AdminHandler) AuditLogs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, logs)
+}
+
+func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "1"))
+	if days <= 0 {
+		days = 1
+	}
+	since := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	filter := domain.AnalyticsOverviewFilter{
+		ErrorCode: c.Query("error_code"),
+		InputID:   c.Query("input_id"),
+	}
+	overview, err := h.analytics.Overview(c.Request.Context(), since, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, overview)
+}
+
+func (h *AdminHandler) AnalyticsUserDrilldown(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "60"))
+	sessionID := c.Query("session_id")
+	drilldown, err := h.analytics.UserDrilldown(c.Request.Context(), userID, limit, sessionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, drilldown)
 }
 
 func (h *AdminHandler) ReviewTransfer(c *gin.Context) {

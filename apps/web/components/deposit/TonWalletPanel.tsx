@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { Button } from "@/components/ui/button";
+import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import {
   formatWalletError,
   formatTransferDate,
@@ -142,6 +143,8 @@ export function TonWalletPanel() {
     [transfers],
   );
   const pendingDeposits = deposits.filter((item) => item.status === "awaiting_payment").length;
+  const depositInput = useAnalyticsInput("deposit_ton_amount", "deposit");
+  const withdrawInput = useAnalyticsInput("withdraw_ton_amount", "wallet");
 
   useEffect(() => {
     if (!connectionRestored) return;
@@ -209,6 +212,7 @@ export function TonWalletPanel() {
       return;
     }
 
+    depositInput.complete();
     setLoading(true);
     try {
       const intent = await createWalletDepositIntent(amountNanoton);
@@ -277,6 +281,7 @@ export function TonWalletPanel() {
       return;
     }
 
+    withdrawInput.complete();
     setLoading(true);
     try {
       const result = await requestWalletWithdraw(receiveNanoton, newIdempotencyKey("withdraw"));
@@ -375,7 +380,9 @@ export function TonWalletPanel() {
                 <span className="text-xs text-muted">Сумма пополнения</span>
                 <input
                   value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
+                  {...depositInput.bind({
+                    onChange: (e) => setDepositAmount(e.target.value),
+                  })}
                   inputMode="decimal"
                   className="h-11 w-full rounded-xl border border-[var(--border)] bg-surface-raised px-3 text-sm tabular-nums outline-none focus:border-accent"
                   placeholder="1"
@@ -399,7 +406,9 @@ export function TonWalletPanel() {
                 <span className="text-xs text-muted">Сколько получить на кошелёк</span>
                 <input
                   value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  {...withdrawInput.bind({
+                    onChange: (e) => setWithdrawAmount(e.target.value),
+                  })}
                   inputMode="decimal"
                   className="h-11 w-full rounded-xl border border-[var(--border)] bg-surface-raised px-3 text-sm tabular-nums outline-none focus:border-accent"
                   placeholder="1"

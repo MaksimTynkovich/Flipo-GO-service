@@ -72,7 +72,7 @@ export function MarketGiftDetailSheet({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} analyticsModalId="market_gift_detail">
       <div
         role="dialog"
         aria-modal="true"

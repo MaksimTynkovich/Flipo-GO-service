@@ -9,6 +9,7 @@ import {
   getMe,
   User,
 } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
 import { getTelegramWebApp, initTelegramWebApp } from "@/src/shared/lib/twa";
 import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
@@ -47,6 +48,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (token) {
           try {
             setUser(await getMe());
+            trackEvent({
+              event_name: "auth_restored",
+              event_category: "auth",
+              status: "success",
+            });
             return;
           } catch {
             localStorage.removeItem("flipo_token");
@@ -56,23 +62,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const initData = getTelegramWebApp()?.initData;
         if (initData) {
           const startParam = readReferralCodeFromTelegram();
-          if (startParam) storePendingReferral(startParam);
+          if (startParam) {
+            storePendingReferral(startParam);
+            trackEvent({
+              event_name: "referral_detected",
+              event_category: "acquisition",
+              status: "success",
+              start_param: startParam,
+              properties: { source: "telegram_start_param" },
+            });
+          }
           const referralCode = startParam || takePendingReferral() || undefined;
+          trackEvent({
+            event_name: "auth_started",
+            event_category: "auth",
+            status: "info",
+            start_param: referralCode,
+            properties: { source: referralCode ? "referral" : "direct" },
+          });
           const { token: newToken, user: authUser } = await authTelegram(initData, referralCode);
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
+          trackEvent({
+            event_name: "auth_succeeded",
+            event_category: "auth",
+            status: "success",
+            start_param: referralCode,
+            staking_tier: authUser.staking_tier,
+            properties: { source: referralCode ? "referral" : "direct" },
+          });
           return;
         }
 
         if (DEBUG_AUTH) {
+          trackEvent({
+            event_name: "auth_started",
+            event_category: "auth",
+            status: "info",
+            properties: { source: "debug" },
+          });
           const { token: newToken, user: authUser } = await authDebug();
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
+          trackEvent({
+            event_name: "auth_debug_succeeded",
+            event_category: "auth",
+            status: "success",
+            staking_tier: authUser.staking_tier,
+            properties: { source: "debug" },
+          });
           return;
         }
 
         setError("No Telegram session. Enable NEXT_PUBLIC_DEBUG_AUTH for browser dev.");
       } catch (e) {
+        trackEvent({
+          event_name: "auth_failed",
+          event_category: "auth",
+          status: "error",
+          error_code: "auth_failed",
+          error_message: e instanceof Error ? e.message : "Auth failed",
+        });
         setError(e instanceof Error ? e.message : "Auth failed");
       } finally {
         setLoading(false);

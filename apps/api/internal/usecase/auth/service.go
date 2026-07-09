@@ -8,6 +8,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ type Service struct {
 	debugTelegramID     int64
 	debugUsername       string
 	debugInitialBalance int64
+	analytics           *analyticsuc.Service
 }
 
 func NewService(users domain.UserRepository, botToken string, jwtSecret string, jwtExpiry time.Duration, referrals *referral.Service, opts ...ServiceOption) *Service {
@@ -66,6 +68,12 @@ func WithAdminTelegramIDs(ids []int64) ServiceOption {
 		for _, id := range ids {
 			s.adminTelegramIDs[id] = struct{}{}
 		}
+	}
+}
+
+func WithAnalytics(analyticsSvc *analyticsuc.Service) ServiceOption {
+	return func(s *Service) {
+		s.analytics = analyticsSvc
 	}
 }
 
@@ -113,12 +121,46 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 
 	if isNew && s.referrals != nil && code != "" {
 		_ = s.referrals.TryAssignReferrer(ctx, user.ID, code)
+		s.analytics.Track(ctx, analyticsuc.EventInput{
+			UserID:        &user.ID,
+			ReferrerID:    user.ReferrerID,
+			TelegramID:    &user.TelegramID,
+			Source:        "api",
+			EventName:     "referral_assigned",
+			EventCategory: "acquisition",
+			Status:        "success",
+			StartParam:    code,
+			StakingTier:   string(user.StakingTier),
+			Properties: map[string]any{
+				"source": "referral",
+				"is_new": isNew,
+			},
+		})
 	}
 
 	token, err := s.issueToken(user)
 	if err != nil {
 		return "", nil, err
 	}
+	authSource := "direct"
+	if code != "" {
+		authSource = "referral"
+	}
+	s.analytics.Track(ctx, analyticsuc.EventInput{
+		UserID:        &user.ID,
+		ReferrerID:    user.ReferrerID,
+		TelegramID:    &user.TelegramID,
+		Source:        "api",
+		EventName:     "auth_succeeded",
+		EventCategory: "auth",
+		Status:        "success",
+		StartParam:    code,
+		StakingTier:   string(user.StakingTier),
+		Properties: map[string]any{
+			"is_new": isNew,
+			"source": authSource,
+		},
+	})
 	return token, user, nil
 }
 
@@ -153,6 +195,18 @@ func (s *Service) AuthenticateDebug(ctx context.Context) (string, *domain.User, 
 	if err != nil {
 		return "", nil, err
 	}
+	s.analytics.Track(ctx, analyticsuc.EventInput{
+		UserID:        &user.ID,
+		TelegramID:    &user.TelegramID,
+		Source:        "api",
+		EventName:     "auth_debug_succeeded",
+		EventCategory: "auth",
+		Status:        "success",
+		StakingTier:   string(user.StakingTier),
+		Properties: map[string]any{
+			"source": "debug",
+		},
+	})
 	return token, user, nil
 }
 

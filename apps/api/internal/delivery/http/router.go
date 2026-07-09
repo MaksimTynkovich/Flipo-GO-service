@@ -24,6 +24,7 @@ type Deps struct {
 	TelegramHandler  *handlers.TelegramHandler
 	PromoHandler     *handlers.PromoHandler
 	AdminHandler     *handlers.AdminHandler
+	AnalyticsHandler *handlers.AnalyticsHandler
 	AdminTelegramIDs []int64
 	Hub              *websocket.Hub
 }
@@ -32,6 +33,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS())
+	r.Use(middleware.RequestMeta())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -53,6 +55,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	{
 		v1.POST("/auth/telegram", deps.AuthHandler.TelegramAuth)
 		v1.POST("/auth/debug", deps.AuthHandler.DebugAuth)
+		v1.POST("/analytics/events", deps.AnalyticsHandler.Ingest)
 		v1.POST("/telegram/webhook", deps.TelegramHandler.Webhook)
 
 		v1.GET("/market/listings", deps.MarketHandler.List)
@@ -116,6 +119,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.GET("/transfers", deps.AdminHandler.Transfers)
 			admin.POST("/transfers/:id/review", deps.AdminHandler.ReviewTransfer)
 			admin.GET("/ledger", deps.AdminHandler.Ledger)
+			admin.GET("/analytics/overview", deps.AdminHandler.AnalyticsOverview)
+			admin.GET("/analytics/users/:id", deps.AdminHandler.AnalyticsUserDrilldown)
 			admin.GET("/games/stats", deps.AdminHandler.GameStats)
 			admin.GET("/games/configs", deps.AdminHandler.ListGameConfigs)
 			admin.PATCH("/games/configs", deps.AdminHandler.UpdateGameConfig)

@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
@@ -49,7 +50,7 @@ export default function GamesSection() {
   }, []);
 
   return (
-    <PageShell title="Игры и RTP" description="Лимиты ставок, house edge и ротация seed.">
+    <PageShell title="Игры" description="Настройки RTP, лимиты ставок и ротация seed.">
       <section className="panel space-y-3">
         <p className="text-base font-semibold">Статистика игр</p>
         {stats.length === 0 && loading ? (
@@ -147,26 +148,25 @@ export default function GamesSection() {
                 />
               </label>
             </div>
-            <div className="flex gap-2">
-              <button
-                className="quick-amount quick-amount-active"
+            <AdminToolbar>
+              <AdminButton
                 onClick={async () => {
                   await updateAdminGameConfig(cfg);
                   showToast({ variant: "success", title: `${cfg.game_type} сохранён` });
                 }}
               >
                 Сохранить
-              </button>
-              <button
-                className="quick-amount"
+              </AdminButton>
+              <AdminButton
+                variant="secondary"
                 onClick={async () => {
                   await rotateAdminGameSeed(cfg.game_type);
                   showToast({ variant: "success", title: `Seed ${cfg.game_type} обновлён` });
                 }}
               >
                 Ротация seed
-              </button>
-            </div>
+              </AdminButton>
+            </AdminToolbar>
           </div>
         ))}
       </section>
@@ -191,15 +191,16 @@ export default function GamesSection() {
               onChange={(v) => setRisk({ ...risk, whale_bet_threshold_nanoton: v })}
             />
           </div>
-          <button
-            className="quick-amount quick-amount-active"
-            onClick={async () => {
-              await updateAdminRiskSettings(risk);
-              showToast({ variant: "success", title: "Risk settings сохранены" });
-            }}
-          >
-            Сохранить лимиты
-          </button>
+          <AdminToolbar>
+            <AdminButton
+              onClick={async () => {
+                await updateAdminRiskSettings(risk);
+                showToast({ variant: "success", title: "Risk settings сохранены" });
+              }}
+            >
+              Сохранить лимиты
+            </AdminButton>
+          </AdminToolbar>
         </section>
       ) : null}
     </PageShell>

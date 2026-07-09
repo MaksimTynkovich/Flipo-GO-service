@@ -6,17 +6,19 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/wallet"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type WalletHandler struct {
-	wallet *wallet.Service
+	wallet    *wallet.Service
+	analytics *analyticsuc.Service
 }
 
-func NewWalletHandler(walletSvc *wallet.Service) *WalletHandler {
-	return &WalletHandler{wallet: walletSvc}
+func NewWalletHandler(walletSvc *wallet.Service, analyticsSvc *analyticsuc.Service) *WalletHandler {
+	return &WalletHandler{wallet: walletSvc, analytics: analyticsSvc}
 }
 
 func (h *WalletHandler) CreateDepositIntent(c *gin.Context) {
@@ -31,6 +33,7 @@ func (h *WalletHandler) CreateDepositIntent(c *gin.Context) {
 
 	intent, err := h.wallet.CreateDepositIntent(c.Request.Context(), userID, req.AmountNanoton)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "wallet", "deposit_intent_created", "error", "deposit_intent_failed", err.Error(), map[string]any{"amount_nanoton": req.AmountNanoton})
 		writeWalletError(c, err)
 		return
 	}
@@ -51,6 +54,7 @@ func (h *WalletHandler) ConfirmDeposit(c *gin.Context) {
 
 	transfer, balance, err := h.wallet.ConfirmDeposit(c.Request.Context(), userID, transferID, req.TxHash)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "wallet", "deposit_confirmed", "error", "deposit_confirm_failed", err.Error(), map[string]any{"transfer_id": transferID.String()})
 		writeWalletError(c, err)
 		return
 	}
@@ -78,6 +82,7 @@ func (h *WalletHandler) RequestWithdrawal(c *gin.Context) {
 		req.IdempotencyKey,
 	)
 	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "wallet", "withdraw_requested", "error", "withdraw_failed", err.Error(), map[string]any{"amount_nanoton": req.AmountNanoton})
 		writeWalletError(c, err)
 		return
 	}

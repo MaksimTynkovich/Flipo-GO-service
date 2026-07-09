@@ -10,6 +10,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
 )
@@ -31,7 +32,9 @@ func main() {
 	invRepo := postgres.NewInventoryRepo(db)
 	userRepo := postgres.NewUserRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
+	analyticsRepo := postgres.NewAnalyticsRepo(db)
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, telegram.NewMTProtoGiftScanner(telegram.MTProtoConfig{}), nil, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)
+	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))
 
 	worker := stakingworker.NewWorker(stakeSvc)
 	worker.Start(ctx)

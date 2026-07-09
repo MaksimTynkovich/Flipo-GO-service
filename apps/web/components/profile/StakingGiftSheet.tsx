@@ -34,7 +34,7 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
   const weeklyYield = weeklyYieldNanoton(gift.daily_yield_nanoton);
 
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} analyticsModalId="staking_gift_detail">
       <div className="relative mx-auto w-full max-w-lg rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
 

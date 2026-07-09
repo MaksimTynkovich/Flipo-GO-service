@@ -67,6 +67,7 @@ export function StakingActionBar({
               showMetrics ? "rounded-none rounded-b-2xl" : "rounded-2xl",
             )}
             disabled={disabled}
+            analyticsAction="staking_submit"
             onClick={onStake}
           >
             <span>{label}</span>

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -38,7 +39,7 @@ func GetUserID(c *gin.Context) uuid.UUID {
 }
 
 func corsAllowHeaders(c *gin.Context) string {
-	headers := "Authorization, Content-Type, X-Telegram-Init-Data"
+	headers := "Authorization, Content-Type, X-Telegram-Init-Data, X-Session-ID, X-Client-Path, X-Request-ID"
 	if strings.Contains(strings.ToLower(c.GetHeader("Access-Control-Request-Headers")), "ngrok-skip-browser-warning") {
 		headers += ", ngrok-skip-browser-warning"
 	}
@@ -54,6 +55,27 @@ func CORS() gin.HandlerFunc {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+		c.Next()
+	}
+}
+
+func RequestMeta() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sessionID := strings.TrimSpace(c.GetHeader("X-Session-ID"))
+		requestID := strings.TrimSpace(c.GetHeader("X-Request-ID"))
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		c.Header("X-Request-ID", requestID)
+		ctx := analyticsuc.WithRequestMeta(c.Request.Context(), analyticsuc.RequestMeta{
+			RequestID: requestID,
+			SessionID: sessionID,
+			Path:      strings.TrimSpace(c.GetHeader("X-Client-Path")),
+			Method:    c.Request.Method,
+			UserAgent: c.Request.UserAgent(),
+			IPAddress: c.ClientIP(),
+		})
+		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
 }

@@ -16,6 +16,7 @@ import {
   MarketListing,
   withdrawGiftItem,
 } from "@/lib/api";
+import { markModalCompleted } from "@/lib/analytics";
 import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
 import { Gift } from "lucide-react";
 
@@ -77,6 +78,7 @@ export function InventorySection() {
     setLiquidating(true);
     try {
       await liquidateItem(selected.id);
+      markModalCompleted("inventory_gift_detail");
       closeSheet();
       load();
     } catch (e) {
@@ -91,6 +93,7 @@ export function InventorySection() {
     setWithdrawing(true);
     try {
       await withdrawGiftItem(selected.id);
+      markModalCompleted("inventory_gift_detail");
       closeSheet();
       load();
     } catch (e) {
@@ -105,6 +108,7 @@ export function InventorySection() {
     const listing = listingByItemId.get(selected.id);
     if (!listing) return;
     await cancelMarketListing(listing.id);
+    markModalCompleted("inventory_gift_detail");
     closeSheet();
     load();
   }

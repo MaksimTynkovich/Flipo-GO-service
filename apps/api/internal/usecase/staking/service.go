@@ -10,6 +10,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/google/uuid"
 )
@@ -29,6 +30,7 @@ type Service struct {
 	valuator  *gifts.Valuator
 	notifier  Notifier
 	threshold int64
+	analytics *analyticsuc.Service
 }
 
 func NewService(
@@ -70,6 +72,10 @@ func (s *Service) monthlyRatePercents(ctx context.Context) (base float64, boost 
 		boost = settings.StakingBoostMonthlyPercent
 	}
 	return base, boost
+}
+
+func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
+	s.analytics = analyticsSvc
 }
 
 func monthlyRateFraction(tier domain.StakingTier, basePercent, boostPercent float64) float64 {
@@ -204,6 +210,21 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 			slog.Warn("daily staking payout failed", "user_id", userID, "error", err)
 			continue
 		}
+		if user, err := s.users.FindByID(ctx, userID); err == nil {
+			s.analytics.Track(ctx, analyticsuc.EventInput{
+				UserID:        &userID,
+				ReferrerID:    user.ReferrerID,
+				TelegramID:    &user.TelegramID,
+				Source:        "worker",
+				EventName:     "staking_yield_paid",
+				EventCategory: "staking",
+				Status:        "success",
+				StakingTier:   string(user.StakingTier),
+				Properties: map[string]any{
+					"amount_nanoton": yield,
+				},
+			})
+		}
 	}
 
 	referrerBonuses := make(map[uuid.UUID]int64)
@@ -223,6 +244,22 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 	for referrerID, bonus := range referrerBonuses {
 		if _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, "referral_daily", payoutRefID); err != nil {
 			slog.Warn("daily referral payout failed", "referrer_id", referrerID, "error", err)
+			continue
+		}
+		if user, err := s.users.FindByID(ctx, referrerID); err == nil {
+			s.analytics.Track(ctx, analyticsuc.EventInput{
+				UserID:        &referrerID,
+				ReferrerID:    user.ReferrerID,
+				TelegramID:    &user.TelegramID,
+				Source:        "worker",
+				EventName:     "referral_bonus_paid",
+				EventCategory: "staking",
+				Status:        "success",
+				StakingTier:   string(user.StakingTier),
+				Properties: map[string]any{
+					"amount_nanoton": bonus,
+				},
+			})
 		}
 	}
 

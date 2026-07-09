@@ -28,6 +28,7 @@ import {
 } from "@/lib/game-errors";
 import { connectGameWS } from "@/lib/ws";
 import { cn } from "@/lib/utils";
+import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
@@ -52,6 +53,7 @@ export default function CrashPage() {
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
   const [cashingOut, setCashingOut] = useState(false);
   const lastPhase = useRef<string | null>(null);
+  const betAmountInput = useAnalyticsInput("crash_bet_amount", "crash");
 
   const loadHistory = useCallback(async () => {
     try {
@@ -156,6 +158,7 @@ export default function CrashPage() {
     }
 
     setBetting(true);
+    betAmountInput.complete();
     try {
       const res = (await placeCrashBet(nanotons, crypto.randomUUID())) as {
         id: string;
@@ -251,7 +254,9 @@ export default function CrashPage() {
               min="0"
               disabled={!canBet}
               value={amountTon}
-              onChange={(e) => setAmountTon(e.target.value)}
+              {...betAmountInput.bind({
+                onChange: (e) => setAmountTon(e.target.value),
+              })}
               className="w-full bg-transparent text-center text-lg font-bold tabular-nums text-foreground outline-none disabled:opacity-40"
               placeholder="0.00"
             />

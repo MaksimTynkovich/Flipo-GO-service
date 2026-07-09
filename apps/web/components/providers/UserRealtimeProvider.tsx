@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { InventoryItem } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { connectUserWS } from "@/lib/ws";
 import { emitBalanceWin } from "@/lib/balance-win";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
@@ -46,6 +47,15 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
         if (payload.ledger_type === "win" && payload.delta_nanoton && payload.delta_nanoton > 0) {
           emitBalanceWin(payload.delta_nanoton);
           haptics.notificationOccurred("success");
+          trackEvent({
+            event_name: "balance_win_received",
+            event_category: "gameplay",
+            status: "success",
+            properties: {
+              amount_nanoton: payload.delta_nanoton,
+              ledger_type: payload.ledger_type,
+            },
+          });
         }
         return;
       }
@@ -58,12 +68,12 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
       const dedupeKey = payload.item.id || payload.item.telegram_gift_id || payload.message;
       const now = Date.now();
       const lastSeen = recentDepositEventsRef.current.get(dedupeKey);
-      if (lastSeen && now-lastSeen < 5000) {
+      if (lastSeen && now - lastSeen < 5000) {
         return;
       }
       recentDepositEventsRef.current.set(dedupeKey, now);
-      for (const [key, seenAt] of recentDepositEventsRef.current.entries()) {
-        if (now-seenAt >= 10000) {
+      for (const [key, seenAt] of Array.from(recentDepositEventsRef.current.entries())) {
+        if (now - seenAt >= 10000) {
           recentDepositEventsRef.current.delete(key);
         }
       }
@@ -73,6 +83,15 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
       );
 
       haptics.notificationOccurred("success");
+      trackEvent({
+        event_name: "inventory_deposit_realtime_received",
+        event_category: "inventory",
+        status: "success",
+        properties: {
+          item_id: payload.item.id,
+          gift_id: payload.item.telegram_gift_id,
+        },
+      });
       showToast({
         title: payload.message || `🎁 Подарок «${payload.item.name}» зачислен в инвентарь!`,
       });

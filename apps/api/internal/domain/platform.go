@@ -84,7 +84,8 @@ type TelegramBotSettings struct {
 	ID                  int       `gorm:"primaryKey" json:"id"`
 	BroadcastEnabled    bool      `gorm:"not null;default:false" json:"broadcast_enabled"`
 	SpamProtectionLevel int       `gorm:"not null;default:1" json:"spam_protection_level"`
-	WebAppURL           string    `gorm:"size:512" json:"webapp_url"`
+	WebAppURL           string    `gorm:"column:web_app_url;size:512" json:"webapp_url"`
+	WebAppButtonText    string    `gorm:"column:web_app_button_text;size:64" json:"webapp_button_text"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 

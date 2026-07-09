@@ -1,12 +1,13 @@
 package telegram
 
 import (
+	"context"
 	"testing"
 )
 
 func TestOpenAppMarkupMiniAppLink(t *testing.T) {
 	h := NewBotUpdates(NewBotAPI("token"), "", "flipo_bot", "app")
-	markup := h.openAppMarkup("ref_abc")
+	markup := h.openAppMarkup(context.Background(), "ref_abc")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
 
@@ -20,7 +21,7 @@ func TestOpenAppMarkupMiniAppLink(t *testing.T) {
 
 func TestOpenAppMarkupWebAppURL(t *testing.T) {
 	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "")
-	markup := h.openAppMarkup("")
+	markup := h.openAppMarkup(context.Background(), "")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
 
@@ -35,7 +36,7 @@ func TestOpenAppMarkupWebAppURL(t *testing.T) {
 
 func TestOpenAppMarkupWebAppURLWithPayload(t *testing.T) {
 	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "")
-	markup := h.openAppMarkup("ref_xyz")
+	markup := h.openAppMarkup(context.Background(), "ref_xyz")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
 

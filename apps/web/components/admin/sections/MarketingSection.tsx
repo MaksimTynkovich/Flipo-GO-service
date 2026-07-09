@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
+import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
@@ -199,18 +200,19 @@ export default function MarketingSection() {
                 />
               </label>
             </div>
-            <button
-              className="quick-amount quick-amount-active"
-              onClick={async () => {
-                await updateAdminYieldSettings(settingsForm);
-                primeCache("admin:marketing:settings", settingsForm);
-                setYieldSettings(settingsForm);
-                await loadReferral();
-                showToast({ variant: "success", title: "Проценты сохранены" });
-              }}
-            >
-              Сохранить проценты
-            </button>
+            <AdminToolbar>
+              <AdminButton
+                onClick={async () => {
+                  await updateAdminYieldSettings(settingsForm);
+                  primeCache("admin:marketing:settings", settingsForm);
+                  setYieldSettings(settingsForm);
+                  await loadReferral();
+                  showToast({ variant: "success", title: "Проценты сохранены" });
+                }}
+              >
+                Сохранить проценты
+              </AdminButton>
+            </AdminToolbar>
           </>
         )}
       </section>
@@ -281,22 +283,23 @@ export default function MarketingSection() {
             onChange={(e) => setDraft({ ...draft, max_uses: Number(e.target.value) })}
           />
         </div>
-        <button
-          className="quick-amount quick-amount-active"
-          disabled={!promoCode}
-          onClick={async () => {
-            if (!promoCode) {
-              showToast({ variant: "error", title: "Введите промокод" });
-              return;
-            }
-            await upsertAdminPromoCode({ ...draft, code: promoCode.toUpperCase() });
-            showToast({ variant: "success", title: "Промокод сохранён" });
-            setDraft(EMPTY_PROMO);
-            await loadPromos();
-          }}
-        >
-          Создать / обновить промокод
-        </button>
+        <AdminToolbar>
+          <AdminButton
+            disabled={!promoCode}
+            onClick={async () => {
+              if (!promoCode) {
+                showToast({ variant: "error", title: "Введите промокод" });
+                return;
+              }
+              await upsertAdminPromoCode({ ...draft, code: promoCode.toUpperCase() });
+              showToast({ variant: "success", title: "Промокод сохранён" });
+              setDraft(EMPTY_PROMO);
+              await loadPromos();
+            }}
+          >
+            Создать / обновить промокод
+          </AdminButton>
+        </AdminToolbar>
       </section>
     </PageShell>
   );

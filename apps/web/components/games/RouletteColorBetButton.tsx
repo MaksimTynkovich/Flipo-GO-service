@@ -4,6 +4,7 @@ import { formatTON } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { rouletteFillStyle } from "@/lib/roulette";
 import { cn } from "@/lib/utils";
+import { trackDisabledClick } from "@/lib/analytics";
 
 type Props = {
   color: "red" | "green" | "black";
@@ -26,6 +27,11 @@ export function RouletteColorBetButton({
     <button
       type="button"
       disabled={disabled}
+      onPointerDown={() => {
+        if (disabled) {
+          trackDisabledClick(`roulette_bet_${color}`, "round_not_betting");
+        }
+      }}
       onClick={onClick}
       style={rouletteFillStyle(color)}
       className={cn(
