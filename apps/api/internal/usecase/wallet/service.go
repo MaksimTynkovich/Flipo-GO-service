@@ -10,6 +10,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -34,6 +35,7 @@ type Service struct {
 	cfg       Config
 	risk      WithdrawalRiskEvaluator
 	analytics *analyticsuc.Service
+	notifier  balance.BalanceNotifier
 }
 
 func NewService(users domain.UserRepository, transfers domain.TonTransferRepository, chain *ton.Client, cfg Config) *Service {
@@ -51,6 +53,10 @@ func (s *Service) SetRiskEvaluator(r WithdrawalRiskEvaluator) {
 
 func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
 	s.analytics = analyticsSvc
+}
+
+func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
+	s.notifier = notifier
 }
 
 type DepositIntentView struct {
@@ -167,6 +173,7 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 		}
 		updated, _ := s.transfers.FindByID(ctx, transferID)
 		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
+		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
 		return toView(updated), balanceAfter, nil
 	}
 
@@ -178,6 +185,7 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 		}
 		updated, _ := s.transfers.FindByID(ctx, transferID)
 		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
+		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
 		return toView(updated), balanceAfter, nil
 	}
 
@@ -198,6 +206,7 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 	}
 	updated, _ := s.transfers.FindByID(ctx, transferID)
 	s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
+	balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
 	return toView(updated), balanceAfter, nil
 }
 
@@ -258,6 +267,7 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 	if err != nil {
 		return nil, 0, err
 	}
+	balance.NotifyUser(ctx, s.users, s.notifier, userID, -debitNanoton, domain.LedgerWithdraw)
 	s.analytics.Track(ctx, analyticsuc.EventInput{
 		UserID:        &userID,
 		ReferrerID:    user.ReferrerID,
@@ -363,9 +373,13 @@ func (s *Service) ProcessPendingDeposits(ctx context.Context) error {
 		if incoming == nil {
 			continue
 		}
+		if transfer.Status != domain.TonStatusAwaitingPayment {
+			continue
+		}
 		if _, err := s.transfers.CompleteDepositAtomic(ctx, transfer.ID, incoming.TxHash, incoming.LT); err != nil {
 			continue
 		}
+		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
 	}
 	return nil
 }
@@ -413,6 +427,7 @@ func (s *Service) ProcessPendingWithdrawals(ctx context.Context) error {
 		txHash, lt, err := s.chain.SendTON(ctx, transfer.WalletAddress, transfer.NetAmountNanoton(), "")
 		if err != nil {
 			_, _ = s.transfers.FailWithdrawalAtomic(ctx, transfer.ID, err.Error())
+			balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerRefund)
 			continue
 		}
 		_ = s.transfers.CompleteWithdrawal(ctx, transfer.ID, txHash, lt)

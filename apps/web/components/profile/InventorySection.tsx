@@ -16,11 +16,14 @@ import {
   MarketListing,
   withdrawGiftItem,
 } from "@/lib/api";
+import { patchUserBalance } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
 import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { Gift } from "lucide-react";
 
 export function InventorySection() {
+  const { setUser } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [myListings, setMyListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +80,8 @@ export function InventorySection() {
     if (!selected) return;
     setLiquidating(true);
     try {
-      await liquidateItem(selected.id);
+      const { balance } = await liquidateItem(selected.id);
+      setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: balance }) : prev));
       markModalCompleted("inventory_gift_detail");
       closeSheet();
       load();

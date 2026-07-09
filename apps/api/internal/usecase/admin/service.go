@@ -6,16 +6,19 @@ import (
 	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 )
 
 type Service struct {
-	admin    domain.AdminRepository
-	platform domain.PlatformRepository
-	games    domain.GameRepository
-	market   domain.MarketRepository
+	admin     domain.AdminRepository
+	platform  domain.PlatformRepository
+	games     domain.GameRepository
+	market    domain.MarketRepository
+	users     domain.UserRepository
 	transfers domain.TonTransferRepository
+	notifier  balance.BalanceNotifier
 }
 
 func NewService(
@@ -23,6 +26,7 @@ func NewService(
 	platform domain.PlatformRepository,
 	games domain.GameRepository,
 	market domain.MarketRepository,
+	users domain.UserRepository,
 	transfers domain.TonTransferRepository,
 ) *Service {
 	return &Service{
@@ -30,8 +34,13 @@ func NewService(
 		platform:  platform,
 		games:     games,
 		market:    market,
+		users:     users,
 		transfers: transfers,
 	}
+}
+
+func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
+	s.notifier = notifier
 }
 
 func (s *Service) Summary(ctx context.Context) (*domain.RevenueSummary, error) {
@@ -80,6 +89,9 @@ func (s *Service) ReviewWithdrawal(ctx context.Context, adminID, transferID uuid
 	_, err := s.transfers.RejectWithdrawalAtomic(ctx, transferID, adminID, note)
 	if err != nil {
 		return err
+	}
+	if transfer, findErr := s.transfers.FindByID(ctx, transferID); findErr == nil {
+		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerRefund)
 	}
 	return s.audit(ctx, adminID, "withdrawal_rejected", "ton_transfer", transferID.String(), map[string]string{"note": note})
 }

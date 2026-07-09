@@ -55,6 +55,20 @@ func (h *PromoHandler) Status(c *gin.Context) {
 }
 
 func writePromoError(c *gin.Context, err error) {
+	var channelErr *promo.ChannelNotSubscribedError
+	if errors.As(err, &channelErr) {
+		channel := ""
+		if channelErr != nil {
+			channel = channelErr.Channel
+		}
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error":   "Подпишитесь на канал, чтобы активировать промокод",
+			"code":    "channel_not_subscribed",
+			"channel": channel,
+		})
+		return
+	}
+
 	switch {
 	case errors.Is(err, domain.ErrPromoInvalid):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{

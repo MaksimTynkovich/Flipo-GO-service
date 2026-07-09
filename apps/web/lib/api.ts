@@ -10,6 +10,18 @@ export const AUTH_SESSION_REFRESHED = "flipo:auth-session-refreshed";
 const TOKEN_KEY = "flipo_token";
 const AUTH_PATHS = new Set(["/api/v1/auth/telegram", "/api/v1/auth/debug"]);
 
+export class ApiRequestError extends Error {
+  code?: string;
+  channel?: string;
+
+  constructor(message: string, opts?: { code?: string; channel?: string }) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.code = opts?.code;
+    this.channel = opts?.channel;
+  }
+}
+
 export type User = {
   id: string;
   telegram_id: number;
@@ -142,7 +154,10 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
         error_code: err.code,
       },
     });
-    throw new Error(message);
+    throw new ApiRequestError(message, {
+      code: typeof err.code === "string" ? err.code : undefined,
+      channel: typeof err.channel === "string" ? err.channel : undefined,
+    });
   }
   return res.json();
 }

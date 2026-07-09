@@ -28,4 +28,5 @@ var (
 	ErrPromoAlreadyRedeemed  = errors.New("promo code already redeemed")
 	ErrPromoFundsRestricted  = errors.New("promo funds cannot be used on market")
 	ErrPromoInUse            = errors.New("promo code has redemptions")
+	ErrChannelNotSubscribed  = errors.New("channel subscription required")
 )

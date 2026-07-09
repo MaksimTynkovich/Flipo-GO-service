@@ -44,18 +44,33 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
               : prev,
           );
         }
-        if (payload.ledger_type === "win" && payload.delta_nanoton && payload.delta_nanoton > 0) {
+        const creditTypes = new Set([
+          "win",
+          "liquidate",
+          "market_sell",
+          "deposit",
+          "stake_yield",
+          "referral_bonus",
+          "refund",
+        ]);
+        if (
+          payload.delta_nanoton &&
+          payload.delta_nanoton > 0 &&
+          creditTypes.has(payload.ledger_type ?? "")
+        ) {
           emitBalanceWin(payload.delta_nanoton);
-          haptics.notificationOccurred("success");
-          trackEvent({
-            event_name: "balance_win_received",
-            event_category: "gameplay",
-            status: "success",
-            properties: {
-              amount_nanoton: payload.delta_nanoton,
-              ledger_type: payload.ledger_type,
-            },
-          });
+          if (payload.ledger_type === "win") {
+            haptics.notificationOccurred("success");
+            trackEvent({
+              event_name: "balance_win_received",
+              event_category: "gameplay",
+              status: "success",
+              properties: {
+                amount_nanoton: payload.delta_nanoton,
+                ledger_type: payload.ledger_type,
+              },
+            });
+          }
         }
         return;
       }

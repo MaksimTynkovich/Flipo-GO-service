@@ -120,7 +120,7 @@ func main() {
 	walletSvc.SetRiskEvaluator(risk.WalletEvaluator{Service: riskSvc})
 	walletSvc.SetAnalytics(analyticsSvc)
 	fairnessSvc := fairness.NewService(platformRepo, gameRepo)
-	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, tonTransferRepo)
+	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
@@ -132,6 +132,7 @@ func main() {
 	)
 	balanceSvc := balance.NewService(userRepo)
 	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
+	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
 	if mtprotoCfg.Enabled() {
@@ -148,10 +149,15 @@ func main() {
 
 	hub := websocket.NewHub()
 	balanceSvc.SetNotifier(hub)
+	marketSvc.SetBalanceNotifier(hub)
+	walletSvc.SetBalanceNotifier(hub)
+	promoSvc.SetBalanceNotifier(hub)
+	adminSvc.SetBalanceNotifier(hub)
 	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)
 	stakeSvc.SetAnalytics(analyticsSvc)
+	stakeSvc.SetBalanceNotifier(hub)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error
