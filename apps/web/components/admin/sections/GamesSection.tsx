@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
+import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   formatTON,
@@ -16,32 +17,50 @@ import {
   type AdminRiskSettings,
 } from "@/lib/api";
 
-export default function AdminGamesPage() {
+export default function GamesSection() {
   const { showToast } = useToast();
   const [stats, setStats] = useState<AdminGameStat[]>([]);
   const [configs, setConfigs] = useState<AdminGameConfig[]>([]);
   const [risk, setRisk] = useState<AdminRiskSettings | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [statsData, configsData, riskData] = await Promise.all([
-      getAdminGameStats(),
-      getAdminGameConfigs(),
-      getAdminRiskSettings(),
-    ]);
+    setLoading(true);
+    const [statsData, configsData, riskData] = await loadCached("admin:games", () =>
+      Promise.all([getAdminGameStats(), getAdminGameConfigs(), getAdminRiskSettings()]),
+    );
     setStats(statsData);
     setConfigs(configsData);
     setRisk(riskData);
+    primeCache("admin:games", [statsData, configsData, riskData]);
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch(() => {});
+    runAfterFirstPaint(() => {
+      const cached = readCached<[AdminGameStat[], AdminGameConfig[], AdminRiskSettings]>("admin:games");
+      if (cached) {
+        setStats(cached[0]);
+        setConfigs(cached[1]);
+        setRisk(cached[2]);
+      }
+      load().catch(() => {});
+    });
   }, []);
 
   return (
     <PageShell title="Игры и RTP" description="Лимиты ставок, house edge и ротация seed.">
       <section className="panel space-y-3">
         <p className="text-base font-semibold">Статистика игр</p>
-        {stats.map((game) => (
+        {stats.length === 0 && loading ? (
+          Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="rounded-xl bg-surface-raised/50 px-3 py-2">
+              <div className="h-4 w-28 animate-pulse rounded bg-surface-raised" />
+              <div className="mt-2 h-3 w-40 animate-pulse rounded bg-surface-raised" />
+            </div>
+          ))
+        ) : (
+          stats.map((game) => (
           <div key={game.game_type} className="rounded-xl bg-surface-raised/50 px-3 py-2 text-sm">
             <div className="flex justify-between font-medium uppercase">
               <span>{game.game_type}</span>
@@ -51,7 +70,8 @@ export default function AdminGamesPage() {
               RTP факт {(game.actual_rtp_bps / 100).toFixed(2)}% · теор {(game.theoretical_rtp_bps / 100).toFixed(2)}%
             </p>
           </div>
-        ))}
+          ))
+        )}
       </section>
 
       <section className="panel space-y-3">

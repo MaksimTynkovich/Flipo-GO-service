@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// L1ShareOfMonthlyYield is the referrer's share of a referral's monthly staking income.
-const L1ShareOfMonthlyYield = 0.03 // 3%
+// DefaultSharePercent is the default referrer's share of a referral's staking income.
+const DefaultSharePercent = 3.0
 
 // DaysPerMonth matches staking accrual (see staking.DaysPerMonth).
 const DaysPerMonth = 30
@@ -18,19 +18,22 @@ const DaysPerWeek = 7
 
 // BonusFromYield returns the L1 referrer bonus for a referral's staking yield payout.
 // 3% of monthly income equals 3% of any pro-rated payout (daily or weekly).
-func BonusFromYield(yieldNanoton int64) int64 {
+func BonusFromYield(yieldNanoton int64, sharePercent float64) int64 {
 	if yieldNanoton <= 0 {
 		return 0
 	}
-	return int64(float64(yieldNanoton) * L1ShareOfMonthlyYield)
+	if sharePercent < 0 {
+		sharePercent = 0
+	}
+	return int64(float64(yieldNanoton) * sharePercent / 100)
 }
 
 // WeeklyBonusFromMonthlyYield estimates referrer earnings per week from one referral's monthly staking yield.
-func WeeklyBonusFromMonthlyYield(monthlyYieldNanoton int64) int64 {
+func WeeklyBonusFromMonthlyYield(monthlyYieldNanoton int64, sharePercent float64) int64 {
 	if monthlyYieldNanoton <= 0 {
 		return 0
 	}
-	monthlyBonus := BonusFromYield(monthlyYieldNanoton)
+	monthlyBonus := BonusFromYield(monthlyYieldNanoton, sharePercent)
 	return monthlyBonus * DaysPerWeek / DaysPerMonth
 }
 

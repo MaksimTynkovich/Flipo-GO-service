@@ -47,6 +47,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.AdminAuditLog{},
 		&domain.PromoCode{},
 		&domain.TelegramBotSettings{},
+		&domain.PlatformYieldSettings{},
 		&domain.PromoRedemption{},
 		&domain.TelegramBroadcast{},
 		&domain.TreasurySweep{},

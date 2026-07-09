@@ -213,6 +213,17 @@ body {
   }
 }
 
+@keyframes adminHintIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .balance-gain-fx {
   color: var(--success);
   font-size: 0.875rem;

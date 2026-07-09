@@ -431,6 +431,13 @@ export async function getReferralStats() {
   return api<ReferralStats>("/api/v1/referrals/stats");
 }
 
+export type AdminYieldSettings = {
+  id: number;
+  referral_share_percent: number;
+  staking_base_monthly_percent: number;
+  staking_boost_monthly_percent: number;
+};
+
 export type WalletDepositIntent = {
   id: string;
   to_address: string;
@@ -694,6 +701,17 @@ export async function upsertAdminPromoCode(promo: AdminPromoCode) {
 export async function deleteAdminPromoCode(code: string) {
   return api<{ ok: boolean }>(`/api/v1/admin/marketing/promos/${encodeURIComponent(code)}`, {
     method: "DELETE",
+  });
+}
+
+export async function getAdminYieldSettings() {
+  return api<AdminYieldSettings>("/api/v1/admin/marketing/settings");
+}
+
+export async function updateAdminYieldSettings(settings: AdminYieldSettings) {
+  return api<{ ok: boolean }>("/api/v1/admin/marketing/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
   });
 }
 

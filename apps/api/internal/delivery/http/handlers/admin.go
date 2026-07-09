@@ -298,6 +298,29 @@ func (h *AdminHandler) UpdateBotSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *AdminHandler) GetYieldSettings(c *gin.Context) {
+	settings, err := h.admin.GetYieldSettings(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateYieldSettings(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var settings domain.PlatformYieldSettings
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.UpdateYieldSettings(c.Request.Context(), adminID, settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (h *AdminHandler) CreateBroadcast(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	var req struct {

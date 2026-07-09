@@ -93,7 +93,7 @@ func main() {
 		slog.Warn("platform defaults seed failed", "error", err)
 	}
 
-	referralSvc := referral.NewService(userRepo)
+	referralSvc := referral.NewService(userRepo, platformRepo)
 	tonClient := ton.NewClient(
 		cfg.TonAPIBaseURL,
 		cfg.TonAPIKey,
@@ -143,7 +143,7 @@ func main() {
 	balanceSvc.SetNotifier(hub)
 	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error

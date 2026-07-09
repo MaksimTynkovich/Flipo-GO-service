@@ -15,15 +15,16 @@ import (
 )
 
 const (
-	BaseMonthlyRate  = 0.03
-	BoostMonthlyRate = 0.05
-	DaysPerMonth     = 30
+	DefaultBaseMonthlyPercent  = 3.0
+	DefaultBoostMonthlyPercent = 5.0
+	DaysPerMonth               = 30
 )
 
 type Service struct {
 	staking   domain.StakingRepository
 	inventory domain.InventoryRepository
 	users     domain.UserRepository
+	platform  domain.PlatformRepository
 	scanner   telegram.ProfileGiftScanner
 	valuator  *gifts.Valuator
 	notifier  Notifier
@@ -34,6 +35,7 @@ func NewService(
 	staking domain.StakingRepository,
 	inventory domain.InventoryRepository,
 	users domain.UserRepository,
+	platform domain.PlatformRepository,
 	scanner telegram.ProfileGiftScanner,
 	valuator *gifts.Valuator,
 	notifier Notifier,
@@ -43,11 +45,38 @@ func NewService(
 		staking:   staking,
 		inventory: inventory,
 		users:     users,
+		platform:  platform,
 		scanner:   scanner,
 		valuator:  valuator,
 		notifier:  notifier,
 		threshold: threshold,
 	}
+}
+
+func (s *Service) monthlyRatePercents(ctx context.Context) (base float64, boost float64) {
+	base = DefaultBaseMonthlyPercent
+	boost = DefaultBoostMonthlyPercent
+	if s.platform == nil {
+		return base, boost
+	}
+	settings, err := s.platform.GetYieldSettings(ctx)
+	if err != nil || settings == nil {
+		return base, boost
+	}
+	if settings.StakingBaseMonthlyPercent >= 0 {
+		base = settings.StakingBaseMonthlyPercent
+	}
+	if settings.StakingBoostMonthlyPercent >= 0 {
+		boost = settings.StakingBoostMonthlyPercent
+	}
+	return base, boost
+}
+
+func monthlyRateFraction(tier domain.StakingTier, basePercent, boostPercent float64) float64 {
+	if tier == domain.TierBoost {
+		return boostPercent / 100
+	}
+	return basePercent / 100
 }
 
 func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.StakingPosition, error) {
@@ -132,6 +161,13 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 	payoutRefID := dailyPayoutRefID(todayStart)
 
 	userYield := make(map[uuid.UUID]int64)
+	basePercent, boostPercent := s.monthlyRatePercents(ctx)
+	sharePercent := referral.DefaultSharePercent
+	if s.platform != nil {
+		if settings, err := s.platform.GetYieldSettings(ctx); err == nil && settings != nil && settings.ReferralSharePercent >= 0 {
+			sharePercent = settings.ReferralSharePercent
+		}
+	}
 
 	for _, pos := range positions {
 		lastInMsk := pos.LastAccrualAt.In(msk)
@@ -147,10 +183,7 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 			continue
 		}
 
-		rate := BaseMonthlyRate
-		if user.StakingTier == domain.TierBoost {
-			rate = BoostMonthlyRate
-		}
+		rate := monthlyRateFraction(user.StakingTier, basePercent, boostPercent)
 
 		dailyYield := int64(float64(pos.PrincipalNanoton) * rate / DaysPerMonth)
 		if dailyYield <= 0 {
@@ -182,7 +215,7 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 		if err != nil || user.ReferrerID == nil {
 			continue
 		}
-		bonus := referral.BonusFromYield(yield)
+		bonus := referral.BonusFromYield(yield, sharePercent)
 		if bonus > 0 {
 			referrerBonuses[*user.ReferrerID] += bonus
 		}

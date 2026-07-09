@@ -9,11 +9,12 @@ import (
 )
 
 type Service struct {
-	users domain.UserRepository
+	users    domain.UserRepository
+	platform domain.PlatformRepository
 }
 
-func NewService(users domain.UserRepository) *Service {
-	return &Service{users: users}
+func NewService(users domain.UserRepository, platform domain.PlatformRepository) *Service {
+	return &Service{users: users, platform: platform}
 }
 
 type Stats struct {
@@ -34,15 +35,22 @@ func (s *Service) GetStats(ctx context.Context, userID uuid.UUID) (*Stats, error
 		return nil, err
 	}
 
+	sharePercent := DefaultSharePercent
+	if s.platform != nil {
+		if settings, err := s.platform.GetYieldSettings(ctx); err == nil && settings != nil && settings.ReferralSharePercent >= 0 {
+			sharePercent = settings.ReferralSharePercent
+		}
+	}
+
 	// Portfolio 1 TON at 3%/month -> 0.03 TON monthly yield -> referrer weekly bonus.
 	exampleMonthlyYield := int64(30_000_000)
-	exampleWeekly := WeeklyBonusFromMonthlyYield(exampleMonthlyYield)
+	exampleWeekly := WeeklyBonusFromMonthlyYield(exampleMonthlyYield, sharePercent)
 
 	return &Stats{
 		ReferralCount:      count,
 		TotalEarnedNanoton: earned,
-		SharePercent:       L1ShareOfMonthlyYield * 100,
-		SharePercentWeekly: L1ShareOfMonthlyYield * float64(DaysPerWeek) / float64(DaysPerMonth) * 100,
+		SharePercent:       sharePercent,
+		SharePercentWeekly: sharePercent * float64(DaysPerWeek) / float64(DaysPerMonth),
 		ExampleWeeklyTon:   fmt.Sprintf("%.6f", float64(exampleWeekly)/1_000_000_000),
 	}, nil
 }

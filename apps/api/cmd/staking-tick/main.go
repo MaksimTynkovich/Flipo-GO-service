@@ -44,11 +44,13 @@ func main() {
 	stakeRepo := postgres.NewStakingRepo(db)
 	invRepo := postgres.NewInventoryRepo(db)
 	userRepo := postgres.NewUserRepo(db)
+	platformRepo := postgres.NewPlatformRepo(db)
 	valuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo)
 	stakeSvc := staking.NewService(
 		stakeRepo,
 		invRepo,
 		userRepo,
+		platformRepo,
 		telegram.NewProfileGiftScanner(mtprotoCfg, cfg.DebugAuthEnabled && !mtprotoCfg.Enabled()),
 		valuator,
 		telegram.NewBotNotifier(cfg.BotToken),

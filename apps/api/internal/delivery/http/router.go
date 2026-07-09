@@ -128,6 +128,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.GET("/users", deps.AdminHandler.ListUsers)
 			admin.GET("/users/:id/bets", deps.AdminHandler.UserBets)
 			admin.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)
+			admin.GET("/marketing/settings", deps.AdminHandler.GetYieldSettings)
+			admin.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)
 			admin.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
 			admin.DELETE("/marketing/promos/:code", deps.AdminHandler.DeletePromoCode)
 			admin.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)

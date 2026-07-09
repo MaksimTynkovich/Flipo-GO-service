@@ -90,6 +90,17 @@ type TelegramBotSettings struct {
 
 func (TelegramBotSettings) TableName() string { return "telegram_bot_settings" }
 
+// PlatformYieldSettings - singleton row (id=1) for staking and referral percentages.
+type PlatformYieldSettings struct {
+	ID                         int       `gorm:"primaryKey" json:"id"`
+	ReferralSharePercent       float64   `gorm:"type:decimal(6,2);not null;default:3" json:"referral_share_percent"`
+	StakingBaseMonthlyPercent  float64   `gorm:"type:decimal(6,2);not null;default:3" json:"staking_base_monthly_percent"`
+	StakingBoostMonthlyPercent float64   `gorm:"type:decimal(6,2);not null;default:5" json:"staking_boost_monthly_percent"`
+	UpdatedAt                  time.Time `json:"updated_at"`
+}
+
+func (PlatformYieldSettings) TableName() string { return "platform_yield_settings" }
+
 // RevenueSummary — aggregated financial metrics for admin dashboard.
 type RevenueSummary struct {
 	NetRevenueNanoton        int64 `json:"net_revenue_nanoton"`

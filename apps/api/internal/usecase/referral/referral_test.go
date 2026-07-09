@@ -12,7 +12,7 @@ func TestBonusFromYield(t *testing.T) {
 		{3_000_000_000, 90_000_000},      // 3 TON monthly -> 0.09 TON bonus
 	}
 	for _, tt := range tests {
-		if got := BonusFromYield(tt.yield); got != tt.want {
+		if got := BonusFromYield(tt.yield, DefaultSharePercent); got != tt.want {
 			t.Fatalf("BonusFromYield(%d) = %d, want %d", tt.yield, got, tt.want)
 		}
 	}
@@ -21,7 +21,7 @@ func TestBonusFromYield(t *testing.T) {
 func TestWeeklyBonusFromMonthlyYield(t *testing.T) {
 	// 3 TON/month referral yield -> 0.09 TON/month bonus -> 0.021 TON/week
 	const monthlyYield = 3_000_000_000
-	got := WeeklyBonusFromMonthlyYield(monthlyYield)
+	got := WeeklyBonusFromMonthlyYield(monthlyYield, DefaultSharePercent)
 	want := int64(21_000_000)
 	if got != want {
 		t.Fatalf("WeeklyBonusFromMonthlyYield = %d, want %d", got, want)

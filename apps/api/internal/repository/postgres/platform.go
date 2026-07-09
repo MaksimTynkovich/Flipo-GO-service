@@ -134,6 +134,21 @@ func (r *PlatformRepo) UpdateBotSettings(ctx context.Context, settings *domain.T
 	return r.db.WithContext(ctx).Save(settings).Error
 }
 
+func (r *PlatformRepo) GetYieldSettings(ctx context.Context) (*domain.PlatformYieldSettings, error) {
+	var settings domain.PlatformYieldSettings
+	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrNotFound
+	}
+	return &settings, err
+}
+
+func (r *PlatformRepo) UpdateYieldSettings(ctx context.Context, settings *domain.PlatformYieldSettings) error {
+	settings.ID = 1
+	settings.UpdatedAt = time.Now().UTC()
+	return r.db.WithContext(ctx).Save(settings).Error
+}
+
 func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	defaults := []domain.GameConfig{
 		{GameType: domain.GameRoulette, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 50_000_000_000, MaxPayoutNanoton: 700_000_000_000, HouseEdgeBps: 667, RTPBps: 9333},
@@ -171,6 +186,19 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	var bot domain.TelegramBotSettings
 	if err := r.db.WithContext(ctx).First(&bot, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		if err := r.db.WithContext(ctx).Create(&domain.TelegramBotSettings{ID: 1, SpamProtectionLevel: 1, UpdatedAt: time.Now().UTC()}).Error; err != nil {
+			return err
+		}
+	}
+
+	var yield domain.PlatformYieldSettings
+	if err := r.db.WithContext(ctx).First(&yield, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := r.db.WithContext(ctx).Create(&domain.PlatformYieldSettings{
+			ID:                         1,
+			ReferralSharePercent:       3,
+			StakingBaseMonthlyPercent:  3,
+			StakingBoostMonthlyPercent: 5,
+			UpdatedAt:                  time.Now().UTC(),
+		}).Error; err != nil {
 			return err
 		}
 	}

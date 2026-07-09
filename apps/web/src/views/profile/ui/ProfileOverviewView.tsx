@@ -141,14 +141,9 @@ export function ProfileOverviewView() {
             {promoMessage}
           </p>
         ) : null}
-        {promoStatus?.active ? (
-          <p className="text-xs text-muted">
-            {promoStatus.promo_code}: {formatTON(promoStatus.wager_progress_nanoton ?? 0)} /{" "}
-            {formatTON(promoStatus.wager_required_nanoton ?? 0)} TON вейджер
-          </p>
-        ) : (
+        {!promoStatus?.active ? (
           <p className="text-xs text-muted">Бонус только на ставки. Новый код заменит текущий.</p>
-        )}
+        ) : null}
       </section>
 
       <section className="space-y-2">

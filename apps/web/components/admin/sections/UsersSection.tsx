@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
+import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
   formatTON,
   getAdminRiskUsers,
@@ -11,7 +12,7 @@ import {
   type AdminUser,
 } from "@/lib/api";
 
-export default function AdminUsersPage() {
+export default function UsersSection() {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [riskUsers, setRiskUsers] = useState<AdminRiskUser[]>([]);
@@ -22,16 +23,27 @@ export default function AdminUsersPage() {
   async function load(search = query) {
     setLoading(true);
     try {
-      const [userData, riskData] = await Promise.all([getAdminUsers(search), getAdminRiskUsers()]);
+      const cacheKey = search.trim() ? `admin:users:${search.trim().toLowerCase()}` : "admin:users:default";
+      const [userData, riskData] = await loadCached(cacheKey, () =>
+        Promise.all([getAdminUsers(search), getAdminRiskUsers()]),
+      );
       setUsers(userData);
       setRiskUsers(riskData);
+      primeCache(cacheKey, [userData, riskData]);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    load().catch(() => {});
+    runAfterFirstPaint(() => {
+      const cached = readCached<[AdminUser[], AdminRiskUser[]]>("admin:users:default");
+      if (cached) {
+        setUsers(cached[0]);
+        setRiskUsers(cached[1]);
+      }
+      load().catch(() => {});
+    });
   }, []);
 
   async function selectUser(user: AdminUser) {
@@ -57,7 +69,14 @@ export default function AdminUsersPage() {
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div className="panel space-y-2">
           <p className="text-base font-semibold">Риск-пользователи</p>
-          {riskUsers.length === 0 ? (
+          {riskUsers.length === 0 && loading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="rounded-xl bg-surface-raised/50 px-3 py-2">
+                <div className="h-4 w-28 animate-pulse rounded bg-surface-raised" />
+                <div className="mt-2 h-3 w-40 animate-pulse rounded bg-surface-raised" />
+              </div>
+            ))
+          ) : riskUsers.length === 0 ? (
             <p className="text-sm text-muted">Пока нет пользователей с risk flags.</p>
           ) : (
             riskUsers.map((user) => (
@@ -74,20 +93,29 @@ export default function AdminUsersPage() {
 
         <div className="panel space-y-2">
           <p className="text-base font-semibold">Все пользователи</p>
-          {users.map((user) => (
-            <button
-              key={user.id}
-              type="button"
-              onClick={() => selectUser(user).catch(() => {})}
-              className="flex w-full items-center justify-between rounded-xl bg-surface-raised/50 px-3 py-2 text-left text-sm"
-            >
-              <span>
-                {user.first_name || user.username || user.id.slice(0, 8)}
-                {user.is_banned ? " · banned" : ""}
-              </span>
-              <span>{formatTON(user.betting_balance)} TON</span>
-            </button>
-          ))}
+          {users.length === 0 && loading
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="rounded-xl bg-surface-raised/50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="h-4 w-24 animate-pulse rounded bg-surface-raised" />
+                    <div className="h-4 w-16 animate-pulse rounded bg-surface-raised" />
+                  </div>
+                </div>
+              ))
+            : users.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => selectUser(user).catch(() => {})}
+                  className="flex w-full items-center justify-between rounded-xl bg-surface-raised/50 px-3 py-2 text-left text-sm"
+                >
+                  <span>
+                    {user.first_name || user.username || user.id.slice(0, 8)}
+                    {user.is_banned ? " · banned" : ""}
+                  </span>
+                  <span>{formatTON(user.betting_balance)} TON</span>
+                </button>
+              ))}
         </div>
       </section>
 

@@ -57,15 +57,12 @@ type ProfileGiftsResponse struct {
 	Stats              StakingStats     `json:"stats"`
 }
 
-func monthlyRate(tier domain.StakingTier) float64 {
-	if tier == domain.TierBoost {
-		return BoostMonthlyRate
-	}
-	return BaseMonthlyRate
+func monthlyRate(tier domain.StakingTier, basePercent, boostPercent float64) float64 {
+	return monthlyRateFraction(tier, basePercent, boostPercent)
 }
 
-func calcYields(priceNanoton int64, tier domain.StakingTier) (daily, monthly int64) {
-	rate := monthlyRate(tier)
+func calcYields(priceNanoton int64, tier domain.StakingTier, basePercent, boostPercent float64) (daily, monthly int64) {
+	rate := monthlyRate(tier, basePercent, boostPercent)
 	monthly = int64(float64(priceNanoton) * rate)
 	daily = monthly / DaysPerMonth
 	return daily, monthly
@@ -98,7 +95,8 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		scanned = s.enrichScannedGifts(ctx, scanned)
 	}
 
-	rate := monthlyRate(user.StakingTier)
+	basePercent, boostPercent := s.monthlyRatePercents(ctx)
+	rate := monthlyRate(user.StakingTier, basePercent, boostPercent)
 	resp := &ProfileGiftsResponse{
 		Gifts:              make([]ProfileGift, 0),
 		Epoch:              epochView(epoch),
@@ -142,7 +140,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 
 	for _, g := range scanned {
 		displayPrice := s.giftDisplayPrice(ctx, g)
-		daily, monthly := calcYields(displayPrice, user.StakingTier)
+		daily, monthly := calcYields(displayPrice, user.StakingTier, basePercent, boostPercent)
 		pg := ProfileGift{
 			Slug:                g.Slug,
 			Name:                g.Name,
@@ -181,7 +179,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		}
 
 		displayPrice := s.itemDisplayPrice(ctx, item)
-		daily, monthly := calcYields(displayPrice, user.StakingTier)
+		daily, monthly := calcYields(displayPrice, user.StakingTier, basePercent, boostPercent)
 		id := item.ID.String()
 		pg := ProfileGift{
 			Slug:                item.TelegramGiftID,
@@ -211,7 +209,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			continue
 		}
 		displayPrice := s.itemDisplayPrice(ctx, *item)
-		daily, monthly := calcYields(displayPrice, user.StakingTier)
+		daily, monthly := calcYields(displayPrice, user.StakingTier, basePercent, boostPercent)
 		id := item.ID.String()
 		addGift(ProfileGift{
 			Slug:                item.TelegramGiftID,

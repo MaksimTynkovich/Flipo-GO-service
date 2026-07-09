@@ -140,6 +140,21 @@ func (s *Service) UpdateBotSettings(ctx context.Context, adminID uuid.UUID, sett
 	return s.audit(ctx, adminID, "bot_settings_updated", "telegram_bot_settings", "1", nil)
 }
 
+func (s *Service) GetYieldSettings(ctx context.Context) (*domain.PlatformYieldSettings, error) {
+	return s.platform.GetYieldSettings(ctx)
+}
+
+func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformYieldSettings) error {
+	if err := s.platform.UpdateYieldSettings(ctx, &settings); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "yield_settings_updated", "platform_yield_settings", "1", map[string]any{
+		"referral_share_percent":        settings.ReferralSharePercent,
+		"staking_base_monthly_percent":  settings.StakingBaseMonthlyPercent,
+		"staking_boost_monthly_percent": settings.StakingBoostMonthlyPercent,
+	})
+}
+
 func (s *Service) audit(ctx context.Context, adminID uuid.UUID, action, targetType, targetID string, meta any) error {
 	var raw datatypes.JSON
 	if meta != nil {

@@ -109,6 +109,8 @@ type PlatformRepository interface {
 	DeletePromoCode(ctx context.Context, code string) error
 	GetBotSettings(ctx context.Context) (*TelegramBotSettings, error)
 	UpdateBotSettings(ctx context.Context, settings *TelegramBotSettings) error
+	GetYieldSettings(ctx context.Context) (*PlatformYieldSettings, error)
+	UpdateYieldSettings(ctx context.Context, settings *PlatformYieldSettings) error
 	GetPromoCode(ctx context.Context, code string) (*PromoCode, error)
 	GetActiveRedemption(ctx context.Context, userID uuid.UUID) (*PromoRedemption, error)
 	HasRedeemedPromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)

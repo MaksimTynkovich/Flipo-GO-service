@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/PageShell";
+import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/providers/ToastProvider";
+import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
   formatTON,
   getAdminAuditLogs,
@@ -23,7 +25,7 @@ import {
   type WalletTransfer,
 } from "@/lib/api";
 
-export default function AdminPage() {
+export default function DashboardSection() {
   const { showToast } = useToast();
   const [summary, setSummary] = useState<AdminRevenueSummary | null>(null);
   const [timeseries, setTimeseries] = useState<AdminRevenuePoint[]>([]);
@@ -41,15 +43,17 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const [summaryData, seriesData, transferData, ledgerData, gameData, riskData, auditData] =
-        await Promise.all([
-          getAdminRevenueSummary(),
-          getAdminRevenueTimeseries(7),
-          getAdminTransfers(),
-          getAdminLedger(),
-          getAdminGameStats(),
-          getAdminRiskUsers(),
-          getAdminAuditLogs(),
-        ]);
+        await loadCached("admin:dashboard", () =>
+          Promise.all([
+            getAdminRevenueSummary(),
+            getAdminRevenueTimeseries(7),
+            getAdminTransfers(),
+            getAdminLedger(),
+            getAdminGameStats(),
+            getAdminRiskUsers(),
+            getAdminAuditLogs(),
+          ]),
+        );
       setSummary(summaryData);
       setTimeseries(seriesData);
       setTransfers(transferData);
@@ -57,13 +61,44 @@ export default function AdminPage() {
       setGames(gameData);
       setRiskUsers(riskData);
       setAudit(auditData);
+      primeCache("admin:dashboard", [
+        summaryData,
+        seriesData,
+        transferData,
+        ledgerData,
+        gameData,
+        riskData,
+        auditData,
+      ]);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    load().catch(() => {});
+    runAfterFirstPaint(() => {
+      const cached = readCached<
+        [
+          AdminRevenueSummary,
+          AdminRevenuePoint[],
+          WalletTransfer[],
+          AdminLedgerEntry[],
+          AdminGameStat[],
+          AdminRiskUser[],
+          AdminAuditLog[],
+        ]
+      >("admin:dashboard");
+      if (cached) {
+        setSummary(cached[0]);
+        setTimeseries(cached[1]);
+        setTransfers(cached[2]);
+        setLedger(cached[3]);
+        setGames(cached[4]);
+        setRiskUsers(cached[5]);
+        setAudit(cached[6]);
+      }
+      load().catch(() => {});
+    });
   }, []);
 
   const maxRevenue = useMemo(
@@ -125,6 +160,17 @@ export default function AdminPage() {
           <option value="rejected">Rejected</option>
         </select>
       </div>
+
+      {loading && !hasData ? (
+        <section className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className="panel space-y-2 p-3">
+              <div className="h-3 w-24 animate-pulse rounded bg-surface-raised" />
+              <div className="h-5 w-32 animate-pulse rounded bg-surface-raised" />
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {!hasData && !loading ? (
         <section className="panel space-y-2">
@@ -523,14 +569,7 @@ function MetricCard({
       <div className="flex items-center gap-2">
         <p className="text-xs text-muted">{label}</p>
         {hint ? (
-          <span
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-raised text-[10px] text-muted"
-            title={hint}
-            aria-label={hint}
-            role="tooltip"
-          >
-            i
-          </span>
+          <AdminInfoHint label={label} hint={hint} />
         ) : null}
       </div>
       <p className="text-sm font-semibold">{value}</p>
@@ -544,14 +583,7 @@ function MiniStat({ label, value, hint }: { label: string; value: string; hint?:
       <div className="flex items-center gap-2">
         <p className="text-[11px] text-muted">{label}</p>
         {hint ? (
-          <span
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-raised text-[10px] text-muted"
-            title={hint}
-            aria-label={hint}
-            role="tooltip"
-          >
-            i
-          </span>
+          <AdminInfoHint label={label} hint={hint} />
         ) : null}
       </div>
       <p className="mt-1 text-sm font-semibold">{value}</p>
@@ -591,14 +623,7 @@ function HealthRow({
       <span className="flex items-center gap-2 text-sm text-muted">
         {label}
         {hint ? (
-          <span
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-raised text-[10px] text-muted"
-            title={hint}
-            aria-label={hint}
-            role="tooltip"
-          >
-            i
-          </span>
+          <AdminInfoHint label={label} hint={hint} />
         ) : null}
       </span>
       <span className={`text-sm font-semibold ${toneClass}`}>{value}</span>

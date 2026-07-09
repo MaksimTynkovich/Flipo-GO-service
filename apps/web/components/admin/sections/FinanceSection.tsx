@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/PageShell";
+import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useToast } from "@/components/providers/ToastProvider";
+import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
   formatTON,
   getAdminLedger,
@@ -14,26 +16,36 @@ import {
   type WalletTransfer,
 } from "@/lib/api";
 
-export default function AdminFinancePage() {
+export default function FinanceSection() {
   const { showToast } = useToast();
   const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
   const [ledger, setLedger] = useState<AdminLedgerEntry[]>([]);
   const [treasury, setTreasury] = useState<AdminTreasuryStatus | null>(null);
   const [note, setNote] = useState("approved by admin");
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [transferData, ledgerData, treasuryData] = await Promise.all([
-      getAdminTransfers(),
-      getAdminLedger(),
-      getAdminTreasuryStatus(),
-    ]);
+    setLoading(true);
+    const [transferData, ledgerData, treasuryData] = await loadCached("admin:finance", () =>
+      Promise.all([getAdminTransfers(), getAdminLedger(), getAdminTreasuryStatus()]),
+    );
     setTransfers(transferData);
     setLedger(ledgerData);
     setTreasury(treasuryData);
+    primeCache("admin:finance", [transferData, ledgerData, treasuryData]);
+    setLoading(false);
   }
 
   useEffect(() => {
-    load().catch(() => {});
+    runAfterFirstPaint(() => {
+      const cached = readCached<[WalletTransfer[], AdminLedgerEntry[], AdminTreasuryStatus]>("admin:finance");
+      if (cached) {
+        setTransfers(cached[0]);
+        setLedger(cached[1]);
+        setTreasury(cached[2]);
+      }
+      load().catch(() => {});
+    });
   }, []);
 
   const reviewQueue = useMemo(
@@ -45,11 +57,20 @@ export default function AdminFinancePage() {
     <PageShell title="Финансы" description="TON транзакции, hot/cold кошельки и ручная проверка выводов.">
       {treasury ? (
         <section className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Hot balance" value={`${formatTON(treasury.hot_balance_nanoton ?? 0)} TON`} />
-          <Stat label="Hot wallet" value={treasury.hot_wallet_address || "—"} />
-          <Stat label="Cold wallet" value={treasury.cold_wallet_address || "не задан"} />
-          <Stat label="Pending liability" value={`${formatTON(treasury.pending_liability_nanoton)} TON`} />
-          <Stat label="Sweep needed" value={treasury.requires_sweep ? "Да" : "Нет"} />
+          <Stat label="Hot balance" value={`${formatTON(treasury.hot_balance_nanoton ?? 0)} TON`} hint="Сколько TON сейчас лежит в горячем кошельке для быстрых депозитов и выводов." />
+          <Stat label="Hot wallet" value={treasury.hot_wallet_address || "—"} hint="Горячий кошелёк проекта. Используется для текущих операций и потому считается операционно рискованнее." />
+          <Stat label="Cold wallet" value={treasury.cold_wallet_address || "не задан"} hint="Холодный кошелёк для хранения резерва. Обычно туда уводят излишек средств из hot wallet." />
+          <Stat label="Pending liability" value={`${formatTON(treasury.pending_liability_nanoton)} TON`} hint="Обязательства перед пользователями, которые ещё не закрыты: pending и queued выводы, требующие покрытия." />
+          <Stat label="Sweep needed" value={treasury.requires_sweep ? "Да" : "Нет"} hint="Нужно ли перевести излишек средств из hot wallet в cold wallet по текущим лимитам." />
+        </section>
+      ) : loading ? (
+        <section className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="panel space-y-2 p-3">
+              <div className="h-3 w-24 animate-pulse rounded bg-surface-raised" />
+              <div className="h-5 w-full animate-pulse rounded bg-surface-raised" />
+            </div>
+          ))}
         </section>
       ) : null}
 
@@ -123,10 +144,13 @@ export default function AdminFinancePage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="panel space-y-1 p-3">
-      <p className="text-xs text-muted">{label}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-muted">{label}</p>
+        {hint ? <AdminInfoHint label={label} hint={hint} /> : null}
+      </div>
       <p className="break-all text-sm font-semibold">{value}</p>
     </div>
   );
