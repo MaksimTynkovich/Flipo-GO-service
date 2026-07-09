@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
@@ -96,7 +97,7 @@ func (h *WalletHandler) ListTransfers(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	items, err := h.wallet.ListTransfers(c.Request.Context(), userID, 30)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -120,47 +121,47 @@ func (h *WalletHandler) GetTransfer(c *gin.Context) {
 func writeWalletError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidAmount):
-		c.JSON(http.StatusBadRequest, gin.H{
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Укажи корректную сумму. Проверь минимальный лимит операции.",
 			"code":  "invalid_amount",
 		})
 	case errors.Is(err, domain.ErrInsufficientFunds):
-		c.JSON(http.StatusBadRequest, gin.H{
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Недостаточно средств на балансе.",
 			"code":  "insufficient_funds",
 		})
 	case errors.Is(err, domain.ErrWalletNotLinked):
-		c.JSON(http.StatusBadRequest, gin.H{
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Сначала подключи TON-кошелёк.",
 			"code":  "wallet_not_linked",
 		})
 	case errors.Is(err, domain.ErrTransferPending):
-		c.JSON(http.StatusConflict, gin.H{
+		httperr.Respond(c, http.StatusConflict, err, gin.H{
 			"error": "У тебя уже есть активная операция. Дождись её завершения.",
 			"code":  "transfer_pending",
 		})
 	case errors.Is(err, domain.ErrTransferExpired):
-		c.JSON(http.StatusGone, gin.H{
+		httperr.Respond(c, http.StatusGone, err, gin.H{
 			"error": "Время на оплату истекло. Создай новое пополнение.",
 			"code":  "transfer_expired",
 		})
 	case errors.Is(err, domain.ErrTransferNotFound):
-		c.JSON(http.StatusNotFound, gin.H{
+		httperr.Respond(c, http.StatusNotFound, err, gin.H{
 			"error": "Операция не найдена.",
 			"code":  "transfer_not_found",
 		})
 	case errors.Is(err, domain.ErrDuplicateRequest):
-		c.JSON(http.StatusConflict, gin.H{
+		httperr.Respond(c, http.StatusConflict, err, gin.H{
 			"error": "Такой запрос уже обрабатывается.",
 			"code":  "duplicate_request",
 		})
 	case errors.Is(err, domain.ErrChainUnavailable):
-		c.JSON(http.StatusServiceUnavailable, gin.H{
+		httperr.Respond(c, http.StatusServiceUnavailable, err, gin.H{
 			"error": "Сервис TON временно недоступен. Попробуй через пару минут.",
 			"code":  "chain_unavailable",
 		})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{
+		httperr.Respond(c, http.StatusInternalServerError, err, gin.H{
 			"error": "Не удалось выполнить операцию. Попробуй ещё раз.",
 			"code":  "internal_error",
 		})

@@ -48,6 +48,7 @@ type Config struct {
 	TelegramAPIHash         string
 	TelegramSessionPath     string
 	AdminTelegramIDs        []int64
+	PromoRequiredChannel    string
 }
 
 func Load() *Config {
@@ -96,6 +97,7 @@ func Load() *Config {
 		TelegramAPIHash:        getEnv("TELEGRAM_API_HASH", ""),
 		TelegramSessionPath:    getEnv("TELEGRAM_SESSION_PATH", "data/telegram/session.json"),
 		AdminTelegramIDs:       parseAdminTelegramIDs(getEnv("ADMIN_TELEGRAM_IDS", "")),
+		PromoRequiredChannel:   firstNonEmpty(getEnv("PROMO_REQUIRED_CHANNEL", ""), getEnv("NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL", "")),
 	}
 }
 

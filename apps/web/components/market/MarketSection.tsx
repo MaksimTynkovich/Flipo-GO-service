@@ -5,6 +5,7 @@ import { MarketGiftCard, MarketGiftCardSkeleton } from "@/components/market/Mark
 import { MarketGiftDetailSheet } from "@/components/market/MarketGiftDetailSheet";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { buyMarketListing, getMarketListings, MarketListing } from "@/lib/api";
+import { patchUserBalance } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
 import { mainBalanceNanoton } from "@/lib/balance";
 import { Gift } from "lucide-react";
@@ -41,7 +42,9 @@ export function MarketSection({ onPurchased }: Props) {
     try {
       const { balance, promo_balance } = await buyMarketListing(selected.id);
       markModalCompleted("market_gift_detail");
-      setUser({ ...user, betting_balance: balance, promo_balance });
+      setUser((prev) =>
+        prev ? patchUserBalance(prev, { betting_balance: balance, promo_balance }) : prev,
+      );
       setSelected(null);
       await load();
       onPurchased?.();

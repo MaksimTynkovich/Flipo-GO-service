@@ -11,6 +11,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/google/uuid"
 )
@@ -29,6 +30,7 @@ type Service struct {
 	scanner   telegram.ProfileGiftScanner
 	valuator  *gifts.Valuator
 	notifier  Notifier
+	balanceNotifier balance.BalanceNotifier
 	threshold int64
 	analytics *analyticsuc.Service
 }
@@ -76,6 +78,10 @@ func (s *Service) monthlyRatePercents(ctx context.Context) (base float64, boost 
 
 func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
 	s.analytics = analyticsSvc
+}
+
+func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
+	s.balanceNotifier = notifier
 }
 
 func monthlyRateFraction(tier domain.StakingTier, basePercent, boostPercent float64) float64 {
@@ -210,6 +216,7 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 			slog.Warn("daily staking payout failed", "user_id", userID, "error", err)
 			continue
 		}
+		balance.NotifyUser(ctx, s.users, s.balanceNotifier, userID, yield, domain.LedgerStakeYield)
 		if user, err := s.users.FindByID(ctx, userID); err == nil {
 			s.analytics.Track(ctx, analyticsuc.EventInput{
 				UserID:        &userID,
@@ -246,6 +253,7 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 			slog.Warn("daily referral payout failed", "referrer_id", referrerID, "error", err)
 			continue
 		}
+		balance.NotifyUser(ctx, s.users, s.balanceNotifier, referrerID, bonus, domain.LedgerReferralBonus)
 		if user, err := s.users.FindByID(ctx, referrerID); err == nil {
 			s.analytics.Track(ctx, analyticsuc.EventInput{
 				UserID:        &referrerID,

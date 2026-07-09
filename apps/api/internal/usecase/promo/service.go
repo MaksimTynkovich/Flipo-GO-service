@@ -2,6 +2,7 @@ package promo
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,15 +11,43 @@ import (
 	"github.com/google/uuid"
 )
 
+type ChannelNotSubscribedError struct {
+	Channel string
+}
+
+func (e *ChannelNotSubscribedError) Error() string {
+	return domain.ErrChannelNotSubscribed.Error()
+}
+
+func (e *ChannelNotSubscribedError) Is(target error) bool {
+	return target == domain.ErrChannelNotSubscribed
+}
+
 type Service struct {
-	platform domain.PlatformRepository
-	games    domain.GameRepository
-	users    domain.UserRepository
-	balance  *balance.Service
+	platform        domain.PlatformRepository
+	games           domain.GameRepository
+	users           domain.UserRepository
+	balance         *balance.Service
+	notifier        balance.BalanceNotifier
+	requiredChannel string
+	channelChecker  ChannelChecker
 }
 
 func NewService(platform domain.PlatformRepository, games domain.GameRepository, users domain.UserRepository, balance *balance.Service) *Service {
 	return &Service{platform: platform, games: games, users: users, balance: balance}
+}
+
+func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
+	s.notifier = notifier
+}
+
+func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
+	s.requiredChannel = strings.TrimSpace(channel)
+	s.channelChecker = checker
+}
+
+func (s *Service) RequiredChannel() string {
+	return s.requiredChannel
 }
 
 type StatusView struct {
@@ -59,6 +88,10 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 		return nil, domain.ErrPromoExhausted
 	}
 
+	if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+		return nil, err
+	}
+
 	var replacedCode string
 	active, err := s.platform.GetActiveRedemption(ctx, userID)
 	if err != nil {
@@ -75,6 +108,7 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 		if err := s.users.ReleasePromoBalance(ctx, userID); err != nil {
 			return nil, err
 		}
+		balance.NotifyUser(ctx, s.users, s.notifier, userID, 0, domain.LedgerPromoBonus)
 		replacedCode = active.PromoCode
 	}
 
@@ -109,6 +143,29 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 	return status, nil
 }
 
+func (s *Service) ensureChannelSubscribed(ctx context.Context, userID uuid.UUID) error {
+	if s.requiredChannel == "" || s.channelChecker == nil {
+		return nil
+	}
+
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.TelegramID <= 0 {
+		return &ChannelNotSubscribedError{Channel: s.requiredChannel}
+	}
+
+	member, err := s.channelChecker.IsChannelMember(ctx, s.requiredChannel, user.TelegramID)
+	if err != nil {
+		return fmt.Errorf("channel subscription check failed: %w", err)
+	}
+	if !member {
+		return &ChannelNotSubscribedError{Channel: s.requiredChannel}
+	}
+	return nil
+}
+
 func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, error) {
 	redemption, err := s.platform.GetActiveRedemption(ctx, userID)
 	if err != nil {
@@ -125,6 +182,7 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, er
 	if progress >= redemption.WagerRequiredNanoton && redemption.Status == "active" {
 		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "completed")
 		_ = s.users.ReleasePromoBalance(ctx, userID)
+		balance.NotifyUser(ctx, s.users, s.notifier, userID, 0, domain.LedgerPromoBonus)
 		redemption.Status = "completed"
 	} else if progress != redemption.WagerProgressNanoton {
 		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "active")

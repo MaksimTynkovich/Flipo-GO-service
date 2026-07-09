@@ -43,6 +43,7 @@ type MarketRepository interface {
 	FindActiveByItemID(ctx context.Context, itemID uuid.UUID) (*MarketListing, error)
 	CreateListing(ctx context.Context, listing *MarketListing) error
 	CancelListing(ctx context.Context, id, sellerID uuid.UUID) error
+	UpdateListingPrice(ctx context.Context, listingID uuid.UUID, priceNanoton int64) error
 	Purchase(ctx context.Context, listingID, buyerID uuid.UUID, price, sellerProceeds int64, fee int) (*MarketListing, error)
 	SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, payout, listPrice int64) (int64, error)
 	EnsureBotUser(ctx context.Context) (*User, error)

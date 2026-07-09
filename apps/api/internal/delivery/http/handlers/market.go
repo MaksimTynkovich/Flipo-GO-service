@@ -29,7 +29,7 @@ func (h *MarketHandler) List(c *gin.Context) {
 
 	listings, err := h.market.List(c.Request.Context(), limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, listings)
@@ -47,7 +47,7 @@ func (h *MarketHandler) Get(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "listing not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, listing)
@@ -57,7 +57,7 @@ func (h *MarketHandler) ListMine(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	listings, err := h.market.ListMine(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, listings)

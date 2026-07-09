@@ -9,11 +9,13 @@ import {
   createWalletDepositIntent,
   clearWallet,
   formatTON,
+  getMe,
   getWalletTransfers,
   requestWalletWithdraw,
   updateWallet,
   WalletTransfer,
 } from "@/lib/api";
+import { patchUserBalance } from "@/lib/apply-balance";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { Button } from "@/components/ui/button";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
@@ -185,7 +187,20 @@ export function TonWalletPanel() {
 
   async function refreshTransfers() {
     try {
-      setTransfers(await getWalletTransfers());
+      const next = await getWalletTransfers();
+      const completedDeposit = next.find(
+        (item) =>
+          item.direction === "deposit" &&
+          item.status === "completed" &&
+          transfers.some(
+            (prev) => prev.id === item.id && prev.status !== "completed",
+          ),
+      );
+      setTransfers(next);
+      if (completedDeposit) {
+        const me = await getMe();
+        setUser(me);
+      }
     } catch {
       setTransfers([]);
     }
@@ -234,7 +249,7 @@ export function TonWalletPanel() {
       }
 
       if (confirm.transfer.status === "completed") {
-        if (user) setUser({ ...user, betting_balance: confirm.balance });
+        setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: confirm.balance }) : prev));
         setMessage({ type: "success", text: "Пополнение зачислено на баланс." });
       } else if (confirm.transfer.status === "awaiting_payment") {
         setMessage({
@@ -285,7 +300,7 @@ export function TonWalletPanel() {
     setLoading(true);
     try {
       const result = await requestWalletWithdraw(receiveNanoton, newIdempotencyKey("withdraw"));
-      if (user) setUser({ ...user, betting_balance: result.balance });
+      setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: result.balance }) : prev));
       setMessage({
         type: "success",
         text: `Вывод создан. На кошелёк придёт ${formatTON(receiveNanoton)}.`,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
@@ -47,35 +48,49 @@ func (h *PromoHandler) Status(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	status, err := h.promo.Status(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, status)
 }
 
 func writePromoError(c *gin.Context, err error) {
+	var channelErr *promo.ChannelNotSubscribedError
+	if errors.As(err, &channelErr) {
+		channel := ""
+		if channelErr != nil {
+			channel = channelErr.Channel
+		}
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error":   "Подпишитесь на канал, чтобы активировать промокод",
+			"code":    "channel_not_subscribed",
+			"channel": channel,
+		})
+		return
+	}
+
 	switch {
 	case errors.Is(err, domain.ErrPromoInvalid):
-		c.JSON(http.StatusBadRequest, gin.H{
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Промокод недействителен",
 			"code":  "promo_invalid",
 		})
 	case errors.Is(err, domain.ErrPromoExpired):
-		c.JSON(http.StatusBadRequest, gin.H{
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Промокод истёк",
 			"code":  "promo_expired",
 		})
 	case errors.Is(err, domain.ErrPromoExhausted):
-		c.JSON(http.StatusBadRequest, gin.H{
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Промокод исчерпан",
 			"code":  "promo_exhausted",
 		})
 	case errors.Is(err, domain.ErrPromoAlreadyRedeemed):
-		c.JSON(http.StatusBadRequest, gin.H{
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Промокод уже использован",
 			"code":  "promo_already_redeemed",
 		})
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": err.Error()})
 	}
 }

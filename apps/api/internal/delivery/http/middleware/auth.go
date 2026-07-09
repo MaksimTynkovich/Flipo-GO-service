@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
+	applog "github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
@@ -16,18 +18,28 @@ func JWTAuth(authSvc *auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization"})
+			logAuthFailure(c, "missing_authorization", nil)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization", "code": "missing_authorization"})
 			return
 		}
 		token := strings.TrimPrefix(header, "Bearer ")
 		claims, err := authSvc.ParseToken(token)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			logAuthFailure(c, "invalid_token", err)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token", "code": "invalid_token"})
 			return
 		}
 		c.Set(UserIDKey, claims.UserID)
 		c.Next()
 	}
+}
+
+func logAuthFailure(c *gin.Context, reason string, err error) {
+	attrs := append(applog.RequestAttrs(c), "reason", reason)
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+	}
+	slog.WarnContext(c.Request.Context(), "auth_failed", attrs...)
 }
 
 func GetUserID(c *gin.Context) uuid.UUID {

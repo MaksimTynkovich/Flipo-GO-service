@@ -41,7 +41,7 @@ func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service,
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {
 	summary, err := h.admin.Summary(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, summary)
@@ -51,7 +51,7 @@ func (h *AdminHandler) RevenueTimeseries(c *gin.Context) {
 	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
 	series, err := h.admin.Timeseries(c.Request.Context(), days)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, series)
@@ -60,7 +60,7 @@ func (h *AdminHandler) RevenueTimeseries(c *gin.Context) {
 func (h *AdminHandler) Transfers(c *gin.Context) {
 	items, err := h.admin.ListTransfers(c.Request.Context(), 100)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, toAdminTransferViews(items))
@@ -69,7 +69,7 @@ func (h *AdminHandler) Transfers(c *gin.Context) {
 func (h *AdminHandler) Ledger(c *gin.Context) {
 	items, err := h.admin.ListLedger(c.Request.Context(), 50)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -78,7 +78,7 @@ func (h *AdminHandler) Ledger(c *gin.Context) {
 func (h *AdminHandler) GameStats(c *gin.Context) {
 	stats, err := h.admin.GameStats(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, stats)
@@ -87,7 +87,7 @@ func (h *AdminHandler) GameStats(c *gin.Context) {
 func (h *AdminHandler) RiskUsers(c *gin.Context) {
 	users, err := h.admin.RiskUsers(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, users)
@@ -96,7 +96,7 @@ func (h *AdminHandler) RiskUsers(c *gin.Context) {
 func (h *AdminHandler) AuditLogs(c *gin.Context) {
 	logs, err := h.admin.AuditLogs(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, logs)
@@ -114,7 +114,7 @@ func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
 	}
 	overview, err := h.analytics.Overview(c.Request.Context(), since, filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, overview)
@@ -130,7 +130,7 @@ func (h *AdminHandler) AnalyticsUserDrilldown(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	drilldown, err := h.analytics.UserDrilldown(c.Request.Context(), userID, limit, sessionID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, drilldown)
@@ -161,7 +161,7 @@ func (h *AdminHandler) ReviewTransfer(c *gin.Context) {
 func (h *AdminHandler) ListUsers(c *gin.Context) {
 	users, err := h.admin.ListUsers(c.Request.Context(), c.Query("q"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, users)
@@ -175,7 +175,7 @@ func (h *AdminHandler) UserBets(c *gin.Context) {
 	}
 	bets, err := h.admin.UserBets(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, bets)
@@ -184,7 +184,7 @@ func (h *AdminHandler) UserBets(c *gin.Context) {
 func (h *AdminHandler) ListGameConfigs(c *gin.Context) {
 	configs, err := h.admin.ListGameConfigs(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, configs)
@@ -207,7 +207,7 @@ func (h *AdminHandler) UpdateGameConfig(c *gin.Context) {
 func (h *AdminHandler) GetRiskSettings(c *gin.Context) {
 	settings, err := h.admin.GetRiskSettings(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, settings)
@@ -221,6 +221,31 @@ func (h *AdminHandler) UpdateRiskSettings(c *gin.Context) {
 		return
 	}
 	if err := h.admin.UpdateRiskSettings(c.Request.Context(), adminID, settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	listingID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid listing id"})
+		return
+	}
+	var body struct {
+		PriceNanoton int64 `json:"price_nanoton"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.UpdateMarketListingPrice(c.Request.Context(), adminID, listingID, body.PriceNanoton); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -241,7 +266,7 @@ func (h *AdminHandler) SeedHistory(c *gin.Context) {
 	gameType := domain.GameType(c.Param("game"))
 	history, err := h.fairness.SeedHistory(c.Request.Context(), gameType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, history)
@@ -250,12 +275,12 @@ func (h *AdminHandler) SeedHistory(c *gin.Context) {
 func (h *AdminHandler) TreasuryStatus(c *gin.Context) {
 	summary, err := h.admin.Summary(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	status, err := h.treasury.Status(c.Request.Context(), h.hotAddr, summary.PendingLiabilityNanoton)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, status)
@@ -264,7 +289,7 @@ func (h *AdminHandler) TreasuryStatus(c *gin.Context) {
 func (h *AdminHandler) ListPromoCodes(c *gin.Context) {
 	items, err := h.admin.ListPromoCodes(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -306,7 +331,7 @@ func (h *AdminHandler) DeletePromoCode(c *gin.Context) {
 		case errors.Is(err, domain.ErrPromoInUse):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Есть активации"})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			respondInternal(c, err)
 		}
 		return
 	}
@@ -316,7 +341,7 @@ func (h *AdminHandler) DeletePromoCode(c *gin.Context) {
 func (h *AdminHandler) GetBotSettings(c *gin.Context) {
 	settings, err := h.admin.GetBotSettings(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, settings)
@@ -339,7 +364,7 @@ func (h *AdminHandler) UpdateBotSettings(c *gin.Context) {
 func (h *AdminHandler) GetYieldSettings(c *gin.Context) {
 	settings, err := h.admin.GetYieldSettings(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, settings)
@@ -379,7 +404,7 @@ func (h *AdminHandler) CreateBroadcast(c *gin.Context) {
 func (h *AdminHandler) ListBroadcasts(c *gin.Context) {
 	items, err := h.telegram.ListBroadcasts(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -388,7 +413,7 @@ func (h *AdminHandler) ListBroadcasts(c *gin.Context) {
 func (h *AdminHandler) ListSweeps(c *gin.Context) {
 	items, err := h.treasury.ListSweeps(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, items)

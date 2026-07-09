@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Gift, Plus, Shield, Sparkles, Users } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
@@ -8,12 +8,12 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
   activatePromoCode,
+  ApiRequestError,
   formatTON,
   getMe,
-  getPromoStatus,
-  type PromoStatus,
 } from "@/lib/api";
 import { hasPromoBalance, mainBalanceNanoton } from "@/lib/balance";
+import { PROMO_REQUIRED_CHANNEL, promoChannelMention, promoChannelUrl } from "@/lib/promo-channel";
 import { shortenTonWalletAddress } from "@/lib/wallet";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
@@ -23,25 +23,19 @@ export function ProfileOverviewView() {
   const { user, loading, setUser } = useAuth();
   const haptics = useTelegramHaptics();
   const [promoCode, setPromoCode] = useState("");
-  const [promoStatus, setPromoStatus] = useState<PromoStatus | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
-
-  useEffect(() => {
-    getPromoStatus()
-      .then(setPromoStatus)
-      .catch(() => {});
-  }, []);
+  const [promoChannelLink, setPromoChannelLink] = useState<{ url: string; label: string } | null>(null);
 
   async function activatePromo() {
     if (!promoCode.trim()) return;
     setPromoLoading(true);
     setPromoMessage(null);
     setPromoError(null);
+    setPromoChannelLink(null);
     try {
       const status = await activatePromoCode(promoCode.trim());
-      setPromoStatus(status);
       setPromoCode("");
       try {
         setUser(await getMe());
@@ -56,6 +50,14 @@ export function ProfileOverviewView() {
       haptics.notificationOccurred("success");
     } catch (e) {
       setPromoError(e instanceof Error ? e.message : "Не удалось активировать");
+      if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
+        const channel = e.channel || PROMO_REQUIRED_CHANNEL;
+        const url = promoChannelUrl(channel);
+        const label = promoChannelMention(channel);
+        if (url && label) {
+          setPromoChannelLink({ url, label });
+        }
+      }
       haptics.notificationOccurred("error");
     } finally {
       setPromoLoading(false);
@@ -122,6 +124,7 @@ export function ProfileOverviewView() {
             onChange={(e) => {
               setPromoCode(e.target.value.toUpperCase());
               if (promoError) setPromoError(null);
+              if (promoChannelLink) setPromoChannelLink(null);
               if (promoMessage) setPromoMessage(null);
             }}
             className="input-field h-10 flex-1"
@@ -135,14 +138,25 @@ export function ProfileOverviewView() {
             {promoLoading ? "…" : "Активировать"}
           </button>
         </div>
-        {promoError ? <p className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{promoError}</p> : null}
+        {promoError ? (
+          <div className="space-y-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            <p>{promoError}</p>
+            {promoChannelLink ? (
+              <a
+                href={promoChannelLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex font-semibold text-accent underline underline-offset-2"
+              >
+                Подписаться на {promoChannelLink.label}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
         {promoMessage ? (
           <p className="rounded-xl bg-[color:var(--success)]/10 px-3 py-2 text-xs text-[color:var(--success)]">
             {promoMessage}
           </p>
-        ) : null}
-        {!promoStatus?.active ? (
-          <p className="text-xs text-muted">Бонус только на ставки. Новый код заменит текущий.</p>
         ) : null}
       </section>
 

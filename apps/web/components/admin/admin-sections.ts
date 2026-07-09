@@ -3,6 +3,7 @@ import AnalyticsSection from "./sections/AnalyticsSection";
 import DashboardSection from "./sections/DashboardSection";
 import FinanceSection from "./sections/FinanceSection";
 import GamesSection from "./sections/GamesSection";
+import MarketAdminSection from "./sections/MarketAdminSection";
 import MarketingSection from "./sections/MarketingSection";
 import TelegramSection from "./sections/TelegramSection";
 import UsersSection from "./sections/UsersSection";
@@ -12,6 +13,7 @@ export type AdminSectionId =
   | "analytics"
   | "users"
   | "games"
+  | "market"
   | "finance"
   | "marketing"
   | "telegram";
@@ -28,6 +30,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "analytics", href: "/admin/analytics", label: "Аналитика", hint: "Ошибки, отток и воронки" },
   { id: "users", href: "/admin/users", label: "Пользователи", hint: "Поиск и поведение по сессиям" },
   { id: "games", href: "/admin/games", label: "Игры", hint: "RTP, лимиты и seed" },
+  { id: "market", href: "/admin/market", label: "Маркет", hint: "Цены лотов на маркете" },
   { id: "finance", href: "/admin/finance", label: "Финансы", hint: "Кошельки и журнал" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг", hint: "Промо и рефералы" },
   { id: "telegram", href: "/admin/telegram", label: "Telegram", hint: "Бот и рассылки" },
@@ -38,6 +41,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   analytics: AnalyticsSection,
   users: UsersSection,
   games: GamesSection,
+  market: MarketAdminSection,
   finance: FinanceSection,
   marketing: MarketingSection,
   telegram: TelegramSection,
@@ -48,6 +52,7 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/analytics": "analytics",
   "/admin/users": "users",
   "/admin/games": "games",
+  "/admin/market": "market",
   "/admin/finance": "finance",
   "/admin/marketing": "marketing",
   "/admin/telegram": "telegram",

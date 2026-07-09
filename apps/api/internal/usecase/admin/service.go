@@ -6,29 +6,41 @@ import (
 	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 )
 
 type Service struct {
-	admin    domain.AdminRepository
-	platform domain.PlatformRepository
-	games    domain.GameRepository
+	admin     domain.AdminRepository
+	platform  domain.PlatformRepository
+	games     domain.GameRepository
+	market    domain.MarketRepository
+	users     domain.UserRepository
 	transfers domain.TonTransferRepository
+	notifier  balance.BalanceNotifier
 }
 
 func NewService(
 	admin domain.AdminRepository,
 	platform domain.PlatformRepository,
 	games domain.GameRepository,
+	market domain.MarketRepository,
+	users domain.UserRepository,
 	transfers domain.TonTransferRepository,
 ) *Service {
 	return &Service{
 		admin:     admin,
 		platform:  platform,
 		games:     games,
+		market:    market,
+		users:     users,
 		transfers: transfers,
 	}
+}
+
+func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
+	s.notifier = notifier
 }
 
 func (s *Service) Summary(ctx context.Context) (*domain.RevenueSummary, error) {
@@ -77,6 +89,9 @@ func (s *Service) ReviewWithdrawal(ctx context.Context, adminID, transferID uuid
 	_, err := s.transfers.RejectWithdrawalAtomic(ctx, transferID, adminID, note)
 	if err != nil {
 		return err
+	}
+	if transfer, findErr := s.transfers.FindByID(ctx, transferID); findErr == nil {
+		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerRefund)
 	}
 	return s.audit(ctx, adminID, "withdrawal_rejected", "ton_transfer", transferID.String(), map[string]string{"note": note})
 }
@@ -152,6 +167,27 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 		"referral_share_percent":        settings.ReferralSharePercent,
 		"staking_base_monthly_percent":  settings.StakingBaseMonthlyPercent,
 		"staking_boost_monthly_percent": settings.StakingBoostMonthlyPercent,
+	})
+}
+
+func (s *Service) UpdateMarketListingPrice(ctx context.Context, adminID, listingID uuid.UUID, priceNanoton int64) error {
+	if priceNanoton <= 0 {
+		return domain.ErrInvalidAmount
+	}
+	listing, err := s.market.FindByID(ctx, listingID)
+	if err != nil {
+		return err
+	}
+	if listing.Status != domain.ListingActive {
+		return domain.ErrNotFound
+	}
+	oldPrice := listing.PriceNanoton
+	if err := s.market.UpdateListingPrice(ctx, listingID, priceNanoton); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "market_listing_price_updated", "market_listing", listingID.String(), map[string]any{
+		"old_price_nanoton": oldPrice,
+		"new_price_nanoton": priceNanoton,
 	})
 }
 

@@ -31,9 +31,10 @@ type Deps struct {
 
 func NewRouter(deps Deps) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestMeta())
+	r.Use(middleware.AccessLog())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -132,6 +133,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.GET("/treasury/status", deps.AdminHandler.TreasuryStatus)
 			admin.GET("/users", deps.AdminHandler.ListUsers)
 			admin.GET("/users/:id/bets", deps.AdminHandler.UserBets)
+			admin.PATCH("/market/listings/:id", deps.AdminHandler.UpdateMarketListingPrice)
 			admin.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)
 			admin.GET("/marketing/settings", deps.AdminHandler.GetYieldSettings)
 			admin.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)

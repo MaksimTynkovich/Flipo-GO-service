@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -41,10 +42,15 @@ type Service struct {
 	inventory domain.InventoryRepository
 	users     domain.UserRepository
 	feeBps    int
+	notifier  balance.BalanceNotifier
 }
 
 func NewService(market domain.MarketRepository, inventory domain.InventoryRepository, users domain.UserRepository, feeBps int) *Service {
 	return &Service{market: market, inventory: inventory, users: users, feeBps: feeBps}
+}
+
+func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
+	s.notifier = notifier
 }
 
 func (s *Service) List(ctx context.Context, limit, offset int) ([]ListingView, error) {
@@ -150,10 +156,16 @@ func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (*
 	price := listing.PriceNanoton
 	fee := price * int64(s.feeBps) / 10000
 	sellerProceeds := price - fee
+	sellerID := listing.SellerID
 
 	_, err = s.market.Purchase(ctx, listingID, buyerID, price, sellerProceeds, s.feeBps)
 	if err != nil {
 		return nil, err
+	}
+
+	balance.NotifyUser(ctx, s.users, s.notifier, buyerID, -price, domain.LedgerMarketBuy)
+	if sellerProceeds > 0 && sellerID != buyerID {
+		balance.NotifyUser(ctx, s.users, s.notifier, sellerID, sellerProceeds, domain.LedgerMarketSell)
 	}
 
 	user, err := s.users.FindByID(ctx, buyerID)
@@ -165,7 +177,12 @@ func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (*
 
 // BuybackFromUser pays the seller and lists the gift on the market under the bot account.
 func (s *Service) BuybackFromUser(ctx context.Context, sellerID, itemID uuid.UUID, payout, listPrice int64) (int64, error) {
-	return s.market.SellToBot(ctx, sellerID, itemID, payout, listPrice)
+	balanceAfter, err := s.market.SellToBot(ctx, sellerID, itemID, payout, listPrice)
+	if err != nil {
+		return 0, err
+	}
+	balance.NotifyUser(ctx, s.users, s.notifier, sellerID, payout, domain.LedgerLiquidate)
+	return balanceAfter, nil
 }
 
 // AddBotGift registers a gift received by the bot and lists it on the market.
