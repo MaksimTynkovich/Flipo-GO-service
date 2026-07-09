@@ -6,6 +6,7 @@ import {
   flushAnalyticsEvents,
   flushCurrentScreenExit,
   getAnalyticsSessionId,
+  installClientErrorLogging,
   resumeCurrentScreen,
   trackEvent,
   trackScreenView,
@@ -15,6 +16,7 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    installClientErrorLogging();
     getAnalyticsSessionId();
     trackEvent({
       event_name: "session_started",

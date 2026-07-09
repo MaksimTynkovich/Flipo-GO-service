@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 
+	applog "github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 )
@@ -19,21 +21,25 @@ func AdminAuth(authSvc *auth.Service, adminTelegramIDs []int64) gin.HandlerFunc 
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization"})
+			logAdminAuthFailure(c, "missing_authorization", nil)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization", "code": "missing_authorization"})
 			return
 		}
 		token := strings.TrimPrefix(header, "Bearer ")
 		claims, err := authSvc.ParseToken(token)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			logAdminAuthFailure(c, "invalid_token", err)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token", "code": "invalid_token"})
 			return
 		}
 		if len(allowed) == 0 {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access not configured"})
+			logAdminAuthFailure(c, "admin_not_configured", nil)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access not configured", "code": "admin_not_configured"})
 			return
 		}
 		if _, ok := allowed[claims.TelegramID]; !ok {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+			logAdminAuthFailure(c, "admin_access_required", nil)
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access required", "code": "admin_access_required"})
 			return
 		}
 		c.Set(UserIDKey, claims.UserID)
@@ -59,4 +65,12 @@ func ParseAdminTelegramIDs(raw string) []int64 {
 		}
 	}
 	return out
+}
+
+func logAdminAuthFailure(c *gin.Context, reason string, err error) {
+	attrs := append(applog.RequestAttrs(c), "reason", reason)
+	if err != nil {
+		attrs = append(attrs, "error", err.Error())
+	}
+	slog.WarnContext(c.Request.Context(), "admin_auth_failed", attrs...)
 }

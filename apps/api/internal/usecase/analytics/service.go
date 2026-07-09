@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -47,7 +48,14 @@ func (s *Service) Track(ctx context.Context, input EventInput) {
 	if s == nil || s.repo == nil || input.EventName == "" {
 		return
 	}
-	_ = s.repo.RecordEvents(ctx, []domain.AnalyticsEventCreate{normalizeEvent(ctx, input)})
+	if err := s.repo.RecordEvents(ctx, []domain.AnalyticsEventCreate{normalizeEvent(ctx, input)}); err != nil {
+		slog.WarnContext(ctx, "analytics_track_failed",
+			"event_name", input.EventName,
+			"event_category", input.EventCategory,
+			"error_code", input.ErrorCode,
+			"error", err.Error(),
+		)
+	}
 }
 
 func (s *Service) TrackBatch(ctx context.Context, inputs []EventInput) error {
@@ -64,7 +72,11 @@ func (s *Service) TrackBatch(ctx context.Context, inputs []EventInput) error {
 	if len(events) == 0 {
 		return nil
 	}
-	return s.repo.RecordEvents(ctx, events)
+	if err := s.repo.RecordEvents(ctx, events); err != nil {
+		slog.WarnContext(ctx, "analytics_track_batch_failed", "count", len(events), "error", err.Error())
+		return err
+	}
+	return nil
 }
 
 func (s *Service) Overview(ctx context.Context, since time.Time, filter domain.AnalyticsOverviewFilter) (*domain.AnalyticsOverview, error) {

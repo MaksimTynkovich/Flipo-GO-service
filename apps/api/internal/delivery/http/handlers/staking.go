@@ -23,7 +23,7 @@ func (h *StakingHandler) ListProfileGifts(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	resp, err := h.staking.ListProfileGifts(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, resp)
@@ -87,7 +87,7 @@ func (h *StakingHandler) ListPositions(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	positions, err := h.staking.ListPositions(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, positions)

@@ -14,6 +14,7 @@ type Service struct {
 	admin    domain.AdminRepository
 	platform domain.PlatformRepository
 	games    domain.GameRepository
+	market   domain.MarketRepository
 	transfers domain.TonTransferRepository
 }
 
@@ -21,12 +22,14 @@ func NewService(
 	admin domain.AdminRepository,
 	platform domain.PlatformRepository,
 	games domain.GameRepository,
+	market domain.MarketRepository,
 	transfers domain.TonTransferRepository,
 ) *Service {
 	return &Service{
 		admin:     admin,
 		platform:  platform,
 		games:     games,
+		market:    market,
 		transfers: transfers,
 	}
 }
@@ -152,6 +155,27 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 		"referral_share_percent":        settings.ReferralSharePercent,
 		"staking_base_monthly_percent":  settings.StakingBaseMonthlyPercent,
 		"staking_boost_monthly_percent": settings.StakingBoostMonthlyPercent,
+	})
+}
+
+func (s *Service) UpdateMarketListingPrice(ctx context.Context, adminID, listingID uuid.UUID, priceNanoton int64) error {
+	if priceNanoton <= 0 {
+		return domain.ErrInvalidAmount
+	}
+	listing, err := s.market.FindByID(ctx, listingID)
+	if err != nil {
+		return err
+	}
+	if listing.Status != domain.ListingActive {
+		return domain.ErrNotFound
+	}
+	oldPrice := listing.PriceNanoton
+	if err := s.market.UpdateListingPrice(ctx, listingID, priceNanoton); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "market_listing_price_updated", "market_listing", listingID.String(), map[string]any{
+		"old_price_nanoton": oldPrice,
+		"new_price_nanoton": priceNanoton,
 	})
 }
 

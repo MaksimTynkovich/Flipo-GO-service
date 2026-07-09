@@ -42,7 +42,7 @@ func (h *AnalyticsHandler) Ingest(c *gin.Context) {
 		} `json:"events" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondBadRequest(c, err, "invalid analytics payload", "invalid_payload")
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *AnalyticsHandler) Ingest(c *gin.Context) {
 		})
 	}
 	if err := h.analytics.TrackBatch(c.Request.Context(), inputs); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

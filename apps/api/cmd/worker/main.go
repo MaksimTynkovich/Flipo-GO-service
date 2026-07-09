@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
@@ -19,6 +20,7 @@ func main() {
 	config.LoadDotEnv()
 
 	cfg := config.Load()
+	log.Init("worker", cfg.Env)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

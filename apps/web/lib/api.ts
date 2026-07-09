@@ -62,17 +62,22 @@ function dispatchSessionRefreshed(user: User) {
 
 async function rawFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken();
+  const requestId = typeof crypto !== "undefined" ? crypto.randomUUID() : "";
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     "X-Session-ID": typeof window !== "undefined" ? getAnalyticsSessionId() : "",
     "X-Client-Path": typeof window !== "undefined" ? getCurrentPath() : "",
+    ...(requestId ? { "X-Request-ID": requestId } : {}),
     ...(NGROK_API ? { "ngrok-skip-browser-warning": "1" } : {}),
     ...(options.headers || {}),
   };
   if (token) {
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
-  return fetch(`${API_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  (res as Response & { requestId?: string }).requestId =
+    res.headers.get("X-Request-ID") || requestId || undefined;
+  return res;
 }
 
 /** Re-authenticate via Telegram initData (or debug auth) without a full page reload. */
@@ -122,6 +127,10 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     const message = err.error || "Request failed";
+    const requestId =
+      res.headers.get("X-Request-ID") ||
+      (res as Response & { requestId?: string }).requestId ||
+      undefined;
     trackErrorSurface({
       surface: "api",
       error_code: `${path.replace(/^\/api\/v1\//, "").replace(/\//g, "_")}_failed`,
@@ -129,6 +138,8 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
       properties: {
         path,
         http_status: res.status,
+        request_id: requestId,
+        error_code: err.code,
       },
     });
     throw new Error(message);
@@ -1010,6 +1021,13 @@ export async function getAdminAuditLogs() {
 
 export async function getAdminGameConfigs() {
   return api<AdminGameConfig[]>("/api/v1/admin/games/configs");
+}
+
+export async function updateAdminMarketListingPrice(id: string, priceNanoton: number) {
+  return api<{ ok: boolean }>(`/api/v1/admin/market/listings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ price_nanoton: priceNanoton }),
+  });
 }
 
 export async function updateAdminGameConfig(config: AdminGameConfig) {

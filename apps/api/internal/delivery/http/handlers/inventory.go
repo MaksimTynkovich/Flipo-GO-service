@@ -25,7 +25,7 @@ func (h *InventoryHandler) List(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	items, err := h.inventory.ListAll(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -123,7 +123,7 @@ func (h *InventoryHandler) ListStaking(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	positions, err := h.staking.ListPositions(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, positions)
@@ -139,7 +139,7 @@ func (h *InventoryHandler) SetFloorPrice(c *gin.Context) {
 		return
 	}
 	if err := h.inventory.SetFloorPrice(c.Request.Context(), req.CollectionSlug, req.PriceNanoton); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

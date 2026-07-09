@@ -15,6 +15,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/handlers"
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
@@ -54,6 +55,7 @@ func main() {
 	flag.Parse()
 
 	cfg := config.Load()
+	log.Init("api", cfg.Env)
 	if err := validateWalletConfig(cfg); err != nil {
 		slog.Error("wallet config invalid", "error", err)
 		os.Exit(1)
@@ -118,7 +120,7 @@ func main() {
 	walletSvc.SetRiskEvaluator(risk.WalletEvaluator{Service: riskSvc})
 	walletSvc.SetAnalytics(analyticsSvc)
 	fairnessSvc := fairness.NewService(platformRepo, gameRepo)
-	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, tonTransferRepo)
+	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, tonTransferRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)

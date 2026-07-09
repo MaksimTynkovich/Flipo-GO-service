@@ -1,21 +1,54 @@
 import { AUTH_SESSION_REFRESHED, getAuthToken, silentReauth, WS_URL } from "./api";
+import { trackErrorSurface } from "./analytics";
 
 export type WSMessage = {
   event: string;
   payload: unknown;
 };
 
+function trackWSIssue(
+  channel: string,
+  code: string,
+  message?: string,
+  properties?: Record<string, unknown>,
+) {
+  trackErrorSurface({
+    surface: "ws",
+    error_code: code,
+    error_message: message,
+    event_category: "realtime",
+    properties: {
+      channel,
+      ...properties,
+    },
+  });
+}
+
+function attachGameWSHandlers(ws: WebSocket, game: "roulette" | "crash" | "pvp") {
+  ws.onerror = () => {
+    trackWSIssue(`games/${game}`, `ws_${game}_error`, "WebSocket connection error");
+  };
+  ws.onclose = (event) => {
+    if (event.code !== 1000) {
+      trackWSIssue(`games/${game}`, `ws_${game}_close`, event.reason || "connection closed", {
+        close_code: event.code,
+      });
+    }
+  };
+}
+
 export function connectGameWS(
   game: "roulette" | "crash" | "pvp",
   onMessage: (msg: WSMessage) => void,
 ): () => void {
   const ws = new WebSocket(`${WS_URL}/ws/games/${game}`);
+  attachGameWSHandlers(ws, game);
 
   ws.onmessage = (ev) => {
     try {
       onMessage(JSON.parse(ev.data));
     } catch {
-      // ignore malformed
+      trackWSIssue(`games/${game}`, `ws_${game}_malformed`, "Malformed WebSocket payload");
     }
   };
 
@@ -54,16 +87,25 @@ export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
 
     ws = new WebSocket(`${WS_URL}/ws/user?token=${encodeURIComponent(token)}`);
 
+    ws.onerror = () => {
+      trackWSIssue("user", "ws_user_error", "User WebSocket connection error");
+    };
+
     ws.onmessage = (ev) => {
       try {
         onMessage(JSON.parse(ev.data));
       } catch {
-        // ignore malformed
+        trackWSIssue("user", "ws_user_malformed", "Malformed WebSocket payload");
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (!closed) {
+        if (event.code !== 1000) {
+          trackWSIssue("user", "ws_user_close", event.reason || "connection closed", {
+            close_code: event.code,
+          });
+        }
         scheduleReconnect(3000);
       }
     };

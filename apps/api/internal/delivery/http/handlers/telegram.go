@@ -36,7 +36,7 @@ func (h *TelegramHandler) Webhook(c *gin.Context) {
 	}
 
 	if err := h.updates.HandleUpdate(c.Request.Context(), update); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondInternal(c, err)
 		return
 	}
 

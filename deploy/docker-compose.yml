@@ -33,6 +33,7 @@ services:
       - "8080:8080"
     environment:
       API_PORT: "8080"
+      LOG_FILE: /var/log/flipo/api.log
       DATABASE_URL: postgres://flipo:flipo@postgres:5432/flipo?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       BOT_TOKEN: ${BOT_TOKEN}
@@ -42,6 +43,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ../logs:/var/log/flipo
 
   web:
     build:

@@ -270,8 +270,14 @@ export async function flushAnalyticsEvents() {
       body: JSON.stringify({ events }),
       keepalive: true,
     });
-  } catch {
+  } catch (error) {
     queue.unshift(...events.slice(-50));
+    trackErrorSurface({
+      surface: "api",
+      error_code: "analytics_flush_failed",
+      error_message: error instanceof Error ? error.message : "analytics flush failed",
+      event_category: "analytics",
+    });
   }
 }
 
@@ -439,4 +445,33 @@ export function trackScreenView(pathname: string) {
   currentScreen = pathname;
   screenEnteredAt = Date.now();
   pushJourney(pathname);
+}
+
+let clientErrorLoggingInstalled = false;
+
+export function installClientErrorLogging() {
+  if (typeof window === "undefined" || clientErrorLoggingInstalled) return;
+  clientErrorLoggingInstalled = true;
+
+  window.addEventListener("error", (event) => {
+    trackErrorSurface({
+      surface: "ui",
+      error_code: "uncaught_error",
+      error_message: event.message,
+      properties: {
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+      },
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason;
+    trackErrorSurface({
+      surface: "ui",
+      error_code: "unhandled_rejection",
+      error_message: reason instanceof Error ? reason.message : String(reason),
+    });
+  });
 }

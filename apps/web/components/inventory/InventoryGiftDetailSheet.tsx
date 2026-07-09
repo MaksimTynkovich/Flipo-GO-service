@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, Gift, X } from "lucide-react";
+import { ArrowUpRight, Copy, Gift, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatTON, InventoryItem, MarketListing } from "@/lib/api";
+import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { formatCollectionSlug, giftImageUrl, giftValuationNanoton, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
@@ -43,6 +44,7 @@ export function InventoryGiftDetailSheet({
 }: Props) {
   const [imgError, setImgError] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showWithdrawHint, setShowWithdrawHint] = useState(false);
 
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
   const valuation = giftValuationNanoton(item);
@@ -51,6 +53,7 @@ export function InventoryGiftDetailSheet({
   useEffect(() => {
     setImgError(false);
     setCopied(false);
+    setShowWithdrawHint(false);
   }, [item.id]);
 
   async function handleCopy() {
@@ -130,6 +133,40 @@ export function InventoryGiftDetailSheet({
 
         <div className="shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
           {listError && <p className="mb-3 text-center text-sm text-danger">{listError}</p>}
+
+          {item.status === "available" && (
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => setShowWithdrawHint((value) => !value)}
+                aria-expanded={showWithdrawHint}
+                className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors active:text-foreground"
+              >
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-raised text-[10px] font-semibold">
+                  i
+                </span>
+                Как вывести подарок?
+              </button>
+
+              {showWithdrawHint && (
+                <div className="mt-2 rounded-2xl bg-surface-raised/60 px-3.5 py-3">
+                  <p className="text-xs leading-relaxed text-muted">
+                    Перед выводом отправьте боту {depositBotMention()} любое сообщение — без этого Telegram не
+                    сможет доставить подарок обратно вам.
+                  </p>
+                  <a
+                    href={depositBotTelegramUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-accent"
+                  >
+                    Открыть {depositBotMention()}
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
 
           {item.status === "available" && (
             <div className="mb-1 flex items-start justify-between gap-3">
