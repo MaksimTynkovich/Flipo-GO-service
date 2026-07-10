@@ -41,21 +41,25 @@ export function GamesLobbyView() {
               <div className="games-card__aura" aria-hidden />
               <GamesCardArt tone={item.tone} />
 
-              <div className="games-card__top">
-                <div className="games-card__icon">
-                  <item.icon className="h-6 w-6" strokeWidth={2.1} />
+              <div className="games-card__content">
+                <div className="games-card__top">
+                  <div className="games-card__icon">
+                    <item.icon className="h-5 w-5" strokeWidth={2.1} />
+                  </div>
+                  <span className="games-card__badge">{item.badge}</span>
                 </div>
-                <span className="games-card__badge">{item.badge}</span>
-              </div>
 
-              <div className="games-card__body">
-                <p className="games-card__title">{item.title}</p>
-                <p className="games-card__desc">{item.description}</p>
-              </div>
+                <div className="games-card__body">
+                  <p className="games-card__title">{item.title}</p>
+                  <p className="games-card__desc">{item.description}</p>
+                </div>
 
-              <div className="games-card__footer">
-                <span className="games-card__cta">Играть</span>
-                <ArrowRight className="games-card__arrow h-4 w-4" strokeWidth={2.2} />
+                <div className="games-card__footer">
+                  <span className="games-card__cta">
+                    Играть
+                    <ArrowRight className="games-card__arrow h-3.5 w-3.5" strokeWidth={2.4} />
+                  </span>
+                </div>
               </div>
             </Link>
           ))}

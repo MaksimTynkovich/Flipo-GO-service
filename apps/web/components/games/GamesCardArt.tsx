@@ -1,25 +1,72 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 type Tone = "crash" | "roulette" | "pvp";
 
-/** Decorative background art unique to each game mode. */
+function CrashLiveMult() {
+  const [mult, setMult] = useState(1);
+
+  useEffect(() => {
+    let raf = 0;
+    const t0 = performance.now();
+    const CYCLE_MS = 4800;
+
+    const tick = (now: number) => {
+      const t = ((now - t0) % CYCLE_MS) / CYCLE_MS;
+      // Slow start, then climbs like a real crash round — reset before "crash"
+      const climbed = 1 + Math.pow(t, 1.45) * 4.2;
+      setMult(climbed);
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div className="games-art-crash__mult">
+      <span className="games-art-crash__value">{mult.toFixed(2)}</span>
+      <span className="games-art-crash__x">×</span>
+    </div>
+  );
+}
+
+/** Side preview art — readable metaphor for each mode. */
 export function GamesCardArt({ tone }: { tone: Tone }) {
   if (tone === "crash") {
     return (
       <div className="games-card__art games-card__art--crash" aria-hidden>
-        <svg className="games-card__art-svg" viewBox="0 0 180 140" fill="none">
-          <path
-            className="games-art-crash__grid"
-            d="M20 20v100M50 20v100M80 20v100M110 20v100M140 20v100M170 20v100M20 40h150M20 70h150M20 100h150"
-          />
-          <path
-            className="games-art-crash__trail"
-            d="M12 118 C 40 112, 48 96, 62 78 C 78 56, 92 42, 118 28 C 138 18, 152 14, 172 8"
-          />
-          <circle className="games-art-crash__dot games-art-crash__dot--1" cx="62" cy="78" r="3.2" />
-          <circle className="games-art-crash__dot games-art-crash__dot--2" cx="118" cy="28" r="3.6" />
-          <circle className="games-art-crash__rocket" cx="172" cy="8" r="5" />
-        </svg>
+        <div className="games-art-crash">
+          <CrashLiveMult />
+          <svg className="games-art-crash__chart" viewBox="0 0 120 64" fill="none">
+            <path
+              className="games-art-crash__baseline"
+              d="M6 52 H114"
+              strokeDasharray="2 3"
+            />
+            <path
+              className="games-art-crash__trail-glow"
+              d="M8 50 C 28 48, 38 38, 52 28 C 68 16, 82 10, 102 6"
+            />
+            <path
+              className="games-art-crash__trail"
+              d="M8 50 C 28 48, 38 38, 52 28 C 68 16, 82 10, 102 6"
+            />
+            {/* Outer SVG translate stays fixed; CSS animates only the inner group */}
+            <g transform="translate(102 6) rotate(18)">
+              <g className="games-art-crash__rocket">
+                <path
+                  className="games-art-crash__flame"
+                  d="M-1 0 L-7 -2.4 L-7 2.4 Z"
+                />
+                <path d="M0 -4.2 L11 0 L0 4.2 L2.2 0 Z" />
+                <circle cx="5.2" cy="0" r="1.15" className="games-art-crash__rocket-window" />
+              </g>
+            </g>
+          </svg>
+          <span className="games-art-crash__caption">успей забрать</span>
+        </div>
       </div>
     );
   }
@@ -27,48 +74,29 @@ export function GamesCardArt({ tone }: { tone: Tone }) {
   if (tone === "roulette") {
     return (
       <div className="games-card__art games-card__art--roulette" aria-hidden>
-        <svg className="games-card__art-svg" viewBox="0 0 160 160" fill="none">
-          <g className="games-art-roulette__wheel">
-            <circle cx="80" cy="80" r="62" className="games-art-roulette__rim" />
-            <path d="M80 80 L80 18 A62 62 0 0 1 128.5 38 Z" className="games-art-roulette__seg games-art-roulette__seg--red" />
-            <path d="M80 80 L128.5 38 A62 62 0 0 1 142 80 Z" className="games-art-roulette__seg games-art-roulette__seg--black" />
-            <path d="M80 80 L142 80 A62 62 0 0 1 128.5 122 Z" className="games-art-roulette__seg games-art-roulette__seg--red" />
-            <path d="M80 80 L128.5 122 A62 62 0 0 1 80 142 Z" className="games-art-roulette__seg games-art-roulette__seg--black" />
-            <path d="M80 80 L80 142 A62 62 0 0 1 31.5 122 Z" className="games-art-roulette__seg games-art-roulette__seg--red" />
-            <path d="M80 80 L31.5 122 A62 62 0 0 1 18 80 Z" className="games-art-roulette__seg games-art-roulette__seg--green" />
-            <path d="M80 80 L18 80 A62 62 0 0 1 31.5 38 Z" className="games-art-roulette__seg games-art-roulette__seg--black" />
-            <path d="M80 80 L31.5 38 A62 62 0 0 1 80 18 Z" className="games-art-roulette__seg games-art-roulette__seg--red" />
-            <circle cx="80" cy="80" r="18" className="games-art-roulette__hub" />
-            <circle cx="80" cy="80" r="6" className="games-art-roulette__pin" />
-          </g>
-          <circle className="games-art-roulette__ball" cx="80" cy="22" r="4.5" />
-        </svg>
+        <div className="games-art-roulette">
+          <div className="games-art-roulette__disk" />
+          <span className="games-art-roulette__hub">
+            <span className="games-art-roulette__pin" />
+          </span>
+        </div>
+        <div className="games-card__art-legend">
+          <span className="games-card__swatch games-card__swatch--red" />
+          <span className="games-card__swatch games-card__swatch--black" />
+          <span className="games-card__swatch games-card__swatch--green" />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="games-card__art games-card__art--pvp" aria-hidden>
-      <svg className="games-card__art-svg" viewBox="0 0 180 140" fill="none">
-        <path
-          className="games-art-pvp__beam games-art-pvp__beam--left"
-          d="M-10 130 L95 55 L88 48 L-20 118 Z"
-        />
-        <path
-          className="games-art-pvp__beam games-art-pvp__beam--right"
-          d="M190 130 L85 55 L92 48 L200 118 Z"
-        />
-        <path
-          className="games-art-pvp__slash"
-          d="M72 42 L108 78 M78 36 L114 72"
-        />
-        <circle className="games-art-pvp__spark games-art-pvp__spark--1" cx="90" cy="58" r="3" />
-        <circle className="games-art-pvp__spark games-art-pvp__spark--2" cx="102" cy="48" r="2.2" />
-        <circle className="games-art-pvp__spark games-art-pvp__spark--3" cx="78" cy="68" r="2" />
-        <text className="games-art-pvp__vs" x="90" y="108" textAnchor="middle">
-          VS
-        </text>
-      </svg>
+      <div className="games-art-pvp__duel">
+        <span className="games-art-pvp__face games-art-pvp__face--a">A</span>
+        <span className="games-art-pvp__vs">VS</span>
+        <span className="games-art-pvp__face games-art-pvp__face--b">B</span>
+      </div>
+      <span className="games-card__art-chip games-card__art-chip--pvp">1 на 1</span>
     </div>
   );
 }
