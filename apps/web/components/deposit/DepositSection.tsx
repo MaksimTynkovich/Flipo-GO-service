@@ -39,7 +39,9 @@ export function DepositSection() {
         ))}
       </div>
 
-      {tab === "ton" ? <TonWalletPanel /> : <InventoryDepositGuide variant="deposit" />}
+      <div key={tab} className="segment-panel">
+        {tab === "ton" ? <TonWalletPanel /> : <InventoryDepositGuide variant="deposit" />}
+      </div>
     </div>
   );
 }

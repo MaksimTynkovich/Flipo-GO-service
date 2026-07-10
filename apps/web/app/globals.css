@@ -3,19 +3,32 @@
 @tailwind utilities;
 
 :root {
-  /* Telegram dark defaults — overridden at runtime by theme sync */
-  --background: #17212b;
-  --foreground: #f5f5f5;
-  --surface: #232e3c;
-  --surface-raised: #2b3949;
+  /* Cool fintech dark — surfaces may be overridden by Telegram theme sync */
+  --background: #0c141c;
+  --foreground: #f2f5f7;
+  --surface: #141c27;
+  --surface-raised: #1a2433;
   --border: rgba(255, 255, 255, 0.06);
-  --muted: #708499;
-  --accent: #8774e1;
-  --accent-subtle: color-mix(in srgb, #8774e1 14%, transparent);
-  --link: #9d8fe8;
-  --primary: #8774e1;
-  --success: #4fae4e;
+  --muted: #7a8b9a;
+  --accent: #3390ec;
+  --accent-subtle: color-mix(in srgb, #3390ec 14%, transparent);
+  --accent-foreground: #ffffff;
+  --link: #6ab3f3;
+  --primary: #3390ec;
+  --success: #3ecf8e;
   --danger: #e56555;
+
+  /* Flat — no 3D drop shadows; sheets use overlay motion only */
+  --shadow-elev-1: none;
+  --shadow-elev-2: none;
+  --shadow-elev-3: none;
+
+  --duration-slow: 300ms;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+
   --app-safe-top: max(
     env(safe-area-inset-top, 0px),
     calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px))
@@ -45,19 +58,28 @@
 
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    sans-serif;
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 55%),
+    radial-gradient(90% 60% at 100% 20%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 50%),
+    radial-gradient(70% 50% at 0% 80%, color-mix(in srgb, #1a6bb8 10%, transparent), transparent 45%),
+    var(--background);
+  background-attachment: fixed;
+  font-family: var(--font-sans), system-ui, sans-serif;
   min-height: 100vh;
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  letter-spacing: -0.011em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @layer components {
@@ -65,13 +87,30 @@ body {
     @apply mx-auto w-full max-w-lg px-4;
   }
 
-  /* Borderless surface card */
+  .elev-1 {
+    box-shadow: var(--shadow-elev-1);
+  }
+
+  .elev-2 {
+    box-shadow: var(--shadow-elev-2);
+  }
+
+  .elev-3 {
+    box-shadow: var(--shadow-elev-3);
+  }
+
   .panel {
-    @apply rounded-2xl bg-surface p-4;
+    @apply relative overflow-hidden rounded-2xl bg-surface p-4;
+    background:
+      linear-gradient(
+        165deg,
+        color-mix(in srgb, white 4%, var(--surface)) 0%,
+        var(--surface) 100%
+      );
   }
 
   .panel-sm {
-    @apply rounded-xl bg-surface px-3.5 py-3;
+    @apply relative overflow-hidden rounded-xl bg-surface px-3.5 py-3;
   }
 
   .surface-inset {
@@ -79,23 +118,43 @@ body {
   }
 
   .stat-tile {
-    @apply rounded-xl bg-surface-raised px-3 py-2.5;
+    @apply relative overflow-hidden rounded-xl bg-surface-raised px-3 py-2.5;
+    transition:
+      background-color var(--duration-fast) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .stat-tile:hover {
+      filter: brightness(1.04);
+    }
   }
 
   .input-field {
-    @apply w-full rounded-xl bg-surface-raised px-4 py-3 text-sm text-foreground outline-none transition-[box-shadow,background-color] disabled:opacity-40;
+    @apply w-full rounded-xl bg-surface-raised px-4 py-3 text-sm text-foreground outline-none disabled:opacity-40;
+    transition:
+      box-shadow var(--duration-base) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out);
   }
 
   .input-field::placeholder {
     color: var(--muted);
   }
 
-  .input-field:focus {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  .input-field:focus,
+  .input-field:focus-visible {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 38%, transparent);
   }
 
   .input-inset {
     @apply flex items-center rounded-xl bg-surface-raised px-4 py-3;
+    transition:
+      box-shadow var(--duration-base) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out);
+  }
+
+  .input-inset:focus-within {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 38%, transparent);
   }
 
   .input-inset input[type="number"] {
@@ -118,8 +177,29 @@ body {
   }
 
   .chip-accent {
+    position: relative;
     background: var(--accent-subtle);
     color: var(--accent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .chip-live {
+    position: relative;
+    padding-left: 1.35rem;
+  }
+
+  .chip-live::before {
+    content: "";
+    position: absolute;
+    left: 0.55rem;
+    top: 50%;
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 9999px;
+    background: var(--accent);
+    transform: translateY(-50%);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+    animation: live-pulse 1.8s var(--ease-out) infinite;
   }
 
   .segment-control {
@@ -127,34 +207,159 @@ body {
   }
 
   .segment-item {
-    @apply flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-medium text-muted transition-colors;
+    @apply flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-medium text-muted;
+    transition:
+      color var(--duration-base) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out),
+      opacity var(--duration-base) var(--ease-out);
+  }
+
+  .segment-item:active {
+    transform: scale(0.98);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .segment-item:hover:not(.segment-item-active) {
+      color: var(--foreground);
+      background: color-mix(in srgb, var(--surface) 55%, transparent);
+    }
   }
 
   .segment-item-active {
-    @apply bg-surface text-foreground shadow-sm;
+    @apply bg-surface text-foreground;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+
+  .segment-panel {
+    animation: fade-slide-in 0.28s var(--ease-out) both;
   }
 
   .quick-amount {
-    @apply flex h-9 flex-1 items-center justify-center rounded-lg bg-surface-raised text-xs font-semibold text-muted transition-colors;
+    @apply flex h-9 flex-1 items-center justify-center rounded-lg bg-surface-raised text-xs font-semibold text-muted;
+    transition:
+      color var(--duration-base) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
+  }
+
+  .quick-amount:active {
+    transform: scale(0.97);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .quick-amount:hover:not(.quick-amount-active) {
+      color: var(--foreground);
+      background: color-mix(in srgb, var(--surface-raised) 70%, white);
+    }
   }
 
   .quick-amount-active {
     background: var(--accent-subtle);
     color: var(--accent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+
+  .app-control {
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out),
+      color var(--duration-fast) var(--ease-out),
+      opacity var(--duration-fast) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      box-shadow var(--duration-base) var(--ease-out);
+  }
+
+  .app-control:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .app-control:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
+  .interactive-card {
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out);
+  }
+
+  .interactive-card:active {
+    transform: scale(0.985);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .interactive-card:hover {
+      filter: brightness(1.05);
+      background: color-mix(in srgb, var(--surface) 88%, white);
+    }
+  }
+
+  .btn-primary {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, white 10%, var(--accent)) 0%,
+      var(--accent) 55%,
+      color-mix(in srgb, black 8%, var(--accent)) 100%
+    );
+    color: var(--accent-foreground);
+  }
+
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      color-mix(in srgb, white 28%, transparent) 50%,
+      transparent 65%
+    );
+    transform: translateX(-120%);
+    transition: transform 0.55s var(--ease-out);
+    pointer-events: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover:not(:disabled) {
+      filter: brightness(1.06);
+    }
+
+    .btn-primary:hover:not(:disabled)::after {
+      transform: translateX(120%);
+    }
+  }
+
+  .btn-primary:active:not(:disabled) {
+    filter: brightness(0.94);
   }
 
   .admin-btn {
-    @apply inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40;
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out),
+      color var(--duration-fast) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out);
+  }
+
+  .admin-btn:active:not(:disabled) {
+    transform: scale(0.98);
   }
 
   .admin-btn-primary {
     background: var(--accent-subtle);
     color: var(--accent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
   }
 
   .admin-btn-primary:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 18%, var(--surface-raised));
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface-raised));
   }
 
   .admin-btn-secondary {
@@ -170,9 +375,57 @@ body {
   }
 
   .icon-box {
+    position: relative;
+    overflow: hidden;
     background: var(--accent-subtle);
     color: var(--accent);
     @apply flex shrink-0 items-center justify-center rounded-2xl;
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out),
+      filter var(--duration-fast) var(--ease-out);
+  }
+
+  .stagger-item {
+    animation: stagger-in 0.42s var(--ease-out) both;
+  }
+
+  .balance-pill {
+    background: var(--surface-raised);
+    transition:
+      filter var(--duration-fast) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .balance-pill:hover {
+      filter: brightness(1.05);
+      background: color-mix(in srgb, var(--surface-raised) 85%, white);
+    }
+  }
+
+  .tab-icon-wrap {
+    position: relative;
+    transition:
+      background-color var(--duration-base) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
+  }
+
+  .tab-icon-wrap-active {
+    background: var(--accent-subtle);
+  }
+
+  .tab-icon-wrap-active::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -0.35rem;
+    width: 0.85rem;
+    height: 0.16rem;
+    border-radius: 9999px;
+    background: var(--accent);
+    transform: translateX(-50%);
+    animation: tab-dot-in 0.28s var(--ease-out) both;
   }
 
   .hairline-top {
@@ -184,31 +437,32 @@ body {
   }
 
   .glass {
-    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--border);
   }
 
   .glass-inset {
-    background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
+    background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--border);
   }
 
   .pvp-player-avatar--active {
     opacity: calc(0.52 + var(--hl, 0) * 0.48);
     transform: scale(calc(0.94 + var(--hl, 0) * 0.06));
-    filter: saturate(calc(0.7 + var(--hl, 0) * 0.45)) brightness(calc(0.72 + var(--hl, 0) * 0.34));
-    box-shadow:
-      0 0 0 calc(1px + var(--hl, 0) * 1px) color-mix(in srgb, var(--accent) calc(10% + var(--hl, 0) * 18%), transparent),
-      0 0 calc(14px + var(--hl, 0) * 22px) color-mix(in srgb, var(--accent) calc(8% + var(--hl, 0) * 16%), transparent);
+    filter: saturate(calc(0.8 + var(--hl, 0) * 0.3)) brightness(calc(0.82 + var(--hl, 0) * 0.24));
+    box-shadow: 0 0 0 calc(1.5px + var(--hl, 0) * 1px)
+      color-mix(in srgb, var(--accent) calc(28% + var(--hl, 0) * 40%), transparent);
     transition:
-      opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-      transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-      filter 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+      opacity 0.2s var(--ease-out),
+      transform 0.2s var(--ease-out),
+      filter 0.2s var(--ease-out),
+      box-shadow 0.2s var(--ease-out);
+  }
+
+  .page-enter {
+    animation: page-enter 0.36s var(--ease-out) both;
   }
 }
 
@@ -218,6 +472,54 @@ body {
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+    opacity: 1;
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+    opacity: 0.75;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    opacity: 1;
+  }
+}
+
+@keyframes tab-dot-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scaleX(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1);
+  }
 }
 
 @keyframes balance-gain-rise {
@@ -256,8 +558,7 @@ body {
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1;
-  text-shadow: 0 1px 12px color-mix(in srgb, var(--success) 40%, transparent);
-  animation: balance-gain-rise 2.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: balance-gain-rise 2.5s var(--ease-out) forwards;
 }
 
 @keyframes toast-enter {
@@ -272,7 +573,7 @@ body {
 }
 
 .toast-enter {
-  animation: toast-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: toast-enter 0.22s var(--ease-out);
 }
 
 @keyframes splash-spin {
@@ -300,4 +601,68 @@ body {
   100% {
     box-shadow: inset 0 0 0 0 rgba(229, 101, 85, 0);
   }
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.overlay-backdrop {
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+.overlay-backdrop-open {
+  opacity: 1;
+}
+
+.overlay-sheet-host {
+  opacity: 1;
+  transform: translateY(100%);
+  transition:
+    transform var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out);
+  will-change: transform, opacity;
+}
+
+.overlay-sheet-host-open {
+  transform: translateY(0);
+}
+
+.overlay-popover-host {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+  transition:
+    transform var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-out);
+  will-change: transform, opacity;
+}
+
+.overlay-popover-host-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-backdrop,
+  .overlay-sheet-host,
+  .overlay-popover-host,
+  .segment-panel {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.sheet-panel {
+  @apply rounded-t-[1.75rem] bg-surface;
 }

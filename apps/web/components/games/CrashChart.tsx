@@ -218,7 +218,7 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
   return (
     <div
       className={cn(
-        "glass relative mx-auto aspect-[5/3] w-full max-w-md overflow-hidden rounded-2xl",
+        "relative mx-auto aspect-[5/3] w-full max-w-md overflow-hidden rounded-2xl bg-surface",
         crashed && "animate-[crash-flash_0.45s_ease-out]",
       )}
     >

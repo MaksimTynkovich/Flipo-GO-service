@@ -128,14 +128,14 @@ export function PvpAvatarStrip({
 
   return (
     <div className={cn("relative w-full", className)}>
-      <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 text-accent drop-shadow-[0_0_14px_color-mix(in_srgb,var(--accent)_55%,transparent)]">
+      <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 text-accent">
         <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
       </div>
 
       <div
         ref={viewportRef}
         className={cn(
-          "relative mt-4 overflow-hidden rounded-2xl bg-[linear-gradient(180deg,rgba(30,37,58,0.78),rgba(19,24,40,0.84))] py-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)]",
+          "relative mt-4 overflow-hidden rounded-2xl bg-surface-raised py-4",
           dimmed && "opacity-40",
         )}
       >
@@ -158,8 +158,8 @@ export function PvpAvatarStrip({
           ))}
         </div>
 
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-[rgba(19,24,40,0.98)] via-[rgba(19,24,40,0.7)] to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-[rgba(19,24,40,0.98)] via-[rgba(19,24,40,0.7)] to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-surface-raised via-surface-raised/70 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-surface-raised via-surface-raised/70 to-transparent" />
       </div>
     </div>
   );

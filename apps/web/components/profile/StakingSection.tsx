@@ -180,7 +180,7 @@ export function StakingSection() {
           </div>
 
           {tab === "staked" && (
-            <section className="space-y-3">
+            <section key="staked" className="segment-panel space-y-3">
               {stakedGifts.length === 0 ? (
                 <div className="panel py-10 text-center">
                   <p className="font-medium">Стейкинг пуст</p>
@@ -208,7 +208,7 @@ export function StakingSection() {
           )}
 
           {tab === "add" && (
-            <section className="space-y-3">
+            <section key="add" className="segment-panel space-y-3">
               {unstakedGifts.length === 0 ? (
                 <div className="panel py-10 text-center">
                   {gifts.length > 0 ? (

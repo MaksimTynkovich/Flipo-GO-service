@@ -35,7 +35,8 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
 
   return (
     <ModalOverlay onClose={onClose} analyticsModalId="staking_gift_detail">
-      <div className="relative mx-auto w-full max-w-lg rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]">
+      {(close) => (
+      <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
 
         <div className="relative mb-4 flex items-center justify-center">
@@ -44,7 +45,7 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
           </p>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             aria-label="Закрыть"
             className="absolute right-0 flex h-9 w-9 items-center justify-center rounded-full bg-surface-raised text-muted transition-opacity active:opacity-70"
           >
@@ -112,6 +113,7 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
           </p>
         )}
       </div>
+      )}
     </ModalOverlay>
   );
 }

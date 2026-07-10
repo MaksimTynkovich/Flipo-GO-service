@@ -17,10 +17,26 @@ const config: Config = {
         border: "var(--border)",
         muted: "var(--muted)",
         accent: "var(--accent)",
+        "accent-foreground": "var(--accent-foreground)",
         primary: "var(--primary)",
         success: "var(--success)",
         danger: "var(--danger)",
         card: "var(--surface)",
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+      },
+      boxShadow: {
+        elev1: "var(--shadow-elev-1)",
+        elev2: "var(--shadow-elev-2)",
+        elev3: "var(--shadow-elev-3)",
+      },
+      transitionTimingFunction: {
+        out: "cubic-bezier(0.22, 1, 0.36, 1)",
+      },
+      transitionDuration: {
+        fast: "150ms",
+        base: "200ms",
       },
     },
   },

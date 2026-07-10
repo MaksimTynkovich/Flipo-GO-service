@@ -73,11 +73,12 @@ export function MarketGiftDetailSheet({
 
   return (
     <ModalOverlay onClose={onClose} analyticsModalId="market_gift_detail">
+      {(close) => (
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Покупка подарка"
-        className="relative mx-auto flex w-full max-w-lg max-h-[min(92dvh,100%)] flex-col rounded-t-[1.75rem] bg-surface shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+        className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(92dvh,100%)] flex-col"
       >
         <div className="shrink-0 px-4 pt-2">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
@@ -86,7 +87,7 @@ export function MarketGiftDetailSheet({
             <p className="text-[15px] font-semibold text-foreground">Подарок</p>
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               aria-label="Закрыть"
               className="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised text-muted transition-opacity active:opacity-70"
             >
@@ -165,6 +166,7 @@ export function MarketGiftDetailSheet({
           )}
         </div>
       </div>
+      )}
     </ModalOverlay>
   );
 }

@@ -66,7 +66,7 @@ export function PvpOpenRoomCard({
 
   return (
     <>
-      <article className="panel p-3">
+      <article className="app-control interactive-card panel p-3">
         <div className="flex items-center gap-3">
           <div className="size-10 shrink-0">
             {creator ? <PvpPlayerAvatar player={creator} size={40} /> : null}

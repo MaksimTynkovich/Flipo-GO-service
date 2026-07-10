@@ -30,7 +30,7 @@ export function StakingActionBar({
       {/* Резервируем место под фиксированную панель, чтобы карточки не перекрывались */}
       <div className="h-[8.75rem] shrink-0" aria-hidden />
       <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-4">
-        <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-[var(--border)] bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+        <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-[var(--border)] bg-surface">
           {showMetrics && (
             <div className="grid grid-cols-2 divide-x divide-[var(--border)] border-b border-[var(--border)]">
               <div className="px-4 py-3">

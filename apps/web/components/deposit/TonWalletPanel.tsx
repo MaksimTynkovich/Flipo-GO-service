@@ -390,7 +390,7 @@ export function TonWalletPanel() {
           </div>
 
           {mode === "deposit" ? (
-            <div className="space-y-3">
+            <div key="deposit" className="segment-panel space-y-3">
               <label className="block space-y-2">
                 <span className="text-xs text-muted">Сумма пополнения</span>
                 <input
@@ -416,7 +416,7 @@ export function TonWalletPanel() {
               </Button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div key="withdraw" className="segment-panel space-y-3">
               <label className="block space-y-2">
                 <span className="text-xs text-muted">Сколько получить на кошелёк</span>
                 <input
@@ -464,7 +464,7 @@ export function TonWalletPanel() {
               </div>
 
               <Button
-                className="h-11 w-full rounded-xl shadow-[0_8px_24px_color-mix(in_srgb,var(--accent)_28%,transparent)]"
+                className="h-11 w-full rounded-xl"
                 disabled={loading}
                 onClick={handleWithdraw}
               >

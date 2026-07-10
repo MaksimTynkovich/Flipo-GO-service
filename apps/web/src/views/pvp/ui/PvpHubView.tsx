@@ -292,7 +292,8 @@ export function PvpHubView() {
 
       {joinRoomId && joinRoom ? (
         <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
-          <div className="relative mx-auto w-full max-w-lg rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]">
+          {(close) => (
+          <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
             <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
             <p className="mb-1 text-center text-xs text-muted">
@@ -332,7 +333,7 @@ export function PvpHubView() {
               <Button
                 variant="outline"
                 className="h-11 rounded-xl"
-                onClick={() => setJoinRoomId(null)}
+                onClick={close}
                 disabled={!!joiningId}
               >
                 Отмена
@@ -347,6 +348,7 @@ export function PvpHubView() {
               </Button>
             </div>
           </div>
+          )}
         </ModalOverlay>
       ) : null}
 

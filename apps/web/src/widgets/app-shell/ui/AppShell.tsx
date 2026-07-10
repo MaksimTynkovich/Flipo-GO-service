@@ -15,7 +15,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <AppHeader />
       <main
         className={cn(
-          "min-h-[100dvh] pb-[var(--app-tabbar-offset)] pt-[var(--app-header-offset)]",
+          "page-enter min-h-[100dvh] pb-[var(--app-tabbar-offset)] pt-[var(--app-header-offset)]",
           isAdmin ? "admin-container" : "app-container",
         )}
       >

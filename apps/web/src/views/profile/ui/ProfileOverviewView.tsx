@@ -166,9 +166,9 @@ export function ProfileOverviewView() {
           <Link
             href={APP_ROUTES.profileStaking}
             onClick={() => haptics.impactOccurred("medium")}
-            className="panel flex items-center gap-3.5 transition-transform active:scale-[0.99]"
+            className="app-control interactive-card panel stagger-item group flex items-center gap-3.5"
           >
-            <div className="icon-box h-11 w-11">
+            <div className="icon-box h-11 w-11 transition-transform duration-200 ease-out group-hover:scale-110 group-hover:-rotate-3">
               <Sparkles className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -177,16 +177,17 @@ export function ProfileOverviewView() {
             </div>
             <div className="flex shrink-0 items-center gap-1 text-accent">
               <span className="text-xs font-semibold">Открыть</span>
-              <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+              <ChevronRight className="h-5 w-5 transition-transform duration-200 ease-out group-hover:translate-x-0.5" strokeWidth={2.25} />
             </div>
           </Link>
 
           <Link
             href={APP_ROUTES.inventory}
             onClick={() => haptics.impactOccurred("medium")}
-            className="panel flex items-center gap-3.5 transition-transform active:scale-[0.99]"
+            className="app-control interactive-card panel stagger-item group flex items-center gap-3.5"
+            style={{ animationDelay: "70ms" }}
           >
-            <div className="icon-box h-11 w-11">
+            <div className="icon-box h-11 w-11 transition-transform duration-200 ease-out group-hover:scale-110 group-hover:-rotate-3">
               <Gift className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -195,16 +196,17 @@ export function ProfileOverviewView() {
             </div>
             <div className="flex shrink-0 items-center gap-1 text-accent">
               <span className="text-xs font-semibold">Открыть</span>
-              <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+              <ChevronRight className="h-5 w-5 transition-transform duration-200 ease-out group-hover:translate-x-0.5" strokeWidth={2.25} />
             </div>
           </Link>
 
           <Link
             href={APP_ROUTES.profileReferrals}
             onClick={() => haptics.impactOccurred("medium")}
-            className="panel flex items-center gap-3.5 transition-transform active:scale-[0.99]"
+            className="app-control interactive-card panel stagger-item group flex items-center gap-3.5"
+            style={{ animationDelay: "140ms" }}
           >
-            <div className="icon-box h-11 w-11">
+            <div className="icon-box h-11 w-11 transition-transform duration-200 ease-out group-hover:scale-110 group-hover:-rotate-3">
               <Users className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -213,7 +215,7 @@ export function ProfileOverviewView() {
             </div>
             <div className="flex shrink-0 items-center gap-1 text-accent">
               <span className="text-xs font-semibold">Открыть</span>
-              <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+              <ChevronRight className="h-5 w-5 transition-transform duration-200 ease-out group-hover:translate-x-0.5" strokeWidth={2.25} />
             </div>
           </Link>
 
@@ -221,9 +223,10 @@ export function ProfileOverviewView() {
             <Link
               href={APP_ROUTES.admin}
               onClick={() => haptics.impactOccurred("medium")}
-              className="panel flex items-center gap-3.5 transition-transform active:scale-[0.99]"
+              className="app-control interactive-card panel stagger-item group flex items-center gap-3.5"
+              style={{ animationDelay: "210ms" }}
             >
-              <div className="icon-box h-11 w-11">
+              <div className="icon-box h-11 w-11 transition-transform duration-200 ease-out group-hover:scale-110 group-hover:-rotate-3">
                 <Shield className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
@@ -232,7 +235,7 @@ export function ProfileOverviewView() {
               </div>
               <div className="flex shrink-0 items-center gap-1 text-accent">
                 <span className="text-xs font-semibold">Открыть</span>
-                <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
+                <ChevronRight className="h-5 w-5 transition-transform duration-200 ease-out group-hover:translate-x-0.5" strokeWidth={2.25} />
               </div>
             </Link>
           ) : null}

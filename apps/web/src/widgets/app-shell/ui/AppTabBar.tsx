@@ -13,7 +13,7 @@ export function AppTabBar() {
   return (
     <nav
       aria-label="Основная навигация"
-      className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] backdrop-blur-2xl hairline-top"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-background/88 pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] backdrop-blur-xl hairline-top"
     >
       <div className="app-container grid h-[3.25rem] grid-cols-4 items-stretch">
         {MAIN_TABS.map(({ href, label, icon: Icon, match }) => {
@@ -26,11 +26,22 @@ export function AppTabBar() {
               aria-current={active ? "page" : undefined}
               onClick={() => haptics.selectionChanged()}
               className={cn(
-                "flex min-w-0 flex-col items-center justify-center gap-0.5 transition-colors active:opacity-70",
-                active ? "text-accent" : "text-muted",
+                "app-control flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl",
+                active ? "text-accent" : "text-muted hover:text-foreground",
               )}
             >
-              <Icon size={22} strokeWidth={active ? 2.25 : 1.75} />
+              <span
+                className={cn(
+                  "tab-icon-wrap flex h-7 w-7 items-center justify-center rounded-lg",
+                  active && "tab-icon-wrap-active",
+                )}
+              >
+                <Icon
+                  size={20}
+                  strokeWidth={active ? 2.4 : 1.75}
+                  className={cn(active && "transition-transform duration-200 ease-out")}
+                />
+              </span>
               <span className={cn("truncate text-[10px]", active ? "font-semibold" : "font-medium")}>
                 {label}
               </span>

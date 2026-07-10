@@ -29,7 +29,7 @@ export function MarketGiftCard({ listing, onClick }: Props) {
     <button
       type="button"
       onClick={() => onClick?.(listing)}
-      className="panel flex flex-col gap-2 p-2 text-left transition-opacity active:opacity-80"
+      className="app-control interactive-card panel flex flex-col gap-2 p-2 text-left"
     >
       <div className="relative aspect-square overflow-hidden rounded-xl bg-surface-raised">
         {!imgError ? (

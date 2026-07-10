@@ -206,8 +206,8 @@ export function RouletteWheel({ state }: Props) {
         />
       </div>
 
-      <div className="glass relative h-full w-full rounded-full p-[3px] shadow-[0_8px_32px_rgba(0,0,0,0.18)]">
-        <div className="relative h-full w-full rounded-full bg-surface/40 p-[2px]">
+      <div className="relative h-full w-full rounded-full bg-surface p-[3px]">
+        <div className="relative h-full w-full rounded-full bg-surface-raised p-[2px]">
           <div
             ref={wheelRef}
             className="relative h-full w-full overflow-hidden rounded-full will-change-transform"
@@ -266,9 +266,9 @@ export function RouletteWheel({ state }: Props) {
         </div>
       </div>
 
-      <div className="glass-inset pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[44%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-foreground shadow-[0_0_0_3px_color-mix(in_srgb,var(--surface)_90%,transparent)]">
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[44%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface text-foreground ring-[3px] ring-surface-raised">
         {phase === "betting" && (
-          <span className="text-[1.65rem] font-semibold tabular-nums leading-none tracking-tight">
+          <span className="text-[1.65rem] font-semibold tabular-nums leading-none tracking-tight text-accent">
             {countdown.toString().padStart(2, "0")}
           </span>
         )}

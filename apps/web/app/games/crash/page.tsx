@@ -311,7 +311,7 @@ export default function CrashPage() {
               disabled={!canBet}
               onClick={bet}
               className={cn(
-                "flex h-11 items-center justify-center rounded-xl bg-accent text-sm font-bold text-white transition-all active:scale-[0.98]",
+                "app-control btn-primary flex h-11 items-center justify-center rounded-xl text-sm font-bold",
                 !canBet && "opacity-40",
               )}
             >
@@ -326,7 +326,7 @@ export default function CrashPage() {
               disabled={!canCashout}
               onClick={cashout}
               className={cn(
-                "flex h-11 items-center justify-center rounded-xl bg-success text-sm font-bold text-white transition-all active:scale-[0.98]",
+                "app-control flex h-11 items-center justify-center rounded-xl bg-success text-sm font-bold text-white hover:brightness-110",
                 !canCashout && "opacity-40",
               )}
             >

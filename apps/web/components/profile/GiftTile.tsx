@@ -75,7 +75,7 @@ export function GiftTile({ gift, selected, onToggle, onInspect }: Props) {
       <button
         type="button"
         onClick={() => onInspect?.(gift)}
-        className="panel flex w-full flex-col gap-2 p-2 text-left transition-opacity active:opacity-80"
+        className="app-control interactive-card panel flex w-full flex-col gap-2 p-2 text-left"
       >
         <GiftTileImage
           imageSrc={imageSrc}
@@ -83,7 +83,7 @@ export function GiftTile({ gift, selected, onToggle, onInspect }: Props) {
           imgError={imgError}
           onError={() => setImgError(true)}
           overlay={
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-success shadow-[0_0_8px_var(--success)]" />
+            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-success" />
           }
         />
         <GiftTileMeta name={gift.name} collection={collection}>
@@ -103,9 +103,9 @@ export function GiftTile({ gift, selected, onToggle, onInspect }: Props) {
       onClick={() => isSelectable && onToggle?.(gift.slug)}
       disabled={!isSelectable}
       className={cn(
-        "panel flex w-full flex-col gap-2 p-2 text-left transition-all active:opacity-80",
-        isSelectable && selected && "ring-2 ring-accent",
-        isSelectable && !selected && "opacity-80",
+        "app-control interactive-card panel flex w-full flex-col gap-2 p-2 text-left",
+        isSelectable && selected && "ring-1 ring-inset ring-accent/50 bg-accent/5",
+        isSelectable && !selected && "opacity-90",
       )}
     >
       <GiftTileImage
@@ -116,7 +116,7 @@ export function GiftTile({ gift, selected, onToggle, onInspect }: Props) {
         overlay={
           isSelectable &&
           selected && (
-            <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-surface shadow-sm">
+            <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-foreground">
               <Check className="h-3 w-3" strokeWidth={3} />
             </span>
           )

@@ -123,7 +123,7 @@ export function BetFundingPanel({
       </div>
 
       {mode === "balance" ? (
-        <>
+        <div key="balance" className="segment-panel space-y-3">
           <div className="input-inset py-2.5">
             <input
               type="number"
@@ -158,9 +158,9 @@ export function BetFundingPanel({
               ))}
             </div>
           )}
-        </>
+        </div>
       ) : (
-        <div className="space-y-2">
+        <div key="gift" className="segment-panel space-y-2">
           {multiple && selectedGiftIds.length > 0 && (
             <p className="text-center text-[11px] text-muted">
               Выбрано: {selectedGiftIds.length}
@@ -189,10 +189,10 @@ export function BetFundingPanel({
                     disabled={disabled}
                     onClick={() => toggleGift(item.id)}
                     className={cn(
-                      "flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-xl border p-2 transition-colors",
+                      "app-control flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-xl bg-surface-raised p-2",
                       active
-                        ? "border-accent bg-accent/10"
-                        : "border-border bg-surface-raised/60",
+                        ? "bg-accent/12 ring-1 ring-inset ring-accent/40"
+                        : "hover:bg-[color-mix(in_srgb,var(--surface-raised)_70%,white)]",
                       disabled && "opacity-40",
                     )}
                   >

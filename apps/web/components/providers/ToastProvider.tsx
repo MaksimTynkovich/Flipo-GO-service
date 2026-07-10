@@ -25,15 +25,15 @@ const TOAST_HEIGHT_PX = 28;
 
 const VARIANT_STYLES: Record<ToastVariant, { pill: string; text: string }> = {
   success: {
-    pill: "bg-success shadow-[0_4px_16px_color-mix(in_srgb,var(--success)_40%,transparent)]",
+    pill: "bg-success",
     text: "text-white",
   },
   error: {
-    pill: "bg-danger shadow-[0_4px_16px_color-mix(in_srgb,var(--danger)_40%,transparent)]",
+    pill: "bg-danger",
     text: "text-white",
   },
   info: {
-    pill: "bg-[#e8b923] shadow-[0_4px_16px_rgba(232,185,35,0.35)]",
+    pill: "bg-[#e8b923]",
     text: "text-[#1a1408]",
   },
 };

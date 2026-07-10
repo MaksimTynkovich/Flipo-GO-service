@@ -23,11 +23,12 @@ export function PvpStakeDetailSheet({ player, stakeNanoton, onClose }: Props) {
 
   return (
     <ModalOverlay onClose={onClose} analyticsModalId="pvp_stake_detail">
+      {(close) => (
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Ставка игрока"
-        className="relative mx-auto flex w-full max-w-lg max-h-[min(92dvh,100%)] flex-col rounded-t-[1.75rem] bg-surface shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+        className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(92dvh,100%)] flex-col"
       >
         <div className="shrink-0 px-4 pt-2">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
@@ -36,7 +37,7 @@ export function PvpStakeDetailSheet({ player, stakeNanoton, onClose }: Props) {
             <p className="text-center text-[15px] font-semibold">Ставка</p>
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               className="absolute right-0 flex size-8 items-center justify-center rounded-full text-muted"
               aria-label="Закрыть"
             >
@@ -93,6 +94,7 @@ export function PvpStakeDetailSheet({ player, stakeNanoton, onClose }: Props) {
           </div>
         </div>
       </div>
+      )}
     </ModalOverlay>
   );
 }
