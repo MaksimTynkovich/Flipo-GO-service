@@ -35,6 +35,8 @@ type Props = {
   title?: string;
   subtitle?: string;
   className?: string;
+  /** Crash / Roulette: prepare TON + gifts in one sheet. */
+  combined?: boolean;
 };
 
 export function BetFundingControl({
@@ -51,11 +53,12 @@ export function BetFundingControl({
   multiple = true,
   amountInputProps,
   title = "Ставка",
-  subtitle = "TON с баланса или подарок из инвентаря",
+  subtitle,
   className,
+  combined = false,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const needsGifts = mode === "gift" || open;
+  const needsGifts = combined || mode === "gift" || open;
   const { gifts, reload } = useBettableGifts(needsGifts);
 
   useEffect(() => {
@@ -72,10 +75,20 @@ export function BetFundingControl({
     [selectedGifts],
   );
 
-  const summaryReady =
-    mode === "balance"
-      ? parseFloat(amountTon || "0") > 0 || (fixedStakeNanoton != null && fixedStakeNanoton > 0)
-      : selectedGiftIds.length > 0;
+  const amountNanoton =
+    fixedStakeNanoton != null && fixedStakeNanoton > 0
+      ? fixedStakeNanoton
+      : Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+  const hasTon = amountNanoton > 0;
+  const hasGifts = selectedGiftIds.length > 0;
+
+  const summaryReady = combined
+    ? hasTon || hasGifts
+    : mode === "balance"
+      ? hasTon
+      : hasGifts;
+
+  const resolvedSubtitle = subtitle ?? null;
 
   return (
     <>
@@ -92,18 +105,54 @@ export function BetFundingControl({
         )}
       >
         <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface">
-          {mode === "gift" && selectedGifts.length > 0 ? (
+          {hasGifts ? (
             <GiftPreview gifts={selectedGifts} />
-          ) : mode === "gift" ? (
-            <Gift className="h-5 w-5 text-muted" />
-          ) : (
+          ) : hasTon || (!combined && mode === "balance") ? (
             <TonIcon variant="brand" className="h-6 w-6" title="TON" />
+          ) : (
+            <Gift className="h-5 w-5 text-muted" />
           )}
         </span>
 
         <span className="min-w-0 flex-1">
           <span className="block text-[11px] font-medium text-muted">{title}</span>
-          {mode === "balance" ? (
+          {combined ? (
+            summaryReady ? (
+              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[15px] font-semibold text-foreground">
+                {hasTon ? (
+                  <TonAmount
+                    amount={
+                      fixedStakeNanoton != null && fixedStakeNanoton > 0
+                        ? formatTON(fixedStakeNanoton)
+                        : amountTon || "0"
+                    }
+                    iconSize="sm"
+                  />
+                ) : null}
+                {hasTon && hasGifts ? (
+                  <span className="text-muted">+</span>
+                ) : null}
+                {hasGifts ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>
+                      {selectedGifts.length === 1
+                        ? selectedGifts[0].name
+                        : pluralizeGifts(selectedGiftIds.length)}
+                    </span>
+                    {giftTotalNanoton > 0 && (
+                      <span className="text-sm font-medium tabular-nums text-muted">
+                        <TonAmount amount={formatTON(giftTotalNanoton)} iconSize="xs" />
+                      </span>
+                    )}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="mt-0.5 block text-[15px] font-semibold text-muted">
+                TON и/или подарки
+              </span>
+            )
+          ) : mode === "balance" ? (
             <span className="mt-0.5 flex items-center gap-1.5 text-[15px] font-semibold tabular-nums text-foreground">
               <TonAmount
                 amount={
@@ -155,7 +204,9 @@ export function BetFundingControl({
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
               <div className="mb-4 text-center">
                 <p className="text-[15px] font-semibold text-foreground">{title}</p>
-                <p className="mt-1 text-xs text-muted">{subtitle}</p>
+                {resolvedSubtitle ? (
+                  <p className="mt-1 text-xs text-muted">{resolvedSubtitle}</p>
+                ) : null}
               </div>
 
               <BetFundingPanel
@@ -172,6 +223,7 @@ export function BetFundingControl({
                 multiple={multiple}
                 amountInputProps={amountInputProps}
                 layout="sheet"
+                combined={combined}
               />
 
               <Button

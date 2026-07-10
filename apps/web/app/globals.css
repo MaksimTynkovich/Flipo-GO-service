@@ -2531,22 +2531,6 @@ body::-webkit-scrollbar,
   text-shadow: 0 0 14px rgba(245, 200, 76, 0.4);
 }
 
-.crash-live-gain--bump .crash-live-gain__value {
-  animation: crash-live-gain-bump 0.18s var(--ease-out);
-}
-
-@keyframes crash-live-gain-bump {
-  0% {
-    transform: scale(1);
-  }
-  45% {
-    transform: scale(1.08);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
 .crash-cashout-btn {
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 45%, transparent);
   animation: crash-cashout-pulse 1.35s ease-out infinite;

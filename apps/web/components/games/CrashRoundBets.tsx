@@ -7,7 +7,7 @@ import {
   BetGiftView,
 } from "@/lib/api";
 import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
-import { TonAmount } from "@/components/icons/TonIcon";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { crashPlayerName, formatMultiplier } from "@/lib/crash";
 import { cn } from "@/lib/utils";
 
@@ -117,10 +117,10 @@ function liveGainNanoton(
 function formatLiveGain(nanoton: number): string {
   const ton = nanoton / 1_000_000_000;
   if (ton >= 100) return ton.toFixed(1);
-  if (ton >= 10) return ton.toFixed(2);
   return ton.toFixed(2);
 }
 
+/** Smoothly lerps the displayed gain toward the live target — no bump/jitter. */
 function LiveGainPlaque({
   valueNanoton,
   hot,
@@ -128,28 +128,43 @@ function LiveGainPlaque({
   valueNanoton: number;
   hot?: boolean;
 }) {
-  const label = formatLiveGain(valueNanoton);
-  const prevRef = useRef(label);
-  const [bump, setBump] = useState(false);
+  const displayRef = useRef(valueNanoton);
+  const targetRef = useRef(valueNanoton);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const rafRef = useRef(0);
+
+  targetRef.current = valueNanoton;
 
   useEffect(() => {
-    if (prevRef.current === label) return;
-    prevRef.current = label;
-    setBump(true);
-    const t = window.setTimeout(() => setBump(false), 180);
-    return () => window.clearTimeout(t);
-  }, [label]);
+    let alive = true;
+
+    const tick = () => {
+      if (!alive) return;
+      const target = targetRef.current;
+      const cur = displayRef.current;
+      const next = cur + (target - cur) * 0.22;
+      const settled = Math.abs(target - next) < Math.max(1_000, Math.abs(target) * 0.0004);
+      displayRef.current = settled ? target : next;
+      if (labelRef.current) {
+        labelRef.current.textContent = formatLiveGain(displayRef.current);
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   return (
-    <div
-      className={cn(
-        "crash-live-gain",
-        hot && "crash-live-gain--hot",
-        bump && "crash-live-gain--bump",
-      )}
-    >
-      <span className="crash-live-gain__value">
-        <TonAmount amount={label} iconSize="xs" iconClassName="text-success" />
+    <div className={cn("crash-live-gain", hot && "crash-live-gain--hot")}>
+      <span className="crash-live-gain__value inline-flex items-center gap-1">
+        <span ref={labelRef} className="tabular-nums">
+          {formatLiveGain(valueNanoton)}
+        </span>
+        <TonIcon variant="brand" size="xs" className="text-success" />
       </span>
     </div>
   );

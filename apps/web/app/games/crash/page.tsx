@@ -33,7 +33,6 @@ import { connectGameWS } from "@/lib/ws";
 import { cn } from "@/lib/utils";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
-import { BetFundingMode } from "@/lib/bet-funding";
 import { crashBetClosedLabel } from "@/lib/bet-cta";
 import { useCountdownSeconds } from "@/src/shared/hooks/useCountdownSeconds";
 
@@ -63,7 +62,6 @@ export default function CrashPage() {
   const [history, setHistory] = useState<CrashHistoryEntry[]>([]);
   const [roundBets, setRoundBets] = useState<CrashRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
-  const [fundingMode, setFundingMode] = useState<BetFundingMode>("balance");
   const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
   const [liveMult, setLiveMult] = useState(1);
   const liveMultRef = useRef(1);
@@ -279,12 +277,15 @@ export default function CrashPage() {
     state?.phase === "waiting" || state?.phase === "crashed",
   );
 
+  const preparedGiftIds = selectedGiftIds.filter((id) => !excludedGiftIds.includes(id));
+  const preparedTonNanoton = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+  const preparedBetCount =
+    (preparedTonNanoton > 0 ? 1 : 0) + preparedGiftIds.length;
+
   const betButtonLabel = (() => {
     if (betting) return "…";
     if (canBet) {
-      return fundingMode === "gift" && selectedGiftIds.length > 1
-        ? `Поставить (${selectedGiftIds.length})`
-        : "Поставить";
+      return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
     }
     const base = crashBetClosedLabel(state?.phase);
     if (waitSeconds > 0 && (state?.phase === "waiting" || state?.phase === "crashed")) {
@@ -302,13 +303,8 @@ export default function CrashPage() {
   const cashoutMult = state?.phase === "running" ? (state.multiplier ?? liveMult) : displayMult;
 
   const totalStakeNanoton = roundActiveBets.reduce((sum, bet) => sum + bet.amount_nanoton, 0);
-  const potentialWinTon =
-    roundActiveBets.reduce((sum, bet) => {
-      const gross = bet.amount_nanoton * cashoutMult;
-      const isGift = bet.funding_type === "gift";
-      const net = isGift ? gross - bet.amount_nanoton : gross;
-      return sum + net;
-    }, 0) / 1_000_000_000;
+  /** Gross cashout value (stake × mult) — what the button shows. */
+  const cashoutTotalTon = (totalStakeNanoton * cashoutMult) / 1_000_000_000;
 
   const parsedAutoTarget = Number.parseFloat(autoTarget.replace(",", "."));
   const autoCashoutValue =
@@ -331,27 +327,18 @@ export default function CrashPage() {
       return;
     }
 
-    const giftIds =
-      fundingMode === "gift" ? selectedGiftIds.filter((id) => !excludedGiftIds.includes(id)) : [];
+    const giftIds = preparedGiftIds;
+    const nanotons = preparedTonNanoton;
 
-    if (fundingMode === "gift") {
-      if (giftIds.length === 0) {
-        showToast({ variant: "error", title: "Выберите подарок для ставки." });
-        haptics.notificationOccurred("error");
-        return;
-      }
-    } else {
-      const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
-      if (nanotons <= 0) {
-        showToast({ variant: "error", title: "Укажите корректную сумму ставки." });
-        haptics.notificationOccurred("error");
-        return;
-      }
-      if (user && user.betting_balance < nanotons) {
-        showToast({ variant: "error", title: "Недостаточно средств на балансе." });
-        haptics.notificationOccurred("error");
-        return;
-      }
+    if (nanotons <= 0 && giftIds.length === 0) {
+      showToast({ variant: "error", title: "Укажите сумму TON или выберите подарок." });
+      haptics.notificationOccurred("error");
+      return;
+    }
+    if (nanotons > 0 && user && user.betting_balance < nanotons) {
+      showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+      haptics.notificationOccurred("error");
+      return;
     }
 
     if (autoEnabled && autoCashoutValue == null) {
@@ -364,29 +351,25 @@ export default function CrashPage() {
     betAmountInput.complete();
     try {
       const options = { autoCashoutMultiplier: autoCashoutValue };
-      if (fundingMode === "gift") {
-        for (const giftId of giftIds) {
-          await placeCrashBet(
-            crypto.randomUUID(),
-            { mode: "gift", inventoryItemId: giftId },
-            options,
-          );
-        }
-        setSelectedGiftIds([]);
-      } else {
+      if (nanotons > 0) {
         await placeCrashBet(
           crypto.randomUUID(),
-          {
-            mode: "balance",
-            amountNanoton: Math.floor(parseFloat(amountTon || "0") * 1_000_000_000),
-          },
+          { mode: "balance", amountNanoton: nanotons },
           options,
         );
       }
+      for (const giftId of giftIds) {
+        await placeCrashBet(
+          crypto.randomUUID(),
+          { mode: "gift", inventoryItemId: giftId },
+          options,
+        );
+      }
+      if (giftIds.length > 0) setSelectedGiftIds([]);
       haptics.notificationOccurred("success");
       await loadActiveBets();
       loadRoundBets();
-      if (fundingMode === "gift") notifyBettableGiftsChanged();
+      if (giftIds.length > 0) notifyBettableGiftsChanged();
     } catch (e) {
       showToast({ variant: "error", title: formatGameBetError(e) });
       haptics.notificationOccurred("error");
@@ -548,18 +531,24 @@ export default function CrashPage() {
     [tryClientAutoCashout],
   );
 
+  const cashoutAmountRef = useRef<HTMLSpanElement>(null);
+  const cashoutStakeRef = useRef(0);
+  cashoutStakeRef.current = totalStakeNanoton;
+
+  const onLiveFrame = useCallback((mult: number) => {
+    const el = cashoutAmountRef.current;
+    const stake = cashoutStakeRef.current;
+    if (!el || stake <= 0) return;
+    el.textContent = ((stake * mult) / 1_000_000_000).toFixed(2);
+  }, []);
+
   const primaryDisabled = betting || cashingOut || (!canCashout && !canBet);
   const primaryAction = canCashout ? cashout : bet;
   const primaryLabel = (() => {
     if (cashingOut || betting) return "…";
-    if (canCashout) {
-      const win = potentialWinTon.toFixed(2);
-      return roundActiveBets.length > 1 ? `Забрать все · ${win}` : `Забрать · ${win}`;
-    }
+    if (canCashout) return null; // rendered with live amount span
     if (canBet) {
-      return fundingMode === "gift" && selectedGiftIds.length > 1
-        ? `Поставить (${selectedGiftIds.length})`
-        : "Поставить";
+      return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
     }
     if (state?.phase === "running") return "Нет ставки";
     return betButtonLabel;
@@ -580,8 +569,11 @@ export default function CrashPage() {
             roundActiveBets.length > 0 && state?.phase === "running"
               ? {
                   stakeTon: formatTON(totalStakeNanoton),
-                  winTon: potentialWinTon.toFixed(2),
                   betCount: roundActiveBets.length,
+                  bets: roundActiveBets.map((bet) => ({
+                    amount_nanoton: bet.amount_nanoton,
+                    funding_type: bet.funding_type,
+                  })),
                   gifts: activeGiftIcons.map((gift) => ({
                     id: gift.id,
                     image_url: gift.image_url,
@@ -597,6 +589,7 @@ export default function CrashPage() {
               : null
           }
           onLiveMultiplier={onLiveMultiplier}
+          onLiveFrame={onLiveFrame}
           onMilestone={(m) => {
             if (m >= 10) haptics.notificationOccurred("success");
             else if (m >= 5) haptics.impactOccurred("medium");
@@ -606,8 +599,8 @@ export default function CrashPage() {
 
         <div className="panel space-y-3">
           <BetFundingControl
-            mode={fundingMode}
-            onModeChange={setFundingMode}
+            mode="balance"
+            onModeChange={() => {}}
             amountTon={amountTon}
             onAmountTonChange={setAmountTon}
             selectedGiftIds={selectedGiftIds}
@@ -615,6 +608,7 @@ export default function CrashPage() {
             excludedGiftIds={excludedGiftIds}
             disabled={!canEditBet}
             quickAmounts={QUICK_AMOUNTS}
+            combined
             amountInputProps={betAmountInput.bind({
               onChange: (e) => setAmountTon(e.target.value),
             })}
@@ -641,7 +635,14 @@ export default function CrashPage() {
                   : "bg-surface-raised text-muted",
             )}
           >
-            {primaryLabel}
+            {canCashout ? (
+              <span className="inline-flex items-center gap-1.5 tabular-nums">
+                <span>{roundActiveBets.length > 1 ? "Забрать все ·" : "Забрать ·"}</span>
+                <span ref={cashoutAmountRef}>{cashoutTotalTon.toFixed(2)}</span>
+              </span>
+            ) : (
+              primaryLabel
+            )}
           </button>
 
           <div className="hairline-top pt-3">

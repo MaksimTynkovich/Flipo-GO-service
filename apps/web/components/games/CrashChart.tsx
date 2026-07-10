@@ -1,7 +1,7 @@
 "use client";
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { TonAmount } from "@/components/icons/TonIcon";
+import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import {
   CrashRoundState,
   CRASH_FLIGHT_VISUAL_MAX,
@@ -31,13 +31,16 @@ type Props = {
   autoScale?: CrashAutoScale | null;
   /** Throttled (~10Hz). Do not setState every frame in parent. */
   onLiveMultiplier?: (mult: number) => void;
+  /** Every animation frame while running — DOM-only updates (no setState). */
+  onLiveFrame?: (mult: number) => void;
   onMilestone?: (mult: number) => void;
 };
 
 export type CrashStakeHud = {
   stakeTon: string;
-  winTon: string;
   betCount: number;
+  /** Pending bets — used to paint live win every frame without React churn. */
+  bets: { amount_nanoton: number; funding_type?: string }[];
   gifts?: { id: string; image_url: string }[];
 };
 
@@ -68,6 +71,25 @@ type Particle = {
 
 const CLOCK_SYNC_BLEND = 0.22;
 const LIVE_EMIT_MS = 100;
+
+function liveCreditNanoton(
+  bets: { amount_nanoton: number; funding_type?: string }[],
+  mult: number,
+): number {
+  if (mult < 1 || bets.length === 0) return 0;
+  let sum = 0;
+  for (const bet of bets) {
+    const gross = bet.amount_nanoton * mult;
+    sum += bet.funding_type === "gift" ? Math.max(0, gross - bet.amount_nanoton) : gross;
+  }
+  return sum;
+}
+
+function formatLiveWinTon(nanoton: number): string {
+  const ton = nanoton / 1_000_000_000;
+  if (ton >= 100) return ton.toFixed(1);
+  return ton.toFixed(2);
+}
 
 const HEAT = {
   calm: { stroke: "#3ecf8e", glow: "rgba(62,207,142,0.45)", flame: "#7dffb2" },
@@ -359,6 +381,7 @@ export function CrashChart({
   stakeHud = null,
   autoScale = null,
   onLiveMultiplier,
+  onLiveFrame,
   onMilestone,
 }: Props) {
   const phase = state?.phase;
@@ -379,6 +402,7 @@ export function CrashChart({
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const multLabelRef = useRef<HTMLSpanElement>(null);
+  const winAmountRef = useRef<HTMLSpanElement>(null);
   const potLabelRef = useRef<HTMLSpanElement>(null);
   const countdownRingRef = useRef<HTMLDivElement>(null);
   const autoFillRef = useRef<HTMLDivElement>(null);
@@ -386,9 +410,11 @@ export function CrashChart({
 
   const stateRef = useRef(state);
   const onLiveRef = useRef(onLiveMultiplier);
+  const onLiveFrameRef = useRef(onLiveFrame);
   const onMilestoneRef = useRef(onMilestone);
   const fxRef = useRef(fx);
   const autoScaleRef = useRef(autoScale);
+  const stakeHudRef = useRef(stakeHud);
 
   const roundRef = useRef<string | null>(null);
   const runStartMs = useRef(0);
@@ -413,9 +439,11 @@ export function CrashChart({
 
   stateRef.current = state;
   onLiveRef.current = onLiveMultiplier;
+  onLiveFrameRef.current = onLiveFrame;
   onMilestoneRef.current = onMilestone;
   fxRef.current = fx;
   autoScaleRef.current = autoScale;
+  stakeHudRef.current = stakeHud;
 
   // Whole-second countdown + smooth ring progress via rAF
   useEffect(() => {
@@ -886,6 +914,15 @@ export function CrashChart({
           multLabelRef.current.dataset.heat = heat;
         }
 
+        const hud = stakeHudRef.current;
+        if (winAmountRef.current && hud?.bets?.length) {
+          winAmountRef.current.textContent = formatLiveWinTon(
+            liveCreditNanoton(hud.bets, mult),
+          );
+        }
+
+        onLiveFrameRef.current?.(mult);
+
         const auto = autoScaleRef.current;
         if (auto?.target && auto.target > 1) {
           const progress = Math.max(0, Math.min(1, (mult - 1) / (auto.target - 1)));
@@ -1166,11 +1203,12 @@ export function CrashChart({
             <div className="crash-stake-hud__side crash-stake-hud__side--win">
               <span className="crash-stake-hud__label">Сейчас</span>
               <span className="crash-stake-hud__value crash-stake-hud__value--win">
-                <TonAmount
-                  amount={stakeHud.winTon}
-                  iconSize="xs"
-                  iconClassName="text-success"
-                />
+                <span className="inline-flex items-center gap-1">
+                  <span ref={winAmountRef} className="tabular-nums">
+                    {formatLiveWinTon(liveCreditNanoton(stakeHud.bets, 1))}
+                  </span>
+                  <TonIcon variant="brand" size="xs" className="text-success" />
+                </span>
               </span>
             </div>
           </div>

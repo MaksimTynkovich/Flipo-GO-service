@@ -21,9 +21,9 @@ import {
 } from "@/lib/api";
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
 import { numberColor, RouletteRoundState } from "@/lib/roulette";
-import { BetFundingMode } from "@/lib/bet-funding";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
+import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
@@ -35,7 +35,6 @@ export default function RoulettePage() {
   const [history, setHistory] = useState<RouletteHistoryEntry[]>([]);
   const [roundBets, setRoundBets] = useState<RouletteRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
-  const [fundingMode, setFundingMode] = useState<BetFundingMode>("balance");
   const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
   const [betting, setBetting] = useState(false);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
@@ -129,45 +128,38 @@ export default function RoulettePage() {
       return;
     }
 
-    const giftIds =
-      fundingMode === "gift" ? selectedGiftIds.filter((id) => !excludedGiftIds.includes(id)) : [];
+    const giftIds = selectedGiftIds.filter((id) => !excludedGiftIds.includes(id));
+    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
 
-    if (fundingMode === "gift") {
-      if (giftIds.length === 0) {
-        showToast({ variant: "error", title: "Выберите подарок для ставки." });
-        haptics.notificationOccurred("error");
-        return;
-      }
-    } else {
-      const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
-      if (nanotons <= 0) {
-        showToast({ variant: "error", title: "Укажите корректную сумму ставки." });
-        haptics.notificationOccurred("error");
-        return;
-      }
-      if (user && user.betting_balance < nanotons) {
-        showToast({ variant: "error", title: "Недостаточно средств на балансе." });
-        haptics.notificationOccurred("error");
-        return;
-      }
+    if (nanotons <= 0 && giftIds.length === 0) {
+      showToast({ variant: "error", title: "Укажите сумму TON или выберите подарок." });
+      haptics.notificationOccurred("error");
+      return;
+    }
+    if (nanotons > 0 && user && user.betting_balance < nanotons) {
+      showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+      haptics.notificationOccurred("error");
+      return;
     }
 
     setBetting(true);
     betAmountInput.complete();
     try {
-      if (fundingMode === "gift") {
-        for (const giftId of giftIds) {
-          await placeRouletteBet(color, crypto.randomUUID(), {
-            mode: "gift",
-            inventoryItemId: giftId,
-          });
-        }
-        setSelectedGiftIds([]);
-      } else {
+      if (nanotons > 0) {
         await placeRouletteBet(color, crypto.randomUUID(), {
           mode: "balance",
-          amountNanoton: Math.floor(parseFloat(amountTon || "0") * 1_000_000_000),
+          amountNanoton: nanotons,
         });
+      }
+      for (const giftId of giftIds) {
+        await placeRouletteBet(color, crypto.randomUUID(), {
+          mode: "gift",
+          inventoryItemId: giftId,
+        });
+      }
+      if (giftIds.length > 0) {
+        setSelectedGiftIds([]);
+        notifyBettableGiftsChanged();
       }
       haptics.notificationOccurred("success");
       loadRoundBets();
@@ -197,8 +189,8 @@ export default function RoulettePage() {
 
         <div className="panel space-y-3">
           <BetFundingControl
-            mode={fundingMode}
-            onModeChange={setFundingMode}
+            mode="balance"
+            onModeChange={() => {}}
             amountTon={amountTon}
             onAmountTonChange={setAmountTon}
             selectedGiftIds={selectedGiftIds}
@@ -206,6 +198,7 @@ export default function RoulettePage() {
             excludedGiftIds={excludedGiftIds}
             disabled={!canEditBet}
             quickAmounts={QUICK_AMOUNTS}
+            combined
             amountInputProps={betAmountInput.bind({
               onChange: (e) => setAmountTon(e.target.value),
             })}
