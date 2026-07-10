@@ -852,6 +852,52 @@ body::-webkit-scrollbar,
   }
 }
 
+.crash-auto-scale {
+  --auto-scale: #5eead4;
+  --auto-scale-glow: rgba(94, 234, 212, 0.4);
+  padding-top: 0.15rem;
+}
+
+.crash-auto-scale__track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.crash-auto-scale__fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--auto-scale) 35%, transparent),
+    var(--auto-scale)
+  );
+  box-shadow: 0 0 8px var(--auto-scale-glow);
+}
+
+.crash-auto-scale__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem 0;
+}
+
+.crash-auto-scale__remain {
+  font-size: 0.62rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 248, 252, 0.7);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+}
+
+.crash-auto-scale__goal {
+  font-size: 0.58rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--auto-scale) 75%, white);
+  opacity: 0.85;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+
 .crash-stake-hud {
   padding: 1.35rem 0.75rem 0.55rem;
   background: linear-gradient(
@@ -1274,6 +1320,59 @@ body::-webkit-scrollbar,
     transparent 78%
   );
   opacity: 0.88;
+}
+
+.crash-live-gain {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.28rem 0.55rem;
+  border-radius: 0.65rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--success) 22%, transparent),
+      color-mix(in srgb, var(--success) 8%, transparent)
+    );
+}
+
+.crash-live-gain__value {
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #7dffb2;
+  text-shadow: 0 0 12px rgba(62, 207, 142, 0.35);
+  line-height: 1.1;
+}
+
+.crash-live-gain--hot {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, #f5c84c 28%, transparent),
+      color-mix(in srgb, var(--success) 14%, transparent)
+    );
+}
+
+.crash-live-gain--hot .crash-live-gain__value {
+  color: #ffe08a;
+  text-shadow: 0 0 14px rgba(245, 200, 76, 0.4);
+}
+
+.crash-live-gain--bump .crash-live-gain__value {
+  animation: crash-live-gain-bump 0.18s var(--ease-out);
+}
+
+@keyframes crash-live-gain-bump {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .crash-cashout-btn {

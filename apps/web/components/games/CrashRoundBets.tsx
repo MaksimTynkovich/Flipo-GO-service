@@ -7,11 +7,14 @@ import {
   BetGiftView,
 } from "@/lib/api";
 import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
+import { TonAmount } from "@/components/icons/TonIcon";
 import { crashPlayerName, formatMultiplier, isCrashBigBet } from "@/lib/crash";
 import { cn } from "@/lib/utils";
 
 type Props = {
   data: CrashRoundBetsData | null;
+  /** Live round multiplier while running — drives the growing gain plaque. */
+  liveMultiplier?: number | null;
 };
 
 type AggregatedPlayer = {
@@ -21,15 +24,22 @@ type AggregatedPlayer = {
   first_name: string;
   photo_url?: string;
   amount_nanoton: number;
+  /** Stake still at risk (pending bets only). */
+  pending_nanoton: number;
   bet_count: number;
   funding_type?: string;
   gift?: BetGiftView;
   gifts: BetGiftView[];
   status: "pending" | "cashed_out" | "lost";
   cashout_multiplier?: number;
-  auto_cashout_multiplier?: number;
   bet_ids: string[];
 };
+
+function statusRank(status: AggregatedPlayer["status"]): number {
+  if (status === "pending") return 0;
+  if (status === "cashed_out") return 1;
+  return 2;
+}
 
 function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
   const byUser = new Map<string, CrashBetEntry[]>();
@@ -43,6 +53,9 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
   for (const [userId, list] of Array.from(byUser.entries())) {
     const head = list[0];
     const amount = list.reduce((sum, bet) => sum + bet.amount_nanoton, 0);
+    const pendingNanoton = list
+      .filter((bet) => bet.status === "pending")
+      .reduce((sum, bet) => sum + bet.amount_nanoton, 0);
     const gifts = list
       .map((bet) => bet.gift)
       .filter((gift): gift is BetGiftView => !!gift);
@@ -72,12 +85,6 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
       if (weight > 0) cashoutMultiplier = weighted / weight;
     }
 
-    const pendingAutos = list
-      .filter((bet) => bet.status === "pending" && bet.auto_cashout_multiplier != null)
-      .map((bet) => bet.auto_cashout_multiplier!);
-    const autoCashout =
-      pendingAutos.length > 0 ? Math.min(...pendingAutos) : undefined;
-
     const allGift = list.every((bet) => bet.funding_type === "gift" || !!bet.gift);
     const anyGift = list.some((bet) => bet.funding_type === "gift" || !!bet.gift);
 
@@ -88,44 +95,111 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
       first_name: head.first_name,
       photo_url: head.photo_url,
       amount_nanoton: amount,
+      pending_nanoton: pendingNanoton,
       bet_count: list.length,
       funding_type: allGift ? "gift" : anyGift ? "mixed" : "balance",
       gift: uniqueGifts[0],
       gifts: uniqueGifts,
       status,
       cashout_multiplier: cashoutMultiplier,
-      auto_cashout_multiplier: autoCashout,
       bet_ids: list.map((bet) => bet.id),
     });
   }
 
+  // Still in play (biggest stake first) → cashed out → lost
   return rows.sort((a, b) => {
-    const aBig = isCrashBigBet(a.amount_nanoton) ? 1 : 0;
-    const bBig = isCrashBigBet(b.amount_nanoton) ? 1 : 0;
-    if (aBig !== bBig) return bBig - aBig;
+    const rank = statusRank(a.status) - statusRank(b.status);
+    if (rank !== 0) return rank;
+    if (a.status === "pending") {
+      return b.pending_nanoton - a.pending_nanoton;
+    }
     return b.amount_nanoton - a.amount_nanoton;
   });
+}
+
+function liveGainNanoton(
+  pendingNanoton: number,
+  mult: number,
+  fundingType?: string,
+): number {
+  if (pendingNanoton <= 0 || mult < 1) return 0;
+  const gross = pendingNanoton * mult;
+  // Gift bets pay profit only; balance bets show full cashout value.
+  if (fundingType === "gift") return Math.max(0, gross - pendingNanoton);
+  return gross;
+}
+
+function formatLiveGain(nanoton: number): string {
+  const ton = nanoton / 1_000_000_000;
+  if (ton >= 100) return ton.toFixed(1);
+  if (ton >= 10) return ton.toFixed(2);
+  return ton.toFixed(2);
+}
+
+function LiveGainPlaque({
+  valueNanoton,
+  hot,
+}: {
+  valueNanoton: number;
+  hot?: boolean;
+}) {
+  const label = formatLiveGain(valueNanoton);
+  const prevRef = useRef(label);
+  const [bump, setBump] = useState(false);
+
+  useEffect(() => {
+    if (prevRef.current === label) return;
+    prevRef.current = label;
+    setBump(true);
+    const t = window.setTimeout(() => setBump(false), 180);
+    return () => window.clearTimeout(t);
+  }, [label]);
+
+  return (
+    <div
+      className={cn(
+        "crash-live-gain",
+        hot && "crash-live-gain--hot",
+        bump && "crash-live-gain--bump",
+      )}
+    >
+      <span className="crash-live-gain__value">
+        <TonAmount amount={label} iconSize="xs" iconClassName="text-success" />
+      </span>
+    </div>
+  );
 }
 
 function PlayerRow({
   player,
   flash,
+  liveMultiplier,
 }: {
   player: AggregatedPlayer;
   flash?: boolean;
+  liveMultiplier?: number | null;
 }) {
   const [imgError, setImgError] = useState(false);
   const name = crashPlayerName(player);
   const initial = (player.first_name?.[0] || player.username?.[0] || "?").toUpperCase();
   const isCashedOut = player.status === "cashed_out";
   const isLost = player.status === "lost";
-  const big = isCrashBigBet(player.amount_nanoton);
+  const isPending = player.status === "pending";
+  const stakeForBig =
+    isCashedOut || isLost ? player.amount_nanoton : player.pending_nanoton || player.amount_nanoton;
+  const big = isCrashBigBet(stakeForBig);
+  const showLiveGain =
+    isPending && liveMultiplier != null && liveMultiplier >= 1 && player.pending_nanoton > 0;
+  const liveGain = showLiveGain
+    ? liveGainNanoton(player.pending_nanoton, liveMultiplier!, player.funding_type)
+    : 0;
+  const hotGain = showLiveGain && liveMultiplier! >= 2;
 
   return (
     <div
       className={cn(
         "crash-player-row flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-[background,opacity] duration-200",
-        big && !isCashedOut && !isLost && "bg-accent/[0.07]",
+        big && isPending && "bg-accent/[0.07]",
         flash && "crash-bet-flash",
         isCashedOut && "crash-player-row--won",
         isLost && "crash-player-row--lost",
@@ -134,7 +208,7 @@ function PlayerRow({
       <span
         className={cn(
           "flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface text-[10px] font-medium text-muted",
-          big && !isCashedOut && !isLost && "ring-1 ring-accent/50",
+          big && isPending && "ring-1 ring-accent/50",
         )}
       >
         {player.photo_url && !imgError ? (
@@ -161,19 +235,18 @@ function PlayerRow({
         </p>
         <p className="text-[11px] tabular-nums text-muted">
           {player.gifts.length > 1 ? (
-            <GiftStakeIcons gifts={player.gifts} size="xs" amountNanoton={player.amount_nanoton} />
+            <GiftStakeIcons
+              gifts={player.gifts}
+              size="xs"
+              amountNanoton={isPending ? player.pending_nanoton : player.amount_nanoton}
+            />
           ) : (
             <BetStakeLabel
-              amountNanoton={player.amount_nanoton}
+              amountNanoton={isPending ? player.pending_nanoton : player.amount_nanoton}
               fundingType={player.funding_type === "mixed" ? "gift" : player.funding_type}
               gift={player.gift}
             />
           )}
-          {player.status === "pending" && player.auto_cashout_multiplier != null ? (
-            <span className="ml-1.5 text-accent/80">
-              авто {formatMultiplier(player.auto_cashout_multiplier)}
-            </span>
-          ) : null}
         </p>
       </div>
 
@@ -184,6 +257,8 @@ function PlayerRow({
           </p>
         ) : isLost ? (
           <p className="text-[11px] font-medium text-danger">Краш</p>
+        ) : showLiveGain ? (
+          <LiveGainPlaque valueNanoton={liveGain} hot={hotGain} />
         ) : (
           <p className="text-[11px] font-medium text-muted">В игре</p>
         )}
@@ -192,7 +267,7 @@ function PlayerRow({
   );
 }
 
-export function CrashRoundBets({ data }: Props) {
+export function CrashRoundBets({ data, liveMultiplier = null }: Props) {
   const bets = data?.bets ?? [];
   const players = useMemo(() => aggregateBets(bets), [bets]);
   const [flashKeys, setFlashKeys] = useState<Set<string>>(() => new Set());
@@ -210,7 +285,6 @@ export function CrashRoundBets({ data }: Props) {
     const newly: string[] = [];
     for (const player of players) {
       if (player.status !== "cashed_out") continue;
-      // Flash when any of the player's bets newly cashes out
       const fresh = player.bet_ids.filter((id) => !seenCashed.current.has(id));
       if (fresh.length === 0) continue;
       for (const id of player.bet_ids) seenCashed.current.add(id);
@@ -246,7 +320,12 @@ export function CrashRoundBets({ data }: Props) {
 
       <div className="max-h-52 space-y-0.5 overflow-y-auto">
         {players.map((player) => (
-          <PlayerRow key={player.key} player={player} flash={flashKeys.has(player.key)} />
+          <PlayerRow
+            key={player.key}
+            player={player}
+            flash={flashKeys.has(player.key)}
+            liveMultiplier={liveMultiplier}
+          />
         ))}
       </div>
     </div>

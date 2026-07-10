@@ -27,6 +27,8 @@ type Props = {
   fx?: CrashStageFx;
   /** Active stake overlay on the stage while the player is in the round. */
   stakeHud?: CrashStakeHud | null;
+  /** Auto-cashout progress toward target while holding. */
+  autoScale?: CrashAutoScale | null;
   /** Throttled (~10Hz). Do not setState every frame in parent. */
   onLiveMultiplier?: (mult: number) => void;
   onMilestone?: (mult: number) => void;
@@ -37,6 +39,10 @@ export type CrashStakeHud = {
   winTon: string;
   betCount: number;
   gifts?: { id: string; image_url: string }[];
+};
+
+export type CrashAutoScale = {
+  target: number;
 };
 
 type Star = {
@@ -351,6 +357,7 @@ export function CrashChart({
   state,
   fx = null,
   stakeHud = null,
+  autoScale = null,
   onLiveMultiplier,
   onMilestone,
 }: Props) {
@@ -374,11 +381,14 @@ export function CrashChart({
   const multLabelRef = useRef<HTMLSpanElement>(null);
   const potLabelRef = useRef<HTMLSpanElement>(null);
   const countdownRingRef = useRef<HTMLDivElement>(null);
+  const autoFillRef = useRef<HTMLDivElement>(null);
+  const autoRemainRef = useRef<HTMLSpanElement>(null);
 
   const stateRef = useRef(state);
   const onLiveRef = useRef(onLiveMultiplier);
   const onMilestoneRef = useRef(onMilestone);
   const fxRef = useRef(fx);
+  const autoScaleRef = useRef(autoScale);
 
   const roundRef = useRef<string | null>(null);
   const runStartMs = useRef(0);
@@ -405,6 +415,7 @@ export function CrashChart({
   onLiveRef.current = onLiveMultiplier;
   onMilestoneRef.current = onMilestone;
   fxRef.current = fx;
+  autoScaleRef.current = autoScale;
 
   // Whole-second countdown + smooth ring progress via rAF
   useEffect(() => {
@@ -875,6 +886,19 @@ export function CrashChart({
           multLabelRef.current.dataset.heat = heat;
         }
 
+        const auto = autoScaleRef.current;
+        if (auto?.target && auto.target > 1) {
+          const progress = Math.max(0, Math.min(1, (mult - 1) / (auto.target - 1)));
+          const remain = Math.max(0, auto.target - mult);
+          if (autoFillRef.current) {
+            autoFillRef.current.style.width = `${(progress * 100).toFixed(2)}%`;
+          }
+          if (autoRemainRef.current) {
+            autoRemainRef.current.textContent =
+              remain < 0.005 ? "цель" : `−${remain.toFixed(2)}×`;
+          }
+        }
+
         if (now - lastEmitMs.current >= LIVE_EMIT_MS) {
           lastEmitMs.current = now;
           onLiveRef.current?.(mult);
@@ -1090,6 +1114,26 @@ export function CrashChart({
         <span className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] font-medium tabular-nums text-white/35">
           #{state.round_number}
         </span>
+      ) : null}
+
+      {autoScale && autoScale.target > 1 && !winFx && !loseFx ? (
+        <div className="crash-auto-scale pointer-events-none absolute inset-x-0 top-0 z-[13]">
+          <div className="crash-auto-scale__track" aria-hidden>
+            <div
+              ref={autoFillRef}
+              className="crash-auto-scale__fill"
+              style={{ width: "0%" }}
+            />
+          </div>
+          <div className="crash-auto-scale__meta">
+            <span ref={autoRemainRef} className="crash-auto-scale__remain">
+              −{(autoScale.target - 1).toFixed(2)}×
+            </span>
+            <span className="crash-auto-scale__goal">
+              {formatMultiplier(autoScale.target)}
+            </span>
+          </div>
+        </div>
       ) : null}
 
       {stakeHud && !winFx && !loseFx ? (

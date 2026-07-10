@@ -256,6 +256,7 @@ export default function CrashPage() {
   }, [roundBets?.bets, user?.id]);
 
   const canBet = state?.phase === "betting" && !betting;
+  const canEditBet = !betting && !cashingOut;
   const canCashout =
     state?.phase === "running" &&
     roundActiveBets.length > 0 &&
@@ -297,11 +298,19 @@ export default function CrashPage() {
       return sum + net;
     }, 0) / 1_000_000_000;
 
-  const parsedAutoTarget = Number.parseFloat(autoTarget);
+  const parsedAutoTarget = Number.parseFloat(autoTarget.replace(",", "."));
   const autoCashoutValue =
     autoEnabled && Number.isFinite(parsedAutoTarget) && parsedAutoTarget >= 1.01
       ? Math.floor(parsedAutoTarget * 100) / 100
       : null;
+
+  const activeAutoTarget = (() => {
+    const targets = roundActiveBets
+      .map((bet) => bet.auto_cashout_multiplier)
+      .filter((v): v is number => v != null && Number.isFinite(v) && v >= 1.01);
+    if (targets.length === 0) return null;
+    return Math.min(...targets);
+  })();
 
   async function bet() {
     if (!canBet) {
@@ -565,6 +574,13 @@ export default function CrashPage() {
                 }
               : null
           }
+          autoScale={
+            activeAutoTarget != null &&
+            roundActiveBets.length > 0 &&
+            state?.phase === "running"
+              ? { target: activeAutoTarget }
+              : null
+          }
           onLiveMultiplier={onLiveMultiplier}
           onMilestone={(m) => {
             if (m >= 10) haptics.notificationOccurred("success");
@@ -582,7 +598,7 @@ export default function CrashPage() {
             selectedGiftIds={selectedGiftIds}
             onSelectGifts={setSelectedGiftIds}
             excludedGiftIds={excludedGiftIds}
-            disabled={!canBet}
+            disabled={!canEditBet}
             quickAmounts={QUICK_AMOUNTS}
             amountInputProps={betAmountInput.bind({
               onChange: (e) => setAmountTon(e.target.value),
@@ -594,7 +610,7 @@ export default function CrashPage() {
             onEnabledChange={setAutoEnabled}
             target={autoTarget}
             onTargetChange={setAutoTarget}
-            disabled={betting || cashingOut}
+            disabled={!canEditBet}
           />
 
           <button
@@ -614,7 +630,10 @@ export default function CrashPage() {
           </button>
 
           <div className="hairline-top pt-3">
-            <CrashRoundBets data={roundBets} />
+            <CrashRoundBets
+              data={roundBets}
+              liveMultiplier={state?.phase === "running" ? liveMult : null}
+            />
           </div>
         </div>
       </div>

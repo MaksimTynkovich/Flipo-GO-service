@@ -92,7 +92,26 @@ export function CrashAutoCashout({
                     inputMode="decimal"
                     disabled={!enabled}
                     value={target}
-                    onChange={(e) => onTargetChange(e.target.value.replace(/[^\d.]/g, ""))}
+                    onChange={(e) => {
+                      // Accept both "," and "." as decimal (RU keyboards send comma).
+                      const raw = e.target.value.replace(/[^\d.,]/g, "");
+                      const sepIdx = raw.search(/[.,]/);
+                      if (sepIdx < 0) {
+                        onTargetChange(raw);
+                        return;
+                      }
+                      const sep = raw[sepIdx]!;
+                      const intPart = raw.slice(0, sepIdx).replace(/[.,]/g, "");
+                      const frac = raw
+                        .slice(sepIdx + 1)
+                        .replace(/[.,]/g, "")
+                        .slice(0, 2);
+                      onTargetChange(
+                        raw.endsWith(sep) && frac.length === 0
+                          ? `${intPart}${sep}`
+                          : `${intPart}${sep}${frac}`,
+                      );
+                    }}
                     className="ml-3 w-full bg-transparent text-right text-lg font-semibold tabular-nums outline-none"
                     aria-label="Множитель автовывода"
                   />
@@ -111,7 +130,7 @@ export function CrashAutoCashout({
                       }}
                       className={cn(
                         "h-10 rounded-xl text-xs font-semibold tabular-nums transition-colors",
-                        target === preset
+                        target.replace(",", ".") === preset
                           ? "bg-accent text-white"
                           : "bg-surface-raised text-muted hover:text-foreground",
                       )}
