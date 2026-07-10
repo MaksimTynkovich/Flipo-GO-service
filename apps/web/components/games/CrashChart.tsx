@@ -84,55 +84,57 @@ function stagePads(w: number, h: number) {
   };
 }
 
+type Cam = { x: number; y: number };
+
 /**
- * World-space rocket position.
- * X eases toward a right-hand comfort zone (never the corner);
- * Y keeps climbing so the camera can scroll past the first screen.
+ * World-space rocket position — X and Y share the same progress so the
+ * trail stays diagonal forever (camera follows once we leave the frame).
  */
 function rocketWorldPos(mult: number, w: number, h: number): Pt {
   const { padX, padBottom, spanX, spanY } = stagePads(w, h);
   const t = flightProgressWorld(Math.max(1, mult));
-
-  // Ease-out on X so late flight becomes more vertical, not a ruler into the corner.
-  const tX = Math.min(t, 1.25);
-  const tx = (1 - Math.pow(1 - tX / 1.25, 1.55)) * 0.9;
-
   return {
-    x: padX + spanX * tx,
+    x: padX + spanX * t,
     y: h - padBottom - spanY * t,
   };
 }
 
-/** Keep the rocket in the upper band with headroom from the clipped frame edge. */
-function cameraYForRocket(worldY: number, h: number): number {
+/** Keep the rocket in an upper-right comfort zone without bending the path. */
+function cameraForRocket(world: Pt, w: number, h: number): Cam {
+  const focusX = w * 0.78;
   const focusY = h * 0.3;
-  return worldY < focusY ? focusY - worldY : 0;
+  return {
+    x: world.x > focusX ? world.x - focusX : 0,
+    y: world.y < focusY ? focusY - world.y : 0,
+  };
 }
 
-function withCamera(p: Pt, camY: number): Pt {
-  return { x: p.x, y: p.y + camY };
+function withCamera(p: Pt, cam: Cam): Pt {
+  return { x: p.x - cam.x, y: p.y + cam.y };
 }
 
 function rocketPos(mult: number, w: number, h: number): Pt {
   const world = rocketWorldPos(mult, w, h);
-  return withCamera(world, cameraYForRocket(world.y, h));
+  return withCamera(world, cameraForRocket(world, w, h));
 }
 
 /**
  * Recent flight ribbon in screen space.
- * Uses a sliding progress window so high multipliers don't draw a long
- * diagonal that visually "hits" the top of the frame.
+ * Sliding window keeps only ~one screen of trail behind the rocket.
  */
 function buildFlightPath(mult: number, w: number, h: number): Pt[] {
   const tip = Math.max(1.001, mult);
   const tipWorld = rocketWorldPos(tip, w, h);
-  const camY = cameraYForRocket(tipWorld.y, h);
+  const cam = cameraForRocket(tipWorld, w, h);
   const tipT = flightProgressWorld(tip);
 
   // Show roughly one screen of climb behind the rocket.
   const windowT = 1.05;
   const startT = Math.max(0, tipT - windowT);
-  const startMult = startT <= 0 ? 1 : Math.exp(Math.log(CRASH_FLIGHT_VISUAL_MAX) * Math.pow(startT, 1 / 0.78));
+  const startMult =
+    startT <= 0
+      ? 1
+      : Math.exp(Math.log(CRASH_FLIGHT_VISUAL_MAX) * Math.pow(startT, 1 / 0.78));
 
   const steps = Math.min(80, Math.max(20, Math.floor(18 + Math.log(tip) * 12)));
   const pts: Pt[] = [];
@@ -142,16 +144,16 @@ function buildFlightPath(mult: number, w: number, h: number): Pt[] {
   for (let i = 0; i <= steps; i++) {
     const u = i / steps;
     const m = Math.exp(logStart + (logTip - logStart) * u);
-    const screen = withCamera(rocketWorldPos(m, w, h), camY);
-    // Keep a short lead-in below the fold, drop the rest.
-    if (screen.y > h + h * 0.08 && pts.length === 0) continue;
+    const screen = withCamera(rocketWorldPos(m, w, h), cam);
+    // Keep a short lead-in below/left of the fold, drop the rest.
+    if ((screen.y > h + h * 0.08 || screen.x < -w * 0.08) && pts.length === 0) continue;
     pts.push(screen);
   }
 
   if (pts.length < 2) {
     pts.length = 0;
-    pts.push(withCamera(rocketWorldPos(Math.max(1, tip * 0.85), w, h), camY));
-    pts.push(withCamera(tipWorld, camY));
+    pts.push(withCamera(rocketWorldPos(Math.max(1, tip * 0.85), w, h), cam));
+    pts.push(withCamera(tipWorld, cam));
   }
 
   return pts;
@@ -459,7 +461,7 @@ export function CrashChart({
   } | null>(null);
   const starsRef = useRef<Star[]>([]);
   const sparkPhaseRef = useRef(0);
-  const prevCamYRef = useRef(0);
+  const prevCamRef = useRef<Cam>({ x: 0, y: 0 });
 
   stateRef.current = state;
   onLiveRef.current = onLiveMultiplier;
@@ -501,7 +503,7 @@ export function CrashChart({
       milestoneRef.current = 1;
       particlesRef.current = [];
       prevPosRef.current = null;
-      prevCamYRef.current = 0;
+      prevCamRef.current = { x: 0, y: 0 };
       crashAnimRef.current = null;
       setMilestoneFx(null);
       if (milestoneTimerRef.current != null) {
@@ -763,7 +765,7 @@ export function CrashChart({
       ctx.fillRect(0, 0, w, h);
 
       // Stars (parallax scroll while climbing)
-      let camY = 0;
+      let cam: Cam = { x: 0, y: 0 };
       let climbMult = 1;
       if (phaseNow === "running" && runStartMs.current) {
         climbMult = computeRunningMultiplier({
@@ -774,20 +776,24 @@ export function CrashChart({
           nowMs: now,
         });
         const tipWorld = rocketWorldPos(climbMult, w, h);
-        camY = cameraYForRocket(tipWorld.y, h);
+        cam = cameraForRocket(tipWorld, w, h);
       } else if (phaseNow === "crashed" && s?.crash_point) {
         climbMult = s.crash_point;
         const tipWorld = rocketWorldPos(climbMult, w, h);
-        camY = cameraYForRocket(tipWorld.y, h);
+        cam = cameraForRocket(tipWorld, w, h);
       }
 
-      const dCam = camY - prevCamYRef.current;
-      prevCamYRef.current = camY;
-      if (dCam !== 0 && particlesRef.current.length) {
-        for (const p of particlesRef.current) p.y += dCam;
+      const dCamX = cam.x - prevCamRef.current.x;
+      const dCamY = cam.y - prevCamRef.current.y;
+      prevCamRef.current = cam;
+      if ((dCamX !== 0 || dCamY !== 0) && particlesRef.current.length) {
+        for (const p of particlesRef.current) {
+          p.x -= dCamX;
+          p.y += dCamY;
+        }
       }
 
-      const climbing = phaseNow === "running" && camY > 0;
+      const climbing = phaseNow === "running" && (cam.x > 0 || cam.y > 0);
       const starDrift = phaseNow === "running" ? (climbing ? 3.2 : 1.5) : 0.35;
       const ascentPush = climbing
         ? Math.min(4.2, 0.8 + Math.log10(Math.max(1, climbMult)) * 1.35)
@@ -796,15 +802,15 @@ export function CrashChart({
           : 0;
 
       for (const star of starsRef.current) {
-        star.x -= star.s * starDrift * (0.55 + star.depth);
-        star.y += ascentPush * (0.35 + star.depth);
+        star.x -= star.s * starDrift * (0.55 + star.depth) + dCamX * star.depth * 0.35;
+        star.y += ascentPush * (0.35 + star.depth) + dCamY * star.depth * 0.35;
         if (star.x < -2) star.x = w + 2;
+        if (star.x > w + 2) star.x = -2;
         if (star.y > h + 2) star.y = -2;
         if (star.y < -2) star.y = h + 2;
 
-        let sy = star.y + camY * star.depth * 0.55;
-        sy = ((sy % h) + h) % h;
-        const sx = star.x;
+        let sx = ((star.x % w) + w) % w;
+        let sy = ((star.y % h) + h) % h;
 
         ctx.globalAlpha = star.a * (0.65 + 0.35 * Math.sin(nowPerf * 0.004 + sx));
         ctx.fillStyle = "#d7e6f7";
@@ -831,18 +837,18 @@ export function CrashChart({
           const dy = pos.y - prev.y;
           if (dx * dx + dy * dy > 0.15) {
             angle = Math.atan2(dy, dx);
-          } else if (camY > 0) {
-            // Ceiling lock: keep nose up-right even when screen pos is stable
-            angle = -0.95;
+          } else if (climbing) {
+            // Camera-locked: keep the natural diagonal climb angle
+            angle = -0.65;
           } else {
             angle = angleOf(prev, pos);
           }
         } else {
           angle = -0.65;
         }
-        // Bias toward climb once camera is scrolling
-        if (camY > 0) {
-          angle = Math.min(angle, -0.75);
+        if (climbing) {
+          // Stay on the diagonal — never tip into a vertical climb
+          angle = Math.max(-0.85, Math.min(-0.45, angle));
         }
         prevPosRef.current = pos;
 

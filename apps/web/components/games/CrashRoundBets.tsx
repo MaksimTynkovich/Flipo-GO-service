@@ -2,13 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  formatTON,
   CrashBetEntry,
   CrashRoundBets as CrashRoundBetsData,
   BetGiftView,
 } from "@/lib/api";
 import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
-import { TonAmount } from "@/components/icons/TonIcon";
 import { crashPlayerName, formatMultiplier, isCrashBigBet } from "@/lib/crash";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +28,6 @@ type AggregatedPlayer = {
   status: "pending" | "cashed_out" | "lost";
   cashout_multiplier?: number;
   auto_cashout_multiplier?: number;
-  payout_nanoton: number;
-  profit_nanoton: number;
   bet_ids: string[];
 };
 
@@ -64,8 +60,6 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
 
     const cashed = list.filter((bet) => bet.status === "cashed_out");
     let cashoutMultiplier: number | undefined;
-    let payout = 0;
-    let profit = 0;
 
     if (cashed.length > 0) {
       let weighted = 0;
@@ -74,10 +68,6 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
         const mult = bet.cashout_multiplier ?? 0;
         weighted += mult * bet.amount_nanoton;
         weight += bet.amount_nanoton;
-        const betPayout = bet.payout_nanoton ?? 0;
-        payout += betPayout;
-        const isGift = bet.funding_type === "gift" || !!bet.gift;
-        profit += isGift ? betPayout : betPayout - bet.amount_nanoton;
       }
       if (weight > 0) cashoutMultiplier = weighted / weight;
     }
@@ -105,8 +95,6 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
       status,
       cashout_multiplier: cashoutMultiplier,
       auto_cashout_multiplier: autoCashout,
-      payout_nanoton: payout,
-      profit_nanoton: profit,
       bet_ids: list.map((bet) => bet.id),
     });
   }
@@ -190,21 +178,9 @@ function PlayerRow({
 
       <div className="shrink-0 text-right">
         {isCashedOut && player.cashout_multiplier != null ? (
-          <>
-            <p className="text-[11px] font-semibold tabular-nums text-success">
-              {formatMultiplier(player.cashout_multiplier)}
-            </p>
-            {player.profit_nanoton > 0 && (
-              <p className="text-[10px] font-medium tabular-nums text-success/90">
-                +
-                <TonAmount
-                  amount={formatTON(player.profit_nanoton)}
-                  iconSize="xs"
-                  iconClassName="text-success/90"
-                />
-              </p>
-            )}
-          </>
+          <p className="text-[11px] font-semibold tabular-nums text-success">
+            {formatMultiplier(player.cashout_multiplier)}
+          </p>
         ) : isLost ? (
           <p className="text-[11px] font-medium text-danger">Краш</p>
         ) : (
