@@ -66,7 +66,7 @@ function aggregateBets(bets: RouletteBetEntry[]): AggregatedBet[] {
     existing.gift = existing.gifts[0];
   }
 
-  return Array.from(map.values());
+  return Array.from(map.values()).sort((a, b) => b.amount_nanoton - a.amount_nanoton);
 }
 
 function BetRow({
@@ -129,17 +129,7 @@ function BetRow({
 }
 
 export function RouletteRoundBets({ data, currentUserId }: Props) {
-  const rows = useMemo(() => {
-    const aggregated = aggregateBets(data?.bets ?? []);
-    return aggregated.sort((a, b) => {
-      if (currentUserId) {
-        const aMine = a.user_id === currentUserId ? 0 : 1;
-        const bMine = b.user_id === currentUserId ? 0 : 1;
-        if (aMine !== bMine) return aMine - bMine;
-      }
-      return b.amount_nanoton - a.amount_nanoton;
-    });
-  }, [data?.bets, currentUserId]);
+  const rows = useMemo(() => aggregateBets(data?.bets ?? []), [data?.bets]);
 
   if (rows.length === 0) {
     return <p className="text-center text-xs text-muted">Пока нет ставок в раунде</p>;
@@ -147,10 +137,7 @@ export function RouletteRoundBets({ data, currentUserId }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="section-label">Игроки</p>
-        <span className="text-[10px] tabular-nums text-muted">{rows.length}</span>
-      </div>
+      <p className="section-label">Игроки</p>
 
       <div className="max-h-52 space-y-0.5 overflow-y-auto">
         {rows.map((bet) => (

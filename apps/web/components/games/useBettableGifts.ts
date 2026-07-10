@@ -4,6 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { getInventory, InventoryItem } from "@/lib/api";
 import { giftValuationNanoton } from "@/lib/gifts";
 
+const BETTABLE_GIFTS_CHANGED_EVENT = "flipo:bettable-gifts-changed";
+
+export function notifyBettableGiftsChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(BETTABLE_GIFTS_CHANGED_EVENT));
+}
+
 function bettableGifts(items: InventoryItem[]): InventoryItem[] {
   return items.filter(
     (item) => item.status === "available" && giftValuationNanoton(item) > 0,
@@ -27,9 +34,13 @@ export function useBettableGifts(enabled: boolean) {
   }, []);
 
   useEffect(() => {
-    if (enabled) {
+    if (!enabled) return;
+    void reload();
+    const onChange = () => {
       void reload();
-    }
+    };
+    window.addEventListener(BETTABLE_GIFTS_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(BETTABLE_GIFTS_CHANGED_EVENT, onChange);
   }, [enabled, reload]);
 
   return { gifts, loading, reload };

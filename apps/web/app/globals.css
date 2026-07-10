@@ -1639,29 +1639,6 @@ body::-webkit-scrollbar,
   color: rgba(244, 248, 252, 0.45);
 }
 
-.roulette-outcome {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  animation: roulette-outcome-in 0.28s var(--ease-out);
-}
-
-.roulette-outcome__amount {
-  font-size: 1.35rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-  color: #7dffb2;
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
-  animation: roulette-outcome-pop 0.35s var(--ease-out);
-}
-
-.roulette-outcome__amount--lose {
-  color: rgba(244, 248, 252, 0.78);
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
-}
-
 .roulette-bet-btn {
   position: relative;
   display: flex;
@@ -1793,26 +1770,6 @@ body::-webkit-scrollbar,
   }
 }
 
-@keyframes roulette-outcome-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes roulette-outcome-pop {
-  0% {
-    transform: scale(0.92);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
 @keyframes roulette-chip-in {
   from {
     opacity: 0;
@@ -1829,8 +1786,6 @@ body::-webkit-scrollbar,
   .roulette-hub--urgent .roulette-hub__ring,
   .roulette-hub--spinning .roulette-hub__ring,
   .roulette-hub__spin,
-  .roulette-outcome,
-  .roulette-outcome__amount,
   .roulette-history__chip {
     animation: none !important;
   }

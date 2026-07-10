@@ -8,7 +8,7 @@ import {
 } from "@/lib/api";
 import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
 import { TonAmount } from "@/components/icons/TonIcon";
-import { crashPlayerName, formatMultiplier, isCrashBigBet } from "@/lib/crash";
+import { crashPlayerName, formatMultiplier } from "@/lib/crash";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -26,7 +26,6 @@ type AggregatedPlayer = {
   amount_nanoton: number;
   /** Stake still at risk (pending bets only). */
   pending_nanoton: number;
-  bet_count: number;
   funding_type?: string;
   gift?: BetGiftView;
   gifts: BetGiftView[];
@@ -34,12 +33,6 @@ type AggregatedPlayer = {
   cashout_multiplier?: number;
   bet_ids: string[];
 };
-
-function statusRank(status: AggregatedPlayer["status"]): number {
-  if (status === "pending") return 0;
-  if (status === "cashed_out") return 1;
-  return 2;
-}
 
 function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
   const byUser = new Map<string, CrashBetEntry[]>();
@@ -96,7 +89,6 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
       photo_url: head.photo_url,
       amount_nanoton: amount,
       pending_nanoton: pendingNanoton,
-      bet_count: list.length,
       funding_type: allGift ? "gift" : anyGift ? "mixed" : "balance",
       gift: uniqueGifts[0],
       gifts: uniqueGifts,
@@ -106,15 +98,8 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
     });
   }
 
-  // Still in play (biggest stake first) → cashed out → lost
-  return rows.sort((a, b) => {
-    const rank = statusRank(a.status) - statusRank(b.status);
-    if (rank !== 0) return rank;
-    if (a.status === "pending") {
-      return b.pending_nanoton - a.pending_nanoton;
-    }
-    return b.amount_nanoton - a.amount_nanoton;
-  });
+  // Biggest stake first
+  return rows.sort((a, b) => b.amount_nanoton - a.amount_nanoton);
 }
 
 function liveGainNanoton(
@@ -185,9 +170,6 @@ function PlayerRow({
   const isCashedOut = player.status === "cashed_out";
   const isLost = player.status === "lost";
   const isPending = player.status === "pending";
-  const stakeForBig =
-    isCashedOut || isLost ? player.amount_nanoton : player.pending_nanoton || player.amount_nanoton;
-  const big = isCrashBigBet(stakeForBig);
   const showLiveGain =
     isPending && liveMultiplier != null && liveMultiplier >= 1 && player.pending_nanoton > 0;
   const liveGain = showLiveGain
@@ -199,18 +181,12 @@ function PlayerRow({
     <div
       className={cn(
         "crash-player-row flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-[background,opacity] duration-200",
-        big && isPending && "bg-accent/[0.07]",
         flash && "crash-bet-flash",
         isCashedOut && "crash-player-row--won",
         isLost && "crash-player-row--lost",
       )}
     >
-      <span
-        className={cn(
-          "flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface text-[10px] font-medium text-muted",
-          big && isPending && "ring-1 ring-accent/50",
-        )}
-      >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface text-[10px] font-medium text-muted">
         {player.photo_url && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -225,14 +201,7 @@ function PlayerRow({
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 truncate text-sm text-foreground/90">
-          <span className="truncate">{name}</span>
-          {big ? (
-            <span className="shrink-0 rounded bg-accent/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-accent">
-              Big
-            </span>
-          ) : null}
-        </p>
+        <p className="truncate text-sm text-foreground/90">{name}</p>
         <p className="text-[11px] tabular-nums text-muted">
           {player.gifts.length > 1 ? (
             <GiftStakeIcons
@@ -313,12 +282,8 @@ export function CrashRoundBets({ data, liveMultiplier = null }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="section-label">Игроки</p>
-        <span className="text-[10px] tabular-nums text-muted">{players.length}</span>
-      </div>
-
-      <div className="max-h-52 space-y-0.5 overflow-y-auto">
+      <p className="section-label">Игроки</p>
+      <div className="max-h-52 space-y-0.5 overflow-y-auto overscroll-contain">
         {players.map((player) => (
           <PlayerRow
             key={player.key}

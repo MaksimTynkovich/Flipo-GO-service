@@ -6,6 +6,7 @@ import { CrashChart, type CrashStageFx } from "@/components/games/CrashChart";
 import { CrashHistory } from "@/components/games/CrashHistory";
 import { CrashRoundBets } from "@/components/games/CrashRoundBets";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
+import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -173,6 +174,17 @@ export default function CrashPage() {
     return activeBets.filter((bet) => bet.round_id === roundId && bet.status === "pending");
   }, [activeBets, roundBets, state?.round_id, user?.id]);
 
+  const prevActiveGiftIds = useRef<string[]>([]);
+  useEffect(() => {
+    const ids = roundActiveBets
+      .map((bet) => bet.inventory_item_id)
+      .filter((id): id is string => !!id);
+    const prev = prevActiveGiftIds.current;
+    const released = prev.some((id) => !ids.includes(id));
+    prevActiveGiftIds.current = ids;
+    if (released) notifyBettableGiftsChanged();
+  }, [roundActiveBets]);
+
   // Keep local activeBets aligned with round feed (server auto-cashout / other clients).
   useEffect(() => {
     if (!user?.id || !roundBets || roundBets.round_id !== state?.round_id) return;
@@ -239,7 +251,7 @@ export default function CrashPage() {
   const excludedGiftIds = useMemo(() => {
     const ids = new Set<string>();
     for (const bet of roundBets?.bets ?? []) {
-      if (bet.user_id === user?.id && bet.gift?.id) {
+      if (bet.user_id === user?.id && bet.status === "pending" && bet.gift?.id) {
         ids.add(bet.gift.id);
       }
     }
@@ -374,6 +386,7 @@ export default function CrashPage() {
       haptics.notificationOccurred("success");
       await loadActiveBets();
       loadRoundBets();
+      if (fundingMode === "gift") notifyBettableGiftsChanged();
     } catch (e) {
       showToast({ variant: "error", title: formatGameBetError(e) });
       haptics.notificationOccurred("error");
@@ -413,6 +426,7 @@ export default function CrashPage() {
       hadStakeRef.current = false;
       setActiveBets([]);
       loadRoundBets();
+      notifyBettableGiftsChanged();
     } catch (e) {
       showToast({
         variant: "error",
@@ -511,6 +525,7 @@ export default function CrashPage() {
           );
           haptics.notificationOccurred("success");
           hadStakeRef.current = false;
+          notifyBettableGiftsChanged();
         }
 
         await loadActiveBets();

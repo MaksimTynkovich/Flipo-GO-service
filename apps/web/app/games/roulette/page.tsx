@@ -6,13 +6,12 @@ import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButto
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
-import { RouletteWheel, type RouletteStageFx } from "@/components/games/RouletteWheel";
+import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { connectGameWS } from "@/lib/ws";
 import {
-  formatTON,
   getRouletteBets,
   getRouletteHistory,
   getRouletteState,
@@ -27,11 +26,6 @@ import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
-const PAYOUT: Record<"red" | "green" | "black", number> = {
-  red: 2,
-  green: 14,
-  black: 2,
-};
 
 export default function RoulettePage() {
   const { user } = useAuth();
@@ -45,9 +39,7 @@ export default function RoulettePage() {
   const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
   const [betting, setBetting] = useState(false);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
-  const [stageFx, setStageFx] = useState<RouletteStageFx>(null);
   const lastPhase = useRef<string | null>(null);
-  const fxTimer = useRef<number | null>(null);
   const betAmountInput = useAnalyticsInput("roulette_bet_amount", "roulette");
 
   const loadHistory = useCallback(async () => {
@@ -64,21 +56,6 @@ export default function RoulettePage() {
     } catch {
       // ignore
     }
-  }, []);
-
-  function triggerStageFx(next: NonNullable<RouletteStageFx>, ms = 1800) {
-    if (fxTimer.current) window.clearTimeout(fxTimer.current);
-    setStageFx(next);
-    fxTimer.current = window.setTimeout(() => {
-      setStageFx(null);
-      fxTimer.current = null;
-    }, ms);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (fxTimer.current) window.clearTimeout(fxTimer.current);
-    };
   }, []);
 
   useEffect(() => {
@@ -114,45 +91,14 @@ export default function RoulettePage() {
   useEffect(() => {
     const phase = state?.phase ?? null;
 
-    if (phase === "betting" && lastPhase.current !== "betting") {
-      setStageFx(null);
-      if (fxTimer.current) {
-        window.clearTimeout(fxTimer.current);
-        fxTimer.current = null;
-      }
-    }
-
     if (phase === "result" && lastPhase.current != null && lastPhase.current !== "result") {
       loadHistory();
 
       const resultNum = state?.result_number;
       if (resultNum != null && myBets.length > 0) {
         const winColor = numberColor(resultNum);
-        const wonBets = myBets.filter((bet) => bet.color === winColor);
-        if (wonBets.length > 0) {
-          const stake = wonBets.reduce((sum, bet) => sum + bet.amount_nanoton, 0);
-          const payout = stake * PAYOUT[winColor];
-          const isGift = wonBets.every(
-            (bet) => bet.funding_type === "gift" || !!bet.gift,
-          );
-          const net = isGift ? payout - stake : payout;
-          triggerStageFx(
-            {
-              kind: "win",
-              amountTon: formatTON(net),
-              color: winColor,
-              multiplier: winColor === "green" ? "×14" : "×2",
-            },
-            2500,
-          );
-          haptics.notificationOccurred("success");
-        } else {
-          triggerStageFx(
-            { kind: "lose", color: winColor, number: resultNum },
-            2500,
-          );
-          haptics.notificationOccurred("error");
-        }
+        const won = myBets.some((bet) => bet.color === winColor);
+        haptics.notificationOccurred(won ? "success" : "error");
       }
     }
 
@@ -170,6 +116,7 @@ export default function RoulettePage() {
   }, [roundBets?.bets, user?.id]);
 
   const canBet = state?.phase === "betting" && !betting;
+  const canEditBet = !betting;
   const roundTotals = roundBets?.totals ?? { red: 0, green: 0, black: 0 };
 
   async function bet(color: string) {
@@ -246,7 +193,7 @@ export default function RoulettePage() {
           />
         </div>
 
-        <RouletteWheel state={state} fx={stageFx} />
+        <RouletteWheel state={state} />
 
         <div className="panel space-y-3">
           <BetFundingControl
@@ -257,7 +204,7 @@ export default function RoulettePage() {
             selectedGiftIds={selectedGiftIds}
             onSelectGifts={setSelectedGiftIds}
             excludedGiftIds={excludedGiftIds}
-            disabled={!canBet}
+            disabled={!canEditBet}
             quickAmounts={QUICK_AMOUNTS}
             amountInputProps={betAmountInput.bind({
               onChange: (e) => setAmountTon(e.target.value),

@@ -24,11 +24,6 @@ const CATCHUP_MS = 250;
 /** Keep result number visible in the hub at least this long. */
 const RESULT_HOLD_MS = 2500;
 
-export type RouletteStageFx =
-  | { kind: "win"; amountTon: string; color: "red" | "green" | "black"; multiplier: string }
-  | { kind: "lose"; color: "red" | "green" | "black"; number: number }
-  | null;
-
 function animateSpin(
   from: number,
   to: number,
@@ -89,10 +84,9 @@ function useCountdown(endsAt: string | undefined, active: boolean) {
 
 type Props = {
   state: RouletteRoundState | null;
-  fx?: RouletteStageFx;
 };
 
-export function RouletteWheel({ state, fx = null }: Props) {
+export function RouletteWheel({ state }: Props) {
   const wheelRef = useRef<HTMLDivElement>(null);
   const lastSpinRound = useRef<string | null>(null);
   const roundJitter = useRef(0);
@@ -242,8 +236,6 @@ export function RouletteWheel({ state, fx = null }: Props) {
   const cy = 110;
   const rOuter = 100;
   const rInner = 52;
-  const winFx = fx?.kind === "win" ? fx : null;
-  const loseFx = fx?.kind === "lose" ? fx : null;
 
   return (
     <div
@@ -363,20 +355,6 @@ export function RouletteWheel({ state, fx = null }: Props) {
           ) : null}
         </div>
       </div>
-
-      {winFx ? (
-        <div className="roulette-outcome roulette-outcome--win pointer-events-none absolute inset-0 z-30">
-          <p className="roulette-outcome__amount">+{winFx.amountTon}</p>
-        </div>
-      ) : null}
-
-      {loseFx ? (
-        <div className="roulette-outcome roulette-outcome--lose pointer-events-none absolute inset-0 z-30">
-          <p className="roulette-outcome__amount roulette-outcome__amount--lose">
-            {loseFx.number}
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 }

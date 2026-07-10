@@ -204,11 +204,4 @@ export function crashHeatTone(mult: number): "calm" | "warm" | "hot" | "blaze" {
   return "calm";
 }
 
-/** Stake considered a “big bet” for visual emphasis (1 TON). */
-export const CRASH_BIG_BET_NANOTON = 1_000_000_000;
-
-export function isCrashBigBet(amountNanoton: number): boolean {
-  return amountNanoton >= CRASH_BIG_BET_NANOTON;
-}
-
 export const CRASH_AUTO_PRESETS = ["1.5", "2", "3", "5", "10"] as const;

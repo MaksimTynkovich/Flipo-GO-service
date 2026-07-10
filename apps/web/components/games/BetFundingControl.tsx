@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Gift, Pencil } from "lucide-react";
 import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
@@ -56,7 +56,11 @@ export function BetFundingControl({
 }: Props) {
   const [open, setOpen] = useState(false);
   const needsGifts = mode === "gift" || open;
-  const { gifts } = useBettableGifts(needsGifts);
+  const { gifts, reload } = useBettableGifts(needsGifts);
+
+  useEffect(() => {
+    if (open) void reload();
+  }, [open, reload]);
 
   const selectedGifts = useMemo(
     () => gifts.filter((item) => selectedGiftIds.includes(item.id)),
