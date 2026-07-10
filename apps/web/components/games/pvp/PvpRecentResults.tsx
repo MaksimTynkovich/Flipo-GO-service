@@ -1,22 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { PvpRoom } from "@/lib/pvp";
-import { PvpResultRoomCard } from "@/components/games/pvp/PvpRoomCards";
 import { cn } from "@/lib/utils";
 
 export const PVP_RESULT_VISIBLE_MS = 10_000;
 const EXIT_MS = 420;
 
-type Props = {
-  history: PvpRoom[];
-  onProof?: (room: PvpRoom) => void;
-};
-
 /**
- * Shows finished rooms for 10s after finished_at, then slides them away.
+ * Finished rooms still shown (within 10s) or mid exit animation.
  */
-export function PvpRecentResults({ history, onProof }: Props) {
+export function usePvpFinishedVisibility(history: PvpRoom[]) {
   const [now, setNow] = useState(() => Date.now());
   const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set());
   const [goneIds, setGoneIds] = useState<Set<string>>(() => new Set());
@@ -33,14 +27,15 @@ export function PvpRecentResults({ history, onProof }: Props) {
     };
   }, []);
 
-  const visible = history.filter((room) => {
-    if (goneIds.has(room.id)) return false;
-    if (!room.finished_at) return false;
+  const recentById = new Map<string, PvpRoom>();
+  for (const room of history) {
+    if (goneIds.has(room.id) || !room.finished_at) continue;
     const age = now - new Date(room.finished_at).getTime();
-    if (Number.isNaN(age)) return false;
-    // Keep while fresh or while exit animation plays
-    return age < PVP_RESULT_VISIBLE_MS || leavingIds.has(room.id);
-  });
+    if (Number.isNaN(age)) continue;
+    if (age < PVP_RESULT_VISIBLE_MS || leavingIds.has(room.id)) {
+      recentById.set(room.id, room);
+    }
+  }
 
   useEffect(() => {
     for (const room of history) {
@@ -70,28 +65,22 @@ export function PvpRecentResults({ history, onProof }: Props) {
     }
   }, [history, now, leavingIds, goneIds]);
 
-  if (visible.length === 0) return null;
+  return {
+    recentById,
+    leavingIds,
+    goneIds,
+    hasRecent: recentById.size > 0,
+  };
+}
 
-  return (
-    <>
-      {visible.map((room) => (
-        <div
-          key={room.id}
-          className={cn(
-            "pvp-room-enter",
-            leavingIds.has(room.id) && "pvp-room-exit",
-          )}
-        >
-          <PvpResultRoomCard
-            room={room}
-            onProof={
-              room.game_round_id && onProof ? () => onProof(room) : undefined
-            }
-          />
-        </div>
-      ))}
-    </>
-  );
+export function PvpRoomExitShell({
+  leaving,
+  children,
+}: {
+  leaving?: boolean;
+  children: ReactNode;
+}) {
+  return <div className={cn(leaving && "pvp-room-exit")}>{children}</div>;
 }
 
 export function hasRecentPvpResults(history: PvpRoom[], now = Date.now()): boolean {

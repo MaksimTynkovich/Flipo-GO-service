@@ -13,6 +13,7 @@ import {
   spinTimeProgress,
 } from "@/lib/pvp-spin";
 import { cn } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
 
 type Props = {
   players: PvpPlayer[];
@@ -193,17 +194,18 @@ export function PvpAvatarStrip({
     <div
       ref={viewportRef}
       className={cn(
-        "relative w-full overflow-hidden",
+        "relative w-full overflow-hidden pt-3",
         dimmed && "opacity-40",
         className,
       )}
     >
-      <div className="pointer-events-none absolute left-1/2 top-0 z-20 h-1.5 w-px -translate-x-1/2 bg-accent" />
-      <div className="pointer-events-none absolute bottom-0 left-1/2 z-20 h-1.5 w-px -translate-x-1/2 bg-accent" />
+      <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 text-accent">
+        <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
+      </div>
 
       <div
         ref={stripRef}
-        className="flex w-max will-change-transform py-1"
+        className="flex w-max will-change-transform py-0.5"
         style={{
           gap: METRICS.slotGap,
           paddingLeft: METRICS.stripPaddingX,

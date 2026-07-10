@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
@@ -10,10 +10,11 @@ import { BetFundingPanel } from "@/components/games/BetFundingPanel";
 import {
   PvpActiveRoomCard,
   PvpOpenRoomCard,
+  PvpResultRoomCard,
 } from "@/components/games/pvp/PvpRoomCards";
 import {
-  hasRecentPvpResults,
-  PvpRecentResults,
+  PvpRoomExitShell,
+  usePvpFinishedVisibility,
 } from "@/components/games/pvp/PvpRecentResults";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { api, formatTON, getInventory } from "@/lib/api";
@@ -21,7 +22,7 @@ import { trackEvent } from "@/lib/analytics";
 import { BetFundingMode } from "@/lib/bet-funding";
 import { formatGameBetError } from "@/lib/game-errors";
 import { giftValuationNanoton } from "@/lib/gifts";
-import { PvpLobbyState } from "@/lib/pvp";
+import { PvpLobbyState, PvpRoom } from "@/lib/pvp";
 import {
   estimateJoinWinChanceBps,
   formatWinChanceBps,
@@ -65,12 +66,7 @@ export function PvpHubView() {
   const [joinGiftStakeNanoton, setJoinGiftStakeNanoton] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 500);
-    return () => window.clearInterval(timer);
-  }, []);
+  const roomOrderRef = useRef<string[]>([]);
 
   const loadState = useCallback(async () => {
     try {
@@ -233,9 +229,14 @@ export function PvpHubView() {
   }
 
   const userId = user?.id;
-  const activeRooms = state.active;
-  const hasRecentResults = hasRecentPvpResults(state.history, now);
-  const hasRooms = activeRooms.length > 0 || hasRecentResults;
+  const finished = usePvpFinishedVisibility(state.history);
+  const displayRooms = buildStickyRoomList(
+    state.active,
+    finished.recentById,
+    finished.goneIds,
+    roomOrderRef,
+  );
+  const hasRooms = displayRooms.length > 0;
   const joinRoom = state.active.find((room) => room.id === joinRoomId);
   const joinBounds = joinRoom ? pvpStakeBounds(joinRoom.bet_amount_nanoton) : null;
   const joinGiftInRange =
@@ -279,7 +280,21 @@ export function PvpHubView() {
 
       {hasRooms ? (
         <section className="space-y-2">
-          {activeRooms.map((room) => {
+          {displayRooms.map((room) => {
+            if (room.status === "finished") {
+              return (
+                <PvpRoomExitShell key={room.id} leaving={finished.leavingIds.has(room.id)}>
+                  <PvpResultRoomCard
+                    room={room}
+                    onProof={
+                      room.game_round_id
+                        ? () => setProofRoundId(room.game_round_id!)
+                        : undefined
+                    }
+                  />
+                </PvpRoomExitShell>
+              );
+            }
             if (room.status === "countdown" || room.status === "spinning") {
               return <PvpActiveRoomCard key={room.id} room={room} />;
             }
@@ -295,12 +310,6 @@ export function PvpHubView() {
               />
             );
           })}
-          <PvpRecentResults
-            history={state.history}
-            onProof={(room) => {
-              if (room.game_round_id) setProofRoundId(room.game_round_id);
-            }}
-          />
         </section>
       ) : lobbyReady ? (
         <section className="panel flex flex-col items-center gap-2 py-10 text-center">
@@ -385,4 +394,43 @@ export function PvpHubView() {
       ) : null}
     </PageShell>
   );
+}
+
+/**
+ * Keep finished rooms in the same list position they had while active.
+ * New open rooms append; gone rooms drop out of the sticky order.
+ */
+function buildStickyRoomList(
+  active: PvpRoom[],
+  recentById: Map<string, PvpRoom>,
+  goneIds: Set<string>,
+  orderRef: { current: string[] },
+): PvpRoom[] {
+  const activeById = new Map(active.map((room) => [room.id, room]));
+  const presentIds = new Set<string>([
+    ...Array.from(activeById.keys()),
+    ...Array.from(recentById.keys()),
+  ]);
+
+  orderRef.current = orderRef.current.filter(
+    (id) => presentIds.has(id) && !goneIds.has(id),
+  );
+
+  for (const room of active) {
+    if (!orderRef.current.includes(room.id)) {
+      orderRef.current.push(room.id);
+    }
+  }
+  for (const id of Array.from(recentById.keys())) {
+    if (!orderRef.current.includes(id)) {
+      orderRef.current.push(id);
+    }
+  }
+
+  const rooms: PvpRoom[] = [];
+  for (const id of orderRef.current) {
+    const room = activeById.get(id) ?? recentById.get(id);
+    if (room) rooms.push(room);
+  }
+  return rooms;
 }
