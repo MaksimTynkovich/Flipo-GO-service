@@ -3,11 +3,12 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import {
   CrashRoundState,
+  CRASH_FLIGHT_VISUAL_MAX,
   calibrateClockOffsetMs,
   computeRunningMultiplier,
   crashHeatTone,
   elapsedMsForMultiplier,
-  flightProgress,
+  flightProgressWorld,
   formatMultiplier,
   formatMultiplierLive,
   resolveRunStartMs,
@@ -26,6 +27,15 @@ type Props = {
   /** Throttled (~10Hz). Do not setState every frame in parent. */
   onLiveMultiplier?: (mult: number) => void;
   onMilestone?: (mult: number) => void;
+};
+
+type Star = {
+  x: number;
+  y: number;
+  r: number;
+  a: number;
+  s: number;
+  depth: number;
 };
 
 type Pt = { x: number; y: number };
@@ -51,28 +61,89 @@ const HEAT = {
   crash: { stroke: "#e56555", glow: "rgba(229,101,85,0.55)", flame: "#ff8f7a" },
 } as const;
 
-function rocketPos(mult: number, w: number, h: number): Pt {
-  const padX = w * 0.08;
+function stagePads(w: number, h: number) {
+  const padX = w * 0.09;
   const padBottom = h * 0.14;
-  const padTop = h * 0.16;
-  const t = flightProgress(Math.max(1, mult));
+  const padTop = h * 0.22;
   return {
-    x: padX + (w - padX * 1.9) * t,
-    y: h - padBottom - (h - padBottom - padTop) * t,
+    padX,
+    padBottom,
+    padTop,
+    spanX: w - padX * 2.15,
+    spanY: h - padBottom - padTop,
   };
 }
 
-/** Rebuild a smooth path from 1× to current multiplier every frame. */
+/**
+ * World-space rocket position.
+ * X eases toward a right-hand comfort zone (never the corner);
+ * Y keeps climbing so the camera can scroll past the first screen.
+ */
+function rocketWorldPos(mult: number, w: number, h: number): Pt {
+  const { padX, padBottom, spanX, spanY } = stagePads(w, h);
+  const t = flightProgressWorld(Math.max(1, mult));
+
+  // Ease-out on X so late flight becomes more vertical, not a ruler into the corner.
+  const tX = Math.min(t, 1.25);
+  const tx = (1 - Math.pow(1 - tX / 1.25, 1.55)) * 0.9;
+
+  return {
+    x: padX + spanX * tx,
+    y: h - padBottom - spanY * t,
+  };
+}
+
+/** Keep the rocket in the upper band with headroom from the clipped frame edge. */
+function cameraYForRocket(worldY: number, h: number): number {
+  const focusY = h * 0.3;
+  return worldY < focusY ? focusY - worldY : 0;
+}
+
+function withCamera(p: Pt, camY: number): Pt {
+  return { x: p.x, y: p.y + camY };
+}
+
+function rocketPos(mult: number, w: number, h: number): Pt {
+  const world = rocketWorldPos(mult, w, h);
+  return withCamera(world, cameraYForRocket(world.y, h));
+}
+
+/**
+ * Recent flight ribbon in screen space.
+ * Uses a sliding progress window so high multipliers don't draw a long
+ * diagonal that visually "hits" the top of the frame.
+ */
 function buildFlightPath(mult: number, w: number, h: number): Pt[] {
   const tip = Math.max(1.001, mult);
-  const steps = Math.min(64, Math.max(16, Math.floor(12 + tip * 10)));
+  const tipWorld = rocketWorldPos(tip, w, h);
+  const camY = cameraYForRocket(tipWorld.y, h);
+  const tipT = flightProgressWorld(tip);
+
+  // Show roughly one screen of climb behind the rocket.
+  const windowT = 1.05;
+  const startT = Math.max(0, tipT - windowT);
+  const startMult = startT <= 0 ? 1 : Math.exp(Math.log(CRASH_FLIGHT_VISUAL_MAX) * Math.pow(startT, 1 / 0.78));
+
+  const steps = Math.min(80, Math.max(20, Math.floor(18 + Math.log(tip) * 12)));
   const pts: Pt[] = [];
+  const logStart = Math.log(Math.max(1.0001, startMult));
+  const logTip = Math.log(tip);
+
   for (let i = 0; i <= steps; i++) {
     const u = i / steps;
-    // Log-space from 1 → tip so density matches growth
-    const m = Math.exp(Math.log(tip) * u);
-    pts.push(rocketPos(m, w, h));
+    const m = Math.exp(logStart + (logTip - logStart) * u);
+    const screen = withCamera(rocketWorldPos(m, w, h), camY);
+    // Keep a short lead-in below the fold, drop the rest.
+    if (screen.y > h + h * 0.08 && pts.length === 0) continue;
+    pts.push(screen);
   }
+
+  if (pts.length < 2) {
+    pts.length = 0;
+    pts.push(withCamera(rocketWorldPos(Math.max(1, tip * 0.85), w, h), camY));
+    pts.push(withCamera(tipWorld, camY));
+  }
+
   return pts;
 }
 
@@ -82,76 +153,152 @@ function angleOf(from: Pt, to: Pt): number {
 
 type HeatTone = (typeof HEAT)[keyof typeof HEAT];
 
-function strokePolyline(
-  ctx: CanvasRenderingContext2D,
-  path: Pt[],
-  from = 0,
-  to = path.length - 1,
-) {
-  if (to <= from || path.length < 2) return;
-  ctx.beginPath();
-  ctx.moveTo(path[from].x, path[from].y);
-  for (let i = from + 1; i <= to; i++) {
-    ctx.lineTo(path[i].x, path[i].y);
-  }
+function pathPointAt(path: Pt[], u: number): Pt {
+  const t = Math.max(0, Math.min(1, u)) * (path.length - 1);
+  const i = Math.floor(t);
+  const f = t - i;
+  const a = path[i];
+  const b = path[Math.min(path.length - 1, i + 1)];
+  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
 }
 
-/** Live trail: thin animated energy line + moving sparks, no heavy shadow. */
+/** Soft tapering comet ribbon — denser and brighter toward the rocket. */
 function drawLiveTrail(
   ctx: CanvasRenderingContext2D,
   path: Pt[],
   color: HeatTone,
   phase: number,
   nowPerf: number,
+  viewH: number,
 ) {
   if (path.length < 2) return;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // Soft base (thin, no blob shadow)
-  strokePolyline(ctx, path);
-  ctx.strokeStyle = color.stroke;
-  ctx.globalAlpha = 0.35;
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  const n = path.length - 1;
+  const tip = path[path.length - 1];
+  const topFade = viewH * 0.06;
+  const bottomFade = viewH * 0.92;
 
-  // Animated dashed energy overlay
-  strokePolyline(ctx, path);
-  ctx.strokeStyle = color.stroke;
-  ctx.globalAlpha = 0.9;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([7, 9]);
-  ctx.lineDashOffset = -phase * 14;
-  ctx.stroke();
-  ctx.setLineDash([]);
+  const edgeFade = (y: number) => {
+    if (y < topFade) return Math.max(0, y / topFade);
+    if (y > bottomFade) return Math.max(0, 1 - (y - bottomFade) / (viewH * 0.12));
+    return 1;
+  };
 
-  // Bright core near the tip only
-  const tipFrom = Math.max(0, path.length - 14);
-  strokePolyline(ctx, path, tipFrom, path.length - 1);
-  ctx.strokeStyle = "#ffffff";
-  ctx.globalAlpha = 0.85;
-  ctx.lineWidth = 1.6;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-
-  // Traveling spark beads along the path
-  const beads = 5;
-  for (let i = 0; i < beads; i++) {
-    const u = (phase * 0.18 + i / beads) % 1;
-    const idx = Math.min(path.length - 1, Math.floor(u * (path.length - 1)));
-    const p = path[idx];
-    const pulse = 0.45 + 0.55 * Math.sin(nowPerf * 0.01 + i);
-    ctx.globalAlpha = 0.35 + pulse * 0.45;
-    ctx.fillStyle = color.flame;
+  // Wide atmospheric wash (very soft)
+  for (let i = 0; i < n; i++) {
+    const u = (i + 0.5) / n;
+    const ease = u * u;
+    const midY = (path[i].y + path[i + 1].y) * 0.5;
+    const fade = edgeFade(midY);
+    if (fade <= 0.02) continue;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.4 + pulse, 0, Math.PI * 2);
+    ctx.moveTo(path[i].x, path[i].y);
+    ctx.lineTo(path[i + 1].x, path[i + 1].y);
+    ctx.strokeStyle = color.stroke;
+    ctx.globalAlpha = (0.03 + 0.14 * ease) * fade;
+    ctx.lineWidth = 2 + 9 * ease;
+    ctx.stroke();
+  }
+
+  // Colored body — tapers from hairline at pad to a solid ribbon at tip
+  for (let i = 0; i < n; i++) {
+    const u = (i + 0.5) / n;
+    const ease = Math.pow(u, 1.15);
+    const midY = (path[i].y + path[i + 1].y) * 0.5;
+    const fade = edgeFade(midY);
+    if (fade <= 0.02) continue;
+    ctx.beginPath();
+    ctx.moveTo(path[i].x, path[i].y);
+    ctx.lineTo(path[i + 1].x, path[i + 1].y);
+    ctx.strokeStyle = color.stroke;
+    ctx.globalAlpha = (0.12 + 0.78 * ease) * fade;
+    ctx.lineWidth = 0.7 + 2.8 * ease;
+    ctx.stroke();
+  }
+
+  // Hot inner core (rear half → tip)
+  const coreFrom = Math.floor(n * 0.42);
+  for (let i = coreFrom; i < n; i++) {
+    const u = (i - coreFrom) / Math.max(1, n - coreFrom);
+    const midY = (path[i].y + path[i + 1].y) * 0.5;
+    const fade = edgeFade(midY);
+    if (fade <= 0.02) continue;
+    ctx.beginPath();
+    ctx.moveTo(path[i].x, path[i].y);
+    ctx.lineTo(path[i + 1].x, path[i + 1].y);
+    ctx.strokeStyle = color.flame;
+    ctx.globalAlpha = (0.2 + 0.55 * u) * fade;
+    ctx.lineWidth = 0.5 + 1.5 * u;
+    ctx.stroke();
+  }
+
+  // Bright white edge near the rocket
+  const edgeFrom = Math.floor(n * 0.72);
+  for (let i = edgeFrom; i < n; i++) {
+    const u = (i - edgeFrom) / Math.max(1, n - edgeFrom);
+    const midY = (path[i].y + path[i + 1].y) * 0.5;
+    const fade = edgeFade(midY);
+    if (fade <= 0.02) continue;
+    ctx.beginPath();
+    ctx.moveTo(path[i].x, path[i].y);
+    ctx.lineTo(path[i + 1].x, path[i + 1].y);
+    ctx.strokeStyle = "#ffffff";
+    ctx.globalAlpha = (0.25 + 0.65 * u) * fade;
+    ctx.lineWidth = 0.6 + 0.9 * u;
+    ctx.stroke();
+  }
+
+  // Flowing energy ticks traveling toward the tip
+  const ticks = 6;
+  for (let i = 0; i < ticks; i++) {
+    const u = (phase * 0.07 + i / ticks) % 1;
+    if (u < 0.08) continue;
+    const a = pathPointAt(path, Math.max(0, u - 0.035));
+    const b = pathPointAt(path, u);
+    const fade = edgeFade((a.y + b.y) * 0.5);
+    if (fade <= 0.02) continue;
+    const pulse = 0.4 + 0.6 * Math.sin(nowPerf * 0.012 + i * 1.3);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = "#ffffff";
+    ctx.globalAlpha = (0.15 + 0.35 * pulse) * Math.pow(u, 0.7) * fade;
+    ctx.lineWidth = 1.2 + pulse * 0.8;
+    ctx.stroke();
+  }
+
+  // Tip bloom behind the rocket
+  const bloom = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, 16);
+  bloom.addColorStop(0, color.flame);
+  bloom.addColorStop(0.35, color.glow);
+  bloom.addColorStop(1, "transparent");
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = bloom;
+  ctx.beginPath();
+  ctx.arc(tip.x, tip.y, 16, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tiny spark beads on the last third
+  for (let i = 0; i < 4; i++) {
+    const u = 0.55 + ((phase * 0.11 + i * 0.12) % 0.45);
+    const p = pathPointAt(path, u);
+    const fade = edgeFade(p.y);
+    if (fade <= 0.02) continue;
+    const pulse = 0.5 + 0.5 * Math.sin(nowPerf * 0.014 + i * 2);
+    ctx.globalAlpha = (0.25 + pulse * 0.4) * fade;
+    ctx.fillStyle = i % 2 === 0 ? "#ffffff" : color.flame;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 0.9 + pulse * 0.9, 0, Math.PI * 2);
     ctx.fill();
   }
+
   ctx.globalAlpha = 1;
 }
 
 /**
- * Crash: path freezes, tip snaps off and fades, remaining ribbon dissolves from the break.
+ * Crash: trail snaps at the tip, then retracts and fully fades out.
  */
 function drawBrokenTrail(
   ctx: CanvasRenderingContext2D,
@@ -160,50 +307,93 @@ function drawBrokenTrail(
   t: number,
   nowPerf: number,
 ) {
-  if (path.length < 2) return;
+  if (path.length < 2 || t >= 1) return;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // Keep most of the path, but fade the last segment as it "breaks"
-  const keepUntil = Math.max(2, Math.floor(path.length * (1 - t * 0.22)));
-  const fade = Math.max(0, 1 - t * 0.85);
+  const breakPhase = Math.min(1, t / 0.2);
+  const dissolve = Math.max(0, (t - 0.15) / 0.85);
+  const fade = Math.max(0, 1 - dissolve);
+  if (fade <= 0.02) return;
 
-  strokePolyline(ctx, path, 0, keepUntil);
-  ctx.strokeStyle = "#e56555";
-  ctx.globalAlpha = 0.55 * fade;
-  ctx.lineWidth = 2.4;
-  ctx.stroke();
+  const visibleRatio = Math.max(0, 1 - dissolve * 1.05);
+  const keepUntil = Math.max(1, Math.floor((path.length - 1) * visibleRatio));
+  const n = keepUntil;
 
-  strokePolyline(ctx, path, 0, keepUntil);
-  ctx.strokeStyle = "rgba(255,255,255,0.7)";
-  ctx.globalAlpha = 0.35 * fade;
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
+  for (let i = 0; i < n; i++) {
+    const u = (i + 0.5) / Math.max(1, path.length - 1);
+    const ease = Math.pow(u, 1.1);
+    ctx.beginPath();
+    ctx.moveTo(path[i].x, path[i].y);
+    ctx.lineTo(path[i + 1].x, path[i + 1].y);
+    ctx.strokeStyle = "#e56555";
+    ctx.globalAlpha = (0.1 + 0.65 * ease) * fade;
+    ctx.lineWidth = 0.8 + 2.6 * ease;
+    ctx.stroke();
+  }
+
+  const coreFrom = Math.floor(n * 0.5);
+  for (let i = coreFrom; i < n; i++) {
+    const u = (i - coreFrom) / Math.max(1, n - coreFrom);
+    ctx.beginPath();
+    ctx.moveTo(path[i].x, path[i].y);
+    ctx.lineTo(path[i + 1].x, path[i + 1].y);
+    ctx.strokeStyle = "#ffc2b4";
+    ctx.globalAlpha = (0.2 + 0.5 * u) * fade;
+    ctx.lineWidth = 0.6 + u;
+    ctx.stroke();
+  }
   ctx.globalAlpha = 1;
 
-  // Severed tip stub that shrinks away from the rocket
-  if (t < 0.55) {
-    const stubLen = Math.max(2, Math.floor(10 * (1 - t / 0.55)));
-    const from = Math.max(0, path.length - 1 - stubLen);
-    strokePolyline(ctx, path, from, path.length - 1);
-    ctx.strokeStyle = "#ff8f7a";
-    ctx.globalAlpha = 1 - t / 0.55;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([3, 4]);
-    ctx.lineDashOffset = nowPerf * 0.05;
-    ctx.stroke();
-    ctx.setLineDash([]);
+  if (breakPhase < 1) {
+    const tipFrom = Math.max(0, path.length - 12);
+    const drift = breakPhase * 14;
+    ctx.save();
+    ctx.translate(drift * 0.6, drift);
+    for (let i = tipFrom; i < path.length - 1; i++) {
+      const u = (i - tipFrom) / Math.max(1, path.length - 1 - tipFrom);
+      ctx.beginPath();
+      ctx.moveTo(path[i].x, path[i].y);
+      ctx.lineTo(path[i + 1].x, path[i + 1].y);
+      ctx.strokeStyle = "#ff8f7a";
+      ctx.globalAlpha = (1 - breakPhase) * (0.4 + 0.6 * u);
+      ctx.lineWidth = 1.2 + u;
+      ctx.stroke();
+    }
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
-  // Break spark at snap point
-  if (t < 0.4) {
-    const a = 1 - t / 0.4;
-    ctx.globalAlpha = a;
-    ctx.fillStyle = "#ffb4a0";
+  if (t < 0.35) {
+    const a = 1 - t / 0.35;
+    const bloom = ctx.createRadialGradient(
+      breakPos.x,
+      breakPos.y,
+      0,
+      breakPos.x,
+      breakPos.y,
+      8 + t * 30,
+    );
+    bloom.addColorStop(0, `rgba(255,180,160,${0.7 * a})`);
+    bloom.addColorStop(0.45, `rgba(229,101,85,${0.35 * a})`);
+    bloom.addColorStop(1, "transparent");
+    ctx.fillStyle = bloom;
     ctx.beginPath();
-    ctx.arc(breakPos.x, breakPos.y, 3 + t * 10, 0, Math.PI * 2);
+    ctx.arc(breakPos.x, breakPos.y, 8 + t * 30, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  if (dissolve > 0 && dissolve < 0.9 && keepUntil > 1) {
+    const tip = path[keepUntil];
+    ctx.globalAlpha = fade * 0.7;
+    ctx.fillStyle = "#ff9a7a";
+    for (let i = 0; i < 4; i++) {
+      const ox = Math.sin(nowPerf * 0.02 + i * 1.7) * 3;
+      const oy = Math.cos(nowPerf * 0.025 + i) * 3 + dissolve * 8;
+      ctx.beginPath();
+      ctx.arc(tip.x + ox, tip.y + oy, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.globalAlpha = 1;
   }
 }
@@ -216,7 +406,13 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
 
   const [countdown, setCountdown] = useState(0);
   const [staticMult, setStaticMult] = useState("1.00×");
-  const [milestoneFlash, setMilestoneFlash] = useState<number | null>(null);
+  const [milestoneFx, setMilestoneFx] = useState<{
+    value: number;
+    tier: "soft" | "mid" | "high" | "moon";
+    id: number;
+  } | null>(null);
+  const milestoneTimerRef = useRef<number | null>(null);
+  const milestoneAnimId = useRef(0);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -245,8 +441,9 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
     path: Pt[];
     mult: number;
   } | null>(null);
-  const starsRef = useRef<{ x: number; y: number; r: number; a: number; s: number }[]>([]);
+  const starsRef = useRef<Star[]>([]);
   const sparkPhaseRef = useRef(0);
+  const prevCamYRef = useRef(0);
 
   stateRef.current = state;
   onLiveRef.current = onLiveMultiplier;
@@ -288,8 +485,13 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
       milestoneRef.current = 1;
       particlesRef.current = [];
       prevPosRef.current = null;
+      prevCamYRef.current = 0;
       crashAnimRef.current = null;
-      setMilestoneFlash(null);
+      setMilestoneFx(null);
+      if (milestoneTimerRef.current != null) {
+        window.clearTimeout(milestoneTimerRef.current);
+        milestoneTimerRef.current = null;
+      }
     }
 
     if (state.phase === "running") {
@@ -395,12 +597,13 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       if (starsRef.current.length === 0) {
-        starsRef.current = Array.from({ length: 42 }, () => ({
+        starsRef.current = Array.from({ length: 56 }, () => ({
           x: Math.random() * w,
           y: Math.random() * h,
-          r: 0.4 + Math.random() * 1.4,
-          a: 0.15 + Math.random() * 0.55,
-          s: 0.15 + Math.random() * 0.45,
+          r: 0.35 + Math.random() * 1.5,
+          a: 0.12 + Math.random() * 0.55,
+          s: 0.12 + Math.random() * 0.5,
+          depth: 0.25 + Math.random() * 0.75,
         }));
       }
     };
@@ -543,28 +746,57 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
       ctx.fillStyle = vg;
       ctx.fillRect(0, 0, w, h);
 
-      // Stars
+      // Stars (parallax scroll while climbing)
+      let camY = 0;
+      let climbMult = 1;
+      if (phaseNow === "running" && runStartMs.current) {
+        climbMult = computeRunningMultiplier({
+          runStartMs: runStartMs.current,
+          clockOffsetMs: clockOffsetMs.current,
+          serverMultiplier: lastServerMult.current,
+          lastTickAtMs: lastTickAtMs.current,
+          nowMs: now,
+        });
+        const tipWorld = rocketWorldPos(climbMult, w, h);
+        camY = cameraYForRocket(tipWorld.y, h);
+      } else if (phaseNow === "crashed" && s?.crash_point) {
+        climbMult = s.crash_point;
+        const tipWorld = rocketWorldPos(climbMult, w, h);
+        camY = cameraYForRocket(tipWorld.y, h);
+      }
+
+      const dCam = camY - prevCamYRef.current;
+      prevCamYRef.current = camY;
+      if (dCam !== 0 && particlesRef.current.length) {
+        for (const p of particlesRef.current) p.y += dCam;
+      }
+
+      const climbing = phaseNow === "running" && camY > 0;
+      const starDrift = phaseNow === "running" ? (climbing ? 3.2 : 1.5) : 0.35;
+      const ascentPush = climbing
+        ? Math.min(4.2, 0.8 + Math.log10(Math.max(1, climbMult)) * 1.35)
+        : phaseNow === "running"
+          ? 0.15
+          : 0;
+
       for (const star of starsRef.current) {
-        star.x -= star.s * (phaseNow === "running" ? 1.6 : 0.35);
-        if (star.x < 0) star.x = w;
-        ctx.globalAlpha = star.a * (0.7 + 0.3 * Math.sin(nowPerf * 0.004 + star.x));
+        star.x -= star.s * starDrift * (0.55 + star.depth);
+        star.y += ascentPush * (0.35 + star.depth);
+        if (star.x < -2) star.x = w + 2;
+        if (star.y > h + 2) star.y = -2;
+        if (star.y < -2) star.y = h + 2;
+
+        let sy = star.y + camY * star.depth * 0.55;
+        sy = ((sy % h) + h) % h;
+        const sx = star.x;
+
+        ctx.globalAlpha = star.a * (0.65 + 0.35 * Math.sin(nowPerf * 0.004 + sx));
         ctx.fillStyle = "#d7e6f7";
         ctx.beginPath();
-        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        ctx.arc(sx, sy, star.r, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-
-      // Horizon grid
-      ctx.strokeStyle = "rgba(255,255,255,0.045)";
-      ctx.lineWidth = 1;
-      for (let i = 1; i <= 3; i++) {
-        const y = h * (0.28 + i * 0.18);
-        ctx.beginPath();
-        ctx.moveTo(w * 0.04, y);
-        ctx.lineTo(w * 0.96, y);
-        ctx.stroke();
-      }
 
       let mult = 1;
       let heat: keyof typeof HEAT = "calm";
@@ -573,13 +805,7 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
       let showRocket = phaseNow === "running" || phaseNow === "crashed";
 
       if (phaseNow === "running" && runStartMs.current) {
-        mult = computeRunningMultiplier({
-          runStartMs: runStartMs.current,
-          clockOffsetMs: clockOffsetMs.current,
-          serverMultiplier: lastServerMult.current,
-          lastTickAtMs: lastTickAtMs.current,
-          nowMs: now,
-        });
+        mult = climbMult;
         heat = crashHeatTone(mult);
         pos = rocketPos(mult, w, h);
 
@@ -587,10 +813,20 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         if (prev) {
           const dx = pos.x - prev.x;
           const dy = pos.y - prev.y;
-          if (dx * dx + dy * dy > 0.2) angle = Math.atan2(dy, dx);
-          else angle = angleOf(prev, pos);
+          if (dx * dx + dy * dy > 0.15) {
+            angle = Math.atan2(dy, dx);
+          } else if (camY > 0) {
+            // Ceiling lock: keep nose up-right even when screen pos is stable
+            angle = -0.95;
+          } else {
+            angle = angleOf(prev, pos);
+          }
         } else {
           angle = -0.65;
+        }
+        // Bias toward climb once camera is scrolling
+        if (camY > 0) {
+          angle = Math.min(angle, -0.75);
         }
         prevPosRef.current = pos;
 
@@ -621,24 +857,37 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
           });
         }
 
-        // Milestones
+        // Milestones — soft celebration, not a harsh pop
         for (const m of [2, 5, 10, 25, 50]) {
           if (mult >= m && milestoneRef.current < m) {
             milestoneRef.current = m;
             onMilestoneRef.current?.(m);
-            setMilestoneFlash(m);
-            window.setTimeout(() => setMilestoneFlash(null), 650);
-            for (let i = 0; i < 12; i++) {
-              const a = (Math.PI * 2 * i) / 12;
+            const tier =
+              m >= 50 ? "moon" : m >= 10 ? "high" : m >= 5 ? "mid" : "soft";
+            milestoneAnimId.current += 1;
+            const id = milestoneAnimId.current;
+            setMilestoneFx({ value: m, tier, id });
+            if (milestoneTimerRef.current != null) {
+              window.clearTimeout(milestoneTimerRef.current);
+            }
+            milestoneTimerRef.current = window.setTimeout(() => {
+              setMilestoneFx((prev) => (prev?.id === id ? null : prev));
+              milestoneTimerRef.current = null;
+            }, 1300);
+
+            const burst = m >= 10 ? 16 : 10;
+            for (let i = 0; i < burst; i++) {
+              const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+              const sp = 0.8 + Math.random() * 2.2;
               particlesRef.current.push({
-                x: pos.x,
-                y: pos.y,
-                vx: Math.cos(a) * 2.2,
-                vy: Math.sin(a) * 2.2,
+                x: pos.x + (Math.random() - 0.5) * 8,
+                y: pos.y + (Math.random() - 0.5) * 8,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp - 0.6,
                 life: 1,
-                max: 0.55,
-                size: 2,
-                hue: 200,
+                max: 0.55 + Math.random() * 0.35,
+                size: 1.2 + Math.random() * 1.8,
+                hue: m >= 10 ? 35 : m >= 5 ? 48 : 155,
               });
             }
           }
@@ -658,14 +907,14 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         heat = "crash";
         const anim = crashAnimRef.current;
         if (anim) {
-          const t = Math.min(1, (nowPerf - anim.t0) / 1100);
+          const t = Math.min(1, (nowPerf - anim.t0) / 900);
           // Rocket tumbles away from the break point
           pos = {
             x: anim.pos.x + t * 28,
             y: anim.pos.y + t * t * 95,
           };
           angle = anim.angle + t * 3.4;
-          showRocket = t < 0.95;
+          showRocket = t < 0.85;
         } else {
           pos = rocketPos(mult, w, h);
         }
@@ -694,11 +943,11 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
       if (phaseNow === "running" && mult > 1.01) {
         const path = buildFlightPath(mult, w, h);
         const c = HEAT[heat];
-        sparkPhaseRef.current += 0.085;
-        drawLiveTrail(ctx, path, c, sparkPhaseRef.current, nowPerf);
+        sparkPhaseRef.current += 0.1;
+        drawLiveTrail(ctx, path, c, sparkPhaseRef.current, nowPerf, h);
       } else if (phaseNow === "crashed" && crashAnimRef.current) {
         const anim = crashAnimRef.current;
-        const t = Math.min(1, (nowPerf - anim.t0) / 1100);
+        const t = Math.min(1, (nowPerf - anim.t0) / 900);
         drawBrokenTrail(ctx, anim.path, anim.pos, t, nowPerf);
       }
 
@@ -777,9 +1026,31 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
     >
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-hidden />
 
-      {milestoneFlash != null ? (
-        <div className="crash-milestone pointer-events-none absolute inset-0 z-[8]" aria-hidden>
-          <span className="crash-milestone__label">{milestoneFlash}×</span>
+      {milestoneFx ? (
+        <div
+          key={milestoneFx.id}
+          className={cn(
+            "crash-milestone pointer-events-none absolute inset-x-0 top-2 z-[8]",
+            `crash-milestone--${milestoneFx.tier}`,
+          )}
+          aria-hidden
+        >
+          <div className="crash-milestone__bloom" />
+          <div className="crash-milestone__row">
+            <span className="crash-milestone__flare crash-milestone__flare--left" />
+            <div className="crash-milestone__core">
+              <span className="crash-milestone__echo" aria-hidden>
+                {milestoneFx.value}×
+              </span>
+              <span className="crash-milestone__value">{milestoneFx.value}×</span>
+            </div>
+            <span className="crash-milestone__flare crash-milestone__flare--right" />
+          </div>
+          <div className="crash-milestone__sparks" aria-hidden>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <span key={i} style={{ "--i": i } as CSSProperties} />
+            ))}
+          </div>
         </div>
       ) : null}
 

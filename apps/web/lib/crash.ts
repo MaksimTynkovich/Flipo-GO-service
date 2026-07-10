@@ -130,16 +130,25 @@ export function chartProgress(mult: number): number {
   return Math.min(1, Math.log(mult) / Math.log(CRASH_CHART_LOG_MAX));
 }
 
+/** Log-curve used by the rocket stage (~1–20× fills the first screen). */
+export const CRASH_FLIGHT_VISUAL_MAX = 20;
+
 /**
- * Visual flight progress for the rocket stage.
+ * Uncapped flight progress. Same early curve as the stage fill, but continues
+ * past 1 so the camera can keep climbing on high multipliers.
+ */
+export function flightProgressWorld(mult: number): number {
+  if (mult <= 1) return 0;
+  const raw = Math.log(mult) / Math.log(CRASH_FLIGHT_VISUAL_MAX);
+  return Math.pow(Math.max(0, raw), 0.78);
+}
+
+/**
+ * Visual flight progress for the rocket stage (0–1).
  * Spreads early multipliers (1–3×) across more of the screen so the trail is readable.
  */
 export function flightProgress(mult: number): number {
-  if (mult <= 1) return 0;
-  // Most of the stage is used by ~1–20×; higher values ease into the corner.
-  const VISUAL_MAX = 20;
-  const raw = Math.log(mult) / Math.log(VISUAL_MAX);
-  return Math.min(1, Math.pow(Math.min(1, raw), 0.78));
+  return Math.min(1, flightProgressWorld(mult));
 }
 
 export type CrashHistoryTier = {

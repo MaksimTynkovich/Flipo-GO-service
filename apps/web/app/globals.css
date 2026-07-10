@@ -660,24 +660,261 @@ body {
 }
 
 .crash-milestone {
+  --ms-color: #8ef0bc;
+  --ms-glow: rgba(110, 231, 168, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 0.35rem;
+  animation: crash-milestone-enter 1.25s var(--ease-out) forwards;
+}
+
+.crash-milestone--mid {
+  --ms-color: #f5c84c;
+  --ms-glow: rgba(245, 200, 76, 0.55);
+}
+
+.crash-milestone--high {
+  --ms-color: #ff9a5c;
+  --ms-glow: rgba(255, 154, 92, 0.6);
+}
+
+.crash-milestone--moon {
+  --ms-color: #ffd29a;
+  --ms-glow: rgba(255, 210, 154, 0.65);
+}
+
+.crash-milestone__bloom {
+  position: absolute;
+  top: 0.2rem;
+  left: 50%;
+  width: 9rem;
+  height: 3.2rem;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: radial-gradient(ellipse at center, var(--ms-glow), transparent 70%);
+  filter: blur(2px);
+  opacity: 0.85;
+  animation: crash-milestone-bloom 1.25s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+.crash-milestone__row {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.55rem;
 }
 
-.crash-milestone__label {
-  font-size: 2.8rem;
+.crash-milestone__flare {
+  display: block;
+  width: 2.4rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ms-color), transparent);
+  opacity: 0.85;
+  animation: crash-milestone-flare 1.25s var(--ease-out) forwards;
+  box-shadow: 0 0 10px var(--ms-glow);
+}
+
+.crash-milestone__flare--left {
+  transform-origin: right center;
+}
+
+.crash-milestone__flare--right {
+  transform-origin: left center;
+}
+
+.crash-milestone__core {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.crash-milestone__echo,
+.crash-milestone__value {
+  grid-area: 1 / 1;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
-  color: #fff;
-  text-shadow: 0 0 30px color-mix(in srgb, var(--accent) 55%, transparent);
-  animation: crash-milestone-pop 0.65s var(--ease-out) forwards;
+  line-height: 1;
 }
 
-@keyframes crash-milestone-pop {
-  0% { opacity: 0; transform: scale(0.55); }
-  40% { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 0; transform: scale(1.35); }
+.crash-milestone__value {
+  position: relative;
+  z-index: 1;
+  font-size: 1.55rem;
+  color: var(--ms-color);
+  text-shadow:
+    0 0 12px var(--ms-glow),
+    0 0 28px var(--ms-glow),
+    0 1px 0 rgba(0, 0, 0, 0.35);
+  animation: crash-milestone-value 1.25s var(--ease-out) forwards;
+}
+
+.crash-milestone--high .crash-milestone__value {
+  font-size: 1.7rem;
+}
+
+.crash-milestone--moon .crash-milestone__value {
+  font-size: 1.9rem;
+}
+
+.crash-milestone__echo {
+  font-size: 1.55rem;
+  color: var(--ms-color);
+  opacity: 0.35;
+  filter: blur(1px);
+  animation: crash-milestone-echo 1.25s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+.crash-milestone--high .crash-milestone__echo {
+  font-size: 1.7rem;
+}
+
+.crash-milestone--moon .crash-milestone__echo {
+  font-size: 1.9rem;
+}
+
+.crash-milestone__sparks {
+  position: absolute;
+  top: 1.1rem;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.crash-milestone__sparks span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: var(--ms-color);
+  box-shadow: 0 0 8px var(--ms-glow);
+  animation: crash-milestone-spark 1.15s var(--ease-out) forwards;
+  animation-delay: calc(var(--i) * 35ms);
+  opacity: 0;
+}
+
+@keyframes crash-milestone-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  16% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes crash-milestone-bloom {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+  }
+  25% {
+    opacity: 0.9;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.35);
+  }
+}
+
+@keyframes crash-milestone-value {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+    filter: blur(4px);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.12);
+    filter: blur(0);
+  }
+  40% {
+    transform: scale(0.98);
+  }
+  55% {
+    transform: scale(1.03);
+  }
+  70% {
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes crash-milestone-echo {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  20% {
+    opacity: 0.45;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
+
+@keyframes crash-milestone-flare {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.2);
+  }
+  22% {
+    opacity: 0.95;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1.15);
+  }
+}
+
+@keyframes crash-milestone-spark {
+  0% {
+    opacity: 0;
+    transform: rotate(calc(var(--i) * 60deg)) translateY(0) scale(0.6);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(calc(var(--i) * 60deg)) translateY(-22px) scale(0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crash-milestone,
+  .crash-milestone__value,
+  .crash-milestone__echo,
+  .crash-milestone__flare,
+  .crash-milestone__bloom,
+  .crash-milestone__sparks span {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
 }
 
 .crash-outcome {
