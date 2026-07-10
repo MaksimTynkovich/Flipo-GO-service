@@ -1,6 +1,7 @@
 "use client";
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { TonAmount } from "@/components/icons/TonIcon";
 import {
   CrashRoundState,
   CRASH_FLIGHT_VISUAL_MAX,
@@ -24,9 +25,18 @@ export type CrashStageFx =
 type Props = {
   state: CrashRoundState | null;
   fx?: CrashStageFx;
+  /** Active stake overlay on the stage while the player is in the round. */
+  stakeHud?: CrashStakeHud | null;
   /** Throttled (~10Hz). Do not setState every frame in parent. */
   onLiveMultiplier?: (mult: number) => void;
   onMilestone?: (mult: number) => void;
+};
+
+export type CrashStakeHud = {
+  stakeTon: string;
+  winTon: string;
+  betCount: number;
+  gifts?: { id: string; image_url: string }[];
 };
 
 type Star = {
@@ -398,7 +408,13 @@ function drawBrokenTrail(
   }
 }
 
-export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: Props) {
+export function CrashChart({
+  state,
+  fx = null,
+  stakeHud = null,
+  onLiveMultiplier,
+  onMilestone,
+}: Props) {
   const phase = state?.phase;
   const crashed = phase === "crashed";
   const running = phase === "running";
@@ -1069,10 +1085,8 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
 
       {loseFx ? (
         <div className="crash-outcome crash-outcome--lose pointer-events-none absolute inset-0 z-20">
-          <div className="crash-outcome__crack" aria-hidden />
           <p className="crash-outcome__title">Краш</p>
           <p className="crash-outcome__mult">{formatMultiplier(loseFx.multiplier)}</p>
-          <p className="crash-outcome__sub">Ставка сгорела</p>
         </div>
       ) : null}
 
@@ -1112,6 +1126,47 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         <span className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] font-medium tabular-nums text-white/35">
           #{state.round_number}
         </span>
+      ) : null}
+
+      {stakeHud && !winFx && !loseFx ? (
+        <div className="crash-stake-hud pointer-events-none absolute inset-x-0 bottom-0 z-[12]">
+          <div className="crash-stake-hud__inner">
+            <div className="crash-stake-hud__side">
+              <span className="crash-stake-hud__label">Ставка</span>
+              <span className="crash-stake-hud__value">
+                {stakeHud.gifts && stakeHud.gifts.length > 0 ? (
+                  <span className="inline-flex items-center gap-1">
+                    {stakeHud.gifts.slice(0, 3).map((gift) => (
+                      <span
+                        key={gift.id}
+                        className="flex h-4 w-4 shrink-0 overflow-hidden rounded bg-white/10"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={gift.image_url} alt="" className="h-full w-full object-cover" />
+                      </span>
+                    ))}
+                    <TonAmount amount={stakeHud.stakeTon} iconSize="xs" />
+                  </span>
+                ) : (
+                  <TonAmount amount={stakeHud.stakeTon} iconSize="xs" />
+                )}
+                {stakeHud.betCount > 1 ? (
+                  <span className="ml-1 text-[10px] text-white/45">×{stakeHud.betCount}</span>
+                ) : null}
+              </span>
+            </div>
+            <div className="crash-stake-hud__side crash-stake-hud__side--win">
+              <span className="crash-stake-hud__label">Сейчас</span>
+              <span className="crash-stake-hud__value crash-stake-hud__value--win">
+                <TonAmount
+                  amount={stakeHud.winTon}
+                  iconSize="xs"
+                  iconClassName="text-success"
+                />
+              </span>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <span ref={potLabelRef} className="sr-only" />

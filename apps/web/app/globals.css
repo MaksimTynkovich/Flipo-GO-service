@@ -659,6 +659,58 @@ body {
   text-shadow: 0 0 28px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+.crash-stake-hud {
+  padding: 1.35rem 0.75rem 0.55rem;
+  background: linear-gradient(
+    to top,
+    rgba(6, 12, 20, 0.78) 0%,
+    rgba(6, 12, 20, 0.35) 55%,
+    transparent 100%
+  );
+}
+
+.crash-stake-hud__inner {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.crash-stake-hud__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.crash-stake-hud__side--win {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.crash-stake-hud__label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.crash-stake-hud__value {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 248, 252, 0.92);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.crash-stake-hud__value--win {
+  color: #7dffb2;
+  text-shadow: 0 0 14px rgba(62, 207, 142, 0.35);
+}
+
 .crash-milestone {
   --ms-color: #8ef0bc;
   --ms-glow: rgba(110, 231, 168, 0.55);
@@ -970,11 +1022,6 @@ body {
   animation: crash-mult-hit 0.5s var(--ease-out);
 }
 
-.crash-outcome__sub {
-  font-size: 0.7rem;
-  color: color-mix(in srgb, var(--danger) 80%, white);
-}
-
 .crash-outcome__burst { position: absolute; inset: 0; pointer-events: none; }
 
 .crash-outcome__burst span {
@@ -992,15 +1039,6 @@ body {
   animation-delay: calc(var(--i) * 18ms);
 }
 
-.crash-outcome__crack {
-  position: absolute;
-  inset: 18% 22%;
-  border-radius: 1rem;
-  border: 1px solid rgba(229, 101, 85, 0.35);
-  animation: crash-crack 0.65s var(--ease-out);
-  opacity: 0.55;
-}
-
 @keyframes crash-outcome-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1015,12 +1053,6 @@ body {
 @keyframes crash-win-particle {
   0% { opacity: 1; transform: rotate(calc(var(--i) * 30deg)) translateY(0) scale(1); }
   100% { opacity: 0; transform: rotate(calc(var(--i) * 30deg)) translateY(-74px) scale(0.2); }
-}
-
-@keyframes crash-crack {
-  0% { transform: scale(0.85); opacity: 0; }
-  40% { opacity: 0.7; }
-  100% { transform: scale(1.08); opacity: 0; }
 }
 
 .crash-bet-flash {

@@ -6,7 +6,6 @@ import { CrashChart, type CrashStageFx } from "@/components/games/CrashChart";
 import { CrashHistory } from "@/components/games/CrashHistory";
 import { CrashRoundBets } from "@/components/games/CrashRoundBets";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
-import { GiftStakeIcons } from "@/components/games/BetStakeLabel";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -23,7 +22,6 @@ import {
   CrashRoundBets as CrashRoundBetsData,
   CrashActiveBet,
 } from "@/lib/api";
-import { TonAmount } from "@/components/icons/TonIcon";
 import { CrashRoundState, formatMultiplier } from "@/lib/crash";
 import {
   crashCashoutMessage,
@@ -554,6 +552,19 @@ export default function CrashPage() {
         <CrashChart
           state={state}
           fx={stageFx}
+          stakeHud={
+            roundActiveBets.length > 0 && state?.phase === "running"
+              ? {
+                  stakeTon: formatTON(totalStakeNanoton),
+                  winTon: potentialWinTon.toFixed(2),
+                  betCount: roundActiveBets.length,
+                  gifts: activeGiftIcons.map((gift) => ({
+                    id: gift.id,
+                    image_url: gift.image_url,
+                  })),
+                }
+              : null
+          }
           onLiveMultiplier={onLiveMultiplier}
           onMilestone={(m) => {
             if (m >= 10) haptics.notificationOccurred("success");
@@ -563,38 +574,6 @@ export default function CrashPage() {
         />
 
         <div className="panel space-y-3">
-          {roundActiveBets.length > 0 && state?.phase === "running" ? (
-            <div className="flex items-center justify-between gap-3 rounded-xl bg-success/10 px-3 py-2.5">
-              <div>
-                <p className="section-label text-success/80">В игре</p>
-                <p className="text-sm font-semibold">
-                  {activeGiftIcons.length > 0 ? (
-                    <GiftStakeIcons
-                      gifts={activeGiftIcons}
-                      size="sm"
-                      amountNanoton={totalStakeNanoton}
-                    />
-                  ) : (
-                    <TonAmount amount={formatTON(totalStakeNanoton)} iconSize="sm" />
-                  )}
-                  {roundActiveBets.length > 1 && (
-                    <span className="ml-1.5 text-xs text-muted">×{roundActiveBets.length}</span>
-                  )}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="section-label text-success/80">Сейчас</p>
-                <p className="text-sm font-bold tabular-nums text-success">
-                  <TonAmount
-                    amount={potentialWinTon.toFixed(2)}
-                    iconSize="sm"
-                    iconClassName="text-success"
-                  />
-                </p>
-              </div>
-            </div>
-          ) : null}
-
           <BetFundingControl
             mode={fundingMode}
             onModeChange={setFundingMode}
