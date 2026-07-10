@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { usePathname } from "next/navigation";
 import {
   AUTH_SESSION_REFRESHED,
   authDebug,
@@ -11,7 +12,7 @@ import {
 } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
-import { getTelegramWebApp, initTelegramWebApp } from "@/src/shared/lib/twa";
+import { getTelegramWebApp, hasTelegramInitData, initTelegramWebApp } from "@/src/shared/lib/twa";
 import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
 
 type AuthState = {
@@ -25,6 +26,7 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -44,8 +46,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         initTelegramWebApp();
 
+        const isAdmin = pathname.startsWith("/admin");
+        const inTelegram = hasTelegramInitData();
+        const allowBrowserSession = DEBUG_AUTH || isAdmin;
+
         const token = localStorage.getItem("flipo_token");
-        if (token) {
+        if (token && (inTelegram || allowBrowserSession)) {
           try {
             setUser(await getMe());
             trackEvent({
@@ -57,6 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch {
             localStorage.removeItem("flipo_token");
           }
+        } else if (token && !inTelegram && !allowBrowserSession) {
+          localStorage.removeItem("flipo_token");
         }
 
         const initData = getTelegramWebApp()?.initData;
@@ -114,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        setError("No Telegram session. Enable NEXT_PUBLIC_DEBUG_AUTH for browser dev.");
+        setError("Откройте приложение в Telegram.");
       } catch (e) {
         trackEvent({
           event_name: "auth_failed",
@@ -130,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     init();
-  }, []);
+  }, [pathname]);
 
   if (loading) {
     return <AppSplashScreen />;

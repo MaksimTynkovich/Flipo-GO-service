@@ -84,6 +84,12 @@ export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp ?? null;
 }
 
+/** True when the page was opened inside Telegram with a signed user session. */
+export function hasTelegramInitData(): boolean {
+  const initData = getTelegramWebApp()?.initData;
+  return typeof initData === "string" && initData.trim().length > 0;
+}
+
 /** Open a t.me / tg:// link inside Telegram (not external browser). */
 export function openTelegramLink(url: string): boolean {
   const webApp = getTelegramWebApp();
@@ -106,6 +112,30 @@ export function openTelegramShare(opts: { url: string; text?: string }): boolean
 export function isTelegramMobilePlatform(platform?: string) {
   const value = platform?.toLowerCase() ?? "";
   return value === "android" || value === "ios";
+}
+
+export function isTelegramDesktopPlatform(platform?: string) {
+  const value = platform?.toLowerCase() ?? "";
+  return (
+    value === "tdesktop" ||
+    value === "macos" ||
+    value === "web" ||
+    value === "weba" ||
+    value.includes("desktop")
+  );
+}
+
+export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTelegramWebApp()) {
+  if (typeof document === "undefined" || !webApp?.platform) {
+    return;
+  }
+
+  const platform = webApp.platform.toLowerCase();
+  document.documentElement.classList.add(`tg-platform-${platform.replace(/[^a-z0-9_-]/g, "")}`);
+
+  if (isTelegramDesktopPlatform(platform)) {
+    document.documentElement.classList.add("tg-desktop");
+  }
 }
 
 /** Open the mini app maximally: expand (legacy) + fullscreen (Bot API 8.0+). */
@@ -131,6 +161,7 @@ export function initTelegramWebApp() {
 
   const syncSafeArea = () => applyTelegramSafeAreaToDocument();
   syncSafeArea();
+  applyTelegramPlatformClass(webApp);
   requestAnimationFrame(syncSafeArea);
   [50, 150, 400, 800].forEach((delay) => window.setTimeout(syncSafeArea, delay));
 }

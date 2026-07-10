@@ -2,6 +2,7 @@
 
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
 import { TelegramProvider } from "@/src/app/providers/TelegramProvider";
+import { TelegramAccessGate } from "./TelegramAccessGate";
 import { AnalyticsProvider } from "./AnalyticsProvider";
 import { AuthProvider } from "./AuthProvider";
 import { ToastProvider } from "./ToastProvider";
@@ -17,11 +18,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <TonConnectUIProvider manifestUrl={manifestUrl}>
       <TelegramProvider>
         <AnalyticsProvider>
-          <AuthProvider>
-            <ToastProvider>
-              <UserRealtimeProvider>{children}</UserRealtimeProvider>
-            </ToastProvider>
-          </AuthProvider>
+          <TelegramAccessGate>
+            <AuthProvider>
+              <ToastProvider>
+                <UserRealtimeProvider>{children}</UserRealtimeProvider>
+              </ToastProvider>
+            </AuthProvider>
+          </TelegramAccessGate>
         </AnalyticsProvider>
       </TelegramProvider>
     </TonConnectUIProvider>

@@ -24,6 +24,15 @@ export function depositBotMention(): string {
   return `@${DEPOSIT_BOT_USERNAME}`;
 }
 
+/** Direct link to open the mini app inside Telegram. */
+export function miniAppTelegramUrl(startApp?: string): string {
+  const base = `https://t.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}`;
+  if (!startApp?.trim()) {
+    return base;
+  }
+  return `${base}?startapp=${encodeURIComponent(startApp.trim())}`;
+}
+
 /** Referral deep link (startapp passes ref code into Telegram initData.start_param). */
 export function referralTelegramUrl(referrerTelegramId: number | string): string {
   const numericId =
