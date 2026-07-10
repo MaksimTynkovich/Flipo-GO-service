@@ -104,52 +104,37 @@ export function BetFundingControl({
           className,
         )}
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface">
-          {hasGifts ? (
-            <GiftPreview gifts={selectedGifts} />
-          ) : hasTon || (!combined && mode === "balance") ? (
-            <TonIcon variant="brand" className="h-6 w-6" title="TON" />
-          ) : (
-            <Gift className="h-5 w-5 text-muted" />
-          )}
+        <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface">
+          <SummaryThumb
+            hasTon={hasTon}
+            hasGifts={hasGifts}
+            gifts={selectedGifts}
+            giftCount={selectedGiftIds.length}
+            combined={combined}
+            mode={mode}
+          />
         </span>
 
         <span className="min-w-0 flex-1">
           <span className="block text-[11px] font-medium text-muted">{title}</span>
           {combined ? (
             summaryReady ? (
-              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[15px] font-semibold text-foreground">
-                {hasTon ? (
-                  <TonAmount
-                    amount={
-                      fixedStakeNanoton != null && fixedStakeNanoton > 0
-                        ? formatTON(fixedStakeNanoton)
-                        : amountTon || "0"
-                    }
-                    iconSize="sm"
-                  />
-                ) : null}
-                {hasTon && hasGifts ? (
-                  <span className="text-muted">+</span>
-                ) : null}
-                {hasGifts ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span>
-                      {selectedGifts.length === 1
-                        ? selectedGifts[0].name
-                        : pluralizeGifts(selectedGiftIds.length)}
-                    </span>
-                    {giftTotalNanoton > 0 && (
-                      <span className="text-sm font-medium tabular-nums text-muted">
-                        <TonAmount amount={formatTON(giftTotalNanoton)} iconSize="xs" />
-                      </span>
-                    )}
-                  </span>
-                ) : null}
-              </span>
+              <CombinedSummary
+                hasTon={hasTon}
+                hasGifts={hasGifts}
+                amountTon={
+                  fixedStakeNanoton != null && fixedStakeNanoton > 0
+                    ? formatTON(fixedStakeNanoton)
+                    : amountTon || "0"
+                }
+                amountNanoton={amountNanoton}
+                giftCount={selectedGiftIds.length}
+                giftName={selectedGifts.length === 1 ? selectedGifts[0].name : null}
+                giftTotalNanoton={giftTotalNanoton}
+              />
             ) : (
               <span className="mt-0.5 block text-[15px] font-semibold text-muted">
-                TON и/или подарки
+                Настроить
               </span>
             )
           ) : mode === "balance" ? (
@@ -164,17 +149,17 @@ export function BetFundingControl({
               />
             </span>
           ) : selectedGiftIds.length > 0 ? (
-            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[15px] font-semibold text-foreground">
-              <span>
+            <span className="mt-0.5 flex min-w-0 flex-col gap-0.5">
+              <span className="truncate text-[15px] font-semibold text-foreground">
                 {selectedGifts.length === 1
                   ? selectedGifts[0].name
                   : pluralizeGifts(selectedGiftIds.length)}
               </span>
-              {giftTotalNanoton > 0 && (
-                <span className="text-sm font-medium tabular-nums text-muted">
+              {giftTotalNanoton > 0 ? (
+                <span className="text-[12px] font-medium tabular-nums text-muted">
                   <TonAmount amount={formatTON(giftTotalNanoton)} iconSize="xs" />
                 </span>
-              )}
+              ) : null}
             </span>
           ) : (
             <span className="mt-0.5 block text-[15px] font-semibold text-muted">
@@ -241,49 +226,97 @@ export function BetFundingControl({
   );
 }
 
-function GiftPreview({
-  gifts,
+function CombinedSummary({
+  hasTon,
+  hasGifts,
+  amountTon,
+  amountNanoton,
+  giftCount,
+  giftName,
+  giftTotalNanoton,
 }: {
-  gifts: { id: string; collection_slug: string; image_url?: string }[];
+  hasTon: boolean;
+  hasGifts: boolean;
+  amountTon: string;
+  amountNanoton: number;
+  giftCount: number;
+  giftName: string | null;
+  giftTotalNanoton: number;
 }) {
-  const shown = gifts.slice(0, 3);
-  const extra = gifts.length - shown.length;
-
-  if (shown.length === 1) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={giftImageUrl(shown[0].collection_slug, shown[0].image_url)}
-        alt=""
-        className="h-full w-full object-contain"
-      />
+  const totalNanoton = amountNanoton + giftTotalNanoton;
+  const parts: string[] = [];
+  if (hasTon) parts.push(`${amountTon} TON`);
+  if (hasGifts) {
+    parts.push(
+      giftCount === 1 && giftName ? giftName : pluralizeGifts(giftCount),
     );
   }
 
   return (
-    <span className="relative flex h-full w-full items-center justify-center">
-      {shown.map((gift, index) => (
-        <span
-          key={gift.id}
-          className="absolute flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-surface ring-1 ring-surface-raised"
-          style={{
-            left: `${10 + index * 10}px`,
-            zIndex: shown.length - index,
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={giftImageUrl(gift.collection_slug, gift.image_url)}
-            alt=""
-            className="h-full w-full object-contain"
-          />
+    <span className="mt-0.5 flex min-w-0 flex-col gap-0.5">
+      <span className="text-[15px] font-semibold tabular-nums text-foreground">
+        <TonAmount amount={formatTON(totalNanoton)} iconSize="sm" />
+      </span>
+      {hasTon && hasGifts ? (
+        <span className="truncate text-[11px] font-medium text-muted">
+          {parts.join(" · ")}
         </span>
-      ))}
-      {extra > 0 && (
-        <span className="absolute bottom-1 right-1 rounded bg-surface px-1 text-[9px] font-bold text-muted">
-          +{extra}
-        </span>
-      )}
+      ) : hasGifts && giftCount === 1 && giftName ? (
+        <span className="truncate text-[11px] font-medium text-muted">{giftName}</span>
+      ) : null}
     </span>
   );
+}
+
+function SummaryThumb({
+  hasTon,
+  hasGifts,
+  gifts,
+  giftCount,
+  combined,
+  mode,
+}: {
+  hasTon: boolean;
+  hasGifts: boolean;
+  gifts: { id: string; collection_slug: string; image_url?: string }[];
+  giftCount: number;
+  combined: boolean;
+  mode: BetFundingMode;
+}) {
+  // Mixed stake or several gifts → abstract mark, not a cramped collage.
+  if (hasGifts && (giftCount > 1 || (combined && hasTon))) {
+    return (
+      <>
+        {hasTon ? (
+          <TonIcon variant="brand" className="h-6 w-6" title="TON" />
+        ) : (
+          <Gift className="h-5 w-5 text-foreground/80" />
+        )}
+        {giftCount > 0 ? (
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold leading-none text-accent-foreground ring-2 ring-surface-raised">
+            {hasTon ? `+${giftCount}` : giftCount}
+          </span>
+        ) : null}
+      </>
+    );
+  }
+
+  if (hasGifts && gifts[0]) {
+    return (
+      <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={giftImageUrl(gifts[0].collection_slug, gifts[0].image_url)}
+          alt=""
+          className="h-full w-full object-contain p-0.5"
+        />
+      </span>
+    );
+  }
+
+  if (hasTon || (!combined && mode === "balance")) {
+    return <TonIcon variant="brand" className="h-6 w-6" title="TON" />;
+  }
+
+  return <Gift className="h-5 w-5 text-muted" />;
 }
