@@ -5,6 +5,7 @@ import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
+import { BetFundingControl } from "@/components/games/BetFundingControl";
 import { BetFundingPanel } from "@/components/games/BetFundingPanel";
 import {
   PvpActiveRoomCard,
@@ -241,7 +242,7 @@ export function PvpHubView() {
       <section className="panel space-y-3">
         <p className="section-label">Создать комнату 1 на 1</p>
 
-        <BetFundingPanel
+        <BetFundingControl
           mode={fundingMode}
           onModeChange={setFundingMode}
           amountTon={betAmount}
@@ -251,6 +252,8 @@ export function PvpHubView() {
           disabled={creating}
           quickAmounts={QUICK_AMOUNTS}
           multiple={false}
+          title="Ставка комнаты"
+          subtitle="Сумма TON или один подарок — это ставка комнаты"
         />
 
         <Button className="h-11 w-full rounded-xl" variant="accent" disabled={creating} onClick={createRoom}>
@@ -314,6 +317,8 @@ export function PvpHubView() {
               onSelectGifts={setJoinGiftIds}
               disabled={!!joiningId}
               multiple={false}
+              layout="sheet"
+              amountLocked
             />
 
             {joinWinChanceBps != null && (

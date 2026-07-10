@@ -5,7 +5,7 @@ import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButton";
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
-import { BetFundingPanel } from "@/components/games/BetFundingPanel";
+import { BetFundingControl } from "@/components/games/BetFundingControl";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -171,9 +171,7 @@ export default function RoulettePage() {
         </div>
 
         <div className="panel space-y-3">
-          <p className="section-label">Ставка</p>
-
-          <BetFundingPanel
+          <BetFundingControl
             mode={fundingMode}
             onModeChange={setFundingMode}
             amountTon={amountTon}

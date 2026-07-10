@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Gift } from "lucide-react";
 import { TonIcon, TonAmount } from "@/components/icons/TonIcon";
-import { formatTON, getInventory, InventoryItem } from "@/lib/api";
+import { formatTON } from "@/lib/api";
 import { BetFundingMode } from "@/lib/bet-funding";
 import { giftImageUrl, giftValuationNanoton } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
+import { useBettableGifts } from "@/components/games/useBettableGifts";
 
 type AmountInputProps = {
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -24,16 +25,14 @@ type Props = {
   disabled?: boolean;
   quickAmounts?: string[];
   fixedStakeNanoton?: number;
+  /** Lock amount field without filtering gifts by exact value (e.g. PvP join). */
+  amountLocked?: boolean;
   excludedGiftIds?: string[];
   multiple?: boolean;
   amountInputProps?: AmountInputProps;
+  /** sheet = denser gift grid for popups */
+  layout?: "inline" | "sheet";
 };
-
-function bettableGifts(items: InventoryItem[]): InventoryItem[] {
-  return items.filter(
-    (item) => item.status === "available" && giftValuationNanoton(item) > 0,
-  );
-}
 
 export function BetFundingPanel({
   mode,
@@ -45,30 +44,13 @@ export function BetFundingPanel({
   disabled,
   quickAmounts = ["0.1", "0.5", "1", "5"],
   fixedStakeNanoton,
+  amountLocked = false,
   excludedGiftIds = [],
   multiple = true,
   amountInputProps,
+  layout = "inline",
 }: Props) {
-  const [gifts, setGifts] = useState<InventoryItem[]>([]);
-  const [loadingGifts, setLoadingGifts] = useState(false);
-
-  const loadGifts = useCallback(async () => {
-    setLoadingGifts(true);
-    try {
-      const items = await getInventory();
-      setGifts(bettableGifts(items));
-    } catch {
-      setGifts([]);
-    } finally {
-      setLoadingGifts(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (mode === "gift") {
-      void loadGifts();
-    }
-  }, [mode, loadGifts]);
+  const { gifts, loading: loadingGifts } = useBettableGifts(mode === "gift");
 
   const excluded = useMemo(() => new Set(excludedGiftIds), [excludedGiftIds]);
 
@@ -98,6 +80,8 @@ export function BetFundingPanel({
     fixedStakeNanoton != null && fixedStakeNanoton > 0
       ? (fixedStakeNanoton / 1_000_000_000).toFixed(2)
       : null;
+
+  const isSheet = layout === "sheet";
 
   return (
     <div className="space-y-3">
@@ -129,7 +113,7 @@ export function BetFundingPanel({
               type="number"
               step="0.01"
               min="0"
-              disabled={disabled || !!fixedStakeNanoton}
+              disabled={disabled || !!fixedStakeNanoton || amountLocked}
               value={fixedStakeTon ?? amountTon}
               onChange={(e) => onAmountTonChange(e.target.value)}
               {...amountInputProps}
@@ -139,7 +123,7 @@ export function BetFundingPanel({
             <TonIcon variant="brand" size="lg" title="TON" />
           </div>
 
-          {!fixedStakeNanoton && (
+          {!fixedStakeNanoton && !amountLocked && (
             <div className="flex gap-2">
               {quickAmounts.map((v) => (
                 <button
@@ -177,6 +161,40 @@ export function BetFundingPanel({
                   ? "Все доступные подарки уже в ставках"
                   : "Нет доступных подарков в инвентаре"}
             </p>
+          ) : isSheet ? (
+            <div className="grid max-h-[min(42dvh,320px)] grid-cols-4 gap-2 overflow-y-auto overscroll-contain pr-0.5">
+              {availableGifts.map((item) => {
+                const active = selectedGiftIds.includes(item.id);
+                const value = giftValuationNanoton(item);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => toggleGift(item.id)}
+                    className={cn(
+                      "app-control flex flex-col items-center gap-1.5 rounded-xl bg-surface-raised p-2",
+                      active
+                        ? "bg-accent/12 ring-1 ring-inset ring-accent/40"
+                        : "hover:bg-[color-mix(in_srgb,var(--surface-raised)_70%,white)]",
+                      disabled && "opacity-40",
+                    )}
+                  >
+                    <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-surface">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={giftImageUrl(item.collection_slug, item.image_url)}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
+                    </span>
+                    <span className="text-[10px] font-semibold tabular-nums text-muted">
+                      <TonAmount amount={formatTON(value)} iconSize="xs" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {availableGifts.map((item) => {
@@ -213,7 +231,7 @@ export function BetFundingPanel({
             </div>
           )}
 
-          {selectedGifts.length > 0 && (
+          {selectedGifts.length > 0 && !isSheet && (
             <div className="surface-inset flex flex-wrap items-center justify-center gap-2 px-3 py-2.5">
               {selectedGifts.map((item) => (
                 <span

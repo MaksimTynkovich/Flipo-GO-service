@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CrashChart } from "@/components/games/CrashChart";
 import { CrashHistory } from "@/components/games/CrashHistory";
 import { CrashRoundBets } from "@/components/games/CrashRoundBets";
-import { BetFundingPanel } from "@/components/games/BetFundingPanel";
+import { BetFundingControl } from "@/components/games/BetFundingControl";
 import { GiftStakeIcons } from "@/components/games/BetStakeLabel";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { PageShell } from "@/components/PageShell";
@@ -288,9 +288,7 @@ export default function CrashPage() {
             </div>
           )}
 
-          <p className="section-label">Ставка</p>
-
-          <BetFundingPanel
+          <BetFundingControl
             mode={fundingMode}
             onModeChange={setFundingMode}
             amountTon={amountTon}
