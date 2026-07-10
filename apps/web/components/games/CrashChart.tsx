@@ -436,6 +436,7 @@ export function CrashChart({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const multLabelRef = useRef<HTMLSpanElement>(null);
   const potLabelRef = useRef<HTMLSpanElement>(null);
+  const countdownRingRef = useRef<HTMLDivElement>(null);
 
   const stateRef = useRef(state);
   const onLiveRef = useRef(onLiveMultiplier);
@@ -468,22 +469,30 @@ export function CrashChart({
   onMilestoneRef.current = onMilestone;
   fxRef.current = fx;
 
-  // Countdown — 1Hz-ish via rAF but only setState when second changes
+  // Whole-second countdown + smooth ring progress via rAF
   useEffect(() => {
     if (!betting || !state?.ends_at) {
       setCountdown(0);
+      if (countdownRingRef.current) {
+        countdownRingRef.current.style.setProperty("--cd-p", "0");
+      }
       return;
     }
     const deadline = new Date(state.ends_at).getTime();
+    const duration = Math.max(1, deadline - Date.now());
     let frame = 0;
-    let lastShown = -1;
+    let lastSec = -1;
     const tick = () => {
-      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-      if (left !== lastShown) {
-        lastShown = left;
-        setCountdown(left);
+      const leftMs = Math.max(0, deadline - Date.now());
+      const sec = Math.max(0, Math.ceil(leftMs / 1000));
+      if (sec !== lastSec) {
+        lastSec = sec;
+        setCountdown(sec);
       }
-      if (Date.now() < deadline) frame = requestAnimationFrame(tick);
+      if (countdownRingRef.current) {
+        countdownRingRef.current.style.setProperty("--cd-p", String(leftMs / duration));
+      }
+      if (leftMs > 0) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
@@ -941,24 +950,9 @@ export function CrashChart({
           pos = rocketPos(mult, w, h);
         }
       } else if (phaseNow === "betting") {
-        // Idle rocket on pad
-        showRocket = true;
-        pos = { x: w * 0.14, y: h * 0.78 };
-        angle = -Math.PI / 2;
-        heat = "calm";
-        // Soft idle flame
-        if (Math.random() < 0.25) {
-          particlesRef.current.push({
-            x: pos.x,
-            y: pos.y + 10,
-            vx: (Math.random() - 0.5) * 0.3,
-            vy: 0.4 + Math.random() * 0.5,
-            life: 1,
-            max: 0.4,
-            size: 1.2,
-            hue: 145,
-          });
-        }
+        // Keep the stage clear during countdown — rocket appears at launch.
+        showRocket = false;
+        particlesRef.current = [];
       }
 
       // Flight path — live energy ribbon (no heavy shadow), breaks on crash
@@ -1091,19 +1085,32 @@ export function CrashChart({
 
       {loseFx ? (
         <div className="crash-outcome crash-outcome--lose pointer-events-none absolute inset-0 z-20">
-          <p className="crash-outcome__title">Краш</p>
           <p className="crash-outcome__mult">{formatMultiplier(loseFx.multiplier)}</p>
         </div>
       ) : null}
 
       <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
         {betting ? (
-          <>
-            <span className="crash-countdown text-5xl font-bold tabular-nums tracking-tight text-accent">
+          <div
+            className={cn(
+              "crash-countdown",
+              countdown <= 3 && countdown > 0 && "crash-countdown--urgent",
+              countdown === 1 && "crash-countdown--final",
+              countdown === 0 && "crash-countdown--go",
+            )}
+          >
+            <div ref={countdownRingRef} className="crash-countdown__ring" aria-hidden>
+              <span className="crash-countdown__orbit" />
+              <span className="crash-countdown__orbit crash-countdown__orbit--delayed" />
+            </div>
+            <div className="crash-countdown__bloom" aria-hidden />
+            <span key={countdown} className="crash-countdown__value">
               {countdown.toString().padStart(2, "0")}
             </span>
-            <span className="text-xs font-medium text-muted/90">До старта</span>
-          </>
+            <span className="crash-countdown__label">
+              {countdown === 0 ? "Старт" : "До старта"}
+            </span>
+          </div>
         ) : !winFx && !loseFx ? (
           <>
             <span

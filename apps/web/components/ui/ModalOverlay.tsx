@@ -35,7 +35,13 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
       trackModalOpen(analyticsModalId);
     }
 
-    const frame = window.requestAnimationFrame(() => setOpen(true));
+    // Double rAF so the closed transform paints before we open — otherwise the
+    // enter transition is skipped or starts mid-frame and feels sticky.
+    let outer = 0;
+    let inner = 0;
+    outer = window.requestAnimationFrame(() => {
+      inner = window.requestAnimationFrame(() => setOpen(true));
+    });
 
     function syncKeyboard() {
       setKeyboardInset(readKeyboardInset());
@@ -48,7 +54,8 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
     window.addEventListener("resize", syncKeyboard);
 
     return () => {
-      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(outer);
+      window.cancelAnimationFrame(inner);
       document.body.style.overflow = prev;
       vv?.removeEventListener("resize", syncKeyboard);
       vv?.removeEventListener("scroll", syncKeyboard);
@@ -84,7 +91,7 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
         top: "calc(-1 * env(safe-area-inset-top, 0px))",
         bottom: keyboardInset,
         height: "auto",
-        transition: "bottom 180ms ease-out",
+        transition: keyboardInset > 0 ? "bottom 180ms var(--ease-out)" : undefined,
       }}
     >
       <button
@@ -93,7 +100,9 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
         className={cn("overlay-backdrop absolute inset-0", open && "overlay-backdrop-open")}
         onClick={handleClose}
       />
-      <div className={cn("overlay-sheet-host relative z-[1] w-full", open && "overlay-sheet-host-open")}>
+      <div
+        className={cn("overlay-sheet-host relative z-[1] w-full", open && "overlay-sheet-host-open")}
+      >
         {children(handleClose)}
       </div>
     </div>,

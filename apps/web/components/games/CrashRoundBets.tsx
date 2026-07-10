@@ -124,16 +124,17 @@ function PlayerRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors",
-        big && "bg-accent/[0.07]",
+        "crash-player-row flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-[background,opacity] duration-200",
+        big && !isCashedOut && !isLost && "bg-accent/[0.07]",
         flash && "crash-bet-flash",
-        isLost && "opacity-55",
+        isCashedOut && "crash-player-row--won",
+        isLost && "crash-player-row--lost",
       )}
     >
       <span
         className={cn(
           "flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface text-[10px] font-medium text-muted",
-          big && "ring-1 ring-accent/50",
+          big && !isCashedOut && !isLost && "ring-1 ring-accent/50",
         )}
       >
         {player.photo_url && !imgError ? (
