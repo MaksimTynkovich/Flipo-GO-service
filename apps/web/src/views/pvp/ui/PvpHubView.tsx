@@ -3,19 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
+import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
+import { BetFundingPanel } from "@/components/games/BetFundingPanel";
 import {
   PvpActiveRoomCard,
   PvpOpenRoomCard,
   PvpResultRoomCard,
 } from "@/components/games/pvp/PvpRoomCards";
-import { TonIcon } from "@/components/icons/TonIcon";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { api } from "@/lib/api";
+import { api, formatTON } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { BetFundingMode } from "@/lib/bet-funding";
+import { formatGameBetError } from "@/lib/game-errors";
 import { PvpLobbyState } from "@/lib/pvp";
 import { connectGameWS } from "@/lib/ws";
-import { cn } from "@/lib/utils";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 const PVP_MAX_PLAYERS = 2;
@@ -27,6 +29,12 @@ function mapPvpError(message: string): string {
   if (lower.includes("already joined")) return "Вы уже в этой комнате";
   if (lower.includes("insufficient balance")) return "Недостаточно средств на балансе";
   if (lower.includes("invalid amount")) return "Укажите корректную ставку";
+  if (lower.includes("gift not available") || lower.includes("подарок недоступен")) {
+    return "Подарок недоступен для ставки.";
+  }
+  if (lower.includes("gift value") || lower.includes("стоимость подарка")) {
+    return "Стоимость подарка не совпадает со ставкой комнаты.";
+  }
   return message;
 }
 
@@ -35,8 +43,13 @@ export function PvpHubView() {
   const haptics = useTelegramHaptics();
   const [state, setState] = useState<PvpLobbyState>({ active: [], history: [] });
   const [betAmount, setBetAmount] = useState("0.5");
+  const [fundingMode, setFundingMode] = useState<BetFundingMode>("balance");
+  const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [joinRoomId, setJoinRoomId] = useState<string | null>(null);
+  const [joinFundingMode, setJoinFundingMode] = useState<BetFundingMode>("balance");
+  const [joinGiftIds, setJoinGiftIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
 
@@ -71,22 +84,40 @@ export function PvpHubView() {
   }, [loadState]);
 
   async function createRoom() {
-    const nanotons = Math.floor(parseFloat(betAmount || "0") * 1_000_000_000);
-    if (nanotons <= 0) return;
+    if (fundingMode === "gift") {
+      if (selectedGiftIds.length === 0) {
+        setError("Выберите подарок для ставки.");
+        return;
+      }
+    } else {
+      const nanotons = Math.floor(parseFloat(betAmount || "0") * 1_000_000_000);
+      if (nanotons <= 0) return;
+      if (user && user.betting_balance < nanotons) {
+        setError("Недостаточно средств на балансе.");
+        return;
+      }
+    }
 
     setCreating(true);
     setError(null);
     try {
       haptics.impactOccurred("medium");
+      const body =
+        fundingMode === "gift" && selectedGiftIds[0]
+          ? { funding: "gift", inventory_item_id: selectedGiftIds[0], max_players: PVP_MAX_PLAYERS }
+          : {
+              bet_amount_nanoton: Math.floor(parseFloat(betAmount || "0") * 1_000_000_000),
+              max_players: PVP_MAX_PLAYERS,
+            };
       await api("/api/v1/games/pvp/rooms", {
         method: "POST",
-        body: JSON.stringify({ bet_amount_nanoton: nanotons, max_players: PVP_MAX_PLAYERS }),
+        body: JSON.stringify(body),
       });
       trackEvent({
         event_name: "pvp_room_created",
         event_category: "pvp",
         status: "success",
-        properties: { mode: "pvp", amount_nanoton: nanotons },
+        properties: { mode: "pvp", funding: fundingMode },
       });
       await loadState();
     } catch (e) {
@@ -96,7 +127,7 @@ export function PvpHubView() {
         status: "error",
         error_code: "create_failed",
         error_message: e instanceof Error ? e.message : "create_failed",
-        properties: { mode: "pvp", amount_nanoton: nanotons },
+        properties: { mode: "pvp", funding: fundingMode },
       });
       setError(mapPvpError(e instanceof Error ? e.message : "Не удалось создать комнату"));
     } finally {
@@ -104,18 +135,47 @@ export function PvpHubView() {
     }
   }
 
-  async function joinRoom(id: string) {
-    setJoiningId(id);
+  function openJoin(roomId: string) {
+    setJoinRoomId(roomId);
+    setJoinFundingMode("balance");
+    setJoinGiftIds([]);
+    setError(null);
+  }
+
+  async function confirmJoin() {
+    if (!joinRoomId) return;
+    const room = state.active.find((item) => item.id === joinRoomId);
+    if (!room) return;
+
+    if (joinFundingMode === "gift") {
+      if (joinGiftIds.length === 0) {
+        setError("Выберите подарок с подходящей стоимостью.");
+        return;
+      }
+    } else if (user && user.betting_balance < room.bet_amount_nanoton) {
+      setError("Недостаточно средств на балансе.");
+      return;
+    }
+
+    setJoiningId(joinRoomId);
     setError(null);
     try {
       haptics.impactOccurred("medium");
-      await api(`/api/v1/games/pvp/rooms/${id}/join`, { method: "POST" });
+      const body =
+        joinFundingMode === "gift" && joinGiftIds[0]
+          ? { funding: "gift", inventory_item_id: joinGiftIds[0] }
+          : { funding: "balance" };
+      await api(`/api/v1/games/pvp/rooms/${joinRoomId}/join`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
       trackEvent({
         event_name: "pvp_room_joined",
         event_category: "pvp",
         status: "success",
-        properties: { mode: "pvp", room_id: id },
+        properties: { mode: "pvp", room_id: joinRoomId, funding: joinFundingMode },
       });
+      setJoinRoomId(null);
       await loadState();
     } catch (e) {
       trackEvent({
@@ -124,9 +184,9 @@ export function PvpHubView() {
         status: "error",
         error_code: "join_failed",
         error_message: e instanceof Error ? e.message : "join_failed",
-        properties: { mode: "pvp", room_id: id },
+        properties: { mode: "pvp", room_id: joinRoomId, funding: joinFundingMode },
       });
-      setError(mapPvpError(e instanceof Error ? e.message : "Не удалось войти в комнату"));
+      setError(formatGameBetError(e) || mapPvpError(e instanceof Error ? e.message : "Не удалось войти в комнату"));
     } finally {
       setJoiningId(null);
     }
@@ -135,45 +195,30 @@ export function PvpHubView() {
   const userId = user?.id;
   const openRooms = state.active.filter((room) => room.status === "open");
   const liveRooms = state.active.filter((room) => room.status === "countdown" || room.status === "spinning");
+  const joinRoom = state.active.find((room) => room.id === joinRoomId);
 
   return (
     <PageShell flush>
       <section className="panel space-y-3">
         <p className="section-label">Создать комнату 1 на 1</p>
-        <div className="input-inset">
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            className="w-full bg-transparent text-center text-base font-semibold tabular-nums outline-none"
-            value={betAmount}
-            onChange={(event) => setBetAmount(event.target.value)}
-            placeholder="0.00"
-          />
-          <TonIcon variant="brand" className="h-5 w-5 shrink-0" title="TON" />
-        </div>
 
-        <div className="flex gap-2">
-          {QUICK_AMOUNTS.map((amount) => (
-            <button
-              key={amount}
-              type="button"
-              onClick={() => {
-                haptics.impactOccurred("light");
-                setBetAmount(amount);
-              }}
-              className={cn("quick-amount", betAmount === amount && "quick-amount-active")}
-            >
-              {amount}
-            </button>
-          ))}
-        </div>
+        <BetFundingPanel
+          mode={fundingMode}
+          onModeChange={setFundingMode}
+          amountTon={betAmount}
+          onAmountTonChange={setBetAmount}
+          selectedGiftIds={selectedGiftIds}
+          onSelectGifts={setSelectedGiftIds}
+          disabled={creating}
+          quickAmounts={QUICK_AMOUNTS}
+          multiple={false}
+        />
 
         <Button className="h-11 w-full rounded-xl" variant="accent" disabled={creating} onClick={createRoom}>
           {creating ? "Создаём…" : "Создать комнату"}
         </Button>
 
-        {error && (
+        {error && !joinRoomId && (
           <p className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>
         )}
       </section>
@@ -202,7 +247,7 @@ export function PvpHubView() {
                 room={room}
                 canJoin={!alreadyJoined && !isCreator}
                 joining={joiningId === room.id}
-                onJoin={() => joinRoom(room.id)}
+                onJoin={() => openJoin(room.id)}
               />
             );
           })}
@@ -221,6 +266,53 @@ export function PvpHubView() {
           ))}
         </section>
       )}
+
+      {joinRoomId && joinRoom ? (
+        <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
+          <div className="relative mx-auto w-full max-w-lg rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+            <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
+            <p className="mb-4 text-center text-xs text-muted">
+              Ставка комнаты: {formatTON(joinRoom.bet_amount_nanoton)} TON
+            </p>
+
+            <BetFundingPanel
+              mode={joinFundingMode}
+              onModeChange={setJoinFundingMode}
+              amountTon={(joinRoom.bet_amount_nanoton / 1_000_000_000).toFixed(2)}
+              onAmountTonChange={() => {}}
+              selectedGiftIds={joinGiftIds}
+              onSelectGifts={setJoinGiftIds}
+              disabled={!!joiningId}
+              fixedStakeNanoton={joinRoom.bet_amount_nanoton}
+              multiple={false}
+            />
+
+            {error && (
+              <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                className="h-11 rounded-xl"
+                onClick={() => setJoinRoomId(null)}
+                disabled={!!joiningId}
+              >
+                Отмена
+              </Button>
+              <Button
+                variant="accent"
+                className="h-11 rounded-xl"
+                onClick={confirmJoin}
+                disabled={!!joiningId}
+              >
+                {joiningId ? "…" : "Войти"}
+              </Button>
+            </div>
+          </div>
+        </ModalOverlay>
+      ) : null}
 
       {proofRoundId ? (
         <ProofModal

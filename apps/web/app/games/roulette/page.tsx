@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButton";
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
+import { BetFundingPanel } from "@/components/games/BetFundingPanel";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -20,8 +21,7 @@ import {
 } from "@/lib/api";
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
 import { RouletteRoundState } from "@/lib/roulette";
-import { TonIcon } from "@/components/icons/TonIcon";
-import { cn } from "@/lib/utils";
+import { BetFundingMode } from "@/lib/bet-funding";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 
@@ -35,6 +35,8 @@ export default function RoulettePage() {
   const [history, setHistory] = useState<RouletteHistoryEntry[]>([]);
   const [roundBets, setRoundBets] = useState<RouletteRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
+  const [fundingMode, setFundingMode] = useState<BetFundingMode>("balance");
+  const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
   const [betting, setBetting] = useState(false);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
   const lastPhase = useRef<string | null>(null);
@@ -78,6 +80,16 @@ export default function RoulettePage() {
     lastPhase.current = state?.phase ?? null;
   }, [state?.phase, loadHistory]);
 
+  const excludedGiftIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const bet of roundBets?.bets ?? []) {
+      if (bet.user_id === user?.id && bet.gift?.id) {
+        ids.add(bet.gift.id);
+      }
+    }
+    return Array.from(ids);
+  }, [roundBets?.bets, user?.id]);
+
   const canBet = state?.phase === "betting" && !betting;
   const roundTotals = roundBets?.totals ?? { red: 0, green: 0, black: 0 };
 
@@ -91,29 +103,46 @@ export default function RoulettePage() {
       return;
     }
 
-    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
-    if (nanotons <= 0) {
-      showToast({
-        variant: "error",
-        title: "Укажите корректную сумму ставки.",
-      });
-      haptics.notificationOccurred("error");
-      return;
-    }
+    const giftIds =
+      fundingMode === "gift" ? selectedGiftIds.filter((id) => !excludedGiftIds.includes(id)) : [];
 
-    if (user && user.betting_balance < nanotons) {
-      showToast({
-        variant: "error",
-        title: "Недостаточно средств на балансе.",
-      });
-      haptics.notificationOccurred("error");
-      return;
+    if (fundingMode === "gift") {
+      if (giftIds.length === 0) {
+        showToast({ variant: "error", title: "Выберите подарок для ставки." });
+        haptics.notificationOccurred("error");
+        return;
+      }
+    } else {
+      const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+      if (nanotons <= 0) {
+        showToast({ variant: "error", title: "Укажите корректную сумму ставки." });
+        haptics.notificationOccurred("error");
+        return;
+      }
+      if (user && user.betting_balance < nanotons) {
+        showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+        haptics.notificationOccurred("error");
+        return;
+      }
     }
 
     setBetting(true);
     betAmountInput.complete();
     try {
-      await placeRouletteBet(color, nanotons, crypto.randomUUID());
+      if (fundingMode === "gift") {
+        for (const giftId of giftIds) {
+          await placeRouletteBet(color, crypto.randomUUID(), {
+            mode: "gift",
+            inventoryItemId: giftId,
+          });
+        }
+        setSelectedGiftIds([]);
+      } else {
+        await placeRouletteBet(color, crypto.randomUUID(), {
+          mode: "balance",
+          amountNanoton: Math.floor(parseFloat(amountTon || "0") * 1_000_000_000),
+        });
+      }
       loadRoundBets();
     } catch (e) {
       showToast({
@@ -144,39 +173,20 @@ export default function RoulettePage() {
         <div className="panel space-y-3">
           <p className="section-label">Ставка</p>
 
-          <div className="input-inset py-2.5">
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              disabled={!canBet}
-              value={amountTon}
-              {...betAmountInput.bind({
-                onChange: (e) => setAmountTon(e.target.value),
-              })}
-              className="w-full bg-transparent text-center text-lg font-bold tabular-nums text-foreground outline-none disabled:opacity-40"
-              placeholder="0.00"
-            />
-            <TonIcon variant="brand" size="lg" title="TON" />
-          </div>
-
-          <div className="flex gap-2">
-            {QUICK_AMOUNTS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                disabled={!canBet}
-                onClick={() => setAmountTon(v)}
-                className={cn(
-                  "quick-amount",
-                  amountTon === v && "quick-amount-active",
-                  !canBet && "opacity-40",
-                )}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
+          <BetFundingPanel
+            mode={fundingMode}
+            onModeChange={setFundingMode}
+            amountTon={amountTon}
+            onAmountTonChange={setAmountTon}
+            selectedGiftIds={selectedGiftIds}
+            onSelectGifts={setSelectedGiftIds}
+            excludedGiftIds={excludedGiftIds}
+            disabled={!canBet}
+            quickAmounts={QUICK_AMOUNTS}
+            amountInputProps={betAmountInput.bind({
+              onChange: (e) => setAmountTon(e.target.value),
+            })}
+          />
 
           <div className="grid grid-cols-3 gap-2">
             <RouletteColorBetButton

@@ -303,6 +303,28 @@ func (r *MarketRepo) SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, 
 	return newBalance, nil
 }
 
+func (r *MarketRepo) AcquireGiftFromBet(ctx context.Context, itemID uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item domain.InventoryItem
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&item, "id = ? AND status = ?", itemID, domain.InvInBet).Error; err != nil {
+			return err
+		}
+
+		botUser, err := ensureBotUserTx(tx)
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		return tx.Model(&item).Updates(map[string]interface{}{
+			"user_id":    botUser.ID,
+			"status":     domain.InvLocked,
+			"updated_at": now,
+		}).Error
+	})
+}
+
 func ensureBotUserTx(tx *gorm.DB) (*domain.User, error) {
 	var user domain.User
 	err := tx.Where("telegram_id = ?", domain.BotTelegramID).First(&user).Error

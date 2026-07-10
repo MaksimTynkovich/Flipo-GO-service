@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TonAmount } from "@/components/icons/TonIcon";
+import { BetStakeLabel } from "@/components/games/BetStakeLabel";
 import { PvpAvatarStrip } from "@/components/games/pvp/PvpAvatarStrip";
 import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
 import { formatTON } from "@/lib/api";
@@ -33,11 +34,20 @@ export function PvpOpenRoomCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium leading-5">{pvpPlayerName(creator)}</p>
           <p className="mt-1 text-sm font-semibold leading-5 tabular-nums text-foreground/85">
-            <TonAmount
-              amount={formatTON(room.bet_amount_nanoton)}
-              variant="brand"
-              iconClassName="h-3.5 w-3.5"
-            />
+            {creator?.funding_type === "gift" && creator.gift ? (
+              <BetStakeLabel
+                amountNanoton={room.bet_amount_nanoton}
+                fundingType={creator.funding_type}
+                gift={creator.gift}
+                iconSize="sm"
+              />
+            ) : (
+              <TonAmount
+                amount={formatTON(room.bet_amount_nanoton)}
+                variant="brand"
+                iconClassName="h-3.5 w-3.5"
+              />
+            )}
           </p>
         </div>
 

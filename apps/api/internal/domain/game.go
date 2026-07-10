@@ -42,12 +42,21 @@ const (
 	BetRefunded  BetStatus = "refunded"
 )
 
+type BetFundingType string
+
+const (
+	BetFundingBalance BetFundingType = "balance"
+	BetFundingGift    BetFundingType = "gift"
+)
+
 type GameBet struct {
 	ID                uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	RoundID           uuid.UUID      `gorm:"type:uuid;not null;index" json:"round_id"`
 	UserID            uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
 	GameType          GameType       `gorm:"type:varchar(16);not null;index" json:"game_type"`
 	AmountNanoton     int64          `gorm:"not null" json:"amount_nanoton"`
+	FundingType       BetFundingType `gorm:"type:varchar(16);not null;default:balance" json:"funding_type"`
+	InventoryItemID   *uuid.UUID     `gorm:"type:uuid" json:"inventory_item_id,omitempty"`
 	Selection         datatypes.JSON `gorm:"type:jsonb" json:"selection"`
 	PayoutNanoton     int64          `gorm:"default:0" json:"payout_nanoton"`
 	PlatformFee       int64          `gorm:"default:0" json:"platform_fee"`
@@ -78,10 +87,12 @@ type PvPRoom struct {
 }
 
 type PvPRoomPlayer struct {
-	RoomID   uuid.UUID `gorm:"type:uuid;primaryKey" json:"room_id"`
-	UserID   uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
-	JoinedAt time.Time `json:"joined_at"`
-	IsWinner bool      `gorm:"default:false" json:"is_winner"`
+	RoomID          uuid.UUID      `gorm:"type:uuid;primaryKey" json:"room_id"`
+	UserID          uuid.UUID      `gorm:"type:uuid;primaryKey" json:"user_id"`
+	FundingType     BetFundingType `gorm:"type:varchar(16);not null;default:balance" json:"funding_type"`
+	InventoryItemID *uuid.UUID     `gorm:"type:uuid" json:"inventory_item_id,omitempty"`
+	JoinedAt        time.Time      `json:"joined_at"`
+	IsWinner        bool           `gorm:"default:false" json:"is_winner"`
 }
 
 type LedgerType string

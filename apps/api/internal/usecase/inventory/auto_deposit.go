@@ -71,6 +71,19 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 		return false, err
 	}
 
+	txRef := depositTxRef(gift)
+	if existing, err := s.inventory.FindByTelegramTxRef(ctx, txRef); err == nil {
+		slog.Debug("gift deposit skipped: telegram message already credited",
+			"slug", gift.Slug,
+			"tx_ref", txRef,
+			"existing_item_id", existing.ID,
+			"existing_status", existing.Status,
+		)
+		return false, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, err
+	}
+
 	user, err := s.users.FindByTelegramID(ctx, gift.SenderTelegramID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -110,7 +123,7 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 		FloorPriceNanoton: scanned.PriceNanoton,
 		Status:            domain.InvAvailable,
 		DepositedAt:       now,
-		TelegramTxRef:     depositTxRef(gift),
+		TelegramTxRef:     txRef,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}

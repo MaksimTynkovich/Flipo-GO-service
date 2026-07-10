@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { formatTON, RouletteRoundBets as RouletteRoundBetsData } from "@/lib/api";
-import { TonAmount } from "@/components/icons/TonIcon";
+import { RouletteRoundBets as RouletteRoundBetsData } from "@/lib/api";
+import { BetStakeLabel } from "@/components/games/BetStakeLabel";
 import { rouletteFillStyle, roulettePlayerName } from "@/lib/roulette";
 
 type Props = {
@@ -38,8 +38,10 @@ function BetRow({ bet }: { bet: RouletteRoundBetsData["bets"][number] }) {
           className="h-2 w-2 rounded-full"
           aria-hidden
         />
-        <TonAmount
-          amount={formatTON(bet.amount_nanoton)}
+        <BetStakeLabel
+          amountNanoton={bet.amount_nanoton}
+          fundingType={bet.funding_type}
+          gift={bet.gift}
           iconSize="sm"
           className="text-sm font-medium"
         />

@@ -9,6 +9,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
@@ -25,10 +26,11 @@ type GameHandler struct {
 	risk      *risk.Service
 	fairness  *fairness.Service
 	analytics *analyticsuc.Service
+	funding   *betfunding.Service
 }
 
-func NewGameHandler(r *roulette.Service, c *crash.Service, p *pvp.Service, riskSvc *risk.Service, fairnessSvc *fairness.Service, analyticsSvc *analyticsuc.Service) *GameHandler {
-	return &GameHandler{roulette: r, crash: c, pvp: p, risk: riskSvc, fairness: fairnessSvc, analytics: analyticsSvc}
+func NewGameHandler(r *roulette.Service, c *crash.Service, p *pvp.Service, riskSvc *risk.Service, fairnessSvc *fairness.Service, analyticsSvc *analyticsuc.Service, fundingSvc *betfunding.Service) *GameHandler {
+	return &GameHandler{roulette: r, crash: c, pvp: p, risk: riskSvc, fairness: fairnessSvc, analytics: analyticsSvc, funding: fundingSvc}
 }
 
 func (h *GameHandler) RouletteCurrent(c *gin.Context) {
@@ -67,12 +69,24 @@ func (h *GameHandler) RouletteBets(c *gin.Context) {
 func (h *GameHandler) RouletteBet(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		Color          string `json:"color" binding:"required"`
-		AmountNanoton  int64  `json:"amount_nanoton" binding:"required"`
-		IdempotencyKey string `json:"idempotency_key" binding:"required"`
+		Color           string `json:"color" binding:"required"`
+		Funding         string `json:"funding"`
+		AmountNanoton   int64  `json:"amount_nanoton"`
+		InventoryItemID string `json:"inventory_item_id"`
+		IdempotencyKey  string `json:"idempotency_key" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID)
+	if err != nil {
+		writeGameBetError(c, err)
+		return
+	}
+	stakeAmount, err := h.stakeAmount(c.Request.Context(), userID, stake)
+	if err != nil {
+		writeGameBetError(c, err)
 		return
 	}
 	state, _ := h.roulette.CurrentState(c.Request.Context())
@@ -80,25 +94,25 @@ func (h *GameHandler) RouletteBet(c *gin.Context) {
 	if state != nil {
 		roundID = state.RoundID
 	}
-	maxPayout := req.AmountNanoton * 14
+	maxPayout := stakeAmount * 14
 	if req.Color == "red" || req.Color == "black" {
-		maxPayout = req.AmountNanoton * 2
+		maxPayout = stakeAmount * 2
 	}
 	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
 		UserID: userID, GameType: domain.GameRoulette, RoundID: roundID,
-		Amount: req.AmountNanoton, MaxPayout: maxPayout,
+		Amount: stakeAmount, MaxPayout: maxPayout,
 	}); err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "roulette_bet_placed", "error", "risk_blocked", err.Error(), map[string]any{"mode": "roulette", "amount_nanoton": req.AmountNanoton, "color": req.Color})
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "roulette_bet_placed", "error", "risk_blocked", err.Error(), map[string]any{"mode": "roulette", "amount_nanoton": stakeAmount, "color": req.Color, "funding": stake.FundingType})
 		writeGameBetError(c, err)
 		return
 	}
-	bet, err := h.roulette.PlaceBet(c.Request.Context(), userID, req.Color, req.AmountNanoton, req.IdempotencyKey)
+	bet, err := h.roulette.PlaceBet(c.Request.Context(), userID, req.Color, stake, req.IdempotencyKey)
 	if err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "roulette_bet_placed", "error", "bet_failed", err.Error(), map[string]any{"mode": "roulette", "amount_nanoton": req.AmountNanoton, "color": req.Color})
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "roulette_bet_placed", "error", "bet_failed", err.Error(), map[string]any{"mode": "roulette", "amount_nanoton": stakeAmount, "color": req.Color, "funding": stake.FundingType})
 		writeGameBetError(c, err)
 		return
 	}
-	trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "roulette_bet_placed", "success", "", "", map[string]any{"mode": "roulette", "amount_nanoton": req.AmountNanoton, "color": req.Color, "bet_id": bet.ID.String()})
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "roulette_bet_placed", "success", "", "", map[string]any{"mode": "roulette", "amount_nanoton": stakeAmount, "color": req.Color, "funding": stake.FundingType, "bet_id": bet.ID.String()})
 	c.JSON(http.StatusCreated, bet)
 }
 
@@ -138,11 +152,23 @@ func (h *GameHandler) CrashBets(c *gin.Context) {
 func (h *GameHandler) CrashBet(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		AmountNanoton  int64  `json:"amount_nanoton" binding:"required"`
-		IdempotencyKey string `json:"idempotency_key" binding:"required"`
+		Funding         string `json:"funding"`
+		AmountNanoton   int64  `json:"amount_nanoton"`
+		InventoryItemID string `json:"inventory_item_id"`
+		IdempotencyKey  string `json:"idempotency_key" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID)
+	if err != nil {
+		writeGameBetError(c, err)
+		return
+	}
+	stakeAmount, err := h.stakeAmount(c.Request.Context(), userID, stake)
+	if err != nil {
+		writeGameBetError(c, err)
 		return
 	}
 	state, _ := h.crash.CurrentState(c.Request.Context())
@@ -152,30 +178,34 @@ func (h *GameHandler) CrashBet(c *gin.Context) {
 	}
 	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
 		UserID: userID, GameType: domain.GameCrash, RoundID: roundID,
-		Amount: req.AmountNanoton, MaxPayout: req.AmountNanoton * 100,
+		Amount: stakeAmount, MaxPayout: stakeAmount * 100,
 	}); err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "error", "risk_blocked", err.Error(), map[string]any{"mode": "crash", "amount_nanoton": req.AmountNanoton})
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "error", "risk_blocked", err.Error(), map[string]any{"mode": "crash", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
 		writeGameBetError(c, err)
 		return
 	}
-	bet, err := h.crash.PlaceBet(c.Request.Context(), userID, req.AmountNanoton, req.IdempotencyKey)
+	bet, err := h.crash.PlaceBet(c.Request.Context(), userID, stake, req.IdempotencyKey)
 	if err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "error", "bet_failed", err.Error(), map[string]any{"mode": "crash", "amount_nanoton": req.AmountNanoton})
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "error", "bet_failed", err.Error(), map[string]any{"mode": "crash", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
 		writeGameBetError(c, err)
 		return
 	}
-	trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "success", "", "", map[string]any{"mode": "crash", "amount_nanoton": req.AmountNanoton, "bet_id": bet.ID.String()})
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "success", "", "", map[string]any{"mode": "crash", "amount_nanoton": stakeAmount, "funding": stake.FundingType, "bet_id": bet.ID.String()})
 	c.JSON(http.StatusCreated, bet)
 }
 
 func (h *GameHandler) CrashActiveBet(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	bet, err := h.crash.ActiveBet(c.Request.Context(), userID)
+	bets, err := h.crash.ActiveBets(c.Request.Context(), userID)
 	if err != nil {
 		respondInternal(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, bet)
+	if len(bets) == 0 {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+	c.JSON(http.StatusOK, bets)
 }
 
 func (h *GameHandler) CrashCashout(c *gin.Context) {
@@ -220,8 +250,10 @@ func (h *GameHandler) PvPListRooms(c *gin.Context) {
 func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		BetAmountNanoton int64 `json:"bet_amount_nanoton" binding:"required"`
-		MaxPlayers       int   `json:"max_players"`
+		Funding          string `json:"funding"`
+		BetAmountNanoton int64  `json:"bet_amount_nanoton"`
+		InventoryItemID  string `json:"inventory_item_id"`
+		MaxPlayers       int    `json:"max_players"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -234,21 +266,31 @@ func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "pvp rooms support exactly 2 players"})
 		return
 	}
-	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
-		UserID: userID, GameType: domain.GamePvP,
-		Amount: req.BetAmountNanoton, MaxPayout: req.BetAmountNanoton * 2,
-	}); err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "error", "risk_blocked", err.Error(), map[string]any{"mode": "pvp", "amount_nanoton": req.BetAmountNanoton})
+	stake, err := parseStakeInput(req.Funding, req.BetAmountNanoton, req.InventoryItemID)
+	if err != nil {
 		writeGameBetError(c, err)
 		return
 	}
-	room, err := h.pvp.CreateRoom(c.Request.Context(), userID, req.BetAmountNanoton, req.MaxPlayers)
+	stakeAmount, err := h.stakeAmount(c.Request.Context(), userID, stake)
 	if err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "error", "create_failed", err.Error(), map[string]any{"mode": "pvp", "amount_nanoton": req.BetAmountNanoton})
+		writeGameBetError(c, err)
+		return
+	}
+	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
+		UserID: userID, GameType: domain.GamePvP,
+		Amount: stakeAmount, MaxPayout: stakeAmount * 2,
+	}); err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "error", "risk_blocked", err.Error(), map[string]any{"mode": "pvp", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
+		writeGameBetError(c, err)
+		return
+	}
+	room, err := h.pvp.CreateRoom(c.Request.Context(), userID, stake, req.MaxPlayers)
+	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "error", "create_failed", err.Error(), map[string]any{"mode": "pvp", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "success", "", "", map[string]any{"mode": "pvp", "room_id": room.ID, "amount_nanoton": req.BetAmountNanoton})
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "success", "", "", map[string]any{"mode": "pvp", "room_id": room.ID, "amount_nanoton": stakeAmount, "funding": stake.FundingType})
 	c.JSON(http.StatusCreated, room)
 }
 
@@ -259,13 +301,24 @@ func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
 		return
 	}
-	room, err := h.pvp.JoinRoom(c.Request.Context(), userID, roomID)
+	var req struct {
+		Funding         string `json:"funding"`
+		AmountNanoton   int64  `json:"amount_nanoton"`
+		InventoryItemID string `json:"inventory_item_id"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID)
 	if err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_joined", "error", "join_failed", err.Error(), map[string]any{"mode": "pvp", "room_id": roomID.String()})
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeGameBetError(c, err)
 		return
 	}
-	trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_joined", "success", "", "", map[string]any{"mode": "pvp", "room_id": roomID.String()})
+	room, err := h.pvp.JoinRoom(c.Request.Context(), userID, roomID, stake)
+	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_joined", "error", "join_failed", err.Error(), map[string]any{"mode": "pvp", "room_id": roomID.String(), "funding": stake.FundingType})
+		writeGameBetError(c, err)
+		return
+	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_joined", "success", "", "", map[string]any{"mode": "pvp", "room_id": roomID.String(), "funding": stake.FundingType})
 	c.JSON(http.StatusOK, room)
 }
 
@@ -320,6 +373,16 @@ func writeGameBetError(c *gin.Context, err error) {
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Игра временно недоступна.",
 			"code":  "game_disabled",
+		})
+	case errors.Is(err, domain.ErrGiftNotAvailable):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Подарок недоступен для ставки.",
+			"code":  "gift_not_available",
+		})
+	case errors.Is(err, domain.ErrGiftValueMismatch):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Стоимость подарка не совпадает со ставкой комнаты.",
+			"code":  "gift_value_mismatch",
 		})
 	default:
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": err.Error()})

@@ -9,6 +9,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
+	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 )
@@ -26,6 +27,12 @@ type RoundState struct {
 	ServerSeed     string    `json:"server_seed,omitempty"`
 }
 
+type GiftView struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ImageURL string `json:"image_url"`
+}
+
 type BetView struct {
 	ID            uuid.UUID `json:"id"`
 	UserID        uuid.UUID `json:"user_id"`
@@ -34,6 +41,8 @@ type BetView struct {
 	PhotoURL      string    `json:"photo_url"`
 	Color         string    `json:"color"`
 	AmountNanoton int64     `json:"amount_nanoton"`
+	FundingType   string    `json:"funding_type"`
+	Gift          *GiftView `json:"gift,omitempty"`
 }
 
 type ColorTotals struct {
@@ -56,15 +65,24 @@ type RoundBetsState struct {
 }
 
 type Service struct {
-	games    domain.GameRepository
-	balance  *balance.Service
-	cache    domain.GameStateCache
-	bettingS int
-	spinS    int
+	games     domain.GameRepository
+	balance   *balance.Service
+	funding   *betfunding.Service
+	inventory domain.InventoryRepository
+	cache     domain.GameStateCache
+	bettingS  int
+	spinS     int
 }
 
-func NewService(games domain.GameRepository, balance *balance.Service, cache domain.GameStateCache, bettingS, spinS int) *Service {
-	return &Service{games: games, balance: balance, cache: cache, bettingS: bettingS, spinS: spinS}
+func NewService(
+	games domain.GameRepository,
+	balance *balance.Service,
+	funding *betfunding.Service,
+	inventory domain.InventoryRepository,
+	cache domain.GameStateCache,
+	bettingS, spinS int,
+) *Service {
+	return &Service{games: games, balance: balance, funding: funding, inventory: inventory, cache: cache, bettingS: bettingS, spinS: spinS}
 }
 
 func (s *Service) CurrentState(ctx context.Context) (*RoundState, error) {
@@ -79,10 +97,7 @@ func (s *Service) CurrentState(ctx context.Context) (*RoundState, error) {
 	return &state, nil
 }
 
-func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, amount int64, idempotencyKey string) (*domain.GameBet, error) {
-	if amount <= 0 {
-		return nil, domain.ErrInvalidAmount
-	}
+func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, stake betfunding.StakeInput, idempotencyKey string) (*domain.GameBet, error) {
 	if color != "red" && color != "black" && color != "green" {
 		return nil, domain.ErrInvalidAmount
 	}
@@ -97,23 +112,27 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, 
 	}
 
 	betID := uuid.New()
-	if _, err := s.balance.Debit(ctx, userID, amount, domain.LedgerBet, "game_bet", betID); err != nil {
+	resolved, err := s.funding.ResolveAndLock(ctx, userID, betID, stake, "game_bet")
+	if err != nil {
 		return nil, err
 	}
 
 	selection, _ := json.Marshal(map[string]string{"color": color})
 	bet := &domain.GameBet{
-		ID:             betID,
-		RoundID:        state.RoundID,
-		UserID:         userID,
-		GameType:       domain.GameRoulette,
-		AmountNanoton:  amount,
-		Selection:      datatypes.JSON(selection),
-		Status:         domain.BetPending,
-		IdempotencyKey: idempotencyKey,
-		CreatedAt:      time.Now().UTC(),
+		ID:              betID,
+		RoundID:         state.RoundID,
+		UserID:          userID,
+		GameType:        domain.GameRoulette,
+		AmountNanoton:   resolved.AmountNanoton,
+		FundingType:     resolved.FundingType,
+		InventoryItemID: resolved.InventoryItemID,
+		Selection:       datatypes.JSON(selection),
+		Status:          domain.BetPending,
+		IdempotencyKey:  idempotencyKey,
+		CreatedAt:       time.Now().UTC(),
 	}
 	if err := s.games.CreateBet(ctx, bet); err != nil {
+		s.funding.Rollback(ctx, userID, betID, resolved, "game_bet")
 		return nil, err
 	}
 	_ = s.PublishBets(ctx, state.RoundID)
@@ -154,11 +173,16 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 		betColor := sel["color"]
 
 		if betColor == result {
-			payout := provablyfair.RoulettePayout(result, bet.AmountNanoton)
-			_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetWon, payout, nil)
-			_, _ = s.balance.Credit(ctx, bet.UserID, payout, domain.LedgerWin, "game_bet", bet.ID)
+			gross := provablyfair.RoulettePayout(result, bet.AmountNanoton)
+			credit := s.funding.WinTONCredit(bet, gross)
+			_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetWon, credit, nil)
+			if credit > 0 {
+				_, _ = s.balance.Credit(ctx, bet.UserID, credit, domain.LedgerWin, "game_bet", bet.ID)
+			}
+			_ = s.funding.ReleaseOnWin(ctx, bet)
 		} else {
 			_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
+			_ = s.funding.SettleLoss(ctx, bet)
 		}
 	}
 	return nil
@@ -195,6 +219,16 @@ func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*Round
 			UserID:        bet.UserID,
 			Color:         color,
 			AmountNanoton: bet.AmountNanoton,
+			FundingType:   string(bet.FundingType),
+		}
+		if bet.InventoryItemID != nil && s.inventory != nil {
+			if item, err := s.inventory.FindByID(ctx, *bet.InventoryItemID); err == nil {
+				view.Gift = &GiftView{
+					ID:       item.ID.String(),
+					Name:     item.Name,
+					ImageURL: item.ImageURL,
+				}
+			}
 		}
 		if bet.User.ID != uuid.Nil {
 			view.Username = bet.User.Username

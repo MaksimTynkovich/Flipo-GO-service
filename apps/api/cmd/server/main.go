@@ -26,6 +26,7 @@ import (
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
+	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
@@ -173,10 +174,12 @@ func main() {
 		cacheIface = &noopCache{}
 	}
 
-	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
-	crashSvc := crash.NewService(gameRepo, balanceSvc, cacheIface, cfg.CrashTickMs)
+	betFundingSvc := betfunding.NewService(invRepo, marketRepo, balanceSvc, giftValuator)
+
+	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
+	crashSvc := crash.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
-	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, cfg.PlatformFeeBps)
+	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, betFundingSvc, invRepo, cfg.PlatformFeeBps)
 	pvpSvc.SetTickNotifier(hub)
 
 	if cache != nil {
@@ -232,7 +235,7 @@ func main() {
 		AuthHandler:      handlers.NewAuthHandler(authSvc, analyticsSvc),
 		InventoryHandler: handlers.NewInventoryHandler(invSvc, stakeSvc, analyticsSvc),
 		StakingHandler:   handlers.NewStakingHandler(stakeSvc, analyticsSvc),
-		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc, analyticsSvc),
+		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc, analyticsSvc, betFundingSvc),
 		MarketHandler:    handlers.NewMarketHandler(marketSvc, analyticsSvc),
 		ReferralHandler:  handlers.NewReferralHandler(referralSvc),
 		PromoHandler:     handlers.NewPromoHandler(promoSvc, analyticsSvc),

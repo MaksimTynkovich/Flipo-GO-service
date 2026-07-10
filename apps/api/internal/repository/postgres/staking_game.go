@@ -157,18 +157,23 @@ func (r *GameRepo) ListBetsByRoundWithUser(ctx context.Context, roundID uuid.UUI
 }
 
 func (r *GameRepo) FindPendingBetByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) (*domain.GameBet, error) {
-	var bet domain.GameBet
-	result := r.db.WithContext(ctx).
-		Where("user_id = ? AND round_id = ? AND status = ?", userID, roundID, domain.BetPending).
-		Limit(1).
-		Find(&bet)
-	if result.Error != nil {
-		return nil, result.Error
+	bets, err := r.ListPendingBetsByUserAndRound(ctx, userID, roundID)
+	if err != nil {
+		return nil, err
 	}
-	if result.RowsAffected == 0 {
+	if len(bets) == 0 {
 		return nil, nil
 	}
-	return &bet, nil
+	return &bets[0], nil
+}
+
+func (r *GameRepo) ListPendingBetsByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) ([]domain.GameBet, error) {
+	var bets []domain.GameBet
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND round_id = ? AND status = ?", userID, roundID, domain.BetPending).
+		Order("created_at ASC").
+		Find(&bets).Error
+	return bets, err
 }
 
 func (r *GameRepo) SettleBet(ctx context.Context, betID uuid.UUID, status domain.BetStatus, payout int64, multiplier *float64) (bool, error) {

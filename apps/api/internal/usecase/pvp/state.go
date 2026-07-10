@@ -17,12 +17,20 @@ type TickNotifier interface {
 	NotifyGameTick(game string, data []byte)
 }
 
+type GiftView struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ImageURL string `json:"image_url"`
+}
+
 type PlayerView struct {
-	UserID    uuid.UUID `json:"user_id"`
-	FirstName string    `json:"first_name"`
-	Username  string    `json:"username"`
-	PhotoURL  string    `json:"photo_url,omitempty"`
-	IsWinner  bool      `json:"is_winner,omitempty"`
+	UserID      uuid.UUID `json:"user_id"`
+	FirstName   string    `json:"first_name"`
+	Username    string    `json:"username"`
+	PhotoURL    string    `json:"photo_url,omitempty"`
+	FundingType string    `json:"funding_type,omitempty"`
+	Gift        *GiftView `json:"gift,omitempty"`
+	IsWinner    bool      `json:"is_winner,omitempty"`
 }
 
 type RoomView struct {

@@ -272,17 +272,26 @@ export async function depositGift(txRef: string) {
   }
 }
 
-export async function placeRouletteBet(color: string, amount: number, key: string) {
+export async function placeRouletteBet(
+  color: string,
+  key: string,
+  funding: { mode: "balance"; amountNanoton: number } | { mode: "gift"; inventoryItemId: string },
+) {
+  const body =
+    funding.mode === "gift"
+      ? { color, idempotency_key: key, funding: "gift", inventory_item_id: funding.inventoryItemId }
+      : { color, idempotency_key: key, amount_nanoton: funding.amountNanoton };
+  const amountNanoton = funding.mode === "gift" ? 0 : funding.amountNanoton;
   try {
     const result = await api("/api/v1/games/roulette/bet", {
       method: "POST",
-      body: JSON.stringify({ color, amount_nanoton: amount, idempotency_key: key }),
+      body: JSON.stringify(body),
     });
     trackEvent({
       event_name: "roulette_bet_placed",
       event_category: "gameplay",
       status: "success",
-      properties: { mode: "roulette", color, amount_nanoton: amount },
+      properties: { mode: "roulette", color, amount_nanoton: amountNanoton, funding: funding.mode },
     });
     return result;
   } catch (error) {
@@ -292,7 +301,7 @@ export async function placeRouletteBet(color: string, amount: number, key: strin
       status: "error",
       error_code: "bet_failed",
       error_message: error instanceof Error ? error.message : "bet_failed",
-      properties: { mode: "roulette", color, amount_nanoton: amount },
+      properties: { mode: "roulette", color, amount_nanoton: amountNanoton, funding: funding.mode },
     });
     throw error;
   }
@@ -313,6 +322,12 @@ export async function getRouletteHistory() {
   return api<RouletteHistoryEntry[]>("/api/v1/games/roulette/history");
 }
 
+export type BetGiftView = {
+  id: string;
+  name: string;
+  image_url: string;
+};
+
 export type RouletteBetEntry = {
   id: string;
   user_id: string;
@@ -321,6 +336,8 @@ export type RouletteBetEntry = {
   photo_url?: string;
   color: "red" | "green" | "black" | string;
   amount_nanoton: number;
+  funding_type?: "balance" | "gift" | string;
+  gift?: BetGiftView;
 };
 
 export type RouletteColorTotals = {
@@ -347,6 +364,8 @@ export type CrashBetEntry = {
   first_name: string;
   photo_url?: string;
   amount_nanoton: number;
+  funding_type?: "balance" | "gift" | string;
+  gift?: BetGiftView;
   status: "pending" | "cashed_out" | "lost" | string;
   cashout_multiplier?: number;
   payout_nanoton?: number;
@@ -361,17 +380,25 @@ export async function getCrashBets() {
   return api<CrashRoundBets>("/api/v1/games/crash/bets");
 }
 
-export async function placeCrashBet(amount: number, key: string) {
+export async function placeCrashBet(
+  key: string,
+  funding: { mode: "balance"; amountNanoton: number } | { mode: "gift"; inventoryItemId: string },
+) {
+  const body =
+    funding.mode === "gift"
+      ? { idempotency_key: key, funding: "gift", inventory_item_id: funding.inventoryItemId }
+      : { idempotency_key: key, amount_nanoton: funding.amountNanoton };
+  const amountNanoton = funding.mode === "gift" ? 0 : funding.amountNanoton;
   try {
     const result = await api("/api/v1/games/crash/bet", {
       method: "POST",
-      body: JSON.stringify({ amount_nanoton: amount, idempotency_key: key }),
+      body: JSON.stringify(body),
     });
     trackEvent({
       event_name: "crash_bet_placed",
       event_category: "gameplay",
       status: "success",
-      properties: { mode: "crash", amount_nanoton: amount },
+      properties: { mode: "crash", amount_nanoton: amountNanoton, funding: funding.mode },
     });
     return result;
   } catch (error) {
@@ -381,7 +408,7 @@ export async function placeCrashBet(amount: number, key: string) {
       status: "error",
       error_code: "bet_failed",
       error_message: error instanceof Error ? error.message : "bet_failed",
-      properties: { mode: "crash", amount_nanoton: amount },
+      properties: { mode: "crash", amount_nanoton: amountNanoton, funding: funding.mode },
     });
     throw error;
   }
@@ -405,11 +432,14 @@ export type CrashActiveBet = {
   id: string;
   round_id: string;
   amount_nanoton: number;
+  funding_type?: string;
+  inventory_item_id?: string;
   status: string;
 };
 
-export async function getCrashActiveBet() {
-  return api<CrashActiveBet | null>("/api/v1/games/crash/bet/active");
+export async function getCrashActiveBets() {
+  const bets = await api<CrashActiveBet[]>("/api/v1/games/crash/bet/active");
+  return bets ?? [];
 }
 
 export async function cashoutCrash(betId: string, multiplier: number) {

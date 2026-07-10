@@ -29,4 +29,6 @@ var (
 	ErrPromoFundsRestricted  = errors.New("promo funds cannot be used on market")
 	ErrPromoInUse            = errors.New("promo code has redemptions")
 	ErrChannelNotSubscribed  = errors.New("channel subscription required")
+	ErrGiftNotAvailable      = errors.New("gift not available for bet")
+	ErrGiftValueMismatch     = errors.New("gift value does not match required stake")
 )

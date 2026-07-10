@@ -22,6 +22,7 @@ const (
 	InvStaked     InventoryStatus = "staked"
 	InvLiquidated InventoryStatus = "liquidated"
 	InvLocked     InventoryStatus = "locked"
+	InvInBet      InventoryStatus = "in_bet"
 	InvWithdrawn  InventoryStatus = "withdrawn"
 	// InvDissolved — виртуальная запись профильного стейка; не продаётся и не показывается в инвентаре.
 	InvDissolved InventoryStatus = "dissolved"

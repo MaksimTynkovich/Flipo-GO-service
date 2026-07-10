@@ -9,6 +9,7 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
+	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/google/uuid"
 )
 
@@ -25,6 +26,12 @@ type RoundState struct {
 	ServerSeedHash string     `json:"server_seed_hash"`
 }
 
+type GiftView struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ImageURL string `json:"image_url"`
+}
+
 type BetView struct {
 	ID                uuid.UUID `json:"id"`
 	UserID            uuid.UUID `json:"user_id"`
@@ -32,6 +39,8 @@ type BetView struct {
 	FirstName         string    `json:"first_name"`
 	PhotoURL          string    `json:"photo_url"`
 	AmountNanoton     int64     `json:"amount_nanoton"`
+	FundingType       string    `json:"funding_type"`
+	Gift              *GiftView `json:"gift,omitempty"`
 	Status            string    `json:"status"`
 	CashoutMultiplier *float64  `json:"cashout_multiplier,omitempty"`
 	PayoutNanoton     int64     `json:"payout_nanoton,omitempty"`
@@ -49,6 +58,8 @@ type TickNotifier interface {
 type Service struct {
 	games     domain.GameRepository
 	balance   *balance.Service
+	funding   *betfunding.Service
+	inventory domain.InventoryRepository
 	cache     domain.GameStateCache
 	tickMs    int
 	notifier  TickNotifier
@@ -56,10 +67,19 @@ type Service struct {
 	persistCh chan []byte
 }
 
-func NewService(games domain.GameRepository, balance *balance.Service, cache domain.GameStateCache, tickMs int) *Service {
+func NewService(
+	games domain.GameRepository,
+	balance *balance.Service,
+	funding *betfunding.Service,
+	inventory domain.InventoryRepository,
+	cache domain.GameStateCache,
+	tickMs int,
+) *Service {
 	s := &Service{
 		games:     games,
 		balance:   balance,
+		funding:   funding,
+		inventory: inventory,
 		cache:     cache,
 		tickMs:    tickMs,
 		persistCh: make(chan []byte, 256),
@@ -115,19 +135,26 @@ func (s *Service) ReleaseEngineLock(ctx context.Context) error {
 	return s.cache.ReleaseLock(ctx, engineLockKey)
 }
 
-func (s *Service) ActiveBet(ctx context.Context, userID uuid.UUID) (*domain.GameBet, error) {
+func (s *Service) ActiveBets(ctx context.Context, userID uuid.UUID) ([]domain.GameBet, error) {
 	state, err := s.CurrentState(ctx)
 	if err != nil || state == nil {
 		return nil, err
 	}
-	return s.games.FindPendingBetByUserAndRound(ctx, userID, state.RoundID)
+	return s.games.ListPendingBetsByUserAndRound(ctx, userID, state.RoundID)
 }
 
-func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, amount int64, idempotencyKey string) (*domain.GameBet, error) {
-	if amount <= 0 {
-		return nil, domain.ErrInvalidAmount
+func (s *Service) ActiveBet(ctx context.Context, userID uuid.UUID) (*domain.GameBet, error) {
+	bets, err := s.ActiveBets(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
+	if len(bets) == 0 {
+		return nil, nil
+	}
+	return &bets[0], nil
+}
 
+func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, stake betfunding.StakeInput, idempotencyKey string) (*domain.GameBet, error) {
 	if existing, _ := s.games.FindBetByIdempotency(ctx, idempotencyKey); existing != nil {
 		return existing, nil
 	}
@@ -138,21 +165,25 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, amount int64, 
 	}
 
 	betID := uuid.New()
-	if _, err := s.balance.Debit(ctx, userID, amount, domain.LedgerBet, "game_bet", betID); err != nil {
+	resolved, err := s.funding.ResolveAndLock(ctx, userID, betID, stake, "game_bet")
+	if err != nil {
 		return nil, err
 	}
 
 	bet := &domain.GameBet{
-		ID:             betID,
-		RoundID:        state.RoundID,
-		UserID:         userID,
-		GameType:       domain.GameCrash,
-		AmountNanoton:  amount,
-		Status:         domain.BetPending,
-		IdempotencyKey: idempotencyKey,
-		CreatedAt:      time.Now().UTC(),
+		ID:              betID,
+		RoundID:         state.RoundID,
+		UserID:          userID,
+		GameType:        domain.GameCrash,
+		AmountNanoton:   resolved.AmountNanoton,
+		FundingType:     resolved.FundingType,
+		InventoryItemID: resolved.InventoryItemID,
+		Status:          domain.BetPending,
+		IdempotencyKey:  idempotencyKey,
+		CreatedAt:       time.Now().UTC(),
 	}
 	if err := s.games.CreateBet(ctx, bet); err != nil {
+		s.funding.Rollback(ctx, userID, betID, resolved, "game_bet")
 		return nil, err
 	}
 	_ = s.PublishBets(ctx, state.RoundID)
@@ -184,15 +215,19 @@ func (s *Service) Cashout(ctx context.Context, userID, betID uuid.UUID, multipli
 	}
 
 	payout := int64(math.Floor(float64(target.AmountNanoton) * multiplier))
-	ok, err := s.games.SettleBet(ctx, betID, domain.BetCashedOut, payout, &multiplier)
+	credit := s.funding.WinTONCredit(*target, payout)
+	ok, err := s.games.SettleBet(ctx, betID, domain.BetCashedOut, credit, &multiplier)
 	if err != nil || !ok {
 		return 0, domain.ErrRoundNotOpen
 	}
-	if _, err := s.balance.Credit(ctx, userID, payout, domain.LedgerWin, "game_bet", betID); err != nil {
-		return 0, err
+	if credit > 0 {
+		if _, err := s.balance.Credit(ctx, userID, credit, domain.LedgerWin, "game_bet", betID); err != nil {
+			return 0, err
+		}
 	}
+	_ = s.funding.ReleaseOnWin(ctx, *target)
 	_ = s.PublishBets(ctx, state.RoundID)
-	return payout, nil
+	return credit, nil
 }
 
 func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
@@ -202,6 +237,7 @@ func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
 	}
 	for _, bet := range bets {
 		_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
+		_ = s.funding.SettleLoss(ctx, bet)
 	}
 	return s.PublishBets(ctx, roundID)
 }
@@ -282,8 +318,18 @@ func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*Round
 			ID:            bet.ID,
 			UserID:        bet.UserID,
 			AmountNanoton: bet.AmountNanoton,
+			FundingType:   string(bet.FundingType),
 			Status:        string(bet.Status),
 			PayoutNanoton: bet.PayoutNanoton,
+		}
+		if bet.InventoryItemID != nil && s.inventory != nil {
+			if item, err := s.inventory.FindByID(ctx, *bet.InventoryItemID); err == nil {
+				view.Gift = &GiftView{
+					ID:       item.ID.String(),
+					Name:     item.Name,
+					ImageURL: item.ImageURL,
+				}
+			}
 		}
 		if bet.CashoutMultiplier != nil {
 			mult := *bet.CashoutMultiplier

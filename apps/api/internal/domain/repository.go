@@ -29,8 +29,12 @@ type InventoryRepository interface {
 	FindByTelegramGiftID(ctx context.Context, userID uuid.UUID, giftID string) (*InventoryItem, error)
 	FindByGiftSlug(ctx context.Context, slug string) (*InventoryItem, error)
 	FindActiveByGiftSlug(ctx context.Context, slug string) (*InventoryItem, error)
+	FindByTelegramTxRef(ctx context.Context, txRef string) (*InventoryItem, error)
 	Create(ctx context.Context, item *InventoryItem) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, from, to InventoryStatus) error
+	LockForBet(ctx context.Context, userID, itemID uuid.UUID) error
+	ReleaseFromBet(ctx context.Context, itemID uuid.UUID) error
+	TransferFromBet(ctx context.Context, itemID, newUserID uuid.UUID) error
 	TransferOwnership(ctx context.Context, itemID, newUserID uuid.UUID, fromStatus InventoryStatus) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
 	SetFloorPrice(ctx context.Context, slug string, price int64) error
@@ -46,6 +50,7 @@ type MarketRepository interface {
 	UpdateListingPrice(ctx context.Context, listingID uuid.UUID, priceNanoton int64) error
 	Purchase(ctx context.Context, listingID, buyerID uuid.UUID, price, sellerProceeds int64, fee int) (*MarketListing, error)
 	SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, payout, listPrice int64) (int64, error)
+	AcquireGiftFromBet(ctx context.Context, itemID uuid.UUID) error
 	EnsureBotUser(ctx context.Context) (*User, error)
 	CountActive(ctx context.Context) (int64, error)
 }
@@ -88,6 +93,7 @@ type GameRepository interface {
 	ListPendingBetsByRoundWithUser(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
 	ListBetsByRoundWithUser(ctx context.Context, roundID uuid.UUID) ([]GameBet, error)
 	FindPendingBetByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) (*GameBet, error)
+	ListPendingBetsByUserAndRound(ctx context.Context, userID, roundID uuid.UUID) ([]GameBet, error)
 	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
 	SumUserWinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumUserBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)

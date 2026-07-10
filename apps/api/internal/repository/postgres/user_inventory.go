@@ -230,6 +230,7 @@ func (r *InventoryRepo) FindActiveByGiftSlug(ctx context.Context, slug string) (
 			domain.InvAvailable,
 			domain.InvLocked,
 			domain.InvStaked,
+			domain.InvInBet,
 		}).
 		Order("deposited_at DESC").
 		First(&item).Error
@@ -239,8 +240,58 @@ func (r *InventoryRepo) FindActiveByGiftSlug(ctx context.Context, slug string) (
 	return &item, nil
 }
 
+func (r *InventoryRepo) FindByTelegramTxRef(ctx context.Context, txRef string) (*domain.InventoryItem, error) {
+	if txRef == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var item domain.InventoryItem
+	err := r.db.WithContext(ctx).Where("telegram_tx_ref = ?", txRef).First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *InventoryRepo) Create(ctx context.Context, item *domain.InventoryItem) error {
 	return r.db.WithContext(ctx).Create(item).Error
+}
+
+func (r *InventoryRepo) LockForBet(ctx context.Context, userID, itemID uuid.UUID) error {
+	res := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("id = ? AND user_id = ? AND status = ?", itemID, userID, domain.InvAvailable).
+		Updates(map[string]interface{}{
+			"status":     domain.InvInBet,
+			"updated_at": time.Now().UTC(),
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrGiftNotAvailable
+	}
+	return nil
+}
+
+func (r *InventoryRepo) ReleaseFromBet(ctx context.Context, itemID uuid.UUID) error {
+	return r.UpdateStatus(ctx, itemID, domain.InvInBet, domain.InvAvailable)
+}
+
+func (r *InventoryRepo) TransferFromBet(ctx context.Context, itemID, newUserID uuid.UUID) error {
+	now := time.Now().UTC()
+	res := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("id = ? AND status = ?", itemID, domain.InvInBet).
+		Updates(map[string]interface{}{
+			"user_id":    newUserID,
+			"status":     domain.InvAvailable,
+			"updated_at": now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrGiftNotAvailable
+	}
+	return nil
 }
 
 func (r *InventoryRepo) UpdateStatus(ctx context.Context, id uuid.UUID, from, to domain.InventoryStatus) error {

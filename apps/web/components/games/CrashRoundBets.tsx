@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatTON, CrashRoundBets as CrashRoundBetsData } from "@/lib/api";
+import { BetStakeLabel } from "@/components/games/BetStakeLabel";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { crashPlayerName, formatMultiplier } from "@/lib/crash";
 
@@ -15,9 +16,12 @@ function BetRow({ bet }: { bet: CrashRoundBetsData["bets"][number] }) {
   const initial = (bet.first_name?.[0] || bet.username?.[0] || "?").toUpperCase();
   const isCashedOut = bet.status === "cashed_out";
   const isLost = bet.status === "lost";
+  const isGift = bet.funding_type === "gift" || !!bet.gift;
   const profit =
     isCashedOut && bet.payout_nanoton != null
-      ? bet.payout_nanoton - bet.amount_nanoton
+      ? isGift
+        ? bet.payout_nanoton
+        : bet.payout_nanoton - bet.amount_nanoton
       : null;
 
   return (
@@ -39,7 +43,11 @@ function BetRow({ bet }: { bet: CrashRoundBetsData["bets"][number] }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-foreground/90">{name}</p>
         <p className="text-[11px] tabular-nums text-muted">
-          <TonAmount amount={formatTON(bet.amount_nanoton)} iconSize="xs" />
+          <BetStakeLabel
+            amountNanoton={bet.amount_nanoton}
+            fundingType={bet.funding_type}
+            gift={bet.gift}
+          />
         </p>
       </div>
 

@@ -1,8 +1,16 @@
+export type PvpGift = {
+  id: string;
+  name: string;
+  image_url: string;
+};
+
 export type PvpPlayer = {
   user_id: string;
   first_name: string;
   username: string;
   photo_url?: string;
+  funding_type?: "balance" | "gift" | string;
+  gift?: PvpGift;
   is_winner?: boolean;
 };
 
