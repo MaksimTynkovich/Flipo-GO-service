@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -327,11 +326,14 @@ func (r *InventoryRepo) TransferOwnership(ctx context.Context, itemID, newUserID
 
 func (r *InventoryRepo) GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error) {
 	var fp domain.NFTFloorPrice
-	err := r.db.WithContext(ctx).First(&fp, "collection_slug = ?", collectionSlug).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, fmt.Errorf("floor price not found for %s", collectionSlug)
+	res := r.db.WithContext(ctx).Where("collection_slug = ?", collectionSlug).Limit(1).Find(&fp)
+	if res.Error != nil {
+		return 0, res.Error
 	}
-	return fp.PriceNanoton, err
+	if res.RowsAffected == 0 {
+		return 0, nil
+	}
+	return fp.PriceNanoton, nil
 }
 
 func (r *InventoryRepo) SetFloorPrice(ctx context.Context, slug string, price int64) error {

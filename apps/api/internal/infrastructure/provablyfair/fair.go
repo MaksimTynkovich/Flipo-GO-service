@@ -80,22 +80,70 @@ func CrashPoint(hash string) float64 {
 	return math.Max(1.0, math.Floor((100.0/(1.0-e))/100.0*100)/100)
 }
 
-// PvPWinnerIndex picks a deterministic winner among sorted player IDs.
+// PvPWinnerIndex picks a deterministic winner among sorted player IDs (equal odds).
 func PvPWinnerIndex(serverSeed string, nonce int64, playerIDs []uuid.UUID) int {
+	return PvPWeightedWinnerIndex(serverSeed, nonce, playerIDs, nil)
+}
+
+// PvPWeightedWinnerIndex picks a winner proportional to weights (same order as sorted playerIDs).
+// When weights is nil or sums to zero, all players have equal odds.
+func PvPWeightedWinnerIndex(serverSeed string, nonce int64, playerIDs []uuid.UUID, weights []int64) int {
 	if len(playerIDs) == 0 {
 		return 0
 	}
 	ids := append([]uuid.UUID(nil), playerIDs...)
 	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
+
+	orderedWeights := weights
+	if len(weights) == len(playerIDs) && len(weights) > 1 {
+		// Re-order weights to match sorted IDs.
+		byID := make(map[string]int64, len(playerIDs))
+		for i, id := range playerIDs {
+			byID[id.String()] = weights[i]
+		}
+		orderedWeights = make([]int64, len(ids))
+		for i, id := range ids {
+			orderedWeights[i] = byID[id.String()]
+		}
+	}
+
 	clientSeed := ""
 	for i, id := range ids {
 		if i > 0 {
 			clientSeed += ","
 		}
 		clientSeed += id.String()
+		if len(orderedWeights) == len(ids) {
+			clientSeed += fmt.Sprintf(":%d", orderedWeights[i])
+		}
 	}
+
+	var total int64
+	if len(orderedWeights) == len(ids) {
+		for _, w := range orderedWeights {
+			if w > 0 {
+				total += w
+			}
+		}
+	}
+	if total <= 0 {
+		h := HashSHA256(fmt.Sprintf("%s:%s:%d", serverSeed, clientSeed, nonce))
+		return int(hexToInt(h[:8]) % int64(len(ids)))
+	}
+
 	h := HashSHA256(fmt.Sprintf("%s:%s:%d", serverSeed, clientSeed, nonce))
-	return int(hexToInt(h[:8]) % int64(len(ids)))
+	roll := hexToInt(h[:8]) % total
+	var acc int64
+	for i, w := range orderedWeights {
+		if w <= 0 {
+			continue
+		}
+		acc += w
+		if roll < acc {
+			return i
+		}
+	}
+	return len(ids) - 1
 }
 
 func hexToInt(hexStr string) int64 {
@@ -160,7 +208,20 @@ func VerifyRound(gameType string, serverSeedHash, serverSeed string, nonce int64
 			}
 			playerIDs = append(playerIDs, id)
 		}
-		idx := PvPWinnerIndex(serverSeed, nonce, playerIDs)
+		var weights []int64
+		if rawStakes, ok := payload["player_stakes_nanoton"].([]any); ok && len(rawStakes) == len(playerIDs) {
+			weights = make([]int64, len(rawStakes))
+			for i, raw := range rawStakes {
+				switch v := raw.(type) {
+				case float64:
+					weights[i] = int64(v)
+				case json.Number:
+					n, _ := v.Int64()
+					weights[i] = n
+				}
+			}
+		}
+		idx := PvPWeightedWinnerIndex(serverSeed, nonce, playerIDs, weights)
 		if idx < 0 || idx >= len(playerIDs) {
 			return false
 		}

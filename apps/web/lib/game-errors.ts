@@ -17,8 +17,8 @@ export function formatGameBetError(error: unknown): string {
   if (lower.includes("gift not available") || lower.includes("подарок недоступен")) {
     return "Подарок недоступен для ставки.";
   }
-  if (lower.includes("gift value") || lower.includes("стоимость подарка")) {
-    return "Стоимость подарка не совпадает со ставкой.";
+  if (lower.includes("gift value") || lower.includes("стоимость подарка") || lower.includes("±10%")) {
+    return "Сумма подарка не подходит для ставки в этой комнате.";
   }
   if (lower.includes("failed to fetch") || lower.includes("network")) {
     return "Нет связи с сервером. Проверь интернет и попробуй снова.";

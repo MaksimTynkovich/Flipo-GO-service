@@ -80,7 +80,7 @@ export function BetFundingPanel({
     return list;
   }, [gifts, fixedStakeNanoton, excluded]);
 
-  const selectedGifts = availableGifts.filter((item) => selectedGiftIds.includes(item.id));
+  const selectedGifts = gifts.filter((item) => selectedGiftIds.includes(item.id));
 
   function toggleGift(id: string) {
     if (multiple) {

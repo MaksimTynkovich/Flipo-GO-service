@@ -120,7 +120,7 @@ func (s *DepositService) ProcessDeposit(ctx context.Context, user *domain.User, 
 	}
 
 	floorPrice, err := s.inventory.GetFloorPrice(ctx, transfer.CollectionSlug)
-	if err != nil {
+	if err != nil || floorPrice <= 0 {
 		floorPrice = 100_000_000 // 0.1 TON default
 	}
 

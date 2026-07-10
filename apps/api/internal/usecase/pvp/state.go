@@ -18,25 +18,30 @@ type TickNotifier interface {
 }
 
 type GiftView struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	ImageURL string `json:"image_url"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	ImageURL       string `json:"image_url"`
+	CollectionSlug string `json:"collection_slug,omitempty"`
+	ValueNanoton   int64  `json:"value_nanoton,omitempty"`
 }
 
 type PlayerView struct {
-	UserID      uuid.UUID `json:"user_id"`
-	FirstName   string    `json:"first_name"`
-	Username    string    `json:"username"`
-	PhotoURL    string    `json:"photo_url,omitempty"`
-	FundingType string    `json:"funding_type,omitempty"`
-	Gift        *GiftView `json:"gift,omitempty"`
-	IsWinner    bool      `json:"is_winner,omitempty"`
+	UserID       uuid.UUID `json:"user_id"`
+	FirstName    string    `json:"first_name"`
+	Username     string    `json:"username"`
+	PhotoURL     string    `json:"photo_url,omitempty"`
+	StakeNanoton int64     `json:"stake_nanoton"`
+	WinChanceBps int       `json:"win_chance_bps,omitempty"`
+	FundingType  string    `json:"funding_type,omitempty"`
+	Gift         *GiftView `json:"gift,omitempty"`
+	IsWinner     bool      `json:"is_winner,omitempty"`
 }
 
 type RoomView struct {
-	ID               uuid.UUID   `json:"id"`
-	CreatorID        uuid.UUID   `json:"creator_id"`
-	BetAmountNanoton int64       `json:"bet_amount_nanoton"`
+	ID               uuid.UUID    `json:"id"`
+	CreatorID        uuid.UUID    `json:"creator_id"`
+	BetAmountNanoton int64        `json:"bet_amount_nanoton"`
+	StakeToleranceBps int         `json:"stake_tolerance_bps"`
 	MaxPlayers       int         `json:"max_players"`
 	Status           string      `json:"status"`
 	PlayerCount      int         `json:"player_count"`

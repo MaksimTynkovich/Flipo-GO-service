@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
@@ -83,6 +84,7 @@ func (s *Service) CreateRoom(ctx context.Context, creatorID uuid.UUID, stake bet
 	player := &domain.PvPRoomPlayer{
 		RoomID:          room.ID,
 		UserID:          creatorID,
+		StakeNanoton:    resolved.AmountNanoton,
 		FundingType:     resolved.FundingType,
 		InventoryItemID: resolved.InventoryItemID,
 		JoinedAt:        time.Now().UTC(),
@@ -138,13 +140,16 @@ func (s *Service) JoinRoom(ctx context.Context, userID, roomID uuid.UUID, stake 
 		return nil, err
 	}
 	if resolved.AmountNanoton != room.BetAmountNanoton {
-		s.funding.Rollback(ctx, userID, holdID, resolved, "pvp_hold")
-		return nil, domain.ErrGiftValueMismatch
+		if !StakeWithinTolerance(room.BetAmountNanoton, resolved.AmountNanoton) {
+			s.funding.Rollback(ctx, userID, holdID, resolved, "pvp_hold")
+			return nil, domain.ErrGiftValueMismatch
+		}
 	}
 
 	player := &domain.PvPRoomPlayer{
 		RoomID:          roomID,
 		UserID:          userID,
+		StakeNanoton:    resolved.AmountNanoton,
 		FundingType:     resolved.FundingType,
 		InventoryItemID: resolved.InventoryItemID,
 		JoinedAt:        time.Now().UTC(),
@@ -223,13 +228,28 @@ func (s *Service) scheduleSpin(ctx context.Context, room *domain.PvPRoom) error 
 		return nil
 	}
 
-	playerIDs := make([]uuid.UUID, len(players))
-	for i, p := range players {
-		playerIDs[i] = p.UserID
+	type entry struct {
+		userID uuid.UUID
+		stake  int64
 	}
-	sort.Slice(playerIDs, func(i, j int) bool {
-		return playerIDs[i].String() < playerIDs[j].String()
+	entries := make([]entry, len(players))
+	for i, p := range players {
+		stake := p.StakeNanoton
+		if stake <= 0 {
+			stake = room.BetAmountNanoton
+		}
+		entries[i] = entry{userID: p.UserID, stake: stake}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].userID.String() < entries[j].userID.String()
 	})
+
+	playerIDs := make([]uuid.UUID, len(entries))
+	weights := make([]int64, len(entries))
+	for i, e := range entries {
+		playerIDs[i] = e.userID
+		weights[i] = e.stake
+	}
 
 	seedBytes := make([]byte, 32)
 	if _, err := rand.Read(seedBytes); err != nil {
@@ -261,14 +281,14 @@ func (s *Service) scheduleSpin(ctx context.Context, room *domain.PvPRoom) error 
 		return err
 	}
 
-	winnerIdx := provablyfair.PvPWinnerIndex(serverSeed, roundNumber, playerIDs)
-	winner := players[winnerIdx]
+	winnerIdx := provablyfair.PvPWeightedWinnerIndex(serverSeed, roundNumber, playerIDs, weights)
+	winnerID := playerIDs[winnerIdx]
 
 	spinAt := now.Add(CountdownSeconds * time.Second)
 	spinEndsAt := spinAt.Add(SpinSeconds * time.Second)
 
 	room.Status = "countdown"
-	room.WinnerID = &winner.UserID
+	room.WinnerID = &winnerID
 	room.GameRoundID = &gameRound.ID
 	room.SpinAt = &spinAt
 	room.SpinEndsAt = &spinEndsAt
@@ -304,7 +324,11 @@ func (s *Service) finishGame(ctx context.Context, room *domain.PvPRoom) error {
 	pot := int64(0)
 	for _, p := range players {
 		if p.FundingType == domain.BetFundingBalance {
-			pot += latest.BetAmountNanoton
+			stake := p.StakeNanoton
+			if stake <= 0 {
+				stake = latest.BetAmountNanoton
+			}
+			pot += stake
 		}
 	}
 	fee := pot * int64(latest.PlatformFeeBps) / 10000
@@ -325,9 +349,22 @@ func (s *Service) finishGame(ctx context.Context, room *domain.PvPRoom) error {
 			playerIDs = append(playerIDs, p.UserID.String())
 		}
 		sort.Strings(playerIDs)
+		stakeByID := make(map[string]int64, len(players))
+		for _, p := range players {
+			stake := p.StakeNanoton
+			if stake <= 0 {
+				stake = latest.BetAmountNanoton
+			}
+			stakeByID[p.UserID.String()] = stake
+		}
+		sortedStakes := make([]int64, len(playerIDs))
+		for i, id := range playerIDs {
+			sortedStakes[i] = stakeByID[id]
+		}
 		resultJSON, _ := json.Marshal(map[string]interface{}{
-			"winner_id":  latest.WinnerID.String(),
-			"player_ids": playerIDs,
+			"winner_id":               latest.WinnerID.String(),
+			"player_ids":              playerIDs,
+			"player_stakes_nanoton":   sortedStakes,
 		})
 		if round, err := s.games.GetRoundByID(ctx, *latest.GameRoundID); err == nil && round != nil {
 			round.Status = "finished"
@@ -398,25 +435,47 @@ func (s *Service) roomView(ctx context.Context, room *domain.PvPRoom) (*RoomView
 	}
 
 	playerViews := make([]PlayerView, 0, len(players))
+	var totalStake int64
+	for _, player := range players {
+		stake := player.StakeNanoton
+		if stake <= 0 {
+			stake = room.BetAmountNanoton
+		}
+		totalStake += stake
+	}
 	for _, player := range players {
 		user, err := s.users.FindByID(ctx, player.UserID)
 		if err != nil {
 			return nil, err
 		}
+		stake := player.StakeNanoton
+		if stake <= 0 {
+			stake = room.BetAmountNanoton
+		}
 		view := PlayerView{
-			UserID:      user.ID,
-			FirstName:   user.FirstName,
-			Username:    user.Username,
-			PhotoURL:    user.PhotoURL,
-			FundingType: string(player.FundingType),
-			IsWinner:    player.IsWinner || (room.WinnerID != nil && *room.WinnerID == user.ID && room.Status == "finished"),
+			UserID:       user.ID,
+			FirstName:    user.FirstName,
+			Username:     user.Username,
+			PhotoURL:     user.PhotoURL,
+			StakeNanoton: stake,
+			FundingType:  string(player.FundingType),
+			IsWinner:     player.IsWinner || (room.WinnerID != nil && *room.WinnerID == user.ID && room.Status == "finished"),
+		}
+		if totalStake > 0 && len(players) >= 2 {
+			view.WinChanceBps = int(stake * 10000 / totalStake)
 		}
 		if player.InventoryItemID != nil && s.inventory != nil {
 			if item, err := s.inventory.FindByID(ctx, *player.InventoryItemID); err == nil {
+				value := gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
+				if value <= 0 {
+					value = stake
+				}
 				view.Gift = &GiftView{
-					ID:       item.ID.String(),
-					Name:     item.Name,
-					ImageURL: item.ImageURL,
+					ID:             item.ID.String(),
+					Name:           item.Name,
+					ImageURL:       item.ImageURL,
+					CollectionSlug: item.CollectionSlug,
+					ValueNanoton:   value,
 				}
 			}
 		}
@@ -424,9 +483,10 @@ func (s *Service) roomView(ctx context.Context, room *domain.PvPRoom) (*RoomView
 	}
 
 	view := &RoomView{
-		ID:               room.ID,
-		CreatorID:        room.CreatorID,
-		BetAmountNanoton: room.BetAmountNanoton,
+		ID:                room.ID,
+		CreatorID:         room.CreatorID,
+		BetAmountNanoton:  room.BetAmountNanoton,
+		StakeToleranceBps: StakeToleranceBps,
 		MaxPlayers:       room.MaxPlayers,
 		Status:           room.Status,
 		PlayerCount:      len(players),

@@ -2,6 +2,8 @@ export type PvpGift = {
   id: string;
   name: string;
   image_url: string;
+  collection_slug?: string;
+  value_nanoton?: number;
 };
 
 export type PvpPlayer = {
@@ -9,6 +11,8 @@ export type PvpPlayer = {
   first_name: string;
   username: string;
   photo_url?: string;
+  stake_nanoton?: number;
+  win_chance_bps?: number;
   funding_type?: "balance" | "gift" | string;
   gift?: PvpGift;
   is_winner?: boolean;
@@ -18,6 +22,7 @@ export type PvpRoom = {
   id: string;
   creator_id: string;
   bet_amount_nanoton: number;
+  stake_tolerance_bps?: number;
   max_players: number;
   status: "open" | "countdown" | "spinning" | "finished";
   player_count: number;

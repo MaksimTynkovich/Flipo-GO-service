@@ -12,11 +12,18 @@ import {
   PvpResultRoomCard,
 } from "@/components/games/pvp/PvpRoomCards";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { api, formatTON } from "@/lib/api";
+import { api, formatTON, getInventory } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { BetFundingMode } from "@/lib/bet-funding";
 import { formatGameBetError } from "@/lib/game-errors";
+import { giftValuationNanoton } from "@/lib/gifts";
 import { PvpLobbyState } from "@/lib/pvp";
+import {
+  estimateJoinWinChanceBps,
+  formatWinChanceBps,
+  pvpGiftWithinTolerance,
+  pvpStakeBounds,
+} from "@/lib/pvp-stake";
 import { connectGameWS } from "@/lib/ws";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
@@ -32,8 +39,8 @@ function mapPvpError(message: string): string {
   if (lower.includes("gift not available") || lower.includes("подарок недоступен")) {
     return "Подарок недоступен для ставки.";
   }
-  if (lower.includes("gift value") || lower.includes("стоимость подарка")) {
-    return "Стоимость подарка не совпадает со ставкой комнаты.";
+  if (lower.includes("gift value") || lower.includes("стоимость подарка") || lower.includes("±10%")) {
+    return "Сумма подарка не подходит для ставки в этой комнате.";
   }
   return message;
 }
@@ -50,6 +57,7 @@ export function PvpHubView() {
   const [joinRoomId, setJoinRoomId] = useState<string | null>(null);
   const [joinFundingMode, setJoinFundingMode] = useState<BetFundingMode>("balance");
   const [joinGiftIds, setJoinGiftIds] = useState<string[]>([]);
+  const [joinGiftStakeNanoton, setJoinGiftStakeNanoton] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
 
@@ -82,6 +90,17 @@ export function PvpHubView() {
       window.clearInterval(poll);
     };
   }, [loadState]);
+
+  useEffect(() => {
+    if (!joinRoomId || joinGiftIds.length === 0) {
+      setJoinGiftStakeNanoton(null);
+      return;
+    }
+    void getInventory().then((items) => {
+      const item = items.find((entry) => entry.id === joinGiftIds[0]);
+      setJoinGiftStakeNanoton(item ? giftValuationNanoton(item) : null);
+    });
+  }, [joinRoomId, joinGiftIds]);
 
   async function createRoom() {
     if (fundingMode === "gift") {
@@ -139,6 +158,7 @@ export function PvpHubView() {
     setJoinRoomId(roomId);
     setJoinFundingMode("balance");
     setJoinGiftIds([]);
+    setJoinGiftStakeNanoton(null);
     setError(null);
   }
 
@@ -149,7 +169,14 @@ export function PvpHubView() {
 
     if (joinFundingMode === "gift") {
       if (joinGiftIds.length === 0) {
-        setError("Выберите подарок с подходящей стоимостью.");
+        setError("Выберите подарок для ставки.");
+        return;
+      }
+      if (
+        joinGiftStakeNanoton != null &&
+        !pvpGiftWithinTolerance(room.bet_amount_nanoton, joinGiftStakeNanoton)
+      ) {
+        setError("Сумма подарка не подходит для ставки в этой комнате.");
         return;
       }
     } else if (user && user.betting_balance < room.bet_amount_nanoton) {
@@ -195,7 +222,19 @@ export function PvpHubView() {
   const userId = user?.id;
   const openRooms = state.active.filter((room) => room.status === "open");
   const liveRooms = state.active.filter((room) => room.status === "countdown" || room.status === "spinning");
+  const hasRooms = openRooms.length > 0 || liveRooms.length > 0 || state.history.length > 0;
   const joinRoom = state.active.find((room) => room.id === joinRoomId);
+  const joinBounds = joinRoom ? pvpStakeBounds(joinRoom.bet_amount_nanoton) : null;
+  const joinGiftInRange =
+    joinRoom && joinGiftStakeNanoton
+      ? pvpGiftWithinTolerance(joinRoom.bet_amount_nanoton, joinGiftStakeNanoton)
+      : false;
+  const joinWinChanceBps =
+    joinRoom && joinGiftStakeNanoton && joinGiftInRange
+      ? estimateJoinWinChanceBps(joinRoom.bet_amount_nanoton, joinGiftStakeNanoton)
+      : joinRoom && joinFundingMode === "balance"
+        ? estimateJoinWinChanceBps(joinRoom.bet_amount_nanoton, joinRoom.bet_amount_nanoton)
+        : null;
 
   return (
     <PageShell flush>
@@ -223,21 +262,8 @@ export function PvpHubView() {
         )}
       </section>
 
-      {liveRooms.length > 0 && (
+      {hasRooms ? (
         <section className="space-y-2">
-          <p className="section-label px-0.5">Сейчас в игре</p>
-          {liveRooms.map((room) => (
-            <PvpActiveRoomCard key={room.id} room={room} />
-          ))}
-        </section>
-      )}
-
-      {openRooms.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-0.5">
-            <p className="section-label">Открытые комнаты</p>
-            <span className="text-xs text-muted">{openRooms.length}</span>
-          </div>
           {openRooms.map((room) => {
             const alreadyJoined = room.players.some((player) => player.user_id === userId);
             const isCreator = room.creator_id === userId;
@@ -251,12 +277,9 @@ export function PvpHubView() {
               />
             );
           })}
-        </section>
-      )}
-
-      {state.history.length > 0 && (
-        <section className="space-y-2">
-          <p className="section-label px-0.5">Недавние игры</p>
+          {liveRooms.map((room) => (
+            <PvpActiveRoomCard key={room.id} room={room} />
+          ))}
           {state.history.map((room) => (
             <PvpResultRoomCard
               key={room.id}
@@ -265,16 +288,21 @@ export function PvpHubView() {
             />
           ))}
         </section>
-      )}
+      ) : null}
 
       {joinRoomId && joinRoom ? (
         <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
           <div className="relative mx-auto w-full max-w-lg rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
             <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
-            <p className="mb-4 text-center text-xs text-muted">
-              Ставка комнаты: {formatTON(joinRoom.bet_amount_nanoton)} TON
+            <p className="mb-1 text-center text-xs text-muted">
+              Ставка комнаты: {formatTON(joinRoom.bet_amount_nanoton)} TON · допуск ±10%
             </p>
+            {joinBounds && (
+              <p className="mb-4 text-center text-[11px] text-muted">
+                Подарок: {formatTON(joinBounds.min)} – {formatTON(joinBounds.max)} TON
+              </p>
+            )}
 
             <BetFundingPanel
               mode={joinFundingMode}
@@ -284,9 +312,17 @@ export function PvpHubView() {
               selectedGiftIds={joinGiftIds}
               onSelectGifts={setJoinGiftIds}
               disabled={!!joiningId}
-              fixedStakeNanoton={joinRoom.bet_amount_nanoton}
               multiple={false}
             />
+
+            {joinWinChanceBps != null && (
+              <p className="mt-3 text-center text-xs text-muted">
+                Ваш шанс на победу:{" "}
+                <span className="font-semibold text-foreground">
+                  {formatWinChanceBps(joinWinChanceBps)}
+                </span>
+              </p>
+            )}
 
             {error && (
               <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>

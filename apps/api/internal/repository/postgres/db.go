@@ -26,6 +26,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateStakingEpochs(db); err != nil {
 		return err
 	}
+	if err := migratePvPPlayerStake(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(
 		&domain.User{},
 		&domain.InventoryItem{},

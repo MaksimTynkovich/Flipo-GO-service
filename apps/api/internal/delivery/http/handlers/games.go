@@ -381,7 +381,7 @@ func writeGameBetError(c *gin.Context, err error) {
 		})
 	case errors.Is(err, domain.ErrGiftValueMismatch):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
-			"error": "Стоимость подарка не совпадает со ставкой комнаты.",
+			"error": "Ставка должна быть в пределах ±10% от ставки комнаты.",
 			"code":  "gift_value_mismatch",
 		})
 	default:
