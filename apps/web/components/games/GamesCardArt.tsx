@@ -53,8 +53,8 @@ export function GamesCardArt({ tone }: { tone: Tone }) {
               className="games-art-crash__trail"
               d="M8 50 C 28 48, 38 38, 52 28 C 68 16, 82 10, 102 6"
             />
-            {/* Outer SVG translate stays fixed; CSS animates only the inner group */}
-            <g transform="translate(102 6) rotate(18)">
+            {/* Nose along path tangent (up-right). SVG +rotate is clockwise — use negative. */}
+            <g transform="translate(102 6) rotate(-32)">
               <g className="games-art-crash__rocket">
                 <path
                   className="games-art-crash__flame"
