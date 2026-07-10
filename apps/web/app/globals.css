@@ -449,16 +449,20 @@ body {
   }
 
   .pvp-player-avatar--active {
-    opacity: calc(0.52 + var(--hl, 0) * 0.48);
+    opacity: calc(0.42 + var(--hl, 0) * 0.58);
     transform: scale(calc(0.94 + var(--hl, 0) * 0.06));
-    filter: saturate(calc(0.8 + var(--hl, 0) * 0.3)) brightness(calc(0.82 + var(--hl, 0) * 0.24));
-    box-shadow: 0 0 0 calc(1.5px + var(--hl, 0) * 1px)
-      color-mix(in srgb, var(--accent) calc(28% + var(--hl, 0) * 40%), transparent);
     transition:
-      opacity 0.2s var(--ease-out),
-      transform 0.2s var(--ease-out),
-      filter 0.2s var(--ease-out),
-      box-shadow 0.2s var(--ease-out);
+      opacity 0.08s linear,
+      transform 0.08s linear;
+  }
+
+  .pvp-room-enter {
+    animation: pvp-room-enter 0.35s var(--ease-out) both;
+  }
+
+  .pvp-room-exit {
+    animation: pvp-room-exit 0.42s var(--ease-out) both;
+    pointer-events: none;
   }
 
   .page-enter {
@@ -614,6 +618,34 @@ body {
   }
 }
 
+@keyframes pvp-room-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pvp-room-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 28rem;
+    margin-bottom: 0;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(110%);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
 .overlay-backdrop {
   background: rgba(0, 0, 0, 0.52);
   backdrop-filter: blur(6px);
@@ -657,7 +689,9 @@ body {
   .overlay-backdrop,
   .overlay-sheet-host,
   .overlay-popover-host,
-  .segment-panel {
+  .segment-panel,
+  .pvp-room-enter,
+  .pvp-room-exit {
     transition: none !important;
     animation: none !important;
   }

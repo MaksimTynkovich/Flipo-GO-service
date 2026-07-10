@@ -10,8 +10,11 @@ import { BetFundingPanel } from "@/components/games/BetFundingPanel";
 import {
   PvpActiveRoomCard,
   PvpOpenRoomCard,
-  PvpResultRoomCard,
 } from "@/components/games/pvp/PvpRoomCards";
+import {
+  hasRecentPvpResults,
+  PvpRecentResults,
+} from "@/components/games/pvp/PvpRecentResults";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { api, formatTON, getInventory } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
@@ -62,6 +65,12 @@ export function PvpHubView() {
   const [joinGiftStakeNanoton, setJoinGiftStakeNanoton] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const loadState = useCallback(async () => {
     try {
@@ -195,7 +204,7 @@ export function PvpHubView() {
       const body =
         joinFundingMode === "gift" && joinGiftIds[0]
           ? { funding: "gift", inventory_item_id: joinGiftIds[0] }
-          : { funding: "balance" };
+          : { funding: "balance", amount_nanoton: room.bet_amount_nanoton };
       await api(`/api/v1/games/pvp/rooms/${joinRoomId}/join`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -224,9 +233,9 @@ export function PvpHubView() {
   }
 
   const userId = user?.id;
-  const openRooms = state.active.filter((room) => room.status === "open");
-  const liveRooms = state.active.filter((room) => room.status === "countdown" || room.status === "spinning");
-  const hasRooms = openRooms.length > 0 || liveRooms.length > 0 || state.history.length > 0;
+  const activeRooms = state.active;
+  const hasRecentResults = hasRecentPvpResults(state.history, now);
+  const hasRooms = activeRooms.length > 0 || hasRecentResults;
   const joinRoom = state.active.find((room) => room.id === joinRoomId);
   const joinBounds = joinRoom ? pvpStakeBounds(joinRoom.bet_amount_nanoton) : null;
   const joinGiftInRange =
@@ -270,7 +279,10 @@ export function PvpHubView() {
 
       {hasRooms ? (
         <section className="space-y-2">
-          {openRooms.map((room) => {
+          {activeRooms.map((room) => {
+            if (room.status === "countdown" || room.status === "spinning") {
+              return <PvpActiveRoomCard key={room.id} room={room} />;
+            }
             const alreadyJoined = room.players.some((player) => player.user_id === userId);
             const isCreator = room.creator_id === userId;
             return (
@@ -283,16 +295,12 @@ export function PvpHubView() {
               />
             );
           })}
-          {liveRooms.map((room) => (
-            <PvpActiveRoomCard key={room.id} room={room} />
-          ))}
-          {state.history.map((room) => (
-            <PvpResultRoomCard
-              key={room.id}
-              room={room}
-              onProof={room.game_round_id ? () => setProofRoundId(room.game_round_id!) : undefined}
-            />
-          ))}
+          <PvpRecentResults
+            history={state.history}
+            onProof={(room) => {
+              if (room.game_round_id) setProofRoundId(room.game_round_id);
+            }}
+          />
         </section>
       ) : lobbyReady ? (
         <section className="panel flex flex-col items-center gap-2 py-10 text-center">

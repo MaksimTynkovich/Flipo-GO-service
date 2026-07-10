@@ -1,8 +1,32 @@
 import { easeSpinWithSoftLanding } from "@/lib/spin-ease";
 
-const SLOT_SIZE = 44;
-const SLOT_GAP = 10;
-export const PVP_SLOT_STEP = SLOT_SIZE + SLOT_GAP;
+export type PvpStripMetrics = {
+  slotSize: number;
+  slotGap: number;
+  stripPaddingX: number;
+  avatarSize: number;
+};
+
+/** Compact strip — matches open-room card height. */
+export const PVP_STRIP_COMPACT: PvpStripMetrics = {
+  slotSize: 40,
+  slotGap: 8,
+  stripPaddingX: 8,
+  avatarSize: 36,
+};
+
+export const PVP_STRIP_DEFAULT: PvpStripMetrics = {
+  slotSize: 56,
+  slotGap: 12,
+  stripPaddingX: 12,
+  avatarSize: 48,
+};
+
+/** @deprecated use PVP_STRIP_COMPACT / metrics */
+export const PVP_SLOT_SIZE = PVP_STRIP_COMPACT.slotSize;
+export const PVP_SLOT_GAP = PVP_STRIP_COMPACT.slotGap;
+export const PVP_SLOT_STEP = PVP_STRIP_COMPACT.slotSize + PVP_STRIP_COMPACT.slotGap;
+export const PVP_STRIP_PADDING_X = PVP_STRIP_COMPACT.stripPaddingX;
 export const PVP_LAND_CYCLE = 30;
 
 export type SpinOffsets = {
@@ -13,10 +37,12 @@ export function computeSpinOffsets(
   winnerIndex: number,
   playerCount: number,
   viewportWidth: number,
+  metrics: PvpStripMetrics = PVP_STRIP_COMPACT,
 ): SpinOffsets {
+  const step = metrics.slotSize + metrics.slotGap;
   const landIndex = PVP_LAND_CYCLE * playerCount + winnerIndex;
-  const centerOffset = viewportWidth / 2 - SLOT_SIZE / 2;
-  const targetOffset = -(landIndex * PVP_SLOT_STEP) + centerOffset;
+  const centerOffset = viewportWidth / 2 - metrics.slotSize / 2 - metrics.stripPaddingX;
+  const targetOffset = -(landIndex * step) + centerOffset;
   return { targetOffset };
 }
 

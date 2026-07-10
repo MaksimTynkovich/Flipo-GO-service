@@ -307,7 +307,8 @@ func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
 		InventoryItemID string `json:"inventory_item_id"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID)
+	// Balance join uses the room stake; amount may be omitted and filled in JoinRoom.
+	stake, err := parseStakeInputAllowZeroBalance(req.Funding, req.AmountNanoton, req.InventoryItemID)
 	if err != nil {
 		writeGameBetError(c, err)
 		return

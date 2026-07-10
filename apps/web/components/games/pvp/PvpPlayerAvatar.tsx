@@ -31,8 +31,7 @@ export function PvpPlayerAvatar({
       className={cn(
         "pvp-player-avatar relative inline-flex shrink-0 overflow-hidden rounded-full bg-surface-raised",
         highlight === "active" && "pvp-player-avatar--active",
-        highlight === "winner" &&
-          "ring-2 ring-accent/50",
+        highlight === "winner" && "ring-1 ring-accent/70",
         className,
       )}
       style={{
