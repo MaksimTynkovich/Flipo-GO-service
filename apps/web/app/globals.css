@@ -801,32 +801,6 @@ body::-webkit-scrollbar,
   background: var(--surface);
 }
 
-.games-card__orb {
-  position: absolute;
-  border-radius: 999px;
-  filter: blur(2px);
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.55;
-  will-change: transform, opacity;
-}
-
-.games-card__orb--a {
-  width: 7.5rem;
-  height: 7.5rem;
-  top: -2.5rem;
-  right: -1.5rem;
-  animation: games-orb-drift-a 7.5s ease-in-out infinite;
-}
-
-.games-card__orb--b {
-  width: 5rem;
-  height: 5rem;
-  bottom: -1.8rem;
-  left: 30%;
-  animation: games-orb-drift-b 9s ease-in-out infinite;
-}
-
 .games-card__aura {
   position: absolute;
   inset: 0;
@@ -836,18 +810,157 @@ body::-webkit-scrollbar,
   animation: games-aura-breathe 5.5s ease-in-out infinite;
 }
 
-.games-lobby__grid > :nth-child(2) .games-card__orb--a {
-  animation-delay: -2.4s;
+.games-card__art {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.9;
 }
-.games-lobby__grid > :nth-child(2) .games-card__orb--b {
-  animation-delay: -1.2s;
+
+.games-card__art-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-.games-lobby__grid > :nth-child(3) .games-card__orb--a {
-  animation-delay: -4.1s;
+
+.games-card__art--crash {
+  right: -0.4rem;
+  top: 0.35rem;
+  width: 11.5rem;
+  height: 8.8rem;
+  opacity: 0.72;
 }
-.games-lobby__grid > :nth-child(3) .games-card__orb--b {
-  animation-delay: -3s;
+
+.games-art-crash__grid {
+  stroke: rgba(142, 240, 188, 0.12);
+  stroke-width: 1;
 }
+
+.games-art-crash__trail {
+  stroke: #6ee7b7;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  fill: none;
+  filter: drop-shadow(0 0 6px rgba(62, 207, 142, 0.55));
+  stroke-dasharray: 220;
+  stroke-dashoffset: 40;
+  animation: games-crash-draw 4.8s ease-in-out infinite;
+}
+
+.games-art-crash__dot {
+  fill: #f5c84c;
+  filter: drop-shadow(0 0 4px rgba(245, 200, 76, 0.7));
+}
+
+.games-art-crash__dot--1 {
+  animation: games-crash-blink 2.4s ease-in-out infinite;
+}
+.games-art-crash__dot--2 {
+  animation: games-crash-blink 2.4s ease-in-out infinite 0.4s;
+}
+
+.games-art-crash__rocket {
+  fill: #e8fffa;
+  filter: drop-shadow(0 0 8px rgba(142, 240, 188, 0.9));
+  animation: games-crash-rocket 4.8s ease-in-out infinite;
+}
+
+.games-card__art--roulette {
+  right: -2.4rem;
+  top: -1.6rem;
+  width: 10.5rem;
+  height: 10.5rem;
+  opacity: 0.78;
+}
+
+.games-art-roulette__wheel {
+  transform-origin: 80px 80px;
+  animation: games-roulette-spin 14s linear infinite;
+}
+
+.games-art-roulette__rim {
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 3;
+  fill: rgba(10, 14, 22, 0.35);
+}
+
+.games-art-roulette__seg--red {
+  fill: rgba(229, 101, 85, 0.72);
+}
+.games-art-roulette__seg--black {
+  fill: rgba(28, 34, 48, 0.85);
+}
+.games-art-roulette__seg--green {
+  fill: rgba(62, 207, 142, 0.7);
+}
+
+.games-art-roulette__hub {
+  fill: #1a2433;
+  stroke: rgba(255, 210, 120, 0.55);
+  stroke-width: 2;
+}
+
+.games-art-roulette__pin {
+  fill: #f5c84c;
+}
+
+.games-art-roulette__ball {
+  fill: #f4f8fc;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.7));
+  transform-origin: 80px 80px;
+  animation: games-roulette-ball 3.6s ease-in-out infinite;
+}
+
+.games-card__art--pvp {
+  right: -0.2rem;
+  top: 0.2rem;
+  width: 11rem;
+  height: 8.5rem;
+  opacity: 0.8;
+}
+
+.games-art-pvp__beam--left {
+  fill: rgba(51, 144, 236, 0.28);
+  animation: games-pvp-beam 3.2s ease-in-out infinite;
+}
+
+.games-art-pvp__beam--right {
+  fill: rgba(167, 139, 250, 0.28);
+  animation: games-pvp-beam 3.2s ease-in-out infinite 0.35s;
+}
+
+.games-art-pvp__slash {
+  stroke: rgba(244, 248, 252, 0.75);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(158, 201, 247, 0.7));
+  animation: games-pvp-slash 2.8s ease-in-out infinite;
+}
+
+.games-art-pvp__spark {
+  fill: #e8f3ff;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.8));
+}
+
+.games-art-pvp__spark--1 {
+  animation: games-crash-blink 1.6s ease-in-out infinite;
+}
+.games-art-pvp__spark--2 {
+  animation: games-crash-blink 1.6s ease-in-out infinite 0.25s;
+}
+.games-art-pvp__spark--3 {
+  animation: games-crash-blink 1.6s ease-in-out infinite 0.5s;
+}
+
+.games-art-pvp__vs {
+  fill: rgba(158, 201, 247, 0.55);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
 .games-lobby__grid > :nth-child(2) .games-card__icon {
   animation-delay: -1.1s;
 }
@@ -861,14 +974,8 @@ body::-webkit-scrollbar,
 }
 .games-card--crash .games-card__aura {
   background:
-    radial-gradient(90% 80% at 100% 0%, rgba(62, 207, 142, 0.35), transparent 55%),
-    radial-gradient(70% 60% at 0% 100%, rgba(245, 200, 76, 0.14), transparent 50%);
-}
-.games-card--crash .games-card__orb--a {
-  background: rgba(62, 207, 142, 0.35);
-}
-.games-card--crash .games-card__orb--b {
-  background: rgba(245, 200, 76, 0.22);
+    radial-gradient(90% 80% at 100% 0%, rgba(62, 207, 142, 0.28), transparent 55%),
+    radial-gradient(70% 60% at 0% 100%, rgba(245, 200, 76, 0.1), transparent 50%);
 }
 .games-card--crash .games-card__icon {
   background: linear-gradient(145deg, rgba(62, 207, 142, 0.35), rgba(62, 207, 142, 0.12));
@@ -888,14 +995,8 @@ body::-webkit-scrollbar,
 }
 .games-card--roulette .games-card__aura {
   background:
-    radial-gradient(90% 80% at 100% 0%, rgba(229, 101, 85, 0.38), transparent 55%),
-    radial-gradient(70% 60% at 10% 100%, rgba(62, 207, 142, 0.16), transparent 50%);
-}
-.games-card--roulette .games-card__orb--a {
-  background: rgba(229, 101, 85, 0.38);
-}
-.games-card--roulette .games-card__orb--b {
-  background: rgba(244, 248, 252, 0.12);
+    radial-gradient(90% 80% at 100% 0%, rgba(229, 101, 85, 0.3), transparent 55%),
+    radial-gradient(70% 60% at 10% 100%, rgba(62, 207, 142, 0.12), transparent 50%);
 }
 .games-card--roulette .games-card__icon {
   background: linear-gradient(145deg, rgba(229, 101, 85, 0.4), rgba(229, 101, 85, 0.12));
@@ -915,14 +1016,8 @@ body::-webkit-scrollbar,
 }
 .games-card--pvp .games-card__aura {
   background:
-    radial-gradient(90% 80% at 100% 0%, rgba(51, 144, 236, 0.4), transparent 55%),
-    radial-gradient(70% 60% at 0% 100%, rgba(167, 139, 250, 0.18), transparent 50%);
-}
-.games-card--pvp .games-card__orb--a {
-  background: rgba(51, 144, 236, 0.4);
-}
-.games-card--pvp .games-card__orb--b {
-  background: rgba(167, 139, 250, 0.28);
+    radial-gradient(90% 80% at 100% 0%, rgba(51, 144, 236, 0.32), transparent 55%),
+    radial-gradient(70% 60% at 0% 100%, rgba(167, 139, 250, 0.14), transparent 50%);
 }
 .games-card--pvp .games-card__icon {
   background: linear-gradient(145deg, rgba(51, 144, 236, 0.4), rgba(51, 144, 236, 0.12));
@@ -1016,30 +1111,6 @@ body::-webkit-scrollbar,
   animation: games-arrow-nudge 2.4s ease-in-out infinite;
 }
 
-@keyframes games-orb-drift-a {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.5;
-  }
-  50% {
-    transform: translate3d(-12px, 10px, 0) scale(1.08);
-    opacity: 0.72;
-  }
-}
-
-@keyframes games-orb-drift-b {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.4;
-  }
-  50% {
-    transform: translate3d(14px, -8px, 0) scale(1.12);
-    opacity: 0.65;
-  }
-}
-
 @keyframes games-aura-breathe {
   0%,
   100% {
@@ -1047,6 +1118,81 @@ body::-webkit-scrollbar,
   }
   50% {
     opacity: 1;
+  }
+}
+
+@keyframes games-crash-draw {
+  0%,
+  100% {
+    stroke-dashoffset: 48;
+    opacity: 0.75;
+  }
+  50% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes games-crash-rocket {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(0.92);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translate(2px, -3px) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes games-crash-blink {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes games-roulette-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes games-roulette-ball {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(18deg) translateY(2px);
+  }
+}
+
+@keyframes games-pvp-beam {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes games-pvp-slash {
+  0%,
+  100% {
+    opacity: 0.55;
+    stroke-width: 2.2;
+  }
+  50% {
+    opacity: 1;
+    stroke-width: 2.8;
   }
 }
 
@@ -1112,10 +1258,17 @@ body::-webkit-scrollbar,
   .games-promo__slide::after,
   .games-promo__icon,
   .games-card__aura,
-  .games-card__orb,
   .games-card__icon,
   .games-card__badge::before,
-  .games-card__arrow {
+  .games-card__arrow,
+  .games-art-crash__trail,
+  .games-art-crash__rocket,
+  .games-art-crash__dot,
+  .games-art-roulette__wheel,
+  .games-art-roulette__ball,
+  .games-art-pvp__beam,
+  .games-art-pvp__slash,
+  .games-art-pvp__spark {
     animation: none !important;
     transition: none;
   }

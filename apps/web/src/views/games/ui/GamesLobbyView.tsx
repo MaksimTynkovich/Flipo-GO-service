@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { GamesCardArt } from "@/components/games/GamesCardArt";
 import { GamesPromoBanner } from "@/components/games/GamesPromoBanner";
 import { PageShell } from "@/components/PageShell";
 import { GAME_LOBBY_ITEMS } from "@/src/shared/config/navigation";
@@ -38,8 +39,7 @@ export function GamesLobbyView() {
               )}
             >
               <div className="games-card__aura" aria-hidden />
-              <div className="games-card__orb games-card__orb--a" aria-hidden />
-              <div className="games-card__orb games-card__orb--b" aria-hidden />
+              <GamesCardArt tone={item.tone} />
 
               <div className="games-card__top">
                 <div className="games-card__icon">
@@ -55,10 +55,7 @@ export function GamesLobbyView() {
 
               <div className="games-card__footer">
                 <span className="games-card__cta">Играть</span>
-                <ArrowRight
-                  className="games-card__arrow h-4 w-4"
-                  strokeWidth={2.2}
-                />
+                <ArrowRight className="games-card__arrow h-4 w-4" strokeWidth={2.2} />
               </div>
             </Link>
           ))}
