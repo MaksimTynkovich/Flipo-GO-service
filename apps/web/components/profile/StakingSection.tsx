@@ -6,8 +6,7 @@ import { GiftTile, GiftTileSkeleton } from "@/components/profile/GiftTile";
 import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
 import { StakingOverview } from "@/components/profile/StakingOverview";
 import { StakingEpochBanner } from "@/components/profile/StakingEpochBanner";
-import { StakingNoTransferHint } from "@/components/profile/StakingNoTransferHint";
-import { StakingProfileVisibilityHint } from "@/components/profile/StakingProfileVisibilityHint";
+import { StakingHints } from "@/components/profile/StakingHints";
 import { StakingActionBar } from "@/components/profile/StakingActionBar";
 import { Button } from "@/components/ui/button";
 import {
@@ -145,8 +144,7 @@ export function StakingSection() {
 
       {!loading && epochEndsAt && <StakingEpochBanner endsAt={epochEndsAt} />}
 
-      {!loading && <StakingNoTransferHint />}
-      {!loading && <StakingProfileVisibilityHint />}
+      {!loading && <StakingHints />}
 
       {loading ? (
         <div className="grid grid-cols-3 gap-2">
