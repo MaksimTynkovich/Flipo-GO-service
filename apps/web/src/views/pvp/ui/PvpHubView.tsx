@@ -50,6 +50,7 @@ export function PvpHubView() {
   const { user } = useAuth();
   const haptics = useTelegramHaptics();
   const [state, setState] = useState<PvpLobbyState>({ active: [], history: [] });
+  const [lobbyReady, setLobbyReady] = useState(false);
   const [betAmount, setBetAmount] = useState("0.5");
   const [fundingMode, setFundingMode] = useState<BetFundingMode>("balance");
   const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
@@ -71,6 +72,8 @@ export function PvpHubView() {
       });
     } catch {
       // ignore polling errors
+    } finally {
+      setLobbyReady(true);
     }
   }, []);
 
@@ -290,6 +293,13 @@ export function PvpHubView() {
               onProof={room.game_round_id ? () => setProofRoundId(room.game_round_id!) : undefined}
             />
           ))}
+        </section>
+      ) : lobbyReady ? (
+        <section className="panel flex flex-col items-center gap-2 py-10 text-center">
+          <p className="text-sm font-semibold text-foreground">Нет открытых дуэлей</p>
+          <p className="max-w-[16rem] text-xs leading-relaxed text-muted">
+            Создайте первую комнату выше — соперник сможет присоединиться к вашей ставке.
+          </p>
         </section>
       ) : null}
 

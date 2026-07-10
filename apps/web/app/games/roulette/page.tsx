@@ -22,7 +22,9 @@ import {
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
 import { RouletteRoundState } from "@/lib/roulette";
 import { BetFundingMode } from "@/lib/bet-funding";
+import { rouletteBetClosedLabel } from "@/lib/bet-cta";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
+import { useCountdownSeconds } from "@/src/shared/hooks/useCountdownSeconds";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
@@ -91,6 +93,18 @@ export default function RoulettePage() {
   }, [roundBets?.bets, user?.id]);
 
   const canBet = state?.phase === "betting" && !betting;
+  const waitSeconds = useCountdownSeconds(
+    state?.ends_at,
+    state?.phase === "waiting" || state?.phase === "result",
+  );
+  const betClosedLabel = (() => {
+    if (betting) return "Ставим…";
+    const base = rouletteBetClosedLabel(state?.phase);
+    if (waitSeconds > 0 && (state?.phase === "waiting" || state?.phase === "result")) {
+      return `${base} · ${String(waitSeconds).padStart(2, "0")}`;
+    }
+    return base;
+  })();
   const roundTotals = roundBets?.totals ?? { red: 0, green: 0, black: 0 };
 
   async function bet(color: string) {
@@ -185,6 +199,12 @@ export default function RoulettePage() {
               onChange: (e) => setAmountTon(e.target.value),
             })}
           />
+
+          {!canBet ? (
+            <div className="flex h-10 items-center justify-center rounded-xl bg-surface-raised text-sm font-semibold tabular-nums text-muted">
+              {betClosedLabel}
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-3 gap-2">
             <RouletteColorBetButton

@@ -34,6 +34,8 @@ import { cn } from "@/lib/utils";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { BetFundingMode } from "@/lib/bet-funding";
+import { crashBetClosedLabel } from "@/lib/bet-cta";
+import { useCountdownSeconds } from "@/src/shared/hooks/useCountdownSeconds";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
@@ -137,6 +139,25 @@ export default function CrashPage() {
     state?.phase === "running" &&
     roundActiveBets.length > 0 &&
     !cashingOut;
+
+  const waitSeconds = useCountdownSeconds(
+    state?.ends_at,
+    state?.phase === "waiting" || state?.phase === "crashed",
+  );
+
+  const betButtonLabel = (() => {
+    if (betting) return "…";
+    if (canBet) {
+      return fundingMode === "gift" && selectedGiftIds.length > 1
+        ? `Поставить (${selectedGiftIds.length})`
+        : "Поставить";
+    }
+    const base = crashBetClosedLabel(state?.phase);
+    if (waitSeconds > 0 && (state?.phase === "waiting" || state?.phase === "crashed")) {
+      return `${base} · ${String(waitSeconds).padStart(2, "0")}`;
+    }
+    return base;
+  })();
 
   const displayMult =
     state?.phase === "crashed"
@@ -309,26 +330,34 @@ export default function CrashPage() {
               disabled={!canBet}
               onClick={bet}
               className={cn(
-                "app-control btn-primary flex h-11 items-center justify-center rounded-xl text-sm font-bold",
-                !canBet && "opacity-40",
+                "app-control flex h-11 items-center justify-center rounded-xl text-sm font-bold transition-[background-color,color,opacity] duration-200",
+                canBet
+                  ? "btn-primary"
+                  : "bg-surface-raised text-muted",
               )}
             >
-              {betting
-                ? "…"
-                : fundingMode === "gift" && selectedGiftIds.length > 1
-                  ? `Поставить (${selectedGiftIds.length})`
-                  : "Поставить"}
+              {betButtonLabel}
             </button>
             <button
               type="button"
               disabled={!canCashout}
               onClick={cashout}
               className={cn(
-                "app-control flex h-11 items-center justify-center rounded-xl bg-success text-sm font-bold text-white hover:brightness-110",
-                !canCashout && "opacity-40",
+                "app-control flex h-11 items-center justify-center rounded-xl text-sm font-bold transition-[background-color,color,opacity] duration-200",
+                canCashout
+                  ? "bg-success text-white hover:brightness-110"
+                  : "bg-surface-raised text-muted",
               )}
             >
-              {cashingOut ? "…" : roundActiveBets.length > 1 ? "Забрать все" : "Забрать"}
+              {cashingOut
+                ? "…"
+                : canCashout
+                  ? roundActiveBets.length > 1
+                    ? "Забрать все"
+                    : "Забрать"
+                  : state?.phase === "running"
+                    ? "Нет ставки"
+                    : "Забрать"}
             </button>
           </div>
 

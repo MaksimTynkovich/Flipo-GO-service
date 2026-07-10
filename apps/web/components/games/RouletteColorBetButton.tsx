@@ -35,10 +35,10 @@ export function RouletteColorBetButton({
       onClick={onClick}
       style={rouletteFillStyle(color)}
       className={cn(
-        "app-control flex min-h-11 flex-col overflow-hidden rounded-xl text-white hover:brightness-110",
+        "app-control flex min-h-11 flex-col overflow-hidden rounded-xl text-white transition-[filter,transform] duration-200",
         hasTotal ? "h-14" : "h-11",
         color === "black" && "ring-1 ring-inset ring-white/10",
-        disabled && "opacity-40",
+        disabled ? "cursor-default saturate-[0.55] brightness-[0.72]" : "hover:brightness-110",
       )}
     >
       <span className="flex flex-1 items-center justify-center text-sm font-semibold leading-none">
