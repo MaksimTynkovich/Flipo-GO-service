@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { formatTON, CrashRoundBets as CrashRoundBetsData } from "@/lib/api";
-import { BetStakeLabel } from "@/components/games/BetStakeLabel";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  formatTON,
+  CrashBetEntry,
+  CrashRoundBets as CrashRoundBetsData,
+  BetGiftView,
+} from "@/lib/api";
+import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { crashPlayerName, formatMultiplier, isCrashBigBet } from "@/lib/crash";
 import { cn } from "@/lib/utils";
@@ -11,26 +16,122 @@ type Props = {
   data: CrashRoundBetsData | null;
 };
 
-function BetRow({
-  bet,
+type AggregatedPlayer = {
+  key: string;
+  user_id: string;
+  username: string;
+  first_name: string;
+  photo_url?: string;
+  amount_nanoton: number;
+  bet_count: number;
+  funding_type?: string;
+  gift?: BetGiftView;
+  gifts: BetGiftView[];
+  status: "pending" | "cashed_out" | "lost";
+  cashout_multiplier?: number;
+  auto_cashout_multiplier?: number;
+  payout_nanoton: number;
+  profit_nanoton: number;
+  bet_ids: string[];
+};
+
+function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
+  const byUser = new Map<string, CrashBetEntry[]>();
+  for (const bet of bets) {
+    const list = byUser.get(bet.user_id) ?? [];
+    list.push(bet);
+    byUser.set(bet.user_id, list);
+  }
+
+  const rows: AggregatedPlayer[] = [];
+  for (const [userId, list] of Array.from(byUser.entries())) {
+    const head = list[0];
+    const amount = list.reduce((sum, bet) => sum + bet.amount_nanoton, 0);
+    const gifts = list
+      .map((bet) => bet.gift)
+      .filter((gift): gift is BetGiftView => !!gift);
+    const uniqueGifts = Array.from(
+      new Map(gifts.map((gift) => [gift.id, gift])).values(),
+    );
+
+    const hasPending = list.some((bet) => bet.status === "pending");
+    const hasCashed = list.some((bet) => bet.status === "cashed_out");
+    const status: AggregatedPlayer["status"] = hasPending
+      ? "pending"
+      : hasCashed
+        ? "cashed_out"
+        : "lost";
+
+    const cashed = list.filter((bet) => bet.status === "cashed_out");
+    let cashoutMultiplier: number | undefined;
+    let payout = 0;
+    let profit = 0;
+
+    if (cashed.length > 0) {
+      let weighted = 0;
+      let weight = 0;
+      for (const bet of cashed) {
+        const mult = bet.cashout_multiplier ?? 0;
+        weighted += mult * bet.amount_nanoton;
+        weight += bet.amount_nanoton;
+        const betPayout = bet.payout_nanoton ?? 0;
+        payout += betPayout;
+        const isGift = bet.funding_type === "gift" || !!bet.gift;
+        profit += isGift ? betPayout : betPayout - bet.amount_nanoton;
+      }
+      if (weight > 0) cashoutMultiplier = weighted / weight;
+    }
+
+    const pendingAutos = list
+      .filter((bet) => bet.status === "pending" && bet.auto_cashout_multiplier != null)
+      .map((bet) => bet.auto_cashout_multiplier!);
+    const autoCashout =
+      pendingAutos.length > 0 ? Math.min(...pendingAutos) : undefined;
+
+    const allGift = list.every((bet) => bet.funding_type === "gift" || !!bet.gift);
+    const anyGift = list.some((bet) => bet.funding_type === "gift" || !!bet.gift);
+
+    rows.push({
+      key: userId,
+      user_id: userId,
+      username: head.username,
+      first_name: head.first_name,
+      photo_url: head.photo_url,
+      amount_nanoton: amount,
+      bet_count: list.length,
+      funding_type: allGift ? "gift" : anyGift ? "mixed" : "balance",
+      gift: uniqueGifts[0],
+      gifts: uniqueGifts,
+      status,
+      cashout_multiplier: cashoutMultiplier,
+      auto_cashout_multiplier: autoCashout,
+      payout_nanoton: payout,
+      profit_nanoton: profit,
+      bet_ids: list.map((bet) => bet.id),
+    });
+  }
+
+  return rows.sort((a, b) => {
+    const aBig = isCrashBigBet(a.amount_nanoton) ? 1 : 0;
+    const bBig = isCrashBigBet(b.amount_nanoton) ? 1 : 0;
+    if (aBig !== bBig) return bBig - aBig;
+    return b.amount_nanoton - a.amount_nanoton;
+  });
+}
+
+function PlayerRow({
+  player,
   flash,
 }: {
-  bet: CrashRoundBetsData["bets"][number];
+  player: AggregatedPlayer;
   flash?: boolean;
 }) {
   const [imgError, setImgError] = useState(false);
-  const name = crashPlayerName(bet);
-  const initial = (bet.first_name?.[0] || bet.username?.[0] || "?").toUpperCase();
-  const isCashedOut = bet.status === "cashed_out";
-  const isLost = bet.status === "lost";
-  const isGift = bet.funding_type === "gift" || !!bet.gift;
-  const big = isCrashBigBet(bet.amount_nanoton);
-  const profit =
-    isCashedOut && bet.payout_nanoton != null
-      ? isGift
-        ? bet.payout_nanoton
-        : bet.payout_nanoton - bet.amount_nanoton
-      : null;
+  const name = crashPlayerName(player);
+  const initial = (player.first_name?.[0] || player.username?.[0] || "?").toUpperCase();
+  const isCashedOut = player.status === "cashed_out";
+  const isLost = player.status === "lost";
+  const big = isCrashBigBet(player.amount_nanoton);
 
   return (
     <div
@@ -47,10 +148,10 @@ function BetRow({
           big && "ring-1 ring-accent/50",
         )}
       >
-        {bet.photo_url && !imgError ? (
+        {player.photo_url && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={bet.photo_url}
+            src={player.photo_url}
             alt=""
             className="h-full w-full object-cover"
             onError={() => setImgError(true)}
@@ -70,30 +171,34 @@ function BetRow({
           ) : null}
         </p>
         <p className="text-[11px] tabular-nums text-muted">
-          <BetStakeLabel
-            amountNanoton={bet.amount_nanoton}
-            fundingType={bet.funding_type}
-            gift={bet.gift}
-          />
-          {bet.status === "pending" && bet.auto_cashout_multiplier != null ? (
+          {player.gifts.length > 1 ? (
+            <GiftStakeIcons gifts={player.gifts} size="xs" amountNanoton={player.amount_nanoton} />
+          ) : (
+            <BetStakeLabel
+              amountNanoton={player.amount_nanoton}
+              fundingType={player.funding_type === "mixed" ? "gift" : player.funding_type}
+              gift={player.gift}
+            />
+          )}
+          {player.status === "pending" && player.auto_cashout_multiplier != null ? (
             <span className="ml-1.5 text-accent/80">
-              авто {formatMultiplier(bet.auto_cashout_multiplier)}
+              авто {formatMultiplier(player.auto_cashout_multiplier)}
             </span>
           ) : null}
         </p>
       </div>
 
       <div className="shrink-0 text-right">
-        {isCashedOut && bet.cashout_multiplier != null ? (
+        {isCashedOut && player.cashout_multiplier != null ? (
           <>
             <p className="text-[11px] font-semibold tabular-nums text-success">
-              {formatMultiplier(bet.cashout_multiplier)}
+              {formatMultiplier(player.cashout_multiplier)}
             </p>
-            {profit != null && profit > 0 && (
+            {player.profit_nanoton > 0 && (
               <p className="text-[10px] font-medium tabular-nums text-success/90">
                 +
                 <TonAmount
-                  amount={formatTON(profit)}
+                  amount={formatTON(player.profit_nanoton)}
                   iconSize="xs"
                   iconClassName="text-success/90"
                 />
@@ -112,7 +217,8 @@ function BetRow({
 
 export function CrashRoundBets({ data }: Props) {
   const bets = data?.bets ?? [];
-  const [flashIds, setFlashIds] = useState<Set<string>>(() => new Set());
+  const players = useMemo(() => aggregateBets(bets), [bets]);
+  const [flashKeys, setFlashKeys] = useState<Set<string>>(() => new Set());
   const seenCashed = useRef<Set<string>>(new Set());
   const roundRef = useRef<string | null>(null);
 
@@ -121,54 +227,49 @@ export function CrashRoundBets({ data }: Props) {
     if (roundId !== roundRef.current) {
       roundRef.current = roundId;
       seenCashed.current = new Set();
-      setFlashIds(new Set());
+      setFlashKeys(new Set());
     }
 
     const newly: string[] = [];
-    for (const bet of bets) {
-      if (bet.status !== "cashed_out") continue;
-      if (seenCashed.current.has(bet.id)) continue;
-      seenCashed.current.add(bet.id);
-      newly.push(bet.id);
+    for (const player of players) {
+      if (player.status !== "cashed_out") continue;
+      // Flash when any of the player's bets newly cashes out
+      const fresh = player.bet_ids.filter((id) => !seenCashed.current.has(id));
+      if (fresh.length === 0) continue;
+      for (const id of player.bet_ids) seenCashed.current.add(id);
+      newly.push(player.key);
     }
     if (newly.length === 0) return;
 
-    setFlashIds((prev) => {
+    setFlashKeys((prev) => {
       const next = new Set(prev);
-      for (const id of newly) next.add(id);
+      for (const key of newly) next.add(key);
       return next;
     });
     const timer = window.setTimeout(() => {
-      setFlashIds((prev) => {
+      setFlashKeys((prev) => {
         const next = new Set(prev);
-        for (const id of newly) next.delete(id);
+        for (const key of newly) next.delete(key);
         return next;
       });
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [bets, data?.round_id]);
+  }, [players, data?.round_id]);
 
   if (bets.length === 0) {
     return <p className="py-2 text-center text-xs text-muted">Пока нет ставок</p>;
   }
 
-  const sorted = [...bets].sort((a, b) => {
-    const aBig = isCrashBigBet(a.amount_nanoton) ? 1 : 0;
-    const bBig = isCrashBigBet(b.amount_nanoton) ? 1 : 0;
-    if (aBig !== bBig) return bBig - aBig;
-    return b.amount_nanoton - a.amount_nanoton;
-  });
-
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="section-label">Игроки</p>
-        <span className="text-[10px] tabular-nums text-muted">{bets.length}</span>
+        <span className="text-[10px] tabular-nums text-muted">{players.length}</span>
       </div>
 
       <div className="max-h-52 space-y-0.5 overflow-y-auto">
-        {sorted.map((bet) => (
-          <BetRow key={bet.id} bet={bet} flash={flashIds.has(bet.id)} />
+        {players.map((player) => (
+          <PlayerRow key={player.key} player={player} flash={flashKeys.has(player.key)} />
         ))}
       </div>
     </div>

@@ -152,10 +152,55 @@ export default function CrashPage() {
     if (state?.round_id) loadActiveBets();
   }, [state?.round_id, state?.phase, loadActiveBets]);
 
-  const roundActiveBets = useMemo(
-    () => activeBets.filter((bet) => bet.round_id === state?.round_id),
-    [activeBets, state?.round_id],
-  );
+  // Source of truth for "still in play": pending bets in the live round feed.
+  // Fixes stale UI when server auto-cashout settles but /bet/active wasn't refreshed.
+  const roundActiveBets = useMemo(() => {
+    const roundId = state?.round_id;
+    if (!roundId) return [];
+
+    if (user?.id && roundBets?.round_id === roundId) {
+      return roundBets.bets
+        .filter((bet) => bet.user_id === user.id && bet.status === "pending")
+        .map((bet) => ({
+          id: bet.id,
+          round_id: roundId,
+          amount_nanoton: bet.amount_nanoton,
+          funding_type: bet.funding_type,
+          inventory_item_id: bet.gift?.id,
+          status: bet.status,
+          auto_cashout_multiplier: bet.auto_cashout_multiplier,
+        }));
+    }
+
+    return activeBets.filter((bet) => bet.round_id === roundId && bet.status === "pending");
+  }, [activeBets, roundBets, state?.round_id, user?.id]);
+
+  // Keep local activeBets aligned with round feed (server auto-cashout / other clients).
+  useEffect(() => {
+    if (!user?.id || !roundBets || roundBets.round_id !== state?.round_id) return;
+    const myBets = roundBets.bets.filter((bet) => bet.user_id === user.id);
+    const pendingIds = new Set(
+      myBets.filter((bet) => bet.status === "pending").map((bet) => bet.id),
+    );
+    setActiveBets((prev) => {
+      const next = prev.filter(
+        (bet) => bet.round_id !== roundBets.round_id || pendingIds.has(bet.id),
+      );
+      if (next.length === prev.length && next.every((bet, i) => bet.id === prev[i]?.id)) {
+        return prev;
+      }
+      return next;
+    });
+
+    // If all our bets already cashed out, don't treat crash as a personal loss.
+    if (
+      myBets.length > 0 &&
+      pendingIds.size === 0 &&
+      myBets.every((bet) => bet.status === "cashed_out")
+    ) {
+      hadStakeRef.current = false;
+    }
+  }, [roundBets, user?.id, state?.round_id]);
 
   useEffect(() => {
     if (roundActiveBets.length > 0) {
@@ -394,25 +439,65 @@ export default function CrashPage() {
       if (due.length === 0) return;
 
       for (const bet of due) autoFiredRef.current.add(bet.id);
+      const dueIds = new Set(due.map((bet) => bet.id));
 
       try {
         let totalPayout = 0;
         let lastMult = live;
+        let settledAny = false;
+
         for (const bet of due) {
           const target = bet.auto_cashout_multiplier ?? live;
           lastMult = target;
-          const res = (await cashoutCrash(bet.id, target)) as { payout_nanoton: number };
-          totalPayout += res.payout_nanoton;
+          try {
+            const res = (await cashoutCrash(bet.id, target)) as { payout_nanoton: number };
+            totalPayout += res.payout_nanoton ?? 0;
+            settledAny = true;
+          } catch {
+            // Likely already settled by server auto-cashout — still drop from UI.
+            settledAny = true;
+          }
         }
-        if (totalPayout > 0) {
-          showToast({
-            variant: "success",
-            title: `Автовывод +${formatTON(totalPayout)} TON @ ${formatMultiplier(lastMult)}`,
-          });
+
+        // Optimistic: leave the round immediately in the UI.
+        setActiveBets((prev) => prev.filter((bet) => !dueIds.has(bet.id)));
+        setRoundBets((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            bets: prev.bets.map((bet) =>
+              dueIds.has(bet.id)
+                ? {
+                    ...bet,
+                    status: "cashed_out",
+                    cashout_multiplier: bet.cashout_multiplier ?? lastMult,
+                  }
+                : bet,
+            ),
+          };
+        });
+
+        if (settledAny) {
+          const payoutTon =
+            totalPayout > 0
+              ? totalPayout
+              : due.reduce((sum, bet) => {
+                  const target = bet.auto_cashout_multiplier ?? lastMult;
+                  const gross = bet.amount_nanoton * target;
+                  const isGift = bet.funding_type === "gift";
+                  return sum + (isGift ? Math.max(0, gross - bet.amount_nanoton) : gross);
+                }, 0);
+
+          if (totalPayout > 0) {
+            showToast({
+              variant: "success",
+              title: `Автовывод +${formatTON(payoutTon)} TON @ ${formatMultiplier(lastMult)}`,
+            });
+          }
           triggerStageFx(
             {
               kind: "win",
-              amountTon: formatTON(totalPayout),
+              amountTon: formatTON(payoutTon),
               multiplier: lastMult,
             },
             1700,
@@ -420,10 +505,13 @@ export default function CrashPage() {
           haptics.notificationOccurred("success");
           hadStakeRef.current = false;
         }
+
         await loadActiveBets();
-        loadRoundBets();
+        await loadRoundBets();
       } catch {
         for (const bet of due) autoFiredRef.current.delete(bet.id);
+        await loadActiveBets();
+        await loadRoundBets();
       }
     },
     [showToast, haptics, loadActiveBets, loadRoundBets],

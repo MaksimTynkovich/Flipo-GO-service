@@ -80,6 +80,134 @@ function angleOf(from: Pt, to: Pt): number {
   return Math.atan2(to.y - from.y, to.x - from.x);
 }
 
+type HeatTone = (typeof HEAT)[keyof typeof HEAT];
+
+function strokePolyline(
+  ctx: CanvasRenderingContext2D,
+  path: Pt[],
+  from = 0,
+  to = path.length - 1,
+) {
+  if (to <= from || path.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(path[from].x, path[from].y);
+  for (let i = from + 1; i <= to; i++) {
+    ctx.lineTo(path[i].x, path[i].y);
+  }
+}
+
+/** Live trail: thin animated energy line + moving sparks, no heavy shadow. */
+function drawLiveTrail(
+  ctx: CanvasRenderingContext2D,
+  path: Pt[],
+  color: HeatTone,
+  phase: number,
+  nowPerf: number,
+) {
+  if (path.length < 2) return;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Soft base (thin, no blob shadow)
+  strokePolyline(ctx, path);
+  ctx.strokeStyle = color.stroke;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Animated dashed energy overlay
+  strokePolyline(ctx, path);
+  ctx.strokeStyle = color.stroke;
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 9]);
+  ctx.lineDashOffset = -phase * 14;
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Bright core near the tip only
+  const tipFrom = Math.max(0, path.length - 14);
+  strokePolyline(ctx, path, tipFrom, path.length - 1);
+  ctx.strokeStyle = "#ffffff";
+  ctx.globalAlpha = 0.85;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Traveling spark beads along the path
+  const beads = 5;
+  for (let i = 0; i < beads; i++) {
+    const u = (phase * 0.18 + i / beads) % 1;
+    const idx = Math.min(path.length - 1, Math.floor(u * (path.length - 1)));
+    const p = path[idx];
+    const pulse = 0.45 + 0.55 * Math.sin(nowPerf * 0.01 + i);
+    ctx.globalAlpha = 0.35 + pulse * 0.45;
+    ctx.fillStyle = color.flame;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.4 + pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * Crash: path freezes, tip snaps off and fades, remaining ribbon dissolves from the break.
+ */
+function drawBrokenTrail(
+  ctx: CanvasRenderingContext2D,
+  path: Pt[],
+  breakPos: Pt,
+  t: number,
+  nowPerf: number,
+) {
+  if (path.length < 2) return;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Keep most of the path, but fade the last segment as it "breaks"
+  const keepUntil = Math.max(2, Math.floor(path.length * (1 - t * 0.22)));
+  const fade = Math.max(0, 1 - t * 0.85);
+
+  strokePolyline(ctx, path, 0, keepUntil);
+  ctx.strokeStyle = "#e56555";
+  ctx.globalAlpha = 0.55 * fade;
+  ctx.lineWidth = 2.4;
+  ctx.stroke();
+
+  strokePolyline(ctx, path, 0, keepUntil);
+  ctx.strokeStyle = "rgba(255,255,255,0.7)";
+  ctx.globalAlpha = 0.35 * fade;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Severed tip stub that shrinks away from the rocket
+  if (t < 0.55) {
+    const stubLen = Math.max(2, Math.floor(10 * (1 - t / 0.55)));
+    const from = Math.max(0, path.length - 1 - stubLen);
+    strokePolyline(ctx, path, from, path.length - 1);
+    ctx.strokeStyle = "#ff8f7a";
+    ctx.globalAlpha = 1 - t / 0.55;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 4]);
+    ctx.lineDashOffset = nowPerf * 0.05;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  // Break spark at snap point
+  if (t < 0.4) {
+    const a = 1 - t / 0.4;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = "#ffb4a0";
+    ctx.beginPath();
+    ctx.arc(breakPos.x, breakPos.y, 3 + t * 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
 export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: Props) {
   const phase = state?.phase;
   const crashed = phase === "crashed";
@@ -110,8 +238,15 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
   const lastEmitMs = useRef(0);
   const particlesRef = useRef<Particle[]>([]);
   const prevPosRef = useRef<Pt | null>(null);
-  const crashAnimRef = useRef<{ t0: number; pos: Pt; angle: number } | null>(null);
+  const crashAnimRef = useRef<{
+    t0: number;
+    pos: Pt;
+    angle: number;
+    path: Pt[];
+    mult: number;
+  } | null>(null);
   const starsRef = useRef<{ x: number; y: number; r: number; a: number; s: number }[]>([]);
+  const sparkPhaseRef = useRef(0);
 
   stateRef.current = state;
   onLiveRef.current = onLiveMultiplier;
@@ -187,15 +322,33 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
       const h = canvas?.clientHeight || 220;
       const pos = rocketPos(crashMult, w, h);
       const prev = prevPosRef.current ?? { x: pos.x - 8, y: pos.y + 6 };
+      const path = buildFlightPath(crashMult, w, h);
       crashAnimRef.current = {
         t0: performance.now(),
         pos,
         angle: angleOf(prev, pos),
+        path,
+        mult: crashMult,
       };
+      // Break shards from the tip
+      for (let i = 0; i < 18; i++) {
+        const a = angleOf(prev, pos) + Math.PI + (Math.random() - 0.5) * 1.8;
+        const sp = 1.5 + Math.random() * 4;
+        particlesRef.current.push({
+          x: pos.x,
+          y: pos.y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 1,
+          max: 0.55 + Math.random() * 0.45,
+          size: 1.2 + Math.random() * 2.2,
+          hue: 12 + Math.random() * 20,
+        });
+      }
       // Explosion burst
-      for (let i = 0; i < 28; i++) {
-        const a = (Math.PI * 2 * i) / 28 + Math.random() * 0.2;
-        const sp = 1.2 + Math.random() * 3.4;
+      for (let i = 0; i < 22; i++) {
+        const a = (Math.PI * 2 * i) / 22 + Math.random() * 0.2;
+        const sp = 1.4 + Math.random() * 3.6;
         particlesRef.current.push({
           x: pos.x,
           y: pos.y,
@@ -441,18 +594,30 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         }
         prevPosRef.current = pos;
 
-        // Exhaust particles
-        if (Math.random() < 0.55) {
+        // Exhaust + speed sparks
+        if (Math.random() < 0.7) {
           const back = angle + Math.PI;
           particlesRef.current.push({
             x: pos.x + Math.cos(back) * 10,
             y: pos.y + Math.sin(back) * 10,
-            vx: Math.cos(back) * (0.6 + Math.random()) + (Math.random() - 0.5) * 0.4,
-            vy: Math.sin(back) * (0.6 + Math.random()) + (Math.random() - 0.5) * 0.4,
+            vx: Math.cos(back) * (0.7 + Math.random()) + (Math.random() - 0.5) * 0.5,
+            vy: Math.sin(back) * (0.7 + Math.random()) + (Math.random() - 0.5) * 0.5,
             life: 1,
-            max: 0.35 + Math.random() * 0.35,
-            size: 1 + Math.random() * 2,
+            max: 0.28 + Math.random() * 0.28,
+            size: 1 + Math.random() * 1.8,
             hue: heat === "blaze" ? 25 : heat === "hot" ? 42 : 145,
+          });
+        }
+        if (Math.random() < 0.35) {
+          particlesRef.current.push({
+            x: pos.x - Math.cos(angle) * (8 + Math.random() * 20),
+            y: pos.y - Math.sin(angle) * (8 + Math.random() * 20),
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: (Math.random() - 0.5) * 0.4,
+            life: 1,
+            max: 0.4,
+            size: 0.8 + Math.random(),
+            hue: heat === "blaze" ? 30 : 160,
           });
         }
 
@@ -493,13 +658,14 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         heat = "crash";
         const anim = crashAnimRef.current;
         if (anim) {
-          const t = Math.min(1, (nowPerf - anim.t0) / 900);
+          const t = Math.min(1, (nowPerf - anim.t0) / 1100);
+          // Rocket tumbles away from the break point
           pos = {
-            x: anim.pos.x + t * 18,
-            y: anim.pos.y + t * t * 70,
+            x: anim.pos.x + t * 28,
+            y: anim.pos.y + t * t * 95,
           };
-          angle = anim.angle + t * 2.8;
-          showRocket = t < 0.92;
+          angle = anim.angle + t * 3.4;
+          showRocket = t < 0.95;
         } else {
           pos = rocketPos(mult, w, h);
         }
@@ -524,60 +690,16 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         }
       }
 
-      // Flight path ribbon — rebuilt from 1× → current every frame
-      if ((phaseNow === "running" || phaseNow === "crashed") && mult > 1.01) {
+      // Flight path — live energy ribbon (no heavy shadow), breaks on crash
+      if (phaseNow === "running" && mult > 1.01) {
         const path = buildFlightPath(mult, w, h);
         const c = HEAT[heat];
-        if (path.length > 1) {
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-
-          const strokePath = () => {
-            ctx.beginPath();
-            ctx.moveTo(path[0].x, path[0].y);
-            for (let i = 1; i < path.length; i++) {
-              ctx.lineTo(path[i].x, path[i].y);
-            }
-          };
-
-          // Outer glow
-          strokePath();
-          ctx.strokeStyle = c.glow;
-          ctx.globalAlpha = 0.4;
-          ctx.lineWidth = 16;
-          ctx.stroke();
-
-          // Neon band
-          strokePath();
-          ctx.strokeStyle = c.stroke;
-          ctx.globalAlpha = 0.7;
-          ctx.lineWidth = 5.5;
-          ctx.stroke();
-
-          // Bright core
-          strokePath();
-          ctx.strokeStyle = "#ffffff";
-          ctx.globalAlpha = 0.9;
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-
-          // Area under curve
-          let minY = path[0].y;
-          for (const p of path) if (p.y < minY) minY = p.y;
-          ctx.beginPath();
-          ctx.moveTo(path[0].x, h);
-          for (const p of path) ctx.lineTo(p.x, p.y);
-          ctx.lineTo(path[path.length - 1].x, h);
-          ctx.closePath();
-          const fill = ctx.createLinearGradient(0, minY, 0, h);
-          fill.addColorStop(0, c.glow);
-          fill.addColorStop(1, "transparent");
-          ctx.fillStyle = fill;
-          ctx.globalAlpha = 0.3;
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        }
+        sparkPhaseRef.current += 0.085;
+        drawLiveTrail(ctx, path, c, sparkPhaseRef.current, nowPerf);
+      } else if (phaseNow === "crashed" && crashAnimRef.current) {
+        const anim = crashAnimRef.current;
+        const t = Math.min(1, (nowPerf - anim.t0) / 1100);
+        drawBrokenTrail(ctx, anim.path, anim.pos, t, nowPerf);
       }
 
       // Particles
@@ -587,7 +709,7 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         if (p.life <= 0) continue;
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += phaseNow === "crashed" ? 0.06 : 0.01;
+        p.vy += phaseNow === "crashed" ? 0.08 : 0.012;
         ctx.globalAlpha = Math.max(0, p.life) * 0.9;
         ctx.fillStyle = `hsl(${p.hue} 90% 62%)`;
         ctx.beginPath();
@@ -595,7 +717,7 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         ctx.fill();
         next.push(p);
       }
-      particlesRef.current = next.length > 90 ? next.slice(-90) : next;
+      particlesRef.current = next.length > 100 ? next.slice(-100) : next;
       ctx.globalAlpha = 1;
 
       if (showRocket) {
@@ -609,20 +731,21 @@ export function CrashChart({ state, fx = null, onLiveMultiplier, onMilestone }: 
         );
       }
 
-      // Crash shock ring
+      // Crash shock + break flash
       if (crashAnimRef.current && phaseNow === "crashed") {
-        const t = Math.min(1, (nowPerf - crashAnimRef.current.t0) / 650);
+        const anim = crashAnimRef.current;
+        const t = Math.min(1, (nowPerf - anim.t0) / 700);
         if (t < 1) {
-          ctx.strokeStyle = `rgba(229,101,85,${1 - t})`;
+          ctx.strokeStyle = `rgba(229,101,85,${(1 - t) * 0.85})`;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(
-            crashAnimRef.current.pos.x,
-            crashAnimRef.current.pos.y,
-            8 + t * 70,
-            0,
-            Math.PI * 2,
-          );
+          ctx.arc(anim.pos.x, anim.pos.y, 6 + t * 78, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Second ring
+          ctx.strokeStyle = `rgba(255,180,120,${(1 - t) * 0.45})`;
+          ctx.beginPath();
+          ctx.arc(anim.pos.x, anim.pos.y, 3 + t * 48, 0, Math.PI * 2);
           ctx.stroke();
         }
       }

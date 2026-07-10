@@ -65,15 +65,15 @@ export function CrashAutoCashout({
                   type="button"
                   onClick={() => onEnabledChange(!enabled)}
                   className={cn(
-                    "relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200",
+                    "relative h-7 w-12 shrink-0 overflow-hidden rounded-full transition-colors duration-200",
                     enabled ? "bg-accent" : "bg-surface-raised",
                   )}
                   aria-label={enabled ? "Выключить автовывод" : "Включить автовывод"}
                 >
                   <span
                     className={cn(
-                      "absolute top-0.5 size-6 rounded-full bg-white transition-transform duration-200",
-                      enabled ? "translate-x-[1.4rem]" : "translate-x-0.5",
+                      "absolute left-0.5 top-0.5 size-6 rounded-full bg-white transition-transform duration-200",
+                      enabled && "translate-x-5",
                     )}
                   />
                 </button>
