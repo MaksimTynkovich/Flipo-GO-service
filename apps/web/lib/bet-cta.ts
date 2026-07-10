@@ -14,18 +14,3 @@ export function crashBetClosedLabel(phase: string | undefined): string {
       return "Ждём раунд";
   }
 }
-
-export function rouletteBetClosedLabel(phase: string | undefined): string {
-  switch (phase) {
-    case "spinning":
-      return "Крутится";
-    case "result":
-      return "Ждём раунд";
-    case "waiting":
-      return "Ждём раунд";
-    case "betting":
-      return "Ставка";
-    default:
-      return "Ждём раунд";
-  }
-}
