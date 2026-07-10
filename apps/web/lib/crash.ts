@@ -82,8 +82,8 @@ export function calibrateClockOffsetMs(
 }
 
 /**
- * Smooth local extrapolation with a soft server cap.
- * Between ticks grows evenly; after a tick without update, won't run ahead.
+ * Smooth local extrapolation with soft server pull.
+ * Avoid hard caps that freeze the curve between WS ticks.
  */
 export function computeRunningMultiplier(params: {
   runStartMs: number;
@@ -93,15 +93,19 @@ export function computeRunningMultiplier(params: {
   nowMs?: number;
 }): number {
   const now = params.nowMs ?? Date.now();
-  const sinceTick = Math.max(0, now - params.lastTickAtMs);
   const elapsed = Math.max(0, now - params.clockOffsetMs - params.runStartMs);
-  const smooth = multiplierAtElapsedMs(elapsed);
+  const smooth = Math.max(1, multiplierAtElapsedMs(elapsed));
+  const server = Math.max(1, params.serverMultiplier);
+  const sinceTick = Math.max(0, now - params.lastTickAtMs);
 
-  if (sinceTick <= CRASH_TICK_MS) {
-    return Math.max(1, smooth);
+  // Fresh tick: trust local smooth growth.
+  if (sinceTick <= CRASH_TICK_MS * 1.5) {
+    return smooth;
   }
 
-  return Math.min(Math.max(1, smooth), Math.max(1, params.serverMultiplier));
+  // Stale tick: ease toward server instead of freezing.
+  const lag = Math.min(1, (sinceTick - CRASH_TICK_MS) / (CRASH_TICK_MS * 4));
+  return smooth * (1 - lag * 0.35) + server * (lag * 0.35);
 }
 
 export function liveMultiplier(elapsedMs: number): number {
@@ -124,6 +128,18 @@ export function elapsedMsForMultiplier(mult: number): number {
 export function chartProgress(mult: number): number {
   if (mult <= 1) return 0;
   return Math.min(1, Math.log(mult) / Math.log(CRASH_CHART_LOG_MAX));
+}
+
+/**
+ * Visual flight progress for the rocket stage.
+ * Spreads early multipliers (1–3×) across more of the screen so the trail is readable.
+ */
+export function flightProgress(mult: number): number {
+  if (mult <= 1) return 0;
+  // Most of the stage is used by ~1–20×; higher values ease into the corner.
+  const VISUAL_MAX = 20;
+  const raw = Math.log(mult) / Math.log(VISUAL_MAX);
+  return Math.min(1, Math.pow(Math.min(1, raw), 0.78));
 }
 
 export type CrashHistoryTier = {
