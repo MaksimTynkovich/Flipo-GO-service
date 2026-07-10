@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ChevronDown,
   ChevronRight,
   Shield,
   Sparkles,
@@ -13,6 +12,8 @@ import {
 } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { UserAvatar } from "@/components/UserAvatar";
+import { Button } from "@/components/ui/button";
+import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
   activatePromoCode,
@@ -40,9 +41,29 @@ export function ProfileOverviewView() {
   const [promoChannelLink, setPromoChannelLink] = useState<{ url: string; label: string } | null>(
     null,
   );
+  const promoInputRef = useRef<HTMLInputElement | null>(null);
 
   const walletConnected = Boolean(user?.ton_wallet?.trim());
   const showPromoBalance = !loading && user && hasPromoBalance(user);
+
+  useEffect(() => {
+    if (!promoOpen) return;
+    const timer = window.setTimeout(() => {
+      const input = promoInputRef.current;
+      if (!input) return;
+      input.focus({ preventScroll: true });
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 320);
+    return () => window.clearTimeout(timer);
+  }, [promoOpen]);
+
+  function openPromo() {
+    setPromoMessage(null);
+    setPromoError(null);
+    setPromoChannelLink(null);
+    setPromoOpen(true);
+    haptics.impactOccurred("light");
+  }
 
   async function activatePromo() {
     if (!promoCode.trim()) return;
@@ -179,12 +200,8 @@ export function ProfileOverviewView() {
       <section className="panel overflow-hidden p-0">
         <button
           type="button"
-          onClick={() => {
-            setPromoOpen((v) => !v);
-            haptics.impactOccurred("light");
-          }}
+          onClick={openPromo}
           className="app-control flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-surface-raised/60"
-          aria-expanded={promoOpen}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/12 text-accent">
             <Ticket className="h-4 w-4" />
@@ -193,61 +210,90 @@ export function ProfileOverviewView() {
             <span className="block text-sm font-medium text-foreground">Промокод</span>
             <span className="mt-0.5 block text-xs text-muted">Активировать бонус</span>
           </span>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 shrink-0 text-muted transition-transform duration-200",
-              promoOpen && "rotate-180",
-            )}
-          />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
         </button>
+      </section>
 
-        {promoOpen ? (
-          <div className="segment-panel space-y-3 border-t border-[var(--border)] px-4 pb-4 pt-3">
-            <div className="flex gap-2">
-              <input
-                value={promoCode}
-                onChange={(e) => {
-                  setPromoCode(e.target.value.toUpperCase());
-                  if (promoError) setPromoError(null);
-                  if (promoChannelLink) setPromoChannelLink(null);
-                  if (promoMessage) setPromoMessage(null);
-                }}
-                className="input-field h-10 flex-1"
-                placeholder="Введите код"
-                autoFocus
-              />
-              <button
-                type="button"
-                className="quick-amount quick-amount-active h-10 shrink-0 px-3.5"
-                disabled={promoLoading || !promoCode.trim()}
-                onClick={() => activatePromo().catch(() => {})}
-              >
-                {promoLoading ? "…" : "OK"}
-              </button>
-            </div>
-            {promoError ? (
-              <div className="space-y-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                <p>{promoError}</p>
-                {promoChannelLink ? (
-                  <a
-                    href={promoChannelLink.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex font-semibold text-accent underline underline-offset-2"
-                  >
-                    Подписаться на {promoChannelLink.label}
-                  </a>
+      {promoOpen ? (
+        <ModalOverlay onClose={() => setPromoOpen(false)} analyticsModalId="promo_code">
+          {(close) => (
+            <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+              <div className="mb-4 text-center">
+                <p className="text-[15px] font-semibold text-foreground">Промокод</p>
+                <p className="mt-1 text-xs text-muted">Введите код, чтобы получить бонус</p>
+              </div>
+
+              <div className="space-y-3">
+                <input
+                  ref={promoInputRef}
+                  value={promoCode}
+                  onChange={(e) => {
+                    setPromoCode(e.target.value.toUpperCase());
+                    if (promoError) setPromoError(null);
+                    if (promoChannelLink) setPromoChannelLink(null);
+                    if (promoMessage) setPromoMessage(null);
+                  }}
+                  onFocus={(e) => {
+                    window.setTimeout(() => {
+                      e.target.scrollIntoView({ block: "center", behavior: "smooth" });
+                    }, 100);
+                  }}
+                  className="input-field h-12 text-center text-base font-semibold tracking-wide"
+                  placeholder="Введите код"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void activatePromo();
+                    }
+                  }}
+                />
+
+                {promoError ? (
+                  <div className="space-y-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                    <p>{promoError}</p>
+                    {promoChannelLink ? (
+                      <a
+                        href={promoChannelLink.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex font-semibold text-accent underline underline-offset-2"
+                      >
+                        Подписаться на {promoChannelLink.label}
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {promoMessage ? (
+                  <p className="rounded-xl bg-[color:var(--success)]/10 px-3 py-2 text-center text-xs text-[color:var(--success)]">
+                    {promoMessage}
+                  </p>
+                ) : null}
+
+                <Button
+                  variant="accent"
+                  className="h-11 w-full rounded-xl"
+                  disabled={promoLoading || !promoCode.trim()}
+                  onClick={() => activatePromo().catch(() => {})}
+                >
+                  {promoLoading ? "…" : "Активировать"}
+                </Button>
+
+                {promoMessage ? (
+                  <Button variant="outline" className="h-11 w-full rounded-xl" onClick={close}>
+                    Готово
+                  </Button>
                 ) : null}
               </div>
-            ) : null}
-            {promoMessage ? (
-              <p className="rounded-xl bg-[color:var(--success)]/10 px-3 py-2 text-xs text-[color:var(--success)]">
-                {promoMessage}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
+            </div>
+          )}
+        </ModalOverlay>
+      ) : null}
     </PageShell>
   );
 }

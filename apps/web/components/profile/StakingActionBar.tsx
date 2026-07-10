@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { formatTON } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { pluralizeGifts } from "@/lib/staking-ui";
-import { cn } from "@/lib/utils";
 
 type Props = {
   label: string;
@@ -26,57 +25,43 @@ export function StakingActionBar({
   const showMetrics = giftCount > 0;
 
   return (
-    <>
-      {/* Резервируем место под фиксированную панель, чтобы карточки не перекрывались */}
-      <div className="h-[8.75rem] shrink-0" aria-hidden />
-      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-4">
-        <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-[var(--border)] bg-surface">
-          {showMetrics && (
-            <div className="grid grid-cols-2 divide-x divide-[var(--border)] border-b border-[var(--border)]">
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted">
-                  Сумма стейка
-                </p>
-                <p className="mt-1 text-base font-bold tabular-nums leading-none">
-                  <TonAmount
-                    amount={formatTON(totalPriceNanoton)}
-                    variant="brand"
-                    iconClassName="h-5 w-5"
-                  />
-                </p>
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted">
-                  Доход за неделю
-                </p>
-                <p className="mt-1 text-base font-bold tabular-nums leading-none text-success">
-                  <TonAmount
-                    amount={`+${formatTON(weeklyYieldNanoton)}`}
-                    variant="brand"
-                    iconClassName="h-5 w-5"
-                  />
-                </p>
-              </div>
-            </div>
-          )}
-
-          <Button
-            variant="accent"
-            className={cn(
-              "h-12 w-full text-sm font-bold",
-              showMetrics ? "rounded-none rounded-b-2xl" : "rounded-2xl",
-            )}
-            disabled={disabled}
-            analyticsAction="staking_submit"
-            onClick={onStake}
-          >
-            <span>{label}</span>
-            {showMetrics && giftCount > 0 && (
-              <span className="ml-1.5 font-medium opacity-80">· {pluralizeGifts(giftCount)}</span>
-            )}
-          </Button>
+    <div className="panel overflow-hidden p-0">
+      {showMetrics ? (
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+          <p className="min-w-0 truncate text-[11px] tabular-nums text-muted">
+            <span className="inline-flex items-center gap-1 font-medium text-foreground">
+              <TonAmount
+                amount={formatTON(totalPriceNanoton)}
+                variant="brand"
+                iconClassName="h-3.5 w-3.5"
+              />
+            </span>
+            <span className="mx-1.5 opacity-40">·</span>
+            <span className="inline-flex items-center gap-1 text-success">
+              +
+              <TonAmount
+                amount={formatTON(weeklyYieldNanoton)}
+                variant="brand"
+                iconClassName="h-3.5 w-3.5"
+              />
+              /нед
+            </span>
+          </p>
+          <p className="shrink-0 text-[11px] text-muted">{pluralizeGifts(giftCount)}</p>
         </div>
+      ) : null}
+
+      <div className={showMetrics ? "px-2 pb-2" : "p-2"}>
+        <Button
+          variant="accent"
+          className="h-11 w-full rounded-xl text-sm font-bold"
+          disabled={disabled}
+          analyticsAction="staking_submit"
+          onClick={onStake}
+        >
+          {label}
+        </Button>
       </div>
-    </>
+    </div>
   );
 }

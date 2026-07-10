@@ -5,8 +5,6 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { GiftTile, GiftTileSkeleton } from "@/components/profile/GiftTile";
 import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
 import { StakingOverview } from "@/components/profile/StakingOverview";
-import { StakingEpochBanner } from "@/components/profile/StakingEpochBanner";
-import { StakingHints } from "@/components/profile/StakingHints";
 import { StakingActionBar } from "@/components/profile/StakingActionBar";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,9 +16,7 @@ import {
 import { pluralizeGifts, weeklyYieldNanoton } from "@/lib/staking-ui";
 import { trackFlowViewed } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
-import { Gift } from "lucide-react";
-import Link from "next/link";
-import { APP_ROUTES } from "@/src/shared/config/navigation";
+import { Eye, Gift } from "lucide-react";
 
 const emptyStats: StakingStats = {
   staked_count: 0,
@@ -128,23 +124,26 @@ export function StakingSection() {
 
   const stakeLabel = staking
     ? "Стейкаем…"
-    : allUnstakedSelected
-      ? "Добавить"
-      : selectedGifts.length > 0
-        ? "Добавить"
-        : "Выберите подарки";
+    : selectedGifts.length > 0
+      ? allUnstakedSelected && unstakedGifts.length > 1
+        ? "Застейкать все"
+        : "Застейкать"
+      : "Выберите подарки";
 
   return (
     <div className="space-y-4">
+      <header className="space-y-1 pt-1">
+        <h1 className="text-[1.25rem] font-semibold tracking-tight">Стейкинг</h1>
+        <p className="text-sm leading-relaxed text-muted">
+          Подарки из профиля приносят TON каждый день — без передачи боту.
+        </p>
+      </header>
+
       {loading ? (
-        <div className="h-52 animate-pulse rounded-2xl bg-surface-raised" />
+        <div className="h-44 animate-pulse rounded-2xl bg-surface-raised" />
       ) : (
-        <StakingOverview isBoost={isBoost} stats={stats} />
+        <StakingOverview isBoost={isBoost} stats={stats} epochEndsAt={epochEndsAt} />
       )}
-
-      {!loading && epochEndsAt && <StakingEpochBanner endsAt={epochEndsAt} />}
-
-      {!loading && <StakingHints />}
 
       {loading ? (
         <div className="grid grid-cols-3 gap-2">
@@ -152,6 +151,18 @@ export function StakingSection() {
             <GiftTileSkeleton key={i} />
           ))}
         </div>
+      ) : gifts.length === 0 ? (
+        <section className="panel flex flex-col items-center gap-3 py-9 text-center">
+          <div className="icon-box h-11 w-11 rounded-xl">
+            <Gift className="h-5 w-5" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold">Подарков пока нет</p>
+            <p className="mx-auto max-w-[17rem] text-xs leading-relaxed text-muted">
+              Если у вас есть подарки в Telegram — включите их отображение в профиле, и они появятся здесь автоматически.
+            </p>
+          </div>
+        </section>
       ) : (
         <>
           <div className="segment-control">
@@ -177,23 +188,23 @@ export function StakingSection() {
             </button>
           </div>
 
-          {tab === "staked" && (
+          {tab === "staked" ? (
             <section key="staked" className="segment-panel space-y-3">
               {stakedGifts.length === 0 ? (
-                <div className="panel py-10 text-center">
-                  <p className="font-medium">Стейкинг пуст</p>
-                  <p className="mt-1 text-sm text-muted">
-                    Добавь подарки — они начнут приносить доход каждый день
+                <div className="panel flex flex-col items-center gap-3 py-9 text-center">
+                  <p className="text-sm font-semibold">Стейкинг пуст</p>
+                  <p className="max-w-[16rem] text-xs leading-relaxed text-muted">
+                    Добавьте подарки — они начнут приносить доход каждый день.
                   </p>
-                  {unstakedGifts.length > 0 && (
+                  {unstakedGifts.length > 0 ? (
                     <Button
                       variant="accent"
-                      className="mt-4 rounded-xl px-6"
+                      className="mt-1 h-10 rounded-xl px-5"
                       onClick={() => setTab("add")}
                     >
-                      Добавить подарки
+                      Добавить · {pluralizeGifts(unstakedGifts.length)}
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
@@ -203,25 +214,12 @@ export function StakingSection() {
                 </div>
               )}
             </section>
-          )}
-
-          {tab === "add" && (
+          ) : (
             <section key="add" className="segment-panel space-y-3">
               {unstakedGifts.length === 0 ? (
-                <div className="panel py-10 text-center">
-                  {gifts.length > 0 ? (
-                    <>
-                      <p className="font-medium text-success">Весь портфель в стейке</p>
-                      <p className="mt-1 text-sm text-muted">Новых подарков для добавления нет</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-medium">Нет подарков для добавления</p>
-                      <p className="mt-1 text-sm text-muted">
-                        Подарки из профиля Telegram появятся здесь автоматически
-                      </p>
-                    </>
-                  )}
+                <div className="panel flex flex-col items-center gap-2 py-9 text-center">
+                  <p className="text-sm font-semibold text-success">Всё в стейке</p>
+                  <p className="text-xs text-muted">Новых подарков для добавления нет</p>
                 </div>
               ) : (
                 <>
@@ -229,10 +227,10 @@ export function StakingSection() {
                     <p className="text-xs text-muted">
                       {selectedGifts.length > 0
                         ? `Выбрано ${pluralizeGifts(selectedGifts.length)}`
-                        : "Выберите подарки для стейка"}
+                        : "Выберите подарки"}
                     </p>
                     <div className="flex items-center gap-3">
-                      {selectedGifts.length > 0 && (
+                      {selectedGifts.length > 0 ? (
                         <button
                           type="button"
                           onClick={clearSelection}
@@ -240,8 +238,8 @@ export function StakingSection() {
                         >
                           Сбросить
                         </button>
-                      )}
-                      {unstakedGifts.length > 1 && selectedGifts.length < unstakedGifts.length && (
+                      ) : null}
+                      {unstakedGifts.length > 1 && selectedGifts.length < unstakedGifts.length ? (
                         <button
                           type="button"
                           onClick={selectAll}
@@ -249,7 +247,7 @@ export function StakingSection() {
                         >
                           Выбрать все
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
@@ -262,53 +260,29 @@ export function StakingSection() {
                       />
                     ))}
                   </div>
+                  <StakingActionBar
+                    label={stakeLabel}
+                    disabled={staking || selectedGifts.length === 0}
+                    giftCount={selectedGifts.length}
+                    totalPriceNanoton={actionTotals.price}
+                    weeklyYieldNanoton={actionTotals.weekly}
+                    onStake={handleStake}
+                  />
                 </>
               )}
             </section>
           )}
-
-          {gifts.length === 0 && (
-            <div className="panel flex items-start gap-3 p-4">
-              <div className="icon-box h-10 w-10 shrink-0">
-                <Gift className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold">Подарков пока нет</p>
-                  <p className="text-xs leading-relaxed text-muted">
-                    Подарки из профиля Telegram подтянутся автоматически. Передача боту не обязательна.
-                  </p>
-                </div>
-                <Link href={APP_ROUTES.deposit}>
-                  <Button variant="outline" className="h-9 rounded-xl px-4 text-xs">
-                    Как пополнить
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          )}
         </>
       )}
 
-      {!loading && tab === "add" && unstakedGifts.length > 0 && (
-        <StakingActionBar
-          label={stakeLabel}
-          disabled={staking || selectedGifts.length === 0}
-          giftCount={selectedGifts.length}
-          totalPriceNanoton={actionTotals.price}
-          weeklyYieldNanoton={actionTotals.weekly}
-          onStake={handleStake}
-        />
-      )}
-
-      {inspected && (
+      {inspected ? (
         <StakingGiftSheet
           gift={inspected}
           stats={stats}
           epochEndsAt={epochEndsAt}
           onClose={() => setInspected(null)}
         />
-      )}
+      ) : null}
     </div>
   );
 }

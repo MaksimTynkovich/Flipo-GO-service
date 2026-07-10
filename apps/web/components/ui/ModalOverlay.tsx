@@ -14,9 +14,16 @@ type Props = {
   analyticsModalId?: string;
 };
 
+function readKeyboardInset(): number {
+  const vv = window.visualViewport;
+  if (!vv) return 0;
+  return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+}
+
 export function ModalOverlay({ onClose, children, className, analyticsModalId }: Props) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const closedRef = useRef(false);
   const exitTimerRef = useRef<number | null>(null);
 
@@ -30,9 +37,22 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
 
     const frame = window.requestAnimationFrame(() => setOpen(true));
 
+    function syncKeyboard() {
+      setKeyboardInset(readKeyboardInset());
+    }
+    syncKeyboard();
+
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", syncKeyboard);
+    vv?.addEventListener("scroll", syncKeyboard);
+    window.addEventListener("resize", syncKeyboard);
+
     return () => {
       window.cancelAnimationFrame(frame);
       document.body.style.overflow = prev;
+      vv?.removeEventListener("resize", syncKeyboard);
+      vv?.removeEventListener("scroll", syncKeyboard);
+      window.removeEventListener("resize", syncKeyboard);
       if (exitTimerRef.current !== null) {
         window.clearTimeout(exitTimerRef.current);
       }
@@ -57,12 +77,14 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
   return createPortal(
     <div
       className={cn(
-        "fixed left-0 right-0 bottom-0 z-[100] flex flex-col justify-end",
+        "fixed left-0 right-0 z-[100] flex flex-col justify-end",
         className,
       )}
       style={{
         top: "calc(-1 * env(safe-area-inset-top, 0px))",
-        height: "calc(100dvh + env(safe-area-inset-top, 0px))",
+        bottom: keyboardInset,
+        height: "auto",
+        transition: "bottom 180ms ease-out",
       }}
     >
       <button
