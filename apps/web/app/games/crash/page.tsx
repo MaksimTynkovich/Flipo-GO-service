@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CrashAutoCashout } from "@/components/games/CrashAutoCashout";
 import { CrashChart } from "@/components/games/CrashChart";
 import { CrashHistory } from "@/components/games/CrashHistory";
 import { CrashRoundBets } from "@/components/games/CrashRoundBets";
@@ -38,6 +39,22 @@ import { crashBetClosedLabel } from "@/lib/bet-cta";
 import { useCountdownSeconds } from "@/src/shared/hooks/useCountdownSeconds";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
+const AUTO_STORAGE_KEY = "flipo.crash.autoCashout";
+
+function loadAutoSettings(): { enabled: boolean; target: string } {
+  if (typeof window === "undefined") return { enabled: false, target: "2" };
+  try {
+    const raw = window.localStorage.getItem(AUTO_STORAGE_KEY);
+    if (!raw) return { enabled: false, target: "2" };
+    const parsed = JSON.parse(raw) as { enabled?: boolean; target?: string };
+    return {
+      enabled: !!parsed.enabled,
+      target: parsed.target && Number(parsed.target) >= 1.01 ? parsed.target : "2",
+    };
+  } catch {
+    return { enabled: false, target: "2" };
+  }
+}
 
 export default function CrashPage() {
   const { user } = useAuth();
@@ -54,8 +71,28 @@ export default function CrashPage() {
   const [betting, setBetting] = useState(false);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
   const [cashingOut, setCashingOut] = useState(false);
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [autoTarget, setAutoTarget] = useState("2");
   const lastPhase = useRef<string | null>(null);
+  const autoFiredRef = useRef<Set<string>>(new Set());
   const betAmountInput = useAnalyticsInput("crash_bet_amount", "crash");
+
+  useEffect(() => {
+    const saved = loadAutoSettings();
+    setAutoEnabled(saved.enabled);
+    setAutoTarget(saved.target);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        AUTO_STORAGE_KEY,
+        JSON.stringify({ enabled: autoEnabled, target: autoTarget }),
+      );
+    } catch {
+      // ignore
+    }
+  }, [autoEnabled, autoTarget]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -106,9 +143,14 @@ export default function CrashPage() {
     if (state?.phase === "crashed" && lastPhase.current !== "crashed") {
       loadHistory();
       setActiveBets([]);
+      autoFiredRef.current.clear();
+      haptics.notificationOccurred("error");
+    }
+    if (state?.phase === "running" && lastPhase.current !== "running") {
+      autoFiredRef.current.clear();
     }
     lastPhase.current = state?.phase ?? null;
-  }, [state?.phase, loadHistory]);
+  }, [state?.phase, loadHistory, haptics]);
 
   const roundActiveBets = useMemo(
     () => activeBets.filter((bet) => bet.round_id === state?.round_id),
@@ -168,12 +210,19 @@ export default function CrashPage() {
   const cashoutMult = state?.phase === "running" ? (state.multiplier ?? liveMult) : displayMult;
 
   const totalStakeNanoton = roundActiveBets.reduce((sum, bet) => sum + bet.amount_nanoton, 0);
-  const potentialWinTon = roundActiveBets.reduce((sum, bet) => {
-    const gross = bet.amount_nanoton * cashoutMult;
-    const isGift = bet.funding_type === "gift";
-    const net = isGift ? gross - bet.amount_nanoton : gross;
-    return sum + net;
-  }, 0) / 1_000_000_000;
+  const potentialWinTon =
+    roundActiveBets.reduce((sum, bet) => {
+      const gross = bet.amount_nanoton * cashoutMult;
+      const isGift = bet.funding_type === "gift";
+      const net = isGift ? gross - bet.amount_nanoton : gross;
+      return sum + net;
+    }, 0) / 1_000_000_000;
+
+  const parsedAutoTarget = Number.parseFloat(autoTarget);
+  const autoCashoutValue =
+    autoEnabled && Number.isFinite(parsedAutoTarget) && parsedAutoTarget >= 1.01
+      ? Math.floor(parsedAutoTarget * 100) / 100
+      : null;
 
   async function bet() {
     if (!canBet) {
@@ -205,22 +254,34 @@ export default function CrashPage() {
       }
     }
 
+    if (autoEnabled && autoCashoutValue == null) {
+      showToast({ variant: "error", title: "Укажите множитель автовывода ≥ 1.01" });
+      haptics.notificationOccurred("error");
+      return;
+    }
+
     setBetting(true);
     betAmountInput.complete();
     try {
+      const options = { autoCashoutMultiplier: autoCashoutValue };
       if (fundingMode === "gift") {
         for (const giftId of giftIds) {
-          await placeCrashBet(crypto.randomUUID(), {
-            mode: "gift",
-            inventoryItemId: giftId,
-          });
+          await placeCrashBet(
+            crypto.randomUUID(),
+            { mode: "gift", inventoryItemId: giftId },
+            options,
+          );
         }
         setSelectedGiftIds([]);
       } else {
-        await placeCrashBet(crypto.randomUUID(), {
-          mode: "balance",
-          amountNanoton: Math.floor(parseFloat(amountTon || "0") * 1_000_000_000),
-        });
+        await placeCrashBet(
+          crypto.randomUUID(),
+          {
+            mode: "balance",
+            amountNanoton: Math.floor(parseFloat(amountTon || "0") * 1_000_000_000),
+          },
+          options,
+        );
       }
       haptics.notificationOccurred("success");
       await loadActiveBets();
@@ -266,6 +327,54 @@ export default function CrashPage() {
     }
   }
 
+  // Client-side backup: if server auto-cashout lags, fire manual cashout at target.
+  useEffect(() => {
+    if (state?.phase !== "running" || roundActiveBets.length === 0 || cashingOut) return;
+
+    const due = roundActiveBets.filter((bet) => {
+      const target = bet.auto_cashout_multiplier;
+      if (target == null || liveMult < target) return false;
+      if (autoFiredRef.current.has(bet.id)) return false;
+      return true;
+    });
+    if (due.length === 0) return;
+
+    for (const bet of due) autoFiredRef.current.add(bet.id);
+
+    void (async () => {
+      try {
+        let totalPayout = 0;
+        let lastMult = liveMult;
+        for (const bet of due) {
+          const target = bet.auto_cashout_multiplier ?? liveMult;
+          lastMult = target;
+          const res = (await cashoutCrash(bet.id, target)) as { payout_nanoton: number };
+          totalPayout += res.payout_nanoton;
+        }
+        if (totalPayout > 0) {
+          showToast({
+            variant: "success",
+            title: `Автовывод +${formatTON(totalPayout)} TON @ ${formatMultiplier(lastMult)}`,
+          });
+          haptics.notificationOccurred("success");
+        }
+        await loadActiveBets();
+        loadRoundBets();
+      } catch {
+        for (const bet of due) autoFiredRef.current.delete(bet.id);
+      }
+    })();
+  }, [
+    liveMult,
+    state?.phase,
+    roundActiveBets,
+    cashingOut,
+    showToast,
+    haptics,
+    loadActiveBets,
+    loadRoundBets,
+  ]);
+
   return (
     <PageShell flush>
       <div className="flex flex-col gap-2.5 pb-3">
@@ -274,13 +383,20 @@ export default function CrashPage() {
           onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
         />
 
-        <CrashChart state={state} onLiveMultiplier={setLiveMult} />
+        <CrashChart
+          state={state}
+          onLiveMultiplier={setLiveMult}
+          onMilestone={(m) => {
+            if (m >= 5) haptics.impactOccurred("medium");
+            else haptics.impactOccurred("light");
+          }}
+        />
 
         <div className="panel space-y-3">
-          {roundActiveBets.length > 0 && state?.phase === "running" && (
-            <div className="surface-inset flex items-center justify-between gap-3 px-3 py-2.5">
+          {roundActiveBets.length > 0 && state?.phase === "running" ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-success/10 px-3 py-2.5">
               <div>
-                <p className="section-label">В игре</p>
+                <p className="section-label text-success/80">В игре</p>
                 <p className="text-sm font-semibold">
                   {activeGiftIcons.length > 0 ? (
                     <GiftStakeIcons
@@ -297,7 +413,7 @@ export default function CrashPage() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="section-label">Выигрыш</p>
+                <p className="section-label text-success/80">Сейчас</p>
                 <p className="text-sm font-bold tabular-nums text-success">
                   <TonAmount
                     amount={potentialWinTon.toFixed(2)}
@@ -307,7 +423,7 @@ export default function CrashPage() {
                 </p>
               </div>
             </div>
-          )}
+          ) : null}
 
           <BetFundingControl
             mode={fundingMode}
@@ -324,6 +440,14 @@ export default function CrashPage() {
             })}
           />
 
+          <CrashAutoCashout
+            enabled={autoEnabled}
+            onEnabledChange={setAutoEnabled}
+            target={autoTarget}
+            onTargetChange={setAutoTarget}
+            disabled={betting}
+          />
+
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -331,9 +455,7 @@ export default function CrashPage() {
               onClick={bet}
               className={cn(
                 "app-control flex h-11 items-center justify-center rounded-xl text-sm font-bold transition-[background-color,color,opacity] duration-200",
-                canBet
-                  ? "btn-primary"
-                  : "bg-surface-raised text-muted",
+                canBet ? "btn-primary" : "bg-surface-raised text-muted",
               )}
             >
               {betButtonLabel}
@@ -343,9 +465,9 @@ export default function CrashPage() {
               disabled={!canCashout}
               onClick={cashout}
               className={cn(
-                "app-control flex h-11 items-center justify-center rounded-xl text-sm font-bold transition-[background-color,color,opacity] duration-200",
+                "app-control flex h-11 items-center justify-center rounded-xl text-sm font-bold transition-[background-color,color,opacity,transform] duration-200",
                 canCashout
-                  ? "bg-success text-white hover:brightness-110"
+                  ? "bg-success text-white hover:brightness-110 active:scale-[0.98]"
                   : "bg-surface-raised text-muted",
               )}
             >

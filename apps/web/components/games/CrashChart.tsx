@@ -6,6 +6,7 @@ import {
   calibrateClockOffsetMs,
   chartProgress,
   computeRunningMultiplier,
+  crashHeatTone,
   elapsedMsForMultiplier,
   formatMultiplier,
   formatMultiplierLive,
@@ -16,11 +17,11 @@ import {
 import { cn } from "@/lib/utils";
 
 const W = 360;
-const H = 200;
-const PAD = 14;
-const TIP_X = W - PAD - 6;
-const TIP_Y = PAD + 22;
-const START_X = PAD + 4;
+const H = 216;
+const PAD = 16;
+const TIP_X = W - PAD - 8;
+const TIP_Y = PAD + 18;
+const START_X = PAD + 6;
 const CLOCK_SYNC_BLEND = 0.28;
 
 type Tip = { x: number; y: number };
@@ -28,7 +29,16 @@ type Tip = { x: number; y: number };
 type Props = {
   state: CrashRoundState | null;
   onLiveMultiplier?: (mult: number) => void;
+  onMilestone?: (mult: number) => void;
 };
+
+const HEAT_COLORS = {
+  calm: { line: "var(--success)", fill: "var(--success)" },
+  warm: { line: "#7dd3a0", fill: "#7dd3a0" },
+  hot: { line: "#f0b429", fill: "#f0b429" },
+  blaze: { line: "#ff8a4c", fill: "#ff8a4c" },
+  crash: { line: "var(--danger)", fill: "var(--danger)" },
+} as const;
 
 function buildCurve(
   elapsedMs: number,
@@ -49,7 +59,7 @@ function buildCurve(
   const tipX = START_X + (TIP_X - START_X) * tipProgress;
   const tipY = bottomY - (bottomY - TIP_Y) * tipProgress;
 
-  const steps = Math.min(100, Math.max(24, Math.floor(elapsedMs / 35)));
+  const steps = Math.min(120, Math.max(28, Math.floor(elapsedMs / 28)));
   const pts: Tip[] = [];
 
   for (let i = 0; i <= steps; i++) {
@@ -79,15 +89,18 @@ function applyCurve(
     area: React.RefObject<SVGPathElement | null>;
     line: React.RefObject<SVGPathElement | null>;
     tip: React.RefObject<SVGCircleElement | null>;
+    glow: React.RefObject<SVGCircleElement | null>;
   },
 ) {
   refs.area.current?.setAttribute("d", built.area);
   refs.line.current?.setAttribute("d", built.line);
   refs.tip.current?.setAttribute("cx", built.tip.x.toFixed(1));
   refs.tip.current?.setAttribute("cy", built.tip.y.toFixed(1));
+  refs.glow.current?.setAttribute("cx", built.tip.x.toFixed(1));
+  refs.glow.current?.setAttribute("cy", built.tip.y.toFixed(1));
 }
 
-export function CrashChart({ state, onLiveMultiplier }: Props) {
+export function CrashChart({ state, onLiveMultiplier, onMilestone }: Props) {
   const phase = state?.phase;
   const crashed = phase === "crashed";
   const running = phase === "running";
@@ -95,6 +108,8 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
 
   const [countdown, setCountdown] = useState(0);
   const [staticMult, setStaticMult] = useState("1.00×");
+  const [heat, setHeat] = useState<keyof typeof HEAT_COLORS>("calm");
+  const [burst, setBurst] = useState(false);
 
   const roundRef = useRef<string | null>(null);
   const runStartMs = useRef(0);
@@ -102,17 +117,35 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
   const lastServerMult = useRef(1);
   const lastTickAtMs = useRef(0);
   const runningReadyRef = useRef(false);
+  const milestoneRef = useRef(1);
   const stateRef = useRef(state);
   const onLiveRef = useRef(onLiveMultiplier);
+  const onMilestoneRef = useRef(onMilestone);
   const areaRef = useRef<SVGPathElement>(null);
   const lineRef = useRef<SVGPathElement>(null);
   const tipRef = useRef<SVGCircleElement>(null);
+  const glowRef = useRef<SVGCircleElement>(null);
+  const fillStopRef = useRef<SVGStopElement>(null);
+  const tipGlowStopRef = useRef<SVGStopElement>(null);
+  const tipGlowStopOuterRef = useRef<SVGStopElement>(null);
   const multLabelRef = useRef<HTMLSpanElement>(null);
+  const heatRef = useRef<HTMLDivElement>(null);
 
-  const curveRefs = { area: areaRef, line: lineRef, tip: tipRef };
+  const curveRefs = { area: areaRef, line: lineRef, tip: tipRef, glow: glowRef };
 
   stateRef.current = state;
   onLiveRef.current = onLiveMultiplier;
+  onMilestoneRef.current = onMilestone;
+
+  function paintHeat(tone: keyof typeof HEAT_COLORS) {
+    const c = HEAT_COLORS[tone];
+    lineRef.current?.setAttribute("stroke", c.line);
+    tipRef.current?.setAttribute("fill", c.line);
+    fillStopRef.current?.setAttribute("stop-color", c.fill);
+    tipGlowStopRef.current?.setAttribute("stop-color", c.line);
+    tipGlowStopOuterRef.current?.setAttribute("stop-color", c.line);
+    if (heatRef.current) heatRef.current.dataset.heat = tone;
+  }
 
   useEffect(() => {
     if (!betting || !state?.ends_at) {
@@ -139,6 +172,9 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
       clockOffsetMs.current = 0;
       lastServerMult.current = 1;
       lastTickAtMs.current = 0;
+      milestoneRef.current = 1;
+      setHeat("calm");
+      setBurst(false);
     }
 
     if (state.phase === "running") {
@@ -166,13 +202,21 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
       const elapsedMs = elapsedMsForMultiplier(crashMult);
       applyCurve(buildCurve(elapsedMs, crashMult), curveRefs);
       setStaticMult(formatMultiplier(crashMult));
+      setHeat("crash");
+      paintHeat("crash");
+      setBurst(true);
       onLiveRef.current?.(crashMult);
-    } else if (!running) {
+      const t = window.setTimeout(() => setBurst(false), 700);
+      return () => window.clearTimeout(t);
+    }
+
+    if (!running) {
       runningReadyRef.current = false;
       const mult = betting ? 1 : Math.max(1, state.multiplier ?? 1);
       setStaticMult(formatMultiplier(mult));
+      if (!crashed) setHeat("calm");
     }
-  }, [state, running, betting]);
+  }, [state, running, betting, crashed]);
 
   useEffect(() => {
     if (!running) return;
@@ -198,9 +242,21 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
 
       applyCurve(buildCurve(elapsedMs, mult), curveRefs);
 
-      const label = formatMultiplierLive(mult);
+      const tone = crashHeatTone(mult);
+      paintHeat(tone);
+
+      const milestones = [2, 5, 10, 25, 50];
+      for (const m of milestones) {
+        if (mult >= m && milestoneRef.current < m) {
+          milestoneRef.current = m;
+          onMilestoneRef.current?.(m);
+          setHeat(tone);
+        }
+      }
+
       if (multLabelRef.current) {
-        multLabelRef.current.textContent = label;
+        multLabelRef.current.textContent = formatMultiplierLive(mult);
+        multLabelRef.current.dataset.heat = tone;
       }
       onLiveRef.current?.(mult);
 
@@ -212,16 +268,20 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
   }, [running]);
 
   const showCurve = running || crashed;
-  const lineColor = crashed ? "var(--danger)" : "var(--success)";
-  const fillColor = crashed ? "var(--danger)" : "var(--success)";
+  const colors = HEAT_COLORS[crashed ? "crash" : heat];
 
   return (
     <div
+      ref={heatRef}
+      data-heat={heat}
       className={cn(
-        "relative mx-auto aspect-[5/3] w-full max-w-md overflow-hidden rounded-2xl bg-surface",
-        crashed && "animate-[crash-flash_0.45s_ease-out]",
+        "crash-stage relative mx-auto aspect-[5/3] w-full max-w-md overflow-hidden rounded-2xl",
+        crashed && "crash-stage--crashed",
+        burst && "crash-stage--burst",
       )}
     >
+      <div className="crash-stage__glow pointer-events-none absolute inset-0" />
+
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="absolute inset-0 h-full w-full"
@@ -229,15 +289,19 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
       >
         <defs>
           <linearGradient id="crash-fill" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%" stopColor={fillColor} stopOpacity="0" />
-            <stop offset="100%" stopColor={fillColor} stopOpacity="0.22" />
+            <stop offset="0%" stopColor={colors.fill} stopOpacity="0" />
+            <stop ref={fillStopRef} offset="100%" stopColor={colors.fill} stopOpacity="0.28" />
           </linearGradient>
+          <radialGradient id="crash-tip-glow" cx="50%" cy="50%" r="50%">
+            <stop ref={tipGlowStopRef} offset="0%" stopColor={colors.line} stopOpacity="0.55" />
+            <stop ref={tipGlowStopOuterRef} offset="100%" stopColor={colors.line} stopOpacity="0" />
+          </radialGradient>
           <clipPath id="crash-clip">
             <rect x={PAD} y={PAD} width={W - PAD * 2} height={H - PAD * 2} />
           </clipPath>
         </defs>
 
-        {[0.33, 0.66].map((ratio) => (
+        {[0.25, 0.5, 0.75].map((ratio) => (
           <line
             key={ratio}
             x1={PAD}
@@ -246,6 +310,7 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
             y2={PAD + (H - PAD * 2) * ratio}
             stroke="var(--border)"
             strokeWidth="1"
+            opacity="0.55"
           />
         ))}
 
@@ -255,20 +320,29 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
             <path
               ref={lineRef}
               fill="none"
-              stroke={lineColor}
-              strokeWidth="2.5"
+              stroke={colors.line}
+              strokeWidth="2.75"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+            <circle ref={glowRef} r="14" fill="url(#crash-tip-glow)" />
             <circle
               ref={tipRef}
-              r="4.5"
-              fill={lineColor}
-              opacity={crashed ? 0.9 : 1}
+              r="5"
+              fill={colors.line}
+              opacity={crashed ? 0.85 : 1}
             />
           </g>
         )}
       </svg>
+
+      {burst ? (
+        <div className="crash-burst pointer-events-none absolute inset-0" aria-hidden>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <span key={i} className="crash-burst__particle" style={{ "--i": i } as React.CSSProperties} />
+          ))}
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
         {betting ? (
@@ -282,19 +356,31 @@ export function CrashChart({ state, onLiveMultiplier }: Props) {
           <>
             <span
               ref={running ? multLabelRef : undefined}
+              data-heat={heat}
               className={cn(
-                "text-5xl font-bold tabular-nums tracking-tight",
-                crashed ? "text-danger" : "text-foreground",
+                "crash-mult text-5xl font-bold tabular-nums tracking-tight",
+                crashed && "text-danger",
               )}
             >
-              {running ? null : staticMult}
+              {running ? "1.00×" : staticMult}
             </span>
-            <span className={cn("text-xs font-medium", crashed ? "text-danger/80" : "text-muted")}>
+            <span
+              className={cn(
+                "text-xs font-medium",
+                crashed ? "text-danger/80" : "text-muted",
+              )}
+            >
               {statusSubtext(phase)}
             </span>
           </>
         )}
       </div>
+
+      {state?.round_number != null ? (
+        <span className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] font-medium tabular-nums text-muted/80">
+          #{state.round_number}
+        </span>
+      ) : null}
     </div>
   );
 }

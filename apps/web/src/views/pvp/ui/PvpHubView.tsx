@@ -17,7 +17,7 @@ import {
   usePvpFinishedVisibility,
 } from "@/components/games/pvp/PvpRecentResults";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { api, formatTON, getInventory } from "@/lib/api";
+import { api, getInventory } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { BetFundingMode } from "@/lib/bet-funding";
 import { formatGameBetError } from "@/lib/game-errors";
@@ -27,7 +27,6 @@ import {
   estimateJoinWinChanceBps,
   formatWinChanceBps,
   pvpGiftWithinTolerance,
-  pvpStakeBounds,
 } from "@/lib/pvp-stake";
 import { connectGameWS } from "@/lib/ws";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
@@ -238,7 +237,6 @@ export function PvpHubView() {
   );
   const hasRooms = displayRooms.length > 0;
   const joinRoom = state.active.find((room) => room.id === joinRoomId);
-  const joinBounds = joinRoom ? pvpStakeBounds(joinRoom.bet_amount_nanoton) : null;
   const joinGiftInRange =
     joinRoom && joinGiftStakeNanoton
       ? pvpGiftWithinTolerance(joinRoom.bet_amount_nanoton, joinGiftStakeNanoton)
@@ -325,15 +323,7 @@ export function PvpHubView() {
           {(close) => (
           <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
-            <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
-            <p className="mb-1 text-center text-xs text-muted">
-              Ставка комнаты: {formatTON(joinRoom.bet_amount_nanoton)} TON · допуск ±10%
-            </p>
-            {joinBounds && (
-              <p className="mb-4 text-center text-[11px] text-muted">
-                Подарок: {formatTON(joinBounds.min)} – {formatTON(joinBounds.max)} TON
-              </p>
-            )}
+            <p className="mb-4 text-center text-[15px] font-semibold">Войти в комнату</p>
 
             <BetFundingPanel
               mode={joinFundingMode}

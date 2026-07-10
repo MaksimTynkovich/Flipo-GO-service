@@ -152,10 +152,11 @@ func (h *GameHandler) CrashBets(c *gin.Context) {
 func (h *GameHandler) CrashBet(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		Funding         string `json:"funding"`
-		AmountNanoton   int64  `json:"amount_nanoton"`
-		InventoryItemID string `json:"inventory_item_id"`
-		IdempotencyKey  string `json:"idempotency_key" binding:"required"`
+		Funding                string   `json:"funding"`
+		AmountNanoton          int64    `json:"amount_nanoton"`
+		InventoryItemID        string   `json:"inventory_item_id"`
+		IdempotencyKey         string   `json:"idempotency_key" binding:"required"`
+		AutoCashoutMultiplier  *float64 `json:"auto_cashout_multiplier"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -184,7 +185,7 @@ func (h *GameHandler) CrashBet(c *gin.Context) {
 		writeGameBetError(c, err)
 		return
 	}
-	bet, err := h.crash.PlaceBet(c.Request.Context(), userID, stake, req.IdempotencyKey)
+	bet, err := h.crash.PlaceBet(c.Request.Context(), userID, stake, req.IdempotencyKey, req.AutoCashoutMultiplier)
 	if err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "error", "bet_failed", err.Error(), map[string]any{"mode": "crash", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
 		writeGameBetError(c, err)

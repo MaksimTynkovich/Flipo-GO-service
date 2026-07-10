@@ -11,6 +11,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 )
 
 const engineLockKey = "crash:engine:lock"
@@ -33,17 +34,22 @@ type GiftView struct {
 }
 
 type BetView struct {
-	ID                uuid.UUID `json:"id"`
-	UserID            uuid.UUID `json:"user_id"`
-	Username          string    `json:"username"`
-	FirstName         string    `json:"first_name"`
-	PhotoURL          string    `json:"photo_url"`
-	AmountNanoton     int64     `json:"amount_nanoton"`
-	FundingType       string    `json:"funding_type"`
-	Gift              *GiftView `json:"gift,omitempty"`
-	Status            string    `json:"status"`
-	CashoutMultiplier *float64  `json:"cashout_multiplier,omitempty"`
-	PayoutNanoton     int64     `json:"payout_nanoton,omitempty"`
+	ID                     uuid.UUID `json:"id"`
+	UserID                 uuid.UUID `json:"user_id"`
+	Username               string    `json:"username"`
+	FirstName              string    `json:"first_name"`
+	PhotoURL               string    `json:"photo_url"`
+	AmountNanoton          int64     `json:"amount_nanoton"`
+	FundingType            string    `json:"funding_type"`
+	Gift                   *GiftView `json:"gift,omitempty"`
+	Status                 string    `json:"status"`
+	CashoutMultiplier      *float64  `json:"cashout_multiplier,omitempty"`
+	AutoCashoutMultiplier  *float64  `json:"auto_cashout_multiplier,omitempty"`
+	PayoutNanoton          int64     `json:"payout_nanoton,omitempty"`
+}
+
+type betSelection struct {
+	AutoCashoutMultiplier *float64 `json:"auto_cashout_multiplier,omitempty"`
 }
 
 type RoundBetsState struct {
@@ -154,7 +160,7 @@ func (s *Service) ActiveBet(ctx context.Context, userID uuid.UUID) (*domain.Game
 	return &bets[0], nil
 }
 
-func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, stake betfunding.StakeInput, idempotencyKey string) (*domain.GameBet, error) {
+func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, stake betfunding.StakeInput, idempotencyKey string, autoCashout *float64) (*domain.GameBet, error) {
 	if existing, _ := s.games.FindBetByIdempotency(ctx, idempotencyKey); existing != nil {
 		return existing, nil
 	}
@@ -164,12 +170,21 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, stake betfundi
 		return nil, domain.ErrRoundNotOpen
 	}
 
+	if autoCashout != nil {
+		if *autoCashout < 1.01 || *autoCashout > 1000 || math.IsNaN(*autoCashout) || math.IsInf(*autoCashout, 0) {
+			return nil, domain.ErrInvalidAmount
+		}
+		rounded := math.Floor(*autoCashout*100) / 100
+		autoCashout = &rounded
+	}
+
 	betID := uuid.New()
 	resolved, err := s.funding.ResolveAndLock(ctx, userID, betID, stake, "game_bet")
 	if err != nil {
 		return nil, err
 	}
 
+	selection, _ := jsonMarshal(betSelection{AutoCashoutMultiplier: autoCashout})
 	bet := &domain.GameBet{
 		ID:              betID,
 		RoundID:         state.RoundID,
@@ -178,6 +193,7 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, stake betfundi
 		AmountNanoton:   resolved.AmountNanoton,
 		FundingType:     resolved.FundingType,
 		InventoryItemID: resolved.InventoryItemID,
+		Selection:       datatypes.JSON(selection),
 		Status:          domain.BetPending,
 		IdempotencyKey:  idempotencyKey,
 		CreatedAt:       time.Now().UTC(),
@@ -214,20 +230,72 @@ func (s *Service) Cashout(ctx context.Context, userID, betID uuid.UUID, multipli
 		return 0, domain.ErrInvalidAmount
 	}
 
-	payout := int64(math.Floor(float64(target.AmountNanoton) * multiplier))
-	credit := s.funding.WinTONCredit(*target, payout)
-	ok, err := s.games.SettleBet(ctx, betID, domain.BetCashedOut, credit, &multiplier)
+	return s.settleCashout(ctx, *target, multiplier)
+}
+
+// ProcessAutoCashouts settles pending bets whose auto target has been reached.
+// Pays at the configured target (not the live tick), as long as live >= target.
+func (s *Service) ProcessAutoCashouts(ctx context.Context, multiplier float64) {
+	state, err := s.CurrentState(ctx)
+	if err != nil || state == nil || state.Phase != "running" {
+		return
+	}
+
+	bets, err := s.games.ListPendingBetsByRound(ctx, state.RoundID)
+	if err != nil {
+		return
+	}
+
+	changed := false
+	for _, bet := range bets {
+		target := autoCashoutFromSelection(bet.Selection)
+		if target == nil || multiplier < *target {
+			continue
+		}
+		if _, err := s.settleCashout(ctx, bet, *target); err != nil {
+			slog.Warn("crash auto-cashout failed", "bet_id", bet.ID, "error", err)
+			continue
+		}
+		changed = true
+	}
+	if changed {
+		_ = s.PublishBets(ctx, state.RoundID)
+	}
+}
+
+func (s *Service) settleCashout(ctx context.Context, bet domain.GameBet, multiplier float64) (int64, error) {
+	if multiplier < 1 {
+		multiplier = 1
+	}
+	payout := int64(math.Floor(float64(bet.AmountNanoton) * multiplier))
+	credit := s.funding.WinTONCredit(bet, payout)
+	ok, err := s.games.SettleBet(ctx, bet.ID, domain.BetCashedOut, credit, &multiplier)
 	if err != nil || !ok {
 		return 0, domain.ErrRoundNotOpen
 	}
 	if credit > 0 {
-		if _, err := s.balance.Credit(ctx, userID, credit, domain.LedgerWin, "game_bet", betID); err != nil {
+		if _, err := s.balance.Credit(ctx, bet.UserID, credit, domain.LedgerWin, "game_bet", bet.ID); err != nil {
 			return 0, err
 		}
 	}
-	_ = s.funding.ReleaseOnWin(ctx, *target)
-	_ = s.PublishBets(ctx, state.RoundID)
+	_ = s.funding.ReleaseOnWin(ctx, bet)
+	_ = s.PublishBets(ctx, bet.RoundID)
 	return credit, nil
+}
+
+func autoCashoutFromSelection(raw datatypes.JSON) *float64 {
+	if len(raw) == 0 {
+		return nil
+	}
+	var sel betSelection
+	if err := jsonUnmarshal(raw, &sel); err != nil || sel.AutoCashoutMultiplier == nil {
+		return nil
+	}
+	v := *sel.AutoCashoutMultiplier
+	if v < 1.01 {
+		return nil
+	}
+	return &v
 }
 
 func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
@@ -334,6 +402,9 @@ func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*Round
 		if bet.CashoutMultiplier != nil {
 			mult := *bet.CashoutMultiplier
 			view.CashoutMultiplier = &mult
+		}
+		if auto := autoCashoutFromSelection(bet.Selection); auto != nil {
+			view.AutoCashoutMultiplier = auto
 		}
 		if bet.User.ID != uuid.Nil {
 			view.Username = bet.User.Username

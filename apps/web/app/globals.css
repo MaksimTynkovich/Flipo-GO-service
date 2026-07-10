@@ -607,6 +607,93 @@ body {
   }
 }
 
+.crash-stage {
+  background:
+    radial-gradient(120% 80% at 50% 110%, color-mix(in srgb, var(--success) 10%, transparent), transparent 55%),
+    var(--surface);
+}
+
+.crash-stage[data-heat="warm"] {
+  background:
+    radial-gradient(120% 80% at 50% 110%, color-mix(in srgb, #7dd3a0 14%, transparent), transparent 55%),
+    var(--surface);
+}
+
+.crash-stage[data-heat="hot"] {
+  background:
+    radial-gradient(120% 80% at 50% 110%, color-mix(in srgb, #f0b429 16%, transparent), transparent 55%),
+    var(--surface);
+}
+
+.crash-stage[data-heat="blaze"] {
+  background:
+    radial-gradient(120% 80% at 50% 110%, color-mix(in srgb, #ff8a4c 18%, transparent), transparent 55%),
+    var(--surface);
+}
+
+.crash-stage--crashed,
+.crash-stage[data-heat="crash"] {
+  background:
+    radial-gradient(120% 90% at 50% 100%, color-mix(in srgb, var(--danger) 22%, transparent), transparent 60%),
+    var(--surface);
+  animation: crash-flash 0.55s var(--ease-out);
+}
+
+.crash-stage__glow {
+  opacity: 0.55;
+  background: radial-gradient(ellipse at 70% 30%, color-mix(in srgb, white 4%, transparent), transparent 50%);
+}
+
+.crash-mult[data-heat="warm"] {
+  color: #9be0b4;
+}
+
+.crash-mult[data-heat="hot"] {
+  color: #f0b429;
+}
+
+.crash-mult[data-heat="blaze"] {
+  color: #ff8a4c;
+}
+
+.crash-burst__particle {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--danger);
+  opacity: 0;
+  animation: crash-particle 0.65s var(--ease-out) forwards;
+  animation-delay: calc(var(--i) * 18ms);
+  transform: translate(-50%, -50%) rotate(calc(var(--i) * 45deg)) translateY(0);
+}
+
+@keyframes crash-particle {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) rotate(calc(var(--i) * 45deg)) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(calc(var(--i) * 45deg)) translateY(-48px) scale(0.4);
+  }
+}
+
+.crash-bet-flash {
+  animation: crash-bet-flash 0.85s var(--ease-out);
+}
+
+@keyframes crash-bet-flash {
+  0% {
+    background: color-mix(in srgb, var(--success) 22%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 @keyframes fade-slide-in {
   from {
     opacity: 0;
