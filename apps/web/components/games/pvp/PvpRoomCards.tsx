@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Swords } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PvpClickableStake } from "@/components/games/pvp/PvpClickableStake";
 import { PvpAvatarStrip } from "@/components/games/pvp/PvpAvatarStrip";
@@ -10,6 +10,7 @@ import { PvpStakeDetailSheet } from "@/components/games/pvp/PvpStakeDetailSheet"
 import { TonAmount } from "@/components/icons/TonIcon";
 import { formatTON } from "@/lib/api";
 import { PvpPlayer, PvpRoom, pvpPlayerName, pvpWinner } from "@/lib/pvp";
+import { cn } from "@/lib/utils";
 
 type StakeDetail = {
   player: PvpPlayer;
@@ -62,64 +63,82 @@ export function PvpOpenRoomCard({
   const opponent = room.players.find((player) => player.user_id !== room.creator_id);
   const creatorStake = playerStakeNanoton(creator, room);
   const opponentStake = opponent ? playerStakeNanoton(opponent, room) : null;
+  const pot = room.players.reduce((sum, p) => sum + playerStakeNanoton(p, room), 0);
 
   return (
     <>
-      <article className="app-control interactive-card panel p-3">
-        <div className="flex items-center gap-3">
-          <div className="size-10 shrink-0">
-            {creator ? <PvpPlayerAvatar player={creator} size={40} /> : null}
-          </div>
+      <article className="pvp-room pvp-room--open">
+        <div className="pvp-room__glow" aria-hidden />
 
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium leading-5">{pvpPlayerName(creator)}</p>
-            <p className="mt-1 text-sm font-semibold leading-5 tabular-nums text-foreground/85">
-              {creator ? (
-                <PvpClickableStake
-                  player={creator}
-                  amountNanoton={creatorStake}
-                  iconSize="sm"
-                  onOpen={stakeDetail.open}
-                />
-              ) : null}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="flex flex-col items-center gap-1">
-              <div className="size-9 shrink-0">
-                {opponent ? (
-                  <PvpPlayerAvatar player={opponent} size={36} />
-                ) : (
-                  <span className="flex size-full items-center justify-center rounded-full border border-dashed border-[var(--border)] bg-surface-raised/40 text-muted/70">
-                    <Plus className="h-3.5 w-3.5" />
-                  </span>
-                )}
-              </div>
-              {opponent && opponentStake != null ? (
-                <PvpClickableStake
-                  player={opponent}
-                  amountNanoton={opponentStake}
-                  iconSize="xs"
-                  className="max-w-[4.5rem] justify-center"
-                  onOpen={stakeDetail.open}
-                />
-              ) : null}
+        <div className="pvp-room__duel">
+          <div className="pvp-room__fighter">
+            <div className="pvp-room__avatar pvp-room__avatar--a">
+              {creator ? <PvpPlayerAvatar player={creator} size={44} /> : null}
             </div>
+            <p className="pvp-room__name">{pvpPlayerName(creator)}</p>
+            {creator ? (
+              <PvpClickableStake
+                player={creator}
+                amountNanoton={creatorStake}
+                iconSize="sm"
+                className="justify-center"
+                onOpen={stakeDetail.open}
+              />
+            ) : null}
+          </div>
 
-            {canJoin ? (
-              <Button
-                variant="accent"
-                className="h-9 rounded-xl px-3.5 text-xs"
-                disabled={joining}
-                onClick={onJoin}
-              >
-                {joining ? "…" : "Войти"}
-              </Button>
+          <div className="pvp-room__vs" aria-hidden>
+            <Swords className="h-3.5 w-3.5" strokeWidth={2.4} />
+            <span>VS</span>
+          </div>
+
+          <div className="pvp-room__fighter">
+            <div className={cn("pvp-room__avatar", opponent ? "pvp-room__avatar--b" : "pvp-room__avatar--empty")}>
+              {opponent ? (
+                <PvpPlayerAvatar player={opponent} size={44} />
+              ) : (
+                <span className="pvp-room__slot">
+                  <Plus className="h-4 w-4" strokeWidth={2.2} />
+                </span>
+              )}
+            </div>
+            <p className="pvp-room__name">
+              {opponent ? pvpPlayerName(opponent) : "Свободно"}
+            </p>
+            {opponent && opponentStake != null ? (
+              <PvpClickableStake
+                player={opponent}
+                amountNanoton={opponentStake}
+                iconSize="sm"
+                className="justify-center"
+                onOpen={stakeDetail.open}
+              />
             ) : (
-              <span className="chip shrink-0 whitespace-nowrap">Ожидание</span>
+              <span className="pvp-room__wait">Ждём соперника</span>
             )}
           </div>
+        </div>
+
+        <div className="pvp-room__footer">
+          <div className="pvp-room__pot">
+            <span className="pvp-room__pot-label">Банк</span>
+            <span className="pvp-room__pot-value">
+              <TonAmount amount={formatTON(pot)} variant="brand" iconClassName="h-3.5 w-3.5" />
+            </span>
+          </div>
+
+          {canJoin ? (
+            <Button
+              variant="accent"
+              className="pvp-room__join h-10 rounded-xl px-4 text-sm font-bold"
+              disabled={joining}
+              onClick={onJoin}
+            >
+              {joining ? "…" : "Войти в бой"}
+            </Button>
+          ) : (
+            <span className="pvp-room__status">Ваша комната</span>
+          )}
         </div>
       </article>
 
@@ -134,8 +153,16 @@ export function PvpActiveRoomCard({ room }: { room: PvpRoom }) {
   const countdown = useCountdown(room.spin_at, isCountdown);
 
   return (
-    <article className="panel p-3">
-      <div className="relative">
+    <article
+      className={cn(
+        "pvp-room pvp-room--live",
+        isCountdown && "pvp-room--countdown",
+        isSpinning && "pvp-room--spinning",
+      )}
+    >
+      <div className="pvp-room__glow" aria-hidden />
+
+      <div className="pvp-room__stage">
         <PvpAvatarStrip
           players={room.players}
           winnerId={room.winner_id}
@@ -144,12 +171,20 @@ export function PvpActiveRoomCard({ room }: { room: PvpRoom }) {
           spinAt={room.spin_at}
           spinEndsAt={room.spin_ends_at}
           dimmed={isCountdown}
+          className="pvp-room__strip"
         />
         {isCountdown ? (
-          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-            <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-              {countdown}
-            </span>
+          <div className="pvp-countdown pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+            <div
+              className={cn(
+                "pvp-countdown__ring",
+                countdown <= 2 && "pvp-countdown__ring--urgent",
+              )}
+            >
+              <span key={countdown} className="pvp-countdown__value">
+                {countdown}
+              </span>
+            </div>
           </div>
         ) : null}
       </div>
@@ -168,29 +203,31 @@ export function PvpResultRoomCard({
   const payout = room.payout_nanoton ?? room.bet_amount_nanoton * room.player_count;
 
   return (
-    <article className="panel p-3">
-      <PvpAvatarStrip players={room.players} winnerId={room.winner_id} settled />
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-xs text-muted">
-          {winner ? pvpPlayerName(winner) : "—"}
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="text-sm font-semibold tabular-nums text-success">
-            <TonAmount
-              amount={`+${formatTON(payout)}`}
-              variant="brand"
-              iconClassName="h-3.5 w-3.5"
-            />
-          </span>
-          {room.game_round_id && onProof ? (
-            <button
-              type="button"
-              className="text-[11px] font-medium text-accent"
-              onClick={onProof}
-            >
-              Проверить
-            </button>
-          ) : null}
+    <article className="pvp-room pvp-room--result">
+      <div className="pvp-room__glow" aria-hidden />
+      <div className="pvp-room__stage">
+        <PvpAvatarStrip players={room.players} winnerId={room.winner_id} settled />
+        <div className="pvp-room__result">
+          <div className="min-w-0">
+            <p className="pvp-room__result-label">Победитель</p>
+            <p className="pvp-room__result-name truncate">
+              {winner ? pvpPlayerName(winner) : "—"}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <span className="pvp-room__result-payout">
+              <TonAmount
+                amount={`+${formatTON(payout)}`}
+                variant="brand"
+                iconClassName="h-3.5 w-3.5"
+              />
+            </span>
+            {room.game_round_id && onProof ? (
+              <button type="button" className="pvp-room__proof" onClick={onProof}>
+                Проверить
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </article>

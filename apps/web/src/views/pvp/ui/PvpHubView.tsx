@@ -251,39 +251,64 @@ export function PvpHubView() {
 
   return (
     <PageShell flush>
-      <section className="panel space-y-3">
-        <p className="section-label">Создать комнату 1 на 1</p>
+      <div className="pvp-page flex flex-col gap-3.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="pvp-page__aurora" aria-hidden>
+          <span className="pvp-page__blob pvp-page__blob--a" />
+          <span className="pvp-page__blob pvp-page__blob--b" />
+          <span className="pvp-page__blob pvp-page__blob--c" />
+        </div>
 
-        <BetFundingControl
-          mode={fundingMode}
-          onModeChange={setFundingMode}
-          amountTon={betAmount}
-          onAmountTonChange={setBetAmount}
-          selectedGiftIds={selectedGiftIds}
-          onSelectGifts={setSelectedGiftIds}
-          disabled={creating}
-          quickAmounts={QUICK_AMOUNTS}
-          multiple
-          combined
-          title="Ставка комнаты"
-          subtitle="TON и подарки можно комбинировать — это ставка комнаты"
-        />
+        <section className="pvp-create space-y-3">
+          <div className="pvp-create__intro">
+            <h2 className="pvp-create__title">Дуэль 1 на 1</h2>
+            <p className="pvp-create__text">Создай комнату или войди в открытый бой</p>
+          </div>
 
-        <Button className="h-11 w-full rounded-xl" variant="accent" disabled={creating} onClick={createRoom}>
-          {creating ? "Создаём…" : "Создать комнату"}
-        </Button>
+          <BetFundingControl
+            mode={fundingMode}
+            onModeChange={setFundingMode}
+            amountTon={betAmount}
+            onAmountTonChange={setBetAmount}
+            selectedGiftIds={selectedGiftIds}
+            onSelectGifts={setSelectedGiftIds}
+            disabled={creating}
+            quickAmounts={QUICK_AMOUNTS}
+            multiple
+            combined
+            title="Ставка комнаты"
+            subtitle="TON и подарки можно комбинировать"
+          />
 
-        {error && !joinRoomId && (
-          <p className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>
-        )}
-      </section>
+          <Button
+            className="pvp-create__cta h-12 w-full rounded-2xl text-base font-bold"
+            variant="accent"
+            disabled={creating}
+            onClick={createRoom}
+          >
+            {creating ? "Создаём…" : "Создать комнату"}
+          </Button>
 
-      {hasRooms ? (
-        <section className="space-y-2">
-          {displayRooms.map((room) => {
-            if (room.status === "finished") {
-              return (
-                <PvpRoomExitShell key={room.id} leaving={finished.leavingIds.has(room.id)}>
+          {error && !joinRoomId && (
+            <p className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>
+          )}
+        </section>
+
+        {hasRooms ? (
+          <section className="pvp-rooms space-y-2.5">
+            <div className="pvp-rooms__head">
+              <h2 className="pvp-rooms__title">Комнаты</h2>
+              <span className="pvp-rooms__count">{displayRooms.length}</span>
+            </div>
+            {displayRooms.map((room) => {
+              const phase =
+                room.status === "finished"
+                  ? "result"
+                  : room.status === "countdown" || room.status === "spinning"
+                    ? "live"
+                    : "open";
+
+              const card =
+                phase === "result" ? (
                   <PvpResultRoomCard
                     room={room}
                     onProof={
@@ -292,103 +317,115 @@ export function PvpHubView() {
                         : undefined
                     }
                   />
+                ) : phase === "live" ? (
+                  <PvpActiveRoomCard room={room} />
+                ) : (
+                  <PvpOpenRoomCard
+                    room={room}
+                    canJoin={
+                      !room.players.some((player) => player.user_id === userId) &&
+                      room.creator_id !== userId
+                    }
+                    joining={joiningId === room.id}
+                    onJoin={() => openJoin(room.id)}
+                  />
+                );
+
+              return (
+                <PvpRoomExitShell
+                  key={room.id}
+                  leaving={phase === "result" && finished.leavingIds.has(room.id)}
+                  className="pvp-room-enter"
+                >
+                  <div key={phase} className="pvp-phase-swap">
+                    {card}
+                  </div>
                 </PvpRoomExitShell>
               );
-            }
-            if (room.status === "countdown" || room.status === "spinning") {
-              return <PvpActiveRoomCard key={room.id} room={room} />;
-            }
-            const alreadyJoined = room.players.some((player) => player.user_id === userId);
-            const isCreator = room.creator_id === userId;
-            return (
-              <PvpOpenRoomCard
-                key={room.id}
-                room={room}
-                canJoin={!alreadyJoined && !isCreator}
-                joining={joiningId === room.id}
-                onJoin={() => openJoin(room.id)}
-              />
-            );
-          })}
-        </section>
-      ) : lobbyReady ? (
-        <section className="panel flex flex-col items-center gap-2 py-10 text-center">
-          <p className="text-sm font-semibold text-foreground">Нет открытых дуэлей</p>
-          <p className="max-w-[16rem] text-xs leading-relaxed text-muted">
-            Создайте первую комнату выше — соперник сможет присоединиться к вашей ставке.
-          </p>
-        </section>
-      ) : null}
-
-      {joinRoomId && joinRoom ? (
-        <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
-          {(close) => (
-          <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
-            <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
-            <p className="mb-4 text-center text-xs text-muted">
-              Нужна ставка ≈ {(joinRoom.bet_amount_nanoton / 1_000_000_000).toFixed(2)} TON
-              (±10%)
+            })}
+          </section>
+        ) : lobbyReady ? (
+          <section className="pvp-empty pvp-room-enter">
+            <div className="pvp-empty__glow" aria-hidden />
+            <p className="pvp-empty__title">Нет открытых дуэлей</p>
+            <p className="pvp-empty__text">
+              Создай первую комнату выше — соперник сможет присоединиться к твоей ставке.
             </p>
+          </section>
+        ) : null}
 
-            <BetFundingPanel
-              mode={joinFundingMode}
-              onModeChange={setJoinFundingMode}
-              amountTon={joinAmountTon}
-              onAmountTonChange={setJoinAmountTon}
-              selectedGiftIds={joinGiftIds}
-              onSelectGifts={setJoinGiftIds}
-              disabled={!!joiningId}
-              multiple
-              layout="sheet"
-              combined
-              quickAmounts={QUICK_AMOUNTS}
-            />
+        {joinRoomId && joinRoom ? (
+          <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
+            {(close) => (
+              <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
+                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+                <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
+                <p className="mb-4 text-center text-xs text-muted">
+                  Нужна ставка ≈ {(joinRoom.bet_amount_nanoton / 1_000_000_000).toFixed(2)} TON
+                  (±10%)
+                </p>
 
-            {joinWinChanceBps != null && (
-              <p className="mt-3 text-center text-xs text-muted">
-                Ваш шанс на победу:{" "}
-                <span className="font-semibold text-foreground">
-                  {formatWinChanceBps(joinWinChanceBps)}
-                </span>
-              </p>
+                <BetFundingPanel
+                  mode={joinFundingMode}
+                  onModeChange={setJoinFundingMode}
+                  amountTon={joinAmountTon}
+                  onAmountTonChange={setJoinAmountTon}
+                  selectedGiftIds={joinGiftIds}
+                  onSelectGifts={setJoinGiftIds}
+                  disabled={!!joiningId}
+                  multiple
+                  layout="sheet"
+                  combined
+                  quickAmounts={QUICK_AMOUNTS}
+                />
+
+                {joinWinChanceBps != null && (
+                  <p className="mt-3 text-center text-xs text-muted">
+                    Ваш шанс на победу:{" "}
+                    <span className="font-semibold text-foreground">
+                      {formatWinChanceBps(joinWinChanceBps)}
+                    </span>
+                  </p>
+                )}
+
+                {error && (
+                  <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                    {error}
+                  </p>
+                )}
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-xl"
+                    onClick={close}
+                    disabled={!!joiningId}
+                  >
+                    Отмена
+                  </Button>
+                  <Button
+                    variant="accent"
+                    className="h-11 rounded-xl"
+                    onClick={confirmJoin}
+                    disabled={!!joiningId || !joinInRange}
+                  >
+                    {joiningId ? "…" : "Войти"}
+                  </Button>
+                </div>
+              </div>
             )}
+          </ModalOverlay>
+        ) : null}
 
-            {error && (
-              <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>
-            )}
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                className="h-11 rounded-xl"
-                onClick={close}
-                disabled={!!joiningId}
-              >
-                Отмена
-              </Button>
-              <Button
-                variant="accent"
-                className="h-11 rounded-xl"
-                onClick={confirmJoin}
-                disabled={!!joiningId || !joinInRange}
-              >
-                {joiningId ? "…" : "Войти"}
-              </Button>
-            </div>
-          </div>
-          )}
-        </ModalOverlay>
-      ) : null}
-
-      {proofRoundId ? (
-        <ProofModal
-          roundId={proofRoundId}
-          gameType="pvp"
-          title="Проверка PvP"
-          onClose={() => setProofRoundId(null)}
-        />
-      ) : null}
+        {proofRoundId ? (
+          <ProofModal
+            roundId={proofRoundId}
+            gameType="pvp"
+            title="Проверка PvP"
+            onClose={() => setProofRoundId(null)}
+          />
+        ) : null}
+      </div>
     </PageShell>
   );
 }

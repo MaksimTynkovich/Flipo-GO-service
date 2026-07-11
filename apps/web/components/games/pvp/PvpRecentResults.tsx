@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 /** Must match backend HistoryVisibleSeconds */
 export const PVP_RESULT_VISIBLE_MS = 10_000;
-const EXIT_MS = 420;
+const EXIT_MS = 520;
 
 /**
  * Finished rooms from lobby history (backend already keeps ≤10s).
@@ -95,11 +95,15 @@ export function usePvpFinishedVisibility(history: PvpRoom[]) {
 export function PvpRoomExitShell({
   leaving,
   children,
+  className,
 }: {
   leaving?: boolean;
   children: ReactNode;
+  className?: string;
 }) {
-  return <div className={cn(leaving && "pvp-room-exit")}>{children}</div>;
+  return (
+    <div className={cn(className, leaving && "pvp-room-exit")}>{children}</div>
+  );
 }
 
 export function hasRecentPvpResults(history: PvpRoom[]): boolean {
