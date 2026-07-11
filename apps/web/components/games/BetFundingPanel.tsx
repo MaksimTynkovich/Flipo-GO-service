@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Gift } from "lucide-react";
-import { TonIcon, TonAmount } from "@/components/icons/TonIcon";
-import { formatTON } from "@/lib/api";
+import { Check, Gift } from "lucide-react";
+import { TonIcon } from "@/components/icons/TonIcon";
+import { formatTON, InventoryItem } from "@/lib/api";
 import { BetFundingMode } from "@/lib/bet-funding";
 import { giftImageUrl, giftValuationNanoton } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,57 @@ type Props = {
   combined?: boolean;
 };
 
+function BetGiftCard({
+  item,
+  active,
+  disabled,
+  onToggle,
+  className,
+}: {
+  item: InventoryItem;
+  active: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
+  const value = giftValuationNanoton(item);
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onToggle}
+      className={cn(
+        "gift-card app-control",
+        !active && "gift-card--dimmed",
+        disabled && "opacity-40",
+        className,
+      )}
+    >
+      <div className="gift-card__media">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={giftImageUrl(item.collection_slug, item.image_url)}
+          alt={item.name}
+          className="gift-card__img"
+        />
+        {active ? (
+          <span className="gift-card__check">
+            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+          </span>
+        ) : null}
+      </div>
+      <div className="gift-card__meta">
+        <p className="gift-card__title">{item.name}</p>
+        <span className="gift-card__price">
+          {formatTON(value)}
+          <TonIcon variant="brand" className="h-3 w-3 shrink-0" />
+        </span>
+      </div>
+    </button>
+  );
+}
+
 export function BetFundingPanel({
   mode,
   onModeChange,
@@ -69,8 +120,6 @@ export function BetFundingPanel({
     }
     return list;
   }, [gifts, fixedStakeNanoton, excluded]);
-
-  const selectedGifts = gifts.filter((item) => selectedGiftIds.includes(item.id));
 
   function toggleGift(id: string) {
     if (multiple) {
@@ -165,7 +214,7 @@ export function BetFundingPanel({
           {combined ? (
             <p className="text-[11px] font-medium text-muted">Подарки</p>
           ) : null}
-          <div className={cn(!combined && "segment-panel", "space-y-2")}>
+          <div className={cn(!combined && "segment-panel", "space-y-2.5")}>
             {multiple && selectedGiftIds.length > 0 && (
               <p className="text-center text-[11px] text-muted">
                 Выбрано: {selectedGiftIds.length}
@@ -183,89 +232,28 @@ export function BetFundingPanel({
                     : "Нет доступных подарков в инвентаре"}
               </p>
             ) : isSheet ? (
-              <div className="grid max-h-[min(36dvh,280px)] grid-cols-4 gap-2 overflow-y-auto overscroll-contain pr-0.5">
-                {availableGifts.map((item) => {
-                  const active = selectedGiftIds.includes(item.id);
-                  const value = giftValuationNanoton(item);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => toggleGift(item.id)}
-                      className={cn(
-                        "app-control flex flex-col items-center gap-1.5 rounded-xl bg-surface-raised p-2",
-                        active
-                          ? "bg-accent/12 ring-1 ring-inset ring-accent/40"
-                          : "hover:bg-[color-mix(in_srgb,var(--surface-raised)_70%,white)]",
-                        disabled && "opacity-40",
-                      )}
-                    >
-                      <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-surface">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={giftImageUrl(item.collection_slug, item.image_url)}
-                          alt=""
-                          className="h-full w-full object-contain"
-                        />
-                      </span>
-                      <span className="text-[10px] font-semibold tabular-nums text-muted">
-                        <TonAmount amount={formatTON(value)} iconSize="xs" />
-                      </span>
-                    </button>
-                  );
-                })}
+              <div className="grid max-h-[min(42dvh,340px)] grid-cols-3 gap-x-2.5 gap-y-3 overflow-y-auto overscroll-contain pr-0.5">
+                {availableGifts.map((item) => (
+                  <BetGiftCard
+                    key={item.id}
+                    item={item}
+                    active={selectedGiftIds.includes(item.id)}
+                    disabled={disabled}
+                    onToggle={() => toggleGift(item.id)}
+                  />
+                ))}
               </div>
             ) : (
-              <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {availableGifts.map((item) => {
-                  const active = selectedGiftIds.includes(item.id);
-                  const value = giftValuationNanoton(item);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => toggleGift(item.id)}
-                      className={cn(
-                        "app-control flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-xl bg-surface-raised p-2",
-                        active
-                          ? "bg-accent/12 ring-1 ring-inset ring-accent/40"
-                          : "hover:bg-[color-mix(in_srgb,var(--surface-raised)_70%,white)]",
-                        disabled && "opacity-40",
-                      )}
-                    >
-                      <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-surface">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={giftImageUrl(item.collection_slug, item.image_url)}
-                          alt=""
-                          className="h-full w-full object-contain"
-                        />
-                      </span>
-                      <span className="text-[10px] font-semibold tabular-nums text-muted">
-                        <TonAmount amount={formatTON(value)} iconSize="xs" />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {selectedGifts.length > 0 && !isSheet && (
-              <div className="surface-inset flex flex-wrap items-center justify-center gap-2 px-3 py-2.5">
-                {selectedGifts.map((item) => (
-                  <span
+              <div className="flex gap-2.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {availableGifts.map((item) => (
+                  <BetGiftCard
                     key={item.id}
-                    className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-surface"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={giftImageUrl(item.collection_slug, item.image_url)}
-                      alt=""
-                      className="h-full w-full object-contain"
-                    />
-                  </span>
+                    item={item}
+                    active={selectedGiftIds.includes(item.id)}
+                    disabled={disabled}
+                    onToggle={() => toggleGift(item.id)}
+                    className="w-[6.75rem] shrink-0"
+                  />
                 ))}
               </div>
             )}

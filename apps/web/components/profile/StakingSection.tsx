@@ -146,7 +146,7 @@ export function StakingSection() {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
           {Array.from({ length: 6 }).map((_, i) => (
             <GiftTileSkeleton key={i} />
           ))}
@@ -207,7 +207,7 @@ export function StakingSection() {
                   ) : null}
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
                   {stakedGifts.map((gift) => (
                     <GiftTile key={gift.slug} gift={gift} onInspect={setInspected} />
                   ))}
@@ -250,7 +250,7 @@ export function StakingSection() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
                     {unstakedGifts.map((gift) => (
                       <GiftTile
                         key={gift.slug}

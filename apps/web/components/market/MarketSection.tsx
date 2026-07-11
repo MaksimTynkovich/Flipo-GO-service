@@ -69,8 +69,17 @@ export function MarketSection({ onPurchased }: Props) {
     availableBalance < selected.price_nanoton;
 
   return (
-    <>
-      <div className="grid grid-cols-3 gap-2">
+    <section className="space-y-4">
+      <header className="space-y-1 px-0.5">
+        <h1 className="text-[1.625rem] font-semibold leading-tight tracking-tight text-foreground">
+          Маркет
+        </h1>
+        <p className="text-[0.8125rem] leading-relaxed text-muted">
+          Подарки за TON — бери и забирай в инвентарь
+        </p>
+      </header>
+
+      <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
         {loading
           ? Array.from({ length: 9 }).map((_, i) => <MarketGiftCardSkeleton key={i} />)
           : listings.map((listing) => (
@@ -79,10 +88,12 @@ export function MarketSection({ onPurchased }: Props) {
       </div>
 
       {!loading && listings.length === 0 && (
-        <div className="panel py-10 text-center">
-          <Gift className="mx-auto h-8 w-8 text-muted/50" />
-          <p className="mt-3 text-sm font-medium">Маркет пуст</p>
-          <p className="mt-1 text-xs text-muted">Лоты появятся, когда игроки выставят предметы</p>
+        <div className="flex flex-col items-center gap-2 py-12 text-center">
+          <Gift className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
+          <p className="text-sm font-medium">Маркет пуст</p>
+          <p className="max-w-[15rem] text-xs leading-relaxed text-muted">
+            Лоты появятся, когда игроки выставят предметы
+          </p>
         </div>
       )}
 
@@ -103,6 +114,6 @@ export function MarketSection({ onPurchased }: Props) {
           onBuy={handleBuy}
         />
       )}
-    </>
+    </section>
   );
 }

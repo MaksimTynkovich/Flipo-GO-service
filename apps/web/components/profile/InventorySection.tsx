@@ -134,7 +134,7 @@ export function InventorySection() {
           {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => <InventoryGiftCardSkeleton key={i} />)
             : visibleItems.map((item) => {
