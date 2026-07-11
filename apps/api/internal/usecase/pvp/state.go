@@ -59,6 +59,12 @@ type RoomView struct {
 	GameRoundID      *uuid.UUID  `json:"game_round_id,omitempty"`
 	ServerSeedHash   string      `json:"server_seed_hash,omitempty"`
 	ServerSeed       string      `json:"server_seed,omitempty"`
+	Simulated        bool        `json:"simulated,omitempty"`
+}
+
+// RoomOverlay merges visual-only ghost rooms into the PvP lobby.
+type RoomOverlay interface {
+	PvPGhostRooms() []RoomView
 }
 
 type LobbyState struct {

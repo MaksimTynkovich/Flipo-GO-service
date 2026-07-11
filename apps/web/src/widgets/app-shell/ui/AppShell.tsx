@@ -11,17 +11,17 @@ export function AppShell({ children }: PropsWithChildren) {
   const isAdmin = pathname.startsWith("/admin");
 
   return (
-    <>
+    <div className="app-frame">
       <AppHeader />
       <main
         className={cn(
-          "page-enter min-h-[100dvh] pb-[var(--app-tabbar-offset)] pt-[var(--app-header-offset)]",
+          "app-frame__main page-enter pb-[var(--app-tabbar-offset)] pt-[var(--app-header-offset)]",
           isAdmin ? "admin-container" : "app-container",
         )}
       >
         {children}
       </main>
       <AppTabBar />
-    </>
+    </div>
   );
 }

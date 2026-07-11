@@ -65,6 +65,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.PromoRedemption{},
 		&domain.TelegramBroadcast{},
 		&domain.TreasurySweep{},
+		&domain.SocialSimSettings{},
 	); err != nil {
 		return err
 	}

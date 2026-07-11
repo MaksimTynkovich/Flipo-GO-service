@@ -131,16 +131,26 @@ function BetRow({
 export function RouletteRoundBets({ data, currentUserId }: Props) {
   const rows = useMemo(() => aggregateBets(data?.bets ?? []), [data?.bets]);
 
-  if (rows.length === 0) {
+  const orderedRows = useMemo(() => {
+    if (!currentUserId) return rows;
+    const mine: AggregatedBet[] = [];
+    const others: AggregatedBet[] = [];
+    for (const row of rows) {
+      if (row.user_id === currentUserId) mine.push(row);
+      else others.push(row);
+    }
+    return [...mine, ...others];
+  }, [rows, currentUserId]);
+
+  if (orderedRows.length === 0) {
     return <p className="text-center text-xs text-muted">Пока нет ставок</p>;
   }
 
   return (
     <div className="space-y-2">
       <p className="section-label">Игроки</p>
-
-      <div className="max-h-52 space-y-0.5 overflow-y-auto">
-        {rows.map((bet) => (
+      <div className="space-y-0.5">
+        {orderedRows.map((bet) => (
           <BetRow
             key={bet.key}
             bet={bet}

@@ -43,6 +43,7 @@ export type PvpRoom = {
   created_at: string;
   game_round_id?: string;
   server_seed_hash?: string;
+  simulated?: boolean;
 };
 
 export type PvpLobbyState = {

@@ -7,12 +7,12 @@ export type PvpStripMetrics = {
   avatarSize: number;
 };
 
-/** Compact strip — matches open-room card height. */
+/** Lobby strip — sized to fill compact room card height. */
 export const PVP_STRIP_COMPACT: PvpStripMetrics = {
-  slotSize: 40,
-  slotGap: 8,
-  stripPaddingX: 8,
-  avatarSize: 36,
+  slotSize: 52,
+  slotGap: 10,
+  stripPaddingX: 10,
+  avatarSize: 48,
 };
 
 export const PVP_STRIP_DEFAULT: PvpStripMetrics = {

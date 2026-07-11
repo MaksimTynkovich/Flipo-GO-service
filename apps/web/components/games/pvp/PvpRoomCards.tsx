@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Swords } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PvpClickableStake } from "@/components/games/pvp/PvpClickableStake";
 import { PvpAvatarStrip } from "@/components/games/pvp/PvpAvatarStrip";
 import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
 import { PvpStakeDetailSheet } from "@/components/games/pvp/PvpStakeDetailSheet";
@@ -16,6 +15,16 @@ type StakeDetail = {
   player: PvpPlayer;
   stakeNanoton: number;
 };
+
+type RoomPhase = "open" | "live" | "result";
+
+const PHASE_MS = 560;
+
+function roomPhase(status: PvpRoom["status"]): RoomPhase {
+  if (status === "finished") return "result";
+  if (status === "countdown" || status === "spinning") return "live";
+  return "open";
+}
 
 function useStakeDetail() {
   const [detail, setDetail] = useState<StakeDetail | null>(null);
@@ -47,6 +56,97 @@ function StakeDetailModal({
   );
 }
 
+/** Crossfades open → live → result inside a fixed slot. */
+export function PvpRoomCardView({
+  room,
+  userId,
+  joining,
+  onJoin,
+  onProof,
+}: {
+  room: PvpRoom;
+  userId?: string;
+  joining: boolean;
+  onJoin: () => void;
+  onProof?: () => void;
+}) {
+  const phase = roomPhase(room.status);
+  const [shownPhase, setShownPhase] = useState<RoomPhase>(phase);
+  const [outgoing, setOutgoing] = useState<RoomPhase | null>(null);
+  const [outgoingRoom, setOutgoingRoom] = useState<PvpRoom | null>(null);
+  const [flash, setFlash] = useState<"live" | "result" | null>(null);
+  const prevRoomRef = useRef(room);
+
+  useEffect(() => {
+    if (phase === shownPhase) {
+      prevRoomRef.current = room;
+      return;
+    }
+
+    setOutgoing(shownPhase);
+    setOutgoingRoom(prevRoomRef.current);
+    setShownPhase(phase);
+    setFlash(phase === "open" ? null : phase);
+    prevRoomRef.current = room;
+
+    const clearOut = window.setTimeout(() => {
+      setOutgoing(null);
+      setOutgoingRoom(null);
+    }, PHASE_MS);
+    const clearFlash = window.setTimeout(() => setFlash(null), PHASE_MS + 80);
+    return () => {
+      window.clearTimeout(clearOut);
+      window.clearTimeout(clearFlash);
+    };
+  }, [phase, shownPhase, room]);
+
+  const renderPhase = (target: RoomPhase, data: PvpRoom) => {
+    if (target === "result") {
+      return <PvpResultRoomCard room={data} onProof={onProof} />;
+    }
+    if (target === "live") {
+      return <PvpActiveRoomCard room={data} />;
+    }
+    return (
+      <PvpOpenRoomCard
+        room={data}
+        canJoin={
+          !data.players.some((player) => player.user_id === userId) &&
+          data.creator_id !== userId
+        }
+        joining={joining}
+        onJoin={onJoin}
+      />
+    );
+  };
+
+  return (
+    <div
+      className={cn(
+        "pvp-room-morph",
+        outgoing && "pvp-room-morph--busy",
+        flash === "live" && "pvp-room-morph--flash-live",
+        flash === "result" && "pvp-room-morph--flash-result",
+      )}
+    >
+      {outgoing && outgoingRoom ? (
+        <div className="pvp-room-morph__layer pvp-room-morph__layer--out" aria-hidden>
+          {renderPhase(outgoing, outgoingRoom)}
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "pvp-room-morph__layer",
+          outgoing ? "pvp-room-morph__layer--in" : "pvp-room-morph__layer--solo",
+        )}
+      >
+        {renderPhase(shownPhase, room)}
+      </div>
+      {flash ? <span className="pvp-room-morph__burst" aria-hidden /> : null}
+    </div>
+  );
+}
+
 export function PvpOpenRoomCard({
   room,
   canJoin,
@@ -62,8 +162,8 @@ export function PvpOpenRoomCard({
   const creator = room.players.find((player) => player.user_id === room.creator_id) ?? room.players[0];
   const opponent = room.players.find((player) => player.user_id !== room.creator_id);
   const creatorStake = playerStakeNanoton(creator, room);
-  const opponentStake = opponent ? playerStakeNanoton(opponent, room) : null;
   const pot = room.players.reduce((sum, p) => sum + playerStakeNanoton(p, room), 0);
+  const allowJoin = canJoin;
 
   return (
     <>
@@ -73,18 +173,9 @@ export function PvpOpenRoomCard({
         <div className="pvp-room__duel">
           <div className="pvp-room__fighter">
             <div className="pvp-room__avatar pvp-room__avatar--a">
-              {creator ? <PvpPlayerAvatar player={creator} size={44} /> : null}
+              {creator ? <PvpPlayerAvatar player={creator} size={40} /> : null}
             </div>
             <p className="pvp-room__name">{pvpPlayerName(creator)}</p>
-            {creator ? (
-              <PvpClickableStake
-                player={creator}
-                amountNanoton={creatorStake}
-                iconSize="sm"
-                className="justify-center"
-                onOpen={stakeDetail.open}
-              />
-            ) : null}
           </div>
 
           <div className="pvp-room__vs" aria-hidden>
@@ -95,42 +186,38 @@ export function PvpOpenRoomCard({
           <div className="pvp-room__fighter">
             <div className={cn("pvp-room__avatar", opponent ? "pvp-room__avatar--b" : "pvp-room__avatar--empty")}>
               {opponent ? (
-                <PvpPlayerAvatar player={opponent} size={44} />
+                <PvpPlayerAvatar player={opponent} size={40} />
               ) : (
                 <span className="pvp-room__slot">
-                  <Plus className="h-4 w-4" strokeWidth={2.2} />
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.2} />
                 </span>
               )}
             </div>
             <p className="pvp-room__name">
               {opponent ? pvpPlayerName(opponent) : "Свободно"}
             </p>
-            {opponent && opponentStake != null ? (
-              <PvpClickableStake
-                player={opponent}
-                amountNanoton={opponentStake}
-                iconSize="sm"
-                className="justify-center"
-                onOpen={stakeDetail.open}
-              />
-            ) : (
-              <span className="pvp-room__wait">Ждём соперника</span>
-            )}
           </div>
         </div>
 
         <div className="pvp-room__footer">
-          <div className="pvp-room__pot">
+          <button
+            type="button"
+            className="pvp-room__pot"
+            onClick={() => {
+              if (creator) stakeDetail.open(creator, creatorStake);
+            }}
+            disabled={!creator}
+          >
             <span className="pvp-room__pot-label">Банк</span>
             <span className="pvp-room__pot-value">
-              <TonAmount amount={formatTON(pot)} variant="brand" iconClassName="h-3.5 w-3.5" />
+              <TonAmount amount={formatTON(pot)} variant="brand" iconSize="sm" iconClassName="h-3.5 w-3.5" />
             </span>
-          </div>
+          </button>
 
-          {canJoin ? (
+          {allowJoin ? (
             <Button
               variant="accent"
-              className="pvp-room__join h-10 rounded-xl px-4 text-sm font-bold"
+              className="pvp-room__join h-8 shrink-0 rounded-lg px-3.5 text-xs font-bold"
               disabled={joining}
               onClick={onJoin}
             >

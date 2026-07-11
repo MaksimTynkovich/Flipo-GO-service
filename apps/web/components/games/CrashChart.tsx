@@ -38,7 +38,6 @@ type Props = {
 
 export type CrashStakeHud = {
   stakeTon: string;
-  betCount: number;
   /** Pending bets — used to paint live win every frame without React churn. */
   bets: { amount_nanoton: number; funding_type?: string }[];
   gifts?: { id: string; image_url: string }[];
@@ -1214,9 +1213,6 @@ export function CrashChart({
                 ) : (
                   <TonAmount amount={stakeHud.stakeTon} iconSize="xs" />
                 )}
-                {stakeHud.betCount > 1 ? (
-                  <span className="ml-1 text-[10px] text-white/45">×{stakeHud.betCount}</span>
-                ) : null}
               </span>
             </div>
             <div className="crash-stake-hud__side crash-stake-hud__side--win">

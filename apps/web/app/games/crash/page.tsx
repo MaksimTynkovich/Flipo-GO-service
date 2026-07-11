@@ -563,7 +563,6 @@ export default function CrashPage() {
                 roundActiveBets.length > 0 && state?.phase === "running"
                   ? {
                       stakeTon: formatTON(totalStakeNanoton),
-                      betCount: roundActiveBets.length,
                       bets: roundActiveBets.map((bet) => ({
                         amount_nanoton: bet.amount_nanoton,
                         funding_type: bet.funding_type,

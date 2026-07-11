@@ -55,12 +55,9 @@ export function BalanceGainFx() {
   if (!gain) return null;
 
   return (
-    <span
-      key={gain.id}
-      className="balance-gain-fx pointer-events-none absolute right-full top-1/2 z-10 mr-2.5 flex items-center gap-1 whitespace-nowrap"
-    >
+    <span key={gain.id} className="balance-gain-fx pointer-events-none flex items-center gap-1 whitespace-nowrap">
       <span>+{formatTON(gain.nanoton)}</span>
-      <TonIcon variant="brand" className="h-4 w-4" />
+      <TonIcon variant="brand" className="h-3.5 w-3.5" />
     </span>
   );
 }

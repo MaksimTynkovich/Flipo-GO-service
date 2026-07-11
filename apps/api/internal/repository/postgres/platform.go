@@ -213,7 +213,70 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 			return err
 		}
 	}
+
+	var sim domain.SocialSimSettings
+	if err := r.db.WithContext(ctx).First(&sim, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		defaults := defaultSocialSimSettings()
+		defaults.UpdatedAt = time.Now().UTC()
+		if err := r.db.WithContext(ctx).Create(&defaults).Error; err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func defaultSocialSimSettings() domain.SocialSimSettings {
+	tod := []byte(`[0.45,0.4,0.35,0.35,0.4,0.5,0.65,0.8,0.9,0.95,1.0,1.0,1.05,1.05,1.0,1.0,1.1,1.25,1.4,1.45,1.35,1.15,0.85,0.6]`)
+	return domain.SocialSimSettings{
+		ID:                    1,
+		Enabled:               false,
+		CrashEnabled:          true,
+		RouletteEnabled:       true,
+		PvPEnabled:            true,
+		LobbyEnabled:          true,
+		OnlineBaseMin:         18,
+		OnlineBaseMax:         42,
+		OnlineJitter:          0.12,
+		TODMultipliers:        tod,
+		BetIntensity:          8,
+		BetBurstChance:        0.35,
+		IdleGapMsMin:          400,
+		IdleGapMsMax:          2200,
+		StakeP50:              0.15,
+		StakeP90:              0.55,
+		CrashAutoCashoutShare: 0.55,
+		CrashCashoutMin:       1.2,
+		CrashCashoutMax:       4.5,
+		RouletteRedWeight:     0.46,
+		RouletteBlackWeight:   0.46,
+		RouletteGreenWeight:   0.08,
+		PvPMaxGhostRooms:      4,
+		PvPRoomTTLSecMin:      25,
+		PvPRoomTTLSecMax:      90,
+		PvPStakeMinFrac:       0.12,
+		PvPStakeMaxFrac:       0.7,
+		Chaos:                 0.35,
+	}
+}
+
+func (r *PlatformRepo) GetSocialSimSettings(ctx context.Context) (*domain.SocialSimSettings, error) {
+	var settings domain.SocialSimSettings
+	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		defaults := defaultSocialSimSettings()
+		defaults.UpdatedAt = time.Now().UTC()
+		if err := r.db.WithContext(ctx).Create(&defaults).Error; err != nil {
+			return nil, err
+		}
+		return &defaults, nil
+	}
+	return &settings, err
+}
+
+func (r *PlatformRepo) UpdateSocialSimSettings(ctx context.Context, settings *domain.SocialSimSettings) error {
+	settings.ID = 1
+	settings.UpdatedAt = time.Now().UTC()
+	return r.db.WithContext(ctx).Save(settings).Error
 }
 
 func (r *PlatformRepo) GetPromoCode(ctx context.Context, code string) (*domain.PromoCode, error) {

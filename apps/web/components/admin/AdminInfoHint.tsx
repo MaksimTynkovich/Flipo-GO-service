@@ -65,7 +65,11 @@ export function AdminInfoHint({ label, hint }: Props) {
         className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-raised text-[10px] text-muted transition hover:text-foreground active:scale-95"
         aria-label={`Что означает ${label}`}
         aria-expanded={open}
-        onClick={toggleHint}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleHint();
+        }}
       >
         i
       </button>

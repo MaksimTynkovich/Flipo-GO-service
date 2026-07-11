@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sort"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 type Service struct {
@@ -27,7 +29,50 @@ type Service struct {
 	inventory domain.InventoryRepository
 	feeBps    int
 	notifier  TickNotifier
+	overlay   RoomOverlay
+	ghosts    GhostClaimer
+	bots      BotMatchmaker
 	roomMu    sync.Map
+}
+
+// GhostClaimer materializes joinable social-sim PvP rooms into real DB rooms.
+type GhostClaimer interface {
+	ClaimOpenGhostRoom(roomID uuid.UUID) (*GhostRoomClaim, bool)
+}
+
+// BotMatchmaker schedules house bots into open human-created rooms.
+type BotMatchmaker interface {
+	BotJoinsEnabled() bool
+	PlanBotJoins(rooms []OpenHumanRoom) []PlannedBotJoin
+}
+
+type OpenHumanRoom struct {
+	ID               uuid.UUID
+	CreatorID        uuid.UUID
+	BetAmountNanoton int64
+	CreatedAt        time.Time
+	PlayerIDs        []uuid.UUID
+}
+
+type PlannedBotJoin struct {
+	RoomID        uuid.UUID
+	BotUserID     uuid.UUID
+	BotTelegramID int64
+	BotUsername   string
+	BotFirstName  string
+	BotPhotoURL   string
+	StakeNanoton  int64
+}
+
+type GhostRoomClaim struct {
+	ID               uuid.UUID
+	BetAmountNanoton int64
+	BotUserID        uuid.UUID
+	BotTelegramID    int64
+	BotUsername      string
+	BotFirstName     string
+	BotPhotoURL      string
+	CreatedAt        time.Time
 }
 
 func NewService(
@@ -44,6 +89,18 @@ func NewService(
 
 func (s *Service) SetTickNotifier(notifier TickNotifier) {
 	s.notifier = notifier
+}
+
+func (s *Service) SetRoomOverlay(overlay RoomOverlay) {
+	s.overlay = overlay
+}
+
+func (s *Service) SetGhostClaimer(claimer GhostClaimer) {
+	s.ghosts = claimer
+}
+
+func (s *Service) SetBotMatchmaker(bots BotMatchmaker) {
+	s.bots = bots
 }
 
 func (s *Service) roomLock(roomID uuid.UUID) *sync.Mutex {
@@ -113,7 +170,13 @@ func (s *Service) JoinRoom(ctx context.Context, userID, roomID uuid.UUID, stake 
 
 	room, err := s.pvp.GetRoom(ctx, roomID)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		room, err = s.materializeGhostRoom(ctx, roomID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if room.Status != "open" {
 		return nil, domain.ErrRoomFull
@@ -189,6 +252,80 @@ func (s *Service) JoinRoom(ctx context.Context, userID, roomID uuid.UUID, stake 
 	return view, nil
 }
 
+func (s *Service) materializeGhostRoom(ctx context.Context, roomID uuid.UUID) (*domain.PvPRoom, error) {
+	if s.ghosts == nil {
+		return nil, domain.ErrNotFound
+	}
+	claim, ok := s.ghosts.ClaimOpenGhostRoom(roomID)
+	if !ok || claim == nil {
+		return nil, domain.ErrNotFound
+	}
+
+	bot, err := s.users.EnsureSocialBotUser(
+		ctx,
+		claim.BotUserID,
+		claim.BotTelegramID,
+		claim.BotUsername,
+		claim.BotFirstName,
+		claim.BotPhotoURL,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	bal, err := s.users.GetBalanceForUpdate(ctx, bot.ID)
+	if err != nil {
+		return nil, err
+	}
+	if bal < claim.BetAmountNanoton {
+		need := claim.BetAmountNanoton - bal
+		if _, err := s.balance.Credit(ctx, bot.ID, need, domain.LedgerDeposit, "social_sim_bot_fund", roomID); err != nil {
+			return nil, err
+		}
+	}
+
+	holdID := uuid.New()
+	resolved, err := s.funding.ResolveAndLock(ctx, bot.ID, holdID, betfunding.StakeInput{
+		FundingType:   domain.BetFundingBalance,
+		AmountNanoton: claim.BetAmountNanoton,
+	}, "pvp_hold")
+	if err != nil {
+		return nil, err
+	}
+
+	createdAt := claim.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	room := &domain.PvPRoom{
+		ID:               roomID,
+		CreatorID:        bot.ID,
+		BetAmountNanoton: claim.BetAmountNanoton,
+		MaxPlayers:       2,
+		Status:           "open",
+		PlatformFeeBps:   s.feeBps,
+		CreatedAt:        createdAt,
+	}
+	if err := s.pvp.CreateRoom(ctx, room); err != nil {
+		s.funding.Rollback(ctx, bot.ID, holdID, resolved, "pvp_hold")
+		return nil, err
+	}
+
+	player := &domain.PvPRoomPlayer{
+		RoomID:         room.ID,
+		UserID:         bot.ID,
+		StakeNanoton:   resolved.AmountNanoton,
+		BalanceNanoton: resolved.BalanceNanoton,
+		FundingType:    resolved.FundingType,
+		JoinedAt:       createdAt,
+	}
+	if err := s.pvp.AddPlayer(ctx, player); err != nil {
+		s.funding.Rollback(ctx, bot.ID, holdID, resolved, "pvp_hold")
+		return nil, err
+	}
+	return room, nil
+}
+
 func (s *Service) persistPlayerGifts(ctx context.Context, roomID, userID uuid.UUID, resolved *betfunding.ResolvedStake) error {
 	if resolved == nil || len(resolved.InventoryItemIDs) == 0 {
 		return nil
@@ -216,6 +353,12 @@ func (s *Service) CurrentState(ctx context.Context) (*LobbyState, error) {
 func (s *Service) ProcessDueRooms(ctx context.Context) error {
 	now := time.Now().UTC()
 	changed := false
+
+	if joined, err := s.tryBotJoins(ctx); err != nil {
+		slog.Warn("pvp bot joins failed", "error", err)
+	} else if joined {
+		changed = true
+	}
 
 	expiredRooms, err := s.pvp.ListOpenExpired(ctx, now.Add(-OpenRoomTTL))
 	if err != nil {
@@ -268,10 +411,106 @@ func (s *Service) ProcessDueRooms(ctx context.Context) error {
 		mu.Unlock()
 	}
 
-	if changed {
+	if changed || (s.overlay != nil && len(s.overlay.PvPGhostRooms()) > 0) {
 		s.broadcast(ctx)
 	}
 	return nil
+}
+
+func (s *Service) tryBotJoins(ctx context.Context) (bool, error) {
+	if s.bots == nil || !s.bots.BotJoinsEnabled() {
+		return false, nil
+	}
+	open, err := s.pvp.ListOpenRooms(ctx)
+	if err != nil {
+		return false, err
+	}
+	candidates := make([]OpenHumanRoom, 0, len(open))
+	for i := range open {
+		room := open[i]
+		count, err := s.pvp.CountPlayers(ctx, room.ID)
+		if err != nil || count != 1 {
+			continue
+		}
+		players, err := s.pvp.ListPlayers(ctx, room.ID)
+		if err != nil || len(players) != 1 {
+			continue
+		}
+		creator, err := s.users.FindByID(ctx, room.CreatorID)
+		if err != nil {
+			continue
+		}
+		// Skip house / social bots waiting alone (ghost materializations).
+		if isHouseBotUser(creator) {
+			continue
+		}
+		ids := make([]uuid.UUID, 0, len(players))
+		for _, p := range players {
+			ids = append(ids, p.UserID)
+		}
+		candidates = append(candidates, OpenHumanRoom{
+			ID:               room.ID,
+			CreatorID:        room.CreatorID,
+			BetAmountNanoton: room.BetAmountNanoton,
+			CreatedAt:        room.CreatedAt,
+			PlayerIDs:        ids,
+		})
+	}
+	if len(candidates) == 0 {
+		return false, nil
+	}
+
+	planned := s.bots.PlanBotJoins(candidates)
+	joinedAny := false
+	for _, plan := range planned {
+		if _, err := s.joinBotOpponent(ctx, plan); err != nil {
+			slog.Warn("pvp bot join room failed", "room", plan.RoomID, "error", err)
+			continue
+		}
+		joinedAny = true
+	}
+	return joinedAny, nil
+}
+
+func isHouseBotUser(user *domain.User) bool {
+	if user == nil {
+		return false
+	}
+	if user.TelegramID == domain.BotTelegramID {
+		return true
+	}
+	// Social-sim personas use reserved negative telegram ids.
+	return user.TelegramID < 0
+}
+
+func (s *Service) joinBotOpponent(ctx context.Context, plan PlannedBotJoin) (*RoomView, error) {
+	bot, err := s.users.EnsureSocialBotUser(
+		ctx,
+		plan.BotUserID,
+		plan.BotTelegramID,
+		plan.BotUsername,
+		plan.BotFirstName,
+		plan.BotPhotoURL,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	bal, err := s.users.GetBalanceForUpdate(ctx, bot.ID)
+	if err != nil {
+		return nil, err
+	}
+	if bal < plan.StakeNanoton {
+		need := plan.StakeNanoton - bal
+		if _, err := s.balance.Credit(ctx, bot.ID, need, domain.LedgerDeposit, "social_sim_bot_fund", plan.RoomID); err != nil {
+			return nil, err
+		}
+	}
+
+	return s.JoinRoom(ctx, bot.ID, plan.RoomID, betfunding.StakeInput{
+		FundingType:   domain.BetFundingBalance,
+		AmountNanoton: plan.StakeNanoton,
+	})
 }
 
 // cancelExpiredOpenRoom cancels an open room with no opponent and refunds stakes.
@@ -545,6 +784,17 @@ func (s *Service) buildLobbyState(ctx context.Context) (*LobbyState, error) {
 			return nil, err
 		}
 		history = append(history, *view)
+	}
+
+	if s.overlay != nil {
+		for _, ghost := range s.overlay.PvPGhostRooms() {
+			switch ghost.Status {
+			case "finished":
+				history = append(history, ghost)
+			default:
+				active = append(active, ghost)
+			}
+		}
 	}
 
 	return &LobbyState{Active: active, History: history}, nil

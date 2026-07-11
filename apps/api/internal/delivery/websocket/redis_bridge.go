@@ -32,6 +32,31 @@ func (b *RedisBridge) Start(ctx context.Context) {
 	for _, g := range games {
 		go b.subscribe(ctx, g.gameType, g.channel, g.event)
 	}
+	go b.subscribePresence(ctx)
+}
+
+func (b *RedisBridge) subscribePresence(ctx context.Context) {
+	ch, cleanup, err := b.cache.Subscribe(ctx, "pubsub:game:presence")
+	if err != nil {
+		slog.Error("redis subscribe failed", "channel", "pubsub:game:presence", "error", err)
+		return
+	}
+	defer cleanup()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			payload := JSONMessage("presence", json.RawMessage(msg))
+			for _, game := range []string{"roulette", "crash", "pvp"} {
+				b.hub.Broadcast(game, payload)
+			}
+		}
+	}
 }
 
 func (b *RedisBridge) subscribe(ctx context.Context, gameType, channel, event string) {

@@ -43,6 +43,13 @@ type BetView struct {
 	AmountNanoton int64     `json:"amount_nanoton"`
 	FundingType   string    `json:"funding_type"`
 	Gift          *GiftView `json:"gift,omitempty"`
+	Simulated     bool      `json:"simulated,omitempty"`
+}
+
+// BetOverlay merges visual-only ghost bets into roulette bet feeds.
+type BetOverlay interface {
+	OnRouletteState(roundID uuid.UUID, phase string, endsAt *time.Time, resultColor string)
+	RouletteBets(roundID uuid.UUID) []BetView
 }
 
 type ColorTotals struct {
@@ -72,6 +79,7 @@ type Service struct {
 	cache     domain.GameStateCache
 	bettingS  int
 	spinS     int
+	overlay   BetOverlay
 }
 
 func NewService(
@@ -83,6 +91,10 @@ func NewService(
 	bettingS, spinS int,
 ) *Service {
 	return &Service{games: games, balance: balance, funding: funding, inventory: inventory, cache: cache, bettingS: bettingS, spinS: spinS}
+}
+
+func (s *Service) SetBetOverlay(overlay BetOverlay) {
+	s.overlay = overlay
 }
 
 func (s *Service) CurrentState(ctx context.Context) (*RoundState, error) {
@@ -250,6 +262,23 @@ func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*Round
 		}
 	}
 
+	if s.overlay != nil {
+		for _, ghost := range s.overlay.RouletteBets(roundID) {
+			views = append(views, ghost)
+			switch ghost.Color {
+			case "red":
+				totals.Red += ghost.AmountNanoton
+				counts.Red++
+			case "green":
+				totals.Green += ghost.AmountNanoton
+				counts.Green++
+			case "black":
+				totals.Black += ghost.AmountNanoton
+				counts.Black++
+			}
+		}
+	}
+
 	return &RoundBetsState{
 		RoundID: roundID,
 		Bets:    views,
@@ -287,6 +316,10 @@ func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 	}
 	if err := s.cache.Set(ctx, "roulette:round:current", data, 0); err != nil {
 		return err
+	}
+	if s.overlay != nil {
+		endsAt := state.EndsAt
+		s.overlay.OnRouletteState(state.RoundID, state.Phase, &endsAt, state.Result)
 	}
 	return s.cache.Publish(ctx, "pubsub:game:roulette", data)
 }
