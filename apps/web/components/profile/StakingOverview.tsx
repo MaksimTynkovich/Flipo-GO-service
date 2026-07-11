@@ -7,8 +7,8 @@ import {
   formatStakingEpochEnd,
   formatStakingTierName,
   pluralizeGifts,
+  pluralizePeople,
   stakingBoostHint,
-  stakingBoostThresholdTon,
   weeklyYieldFromMonthly,
   weeklyYieldNanoton,
 } from "@/lib/staking-ui";
@@ -50,8 +50,8 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
   const unlockableWeeklyYield = weeklyYieldFromMonthly(stats.unlockable_monthly_nanoton);
 
   const boostPct =
-    stats.boost_threshold_nanoton > 0
-      ? stats.boost_wager_nanoton / stats.boost_threshold_nanoton
+    stats.boost_referral_target > 0
+      ? stats.boost_referral_count / stats.boost_referral_target
       : 0;
 
   const epoch = epochEndsAt ? formatStakingEpochEnd(epochEndsAt) : null;
@@ -137,33 +137,59 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
           <p className="text-xs font-medium text-success">Весь портфель приносит доход</p>
         ) : null}
 
-        {!isBoost && stats.boost_threshold_nanoton > 0 ? (
+        {typeof stats.tvl_cap_nanoton === "number" && stats.tvl_cap_nanoton > 0 ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-medium text-foreground">Пул стейкинга</span>
+              <span className="tabular-nums text-muted">
+                {formatTON(stats.tvl_nanoton ?? 0)} / {formatTON(stats.tvl_cap_nanoton)} TON
+              </span>
+            </div>
+            <ProgressBar
+              value={(stats.tvl_nanoton ?? 0) / stats.tvl_cap_nanoton}
+              fillClassName={
+                (stats.tvl_remaining_nanoton ?? 0) <= 0 ? "bg-danger" : undefined
+              }
+            />
+            {(stats.tvl_remaining_nanoton ?? 0) <= 0 ? (
+              <p className="text-[11px] font-medium text-danger">Пул заполнен</p>
+            ) : typeof stats.personal_limit_nanoton === "number" ? (
+              <p className="text-[11px] text-muted">
+                Личный лимит: {formatTON(stats.personal_used_nanoton ?? 0)} /{" "}
+                {formatTON(stats.personal_limit_nanoton)} TON
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!isBoost && stats.boost_referral_target > 0 ? (
           <div className="space-y-2 rounded-xl bg-accent/8 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                 <Sparkles className="h-3.5 w-3.5 text-accent" />
-                Буст до 5%/мес
+                Буст до 4%/мес
               </span>
               <span className="tabular-nums text-muted">
-                {Math.min(100, Math.round(boostPct * 100))}%
+                {Math.min(stats.boost_referral_count, stats.boost_referral_target)}/
+                {stats.boost_referral_target}
               </span>
             </div>
             <ProgressBar value={boostPct} />
-            <p className="inline-flex flex-wrap items-center gap-x-1 text-[11px] leading-relaxed text-muted">
-              <TonAmount
-                amount={String(stakingBoostThresholdTon())}
-                variant="brand"
-                iconClassName="h-3.5 w-3.5"
-              />
-              {stakingBoostHint()}
+            <p className="text-[11px] leading-relaxed text-muted">
+              {stakingBoostHint(stats.boost_referral_target)}
             </p>
           </div>
         ) : null}
 
         {isBoost ? (
-          <p className="inline-flex items-center gap-1.5 text-xs text-accent">
+          <p className="inline-flex flex-wrap items-center gap-1.5 text-xs text-accent">
             <Sparkles className="h-3.5 w-3.5" />
-            Максимальная ставка 5%/мес активна
+            4%/мес активна до конца месяца
+            {stats.boost_referral_count > 0 ? (
+              <span className="text-muted">
+                · {pluralizePeople(stats.boost_referral_count)}
+              </span>
+            ) : null}
           </p>
         ) : null}
       </div>

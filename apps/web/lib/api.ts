@@ -531,9 +531,38 @@ export type StakingStats = {
   active_daily_yield_nanoton: number;
   active_monthly_yield_nanoton: number;
   unlockable_monthly_nanoton: number;
-  boost_wager_nanoton: number;
-  boost_threshold_nanoton: number;
+  boost_referral_count: number;
+  boost_referral_target: number;
+  boost_until?: string | null;
   monthly_rate_percent: number;
+  tvl_nanoton?: number;
+  tvl_cap_nanoton?: number;
+  tvl_remaining_nanoton?: number;
+  personal_limit_nanoton?: number;
+  personal_used_nanoton?: number;
+};
+
+export type StakingQuestProgress = {
+  code: string;
+  title: string;
+  description: string;
+  reward_limit_nanoton: number;
+  completed: boolean;
+  progress_current: number;
+  progress_target: number;
+  progress_ratio: number;
+};
+
+export type StakingQuestsResponse = {
+  quests: StakingQuestProgress[];
+  personal_limit_nanoton: number;
+  personal_used_nanoton: number;
+  personal_remaining_nanoton: number;
+  base_limit_nanoton: number;
+  max_limit_nanoton: number;
+  tvl_nanoton: number;
+  tvl_cap_nanoton: number;
+  tvl_remaining_nanoton: number;
 };
 
 export type ProfileGiftsResponse = {
@@ -547,6 +576,10 @@ export type ProfileGiftsResponse = {
 
 export async function getProfileGifts() {
   return api<ProfileGiftsResponse>("/api/v1/staking/gifts");
+}
+
+export async function getStakingQuests() {
+  return api<StakingQuestsResponse>("/api/v1/staking/quests");
 }
 
 export async function getStakingPositions() {
@@ -722,6 +755,7 @@ export type AdminYieldSettings = {
   referral_share_percent: number;
   staking_base_monthly_percent: number;
   staking_boost_monthly_percent: number;
+  staking_tvl_cap_nanoton?: number;
 };
 
 export type WalletDepositIntent = {

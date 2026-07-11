@@ -8,6 +8,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type StakingRepo struct {
@@ -73,6 +74,129 @@ func (r *StakingRepo) SumRouletteWagerLast7Days(ctx context.Context, userID uuid
 		Where("user_id = ? AND game_type = ? AND created_at >= ?", userID, domain.GameRoulette, since).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
 	return total, err
+}
+
+func (r *StakingRepo) SumActivePrincipal(ctx context.Context) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+		Where("is_active = ?", true).
+		Select("COALESCE(SUM(principal_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *StakingRepo) SumActivePrincipalByUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+		Where("user_id = ? AND is_active = ?", userID, true).
+		Select("COALESCE(SUM(principal_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *StakingRepo) ListActiveQuests(ctx context.Context) ([]domain.StakingQuest, error) {
+	var quests []domain.StakingQuest
+	err := r.db.WithContext(ctx).
+		Where("active = ?", true).
+		Order("sort_order ASC, code ASC").
+		Find(&quests).Error
+	return quests, err
+}
+
+func (r *StakingRepo) ListQuestCompletions(ctx context.Context, userID uuid.UUID) ([]domain.StakingQuestCompletion, error) {
+	var completions []domain.StakingQuestCompletion
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Find(&completions).Error
+	return completions, err
+}
+
+func (r *StakingRepo) CompleteQuest(ctx context.Context, userID uuid.UUID, questCode string) error {
+	completion := domain.StakingQuestCompletion{
+		UserID:      userID,
+		QuestCode:   questCode,
+		CompletedAt: time.Now().UTC(),
+	}
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&completion).Error
+}
+
+func (r *StakingRepo) SumCompletedQuestRewards(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).
+		Table("staking_quest_completions AS c").
+		Joins("JOIN staking_quests AS q ON q.code = c.quest_code").
+		Where("c.user_id = ? AND q.active = ?", userID, true).
+		Select("COALESCE(SUM(q.reward_limit_nanoton), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *StakingRepo) HasAnyGameBet(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ?", userID).
+		Limit(1).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *StakingRepo) SumWagerByGame(ctx context.Context, userID uuid.UUID, gameType domain.GameType) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ? AND game_type = ?", userID, gameType).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *StakingRepo) HasPvPMatch(ctx context.Context, userID uuid.UUID) (bool, error) {
+	count, err := r.CountPvPMatches(ctx, userID)
+	return count > 0, err
+}
+
+func (r *StakingRepo) CountPvPMatches(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var roomCount int64
+	err := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).
+		Where("user_id = ?", userID).
+		Count(&roomCount).Error
+	if err != nil {
+		return 0, err
+	}
+	if roomCount > 0 {
+		return roomCount, nil
+	}
+	var betCount int64
+	err = r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ? AND game_type = ?", userID, domain.GamePvP).
+		Count(&betCount).Error
+	return betCount, err
+}
+
+func (r *StakingRepo) SumDeposits(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("user_id = ? AND type = ? AND amount_nanoton > 0", userID, domain.LedgerDeposit).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *StakingRepo) CountActiveReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(DISTINCT u.id)
+		FROM users u
+		WHERE u.referrer_id = ?
+		  AND EXISTS (
+		    SELECT 1 FROM game_bets b WHERE b.user_id = u.id LIMIT 1
+		  )
+	`, referrerID).Scan(&count).Error
+	return count, err
+}
+
+func (r *StakingRepo) HasCompletedEpochStake(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+		Where("user_id = ? AND revoked_reason = ?", userID, domain.StakingRevokedEpochEnd).
+		Limit(1).
+		Count(&count).Error
+	return count > 0, err
 }
 
 var _ domain.StakingRepository = (*StakingRepo)(nil)

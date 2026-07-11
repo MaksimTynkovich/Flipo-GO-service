@@ -43,9 +43,15 @@ type StakingStats struct {
 	ActiveDailyNanoton       int64   `json:"active_daily_yield_nanoton"`
 	ActiveMonthlyNanoton     int64   `json:"active_monthly_yield_nanoton"`
 	UnlockableMonthlyNanoton int64   `json:"unlockable_monthly_nanoton"`
-	BoostWagerNanoton        int64   `json:"boost_wager_nanoton"`
-	BoostThresholdNanoton    int64   `json:"boost_threshold_nanoton"`
+	BoostReferralCount       int64   `json:"boost_referral_count"`
+	BoostReferralTarget      int64   `json:"boost_referral_target"`
+	BoostUntil               *string `json:"boost_until,omitempty"`
 	MonthlyRatePercent       float64 `json:"monthly_rate_percent"`
+	TVLNanoton               int64   `json:"tvl_nanoton"`
+	TVLCapNanoton            int64   `json:"tvl_cap_nanoton"`
+	TVLRemainingNanoton      int64   `json:"tvl_remaining_nanoton"`
+	PersonalLimitNanoton     int64   `json:"personal_limit_nanoton"`
+	PersonalUsedNanoton      int64   `json:"personal_used_nanoton"`
 }
 
 type ProfileGiftsResponse struct {
@@ -96,14 +102,35 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	}
 
 	basePercent, boostPercent := s.monthlyRatePercents(ctx)
+	if tier, err := s.SyncBoostTier(ctx, userID); err == nil {
+		user.StakingTier = tier
+	}
 	rate := monthlyRate(user.StakingTier, basePercent, boostPercent)
+	tvl, tvlCap, tvlRemaining, _ := s.TVLSnapshot(ctx)
+	personalLimit, _ := s.PersonalStakeLimit(ctx, userID)
+	personalUsed, _ := s.staking.SumActivePrincipalByUser(ctx, userID)
+
+	var boostUntil *string
+	referralCount, _ := s.users.CountReferrals(ctx, userID)
+	if user.StakingTier == domain.TierBoost {
+		until := endOfMonthMSK(time.Now().In(MoscowLocation())).Format(time.RFC3339)
+		boostUntil = &until
+	}
+
 	resp := &ProfileGiftsResponse{
 		Gifts:              make([]ProfileGift, 0),
 		Epoch:              epochView(epoch),
 		MonthlyRatePercent: rate * 100,
 		Stats: StakingStats{
-			BoostThresholdNanoton: s.threshold,
+			BoostReferralCount:    referralCount,
+			BoostReferralTarget:   s.referralThreshold,
+			BoostUntil:            boostUntil,
 			MonthlyRatePercent:    rate * 100,
+			TVLNanoton:            tvl,
+			TVLCapNanoton:         tvlCap,
+			TVLRemainingNanoton:   tvlRemaining,
+			PersonalLimitNanoton:  personalLimit,
+			PersonalUsedNanoton:   personalUsed,
 		},
 	}
 
@@ -112,10 +139,6 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	for _, p := range positions {
 		posByItem[p.InventoryItemID] = p
 		resp.Stats.EarnedNanoton += p.AccruedYieldNanoton
-	}
-
-	if wager, err := s.staking.SumRouletteWagerLast7Days(ctx, userID); err == nil {
-		resp.Stats.BoostWagerNanoton = wager
 	}
 
 	seenSlugs := make(map[string]bool)

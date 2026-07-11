@@ -34,9 +34,37 @@ const (
 type StakingRevokeReason string
 
 const (
-	StakingRevokedSuperseded StakingRevokeReason = "superseded"
-	StakingRevokedEpochEnd   StakingRevokeReason = "epoch_end"
+	StakingRevokedSuperseded  StakingRevokeReason = "superseded"
+	StakingRevokedEpochEnd    StakingRevokeReason = "epoch_end"
+	StakingRevokedGiftMissing StakingRevokeReason = "gift_missing"
 )
+
+const (
+	DefaultStakingTVLCapNanoton     int64 = 200_000_000_000 // 200 TON
+	DefaultStakingPersonalLimitNano int64 = 100_000_000_000 // 100 TON
+)
+
+// StakingQuest — catalog entry for personal stake-limit quests.
+type StakingQuest struct {
+	Code                string    `gorm:"primaryKey;size:64" json:"code"`
+	Title               string    `gorm:"size:256;not null" json:"title"`
+	Description         string    `gorm:"type:text;not null;default:''" json:"description"`
+	RewardLimitNanoton  int64     `gorm:"not null" json:"reward_limit_nanoton"`
+	SortOrder           int       `gorm:"not null;default:0" json:"sort_order"`
+	Active              bool      `gorm:"not null;default:true" json:"active"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+func (StakingQuest) TableName() string { return "staking_quests" }
+
+// StakingQuestCompletion — records that a user finished a quest.
+type StakingQuestCompletion struct {
+	UserID      uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
+	QuestCode   string    `gorm:"size:64;primaryKey" json:"quest_code"`
+	CompletedAt time.Time `gorm:"not null" json:"completed_at"`
+}
+
+func (StakingQuestCompletion) TableName() string { return "staking_quest_completions" }
 
 type StakingPosition struct {
 	ID                  uuid.UUID           `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
@@ -76,7 +104,9 @@ func (StakingGiftClaim) TableName() string { return "staking_gift_claims" }
 type UserStakingSnapshot struct {
 	UserID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
 	Rolling7DayRouletteWager int64      `gorm:"not null;default:0" json:"rolling_7day_roulette_wager"`
+	ReferralCount            int64      `gorm:"not null;default:0" json:"referral_count"`
 	BoostEligible            bool       `gorm:"not null;default:false" json:"boost_eligible"`
+	BoostUntil               *time.Time `json:"boost_until,omitempty"`
 	LastRouletteBetAt        *time.Time `json:"last_roulette_bet_at,omitempty"`
 	ComputedAt               time.Time  `gorm:"not null" json:"computed_at"`
 	UpdatedAt                time.Time  `json:"updated_at"`

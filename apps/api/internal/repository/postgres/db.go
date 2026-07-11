@@ -38,6 +38,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateGiftAdjustPercents(db); err != nil {
 		return err
 	}
+	if err := migrateStakingCapsQuests(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(
 		&domain.User{},
 		&domain.InventoryItem{},
@@ -46,6 +49,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.StakingPosition{},
 		&domain.StakingGiftClaim{},
 		&domain.UserStakingSnapshot{},
+		&domain.StakingQuest{},
+		&domain.StakingQuestCompletion{},
 		&domain.GameRound{},
 		&domain.GameBet{},
 		&domain.PvPRoom{},

@@ -92,3 +92,13 @@ func (h *StakingHandler) ListPositions(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, positions)
 }
+
+func (h *StakingHandler) ListQuests(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	resp, err := h.staking.ListQuests(c.Request.Context(), userID)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}

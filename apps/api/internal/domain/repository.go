@@ -17,6 +17,7 @@ type UserRepository interface {
 	ReleasePromoBalance(ctx context.Context, userID uuid.UUID) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
+	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
 	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -68,6 +69,8 @@ type StakingRepository interface {
 	GetSnapshot(ctx context.Context, userID uuid.UUID) (*UserStakingSnapshot, error)
 	UpsertSnapshot(ctx context.Context, snap *UserStakingSnapshot) error
 	SumRouletteWagerLast7Days(ctx context.Context, userID uuid.UUID) (int64, error)
+	SumActivePrincipal(ctx context.Context) (int64, error)
+	SumActivePrincipalByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 
 	GetActiveEpoch(ctx context.Context, now time.Time) (*StakingEpoch, error)
 	GetEpochDueForSettlement(ctx context.Context, now time.Time) (*StakingEpoch, error)
@@ -78,6 +81,18 @@ type StakingRepository interface {
 	DeleteGiftClaim(ctx context.Context, giftSlug string) error
 	DeleteGiftClaimsByEpoch(ctx context.Context, epochID uuid.UUID) error
 	FindActivePositionBySlug(ctx context.Context, giftSlug string) (*StakingPosition, error)
+
+	ListActiveQuests(ctx context.Context) ([]StakingQuest, error)
+	ListQuestCompletions(ctx context.Context, userID uuid.UUID) ([]StakingQuestCompletion, error)
+	CompleteQuest(ctx context.Context, userID uuid.UUID, questCode string) error
+	SumCompletedQuestRewards(ctx context.Context, userID uuid.UUID) (int64, error)
+	HasAnyGameBet(ctx context.Context, userID uuid.UUID) (bool, error)
+	SumWagerByGame(ctx context.Context, userID uuid.UUID, gameType GameType) (int64, error)
+	HasPvPMatch(ctx context.Context, userID uuid.UUID) (bool, error)
+	CountPvPMatches(ctx context.Context, userID uuid.UUID) (int64, error)
+	SumDeposits(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountActiveReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	HasCompletedEpochStake(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
 type GameRepository interface {

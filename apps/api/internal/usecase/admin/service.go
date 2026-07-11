@@ -185,13 +185,33 @@ func (s *Service) UpdateSocialSimSettings(ctx context.Context, adminID uuid.UUID
 }
 
 func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformYieldSettings) error {
-	if err := s.platform.UpdateYieldSettings(ctx, &settings); err != nil {
+	existing, err := s.platform.GetYieldSettings(ctx)
+	if err != nil && !errors.Is(err, domain.ErrNotFound) {
+		return err
+	}
+	if existing == nil {
+		existing = &domain.PlatformYieldSettings{
+			ID:                         1,
+			ReferralSharePercent:       3,
+			StakingBaseMonthlyPercent:  3,
+			StakingBoostMonthlyPercent: 4,
+			StakingTVLCapNanoton:       domain.DefaultStakingTVLCapNanoton,
+		}
+	}
+	existing.ReferralSharePercent = settings.ReferralSharePercent
+	existing.StakingBaseMonthlyPercent = settings.StakingBaseMonthlyPercent
+	existing.StakingBoostMonthlyPercent = settings.StakingBoostMonthlyPercent
+	if settings.StakingTVLCapNanoton > 0 {
+		existing.StakingTVLCapNanoton = settings.StakingTVLCapNanoton
+	}
+	if err := s.platform.UpdateYieldSettings(ctx, existing); err != nil {
 		return err
 	}
 	return s.audit(ctx, adminID, "yield_settings_updated", "platform_yield_settings", "1", map[string]any{
-		"referral_share_percent":        settings.ReferralSharePercent,
-		"staking_base_monthly_percent":  settings.StakingBaseMonthlyPercent,
-		"staking_boost_monthly_percent": settings.StakingBoostMonthlyPercent,
+		"referral_share_percent":        existing.ReferralSharePercent,
+		"staking_base_monthly_percent":  existing.StakingBaseMonthlyPercent,
+		"staking_boost_monthly_percent": existing.StakingBoostMonthlyPercent,
+		"staking_tvl_cap_nanoton":       existing.StakingTVLCapNanoton,
 	})
 }
 
@@ -227,7 +247,8 @@ func (s *Service) UpdateGiftPriceSettings(ctx context.Context, adminID uuid.UUID
 			ID:                         1,
 			ReferralSharePercent:       3,
 			StakingBaseMonthlyPercent:  3,
-			StakingBoostMonthlyPercent: 5,
+			StakingBoostMonthlyPercent: 4,
+			StakingTVLCapNanoton:       domain.DefaultStakingTVLCapNanoton,
 		}
 	}
 	settings.GiftBuyAdjustPercent = buyAdjust

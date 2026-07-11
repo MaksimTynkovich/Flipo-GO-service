@@ -32,7 +32,8 @@ const DEFAULT_YIELD_SETTINGS: AdminYieldSettings = {
   id: 1,
   referral_share_percent: 3,
   staking_base_monthly_percent: 3,
-  staking_boost_monthly_percent: 5,
+  staking_boost_monthly_percent: 4,
+  staking_tvl_cap_nanoton: 200_000_000_000,
 };
 
 export default function MarketingSection() {
@@ -140,8 +141,8 @@ export default function MarketingSection() {
           <p className="text-sm text-muted">Настройки применяются к новым расчётам стейкинга и реферальных начислений.</p>
         </div>
         {settingsLoading && !yieldSettings ? (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="rounded-xl bg-surface-raised/50 px-3 py-2">
                 <div className="h-3 w-24 animate-pulse rounded bg-surface-raised" />
                 <div className="mt-2 h-10 w-full animate-pulse rounded bg-surface-raised" />
@@ -150,7 +151,7 @@ export default function MarketingSection() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <label className="text-xs text-muted">
                 Реферальный процент
                 <input
@@ -195,6 +196,22 @@ export default function MarketingSection() {
                     setYieldSettings({
                       ...settingsForm,
                       staking_boost_monthly_percent: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label className="text-xs text-muted">
+                TVL cap (TON)
+                <input
+                  className="input-field mt-1"
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={(settingsForm.staking_tvl_cap_nanoton ?? 200_000_000_000) / 1_000_000_000}
+                  onChange={(e) =>
+                    setYieldSettings({
+                      ...settingsForm,
+                      staking_tvl_cap_nanoton: Math.round(Number(e.target.value) * 1_000_000_000),
                     })
                   }
                 />

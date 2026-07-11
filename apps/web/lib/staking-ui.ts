@@ -43,7 +43,7 @@ export function pluralizeGifts(count: number): string {
 
 /** Короткая подпись для плиток профиля. */
 export function formatStakingRate(tier?: StakingTier | null): string {
-  if (tier === "boost") return "5%/мес";
+  if (tier === "boost") return "4%/мес";
   if (tier === "base") return "3%/мес";
   return "—";
 }
@@ -57,16 +57,24 @@ export function formatStakingTierName(tier?: StakingTier | null): string {
 
 /** Одна строка: уровень и ставка. */
 export function formatStakingTierSummary(tier?: StakingTier | null): string {
-  if (tier === "boost") return "Повышенный · 5%/мес";
+  if (tier === "boost") return "Повышенный · 4%/мес";
   if (tier === "base") return "Базовый · 3%/мес";
   return "—";
 }
 
-/** Пояснение, как получить повышенную ставку (без суммы — её рендерят с иконкой TON). */
-export function stakingBoostHint(): string {
-  return "в рулетке за 7 дней — доходность вырастет до 5%/мес";
+/** Пояснение, как получить повышенную ставку. */
+export function stakingBoostHint(target = 15): string {
+  return `пригласи ${target} человек — повышенный процент до конца месяца`;
 }
 
-export function stakingBoostThresholdTon(): number {
-  return 5;
+export function stakingBoostReferralTarget(): number {
+  return 15;
+}
+
+export function pluralizePeople(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} человек`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${count} человека`;
+  return `${count} человек`;
 }

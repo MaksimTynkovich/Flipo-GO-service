@@ -17,22 +17,23 @@ import (
 )
 
 const (
-	DefaultBaseMonthlyPercent  = 3.0
-	DefaultBoostMonthlyPercent = 5.0
-	DaysPerMonth               = 30
+	DefaultBaseMonthlyPercent     = 3.0
+	DefaultBoostMonthlyPercent    = 4.0
+	DefaultBoostReferralThreshold = 15
+	DaysPerMonth                  = 30
 )
 
 type Service struct {
-	staking   domain.StakingRepository
-	inventory domain.InventoryRepository
-	users     domain.UserRepository
-	platform  domain.PlatformRepository
-	scanner   telegram.ProfileGiftScanner
-	valuator  *gifts.Valuator
-	notifier  Notifier
-	balanceNotifier balance.BalanceNotifier
-	threshold int64
-	analytics *analyticsuc.Service
+	staking            domain.StakingRepository
+	inventory          domain.InventoryRepository
+	users              domain.UserRepository
+	platform           domain.PlatformRepository
+	scanner            telegram.ProfileGiftScanner
+	valuator           *gifts.Valuator
+	notifier           Notifier
+	balanceNotifier    balance.BalanceNotifier
+	referralThreshold  int64
+	analytics          *analyticsuc.Service
 }
 
 func NewService(
@@ -43,17 +44,20 @@ func NewService(
 	scanner telegram.ProfileGiftScanner,
 	valuator *gifts.Valuator,
 	notifier Notifier,
-	threshold int64,
+	referralThreshold int64,
 ) *Service {
+	if referralThreshold <= 0 {
+		referralThreshold = DefaultBoostReferralThreshold
+	}
 	return &Service{
-		staking:   staking,
-		inventory: inventory,
-		users:     users,
-		platform:  platform,
-		scanner:   scanner,
-		valuator:  valuator,
-		notifier:  notifier,
-		threshold: threshold,
+		staking:           staking,
+		inventory:         inventory,
+		users:             users,
+		platform:          platform,
+		scanner:           scanner,
+		valuator:          valuator,
+		notifier:          notifier,
+		referralThreshold: referralThreshold,
 	}
 }
 
@@ -118,43 +122,72 @@ func (s *Service) ListPositions(ctx context.Context, userID uuid.UUID) ([]domain
 }
 
 func (s *Service) RecalculateTiers(ctx context.Context) error {
+	userIDs := make(map[uuid.UUID]struct{})
+
 	positions, err := s.staking.ListAllActive(ctx)
 	if err != nil {
 		return err
 	}
-
-	seen := make(map[uuid.UUID]bool)
 	for _, pos := range positions {
-		if seen[pos.UserID] {
-			continue
-		}
-		seen[pos.UserID] = true
+		userIDs[pos.UserID] = struct{}{}
+	}
 
-		wager, err := s.staking.SumRouletteWagerLast7Days(ctx, pos.UserID)
-		if err != nil {
-			return err
-		}
+	boostUsers, err := s.users.ListIDsByStakingTier(ctx, domain.TierBoost)
+	if err != nil {
+		return err
+	}
+	for _, id := range boostUsers {
+		userIDs[id] = struct{}{}
+	}
 
-		boostEligible := wager >= s.threshold
-		tier := domain.TierBase
-		if boostEligible {
-			tier = domain.TierBoost
-		}
-
-		snap := &domain.UserStakingSnapshot{
-			UserID:                   pos.UserID,
-			Rolling7DayRouletteWager: wager,
-			BoostEligible:            boostEligible,
-			ComputedAt:               time.Now().UTC(),
-		}
-		if err := s.staking.UpsertSnapshot(ctx, snap); err != nil {
-			return err
-		}
-		if err := s.users.UpdateStakingTier(ctx, pos.UserID, tier); err != nil {
+	for userID := range userIDs {
+		if _, err := s.SyncBoostTier(ctx, userID); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// SyncBoostTier sets boost when the user has enough referrals; boost lasts until end of MSK month.
+func (s *Service) SyncBoostTier(ctx context.Context, userID uuid.UUID) (domain.StakingTier, error) {
+	count, err := s.users.CountReferrals(ctx, userID)
+	if err != nil {
+		return domain.TierBase, err
+	}
+
+	now := time.Now().UTC()
+	mskNow := now.In(MoscowLocation())
+	monthEnd := endOfMonthMSK(mskNow)
+
+	boostEligible := count >= s.referralThreshold
+	tier := domain.TierBase
+	var boostUntil *time.Time
+	if boostEligible {
+		tier = domain.TierBoost
+		until := monthEnd
+		boostUntil = &until
+	}
+
+	snap := &domain.UserStakingSnapshot{
+		UserID:         userID,
+		ReferralCount:  count,
+		BoostEligible:  boostEligible,
+		BoostUntil:     boostUntil,
+		ComputedAt:     now,
+	}
+	if err := s.staking.UpsertSnapshot(ctx, snap); err != nil {
+		return tier, err
+	}
+	if err := s.users.UpdateStakingTier(ctx, userID, tier); err != nil {
+		return tier, err
+	}
+	return tier, nil
+}
+
+func endOfMonthMSK(now time.Time) time.Time {
+	msk := MoscowLocation()
+	t := now.In(msk)
+	return time.Date(t.Year(), t.Month()+1, 1, 0, 0, 0, 0, msk)
 }
 
 func (s *Service) AccrueDailyYield(ctx context.Context) error {
@@ -181,6 +214,8 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 		}
 	}
 
+	profileSlugCache := make(map[int64]map[string]bool)
+
 	for _, pos := range positions {
 		lastInMsk := pos.LastAccrualAt.In(msk)
 		if !lastInMsk.Before(todayStart) {
@@ -192,6 +227,24 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 
 		user, err := s.users.FindByID(ctx, pos.UserID)
 		if err != nil {
+			continue
+		}
+
+		owned, err := s.giftStillOwned(ctx, &pos, user, profileSlugCache)
+		if err != nil {
+			slog.Warn("staking ownership check failed", "position_id", pos.ID, "error", err)
+			continue
+		}
+		if !owned {
+			slog.Info("staking gift missing, revoking",
+				"position_id", pos.ID,
+				"user_id", pos.UserID,
+				"gift_slug", pos.GiftSlug,
+				"source", pos.Source,
+			)
+			if err := s.revokePosition(ctx, &pos, domain.StakingRevokedGiftMissing); err != nil {
+				slog.Warn("staking gift-missing revoke failed", "position_id", pos.ID, "error", err)
+			}
 			continue
 		}
 
@@ -304,4 +357,62 @@ func dailyPayoutRefID(day time.Time) uuid.UUID {
 
 func isProfileItem(item domain.InventoryItem) bool {
 	return strings.HasPrefix(item.TelegramTxRef, "profile:")
+}
+
+func (s *Service) giftStillOwned(
+	ctx context.Context,
+	pos *domain.StakingPosition,
+	user *domain.User,
+	profileSlugCache map[int64]map[string]bool,
+) (bool, error) {
+	item, err := s.inventory.FindByID(ctx, pos.InventoryItemID)
+	if err != nil {
+		return false, nil
+	}
+	if item.UserID != pos.UserID {
+		return false, nil
+	}
+
+	switch pos.Source {
+	case domain.StakingSourceInventory:
+		if isProfileItem(*item) {
+			return s.profileGiftPresent(ctx, user, pos.GiftSlug, profileSlugCache)
+		}
+		return item.Status == domain.InvStaked, nil
+	case domain.StakingSourceProfile:
+		return s.profileGiftPresent(ctx, user, pos.GiftSlug, profileSlugCache)
+	default:
+		if isProfileItem(*item) {
+			return s.profileGiftPresent(ctx, user, pos.GiftSlug, profileSlugCache)
+		}
+		return item.Status == domain.InvStaked, nil
+	}
+}
+
+func (s *Service) profileGiftPresent(
+	ctx context.Context,
+	user *domain.User,
+	slug string,
+	cache map[int64]map[string]bool,
+) (bool, error) {
+	if slugs, ok := cache[user.TelegramID]; ok {
+		return slugs[slug], nil
+	}
+	if s.scanner == nil {
+		cache[user.TelegramID] = map[string]bool{}
+		return false, nil
+	}
+	scanned, err := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
+		TelegramUserID: user.TelegramID,
+		Username:       user.Username,
+	})
+	if err != nil {
+		return false, err
+	}
+	slugs := make(map[string]bool, len(scanned))
+	for _, g := range scanned {
+		slugs[g.Slug] = true
+	}
+	cache[user.TelegramID] = slugs
+	return slugs[slug], nil
 }

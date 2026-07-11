@@ -35,7 +35,7 @@ func main() {
 	userRepo := postgres.NewUserRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
 	analyticsRepo := postgres.NewAnalyticsRepo(db)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, telegram.NewMTProtoGiftScanner(telegram.MTProtoConfig{}), nil, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, telegram.NewMTProtoGiftScanner(telegram.MTProtoConfig{}), nil, telegram.NewBotNotifier(cfg.BotToken), int64(cfg.BoostReferralThreshold))
 	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))
 
 	worker := stakingworker.NewWorker(stakeSvc)

@@ -38,6 +38,8 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 		}
 		if err := s.revokePosition(ctx, &pos, domain.StakingRevokedEpochEnd); err != nil {
 			slog.Warn("staking epoch revoke failed", "position_id", pos.ID, "error", err)
+		} else {
+			s.maybeCompleteFullEpochQuest(ctx, pos.UserID)
 		}
 	}
 

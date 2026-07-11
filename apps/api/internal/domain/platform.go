@@ -96,7 +96,8 @@ type PlatformYieldSettings struct {
 	ID                          int       `gorm:"primaryKey" json:"id"`
 	ReferralSharePercent        float64   `gorm:"type:decimal(6,2);not null;default:3" json:"referral_share_percent"`
 	StakingBaseMonthlyPercent   float64   `gorm:"type:decimal(6,2);not null;default:3" json:"staking_base_monthly_percent"`
-	StakingBoostMonthlyPercent  float64   `gorm:"type:decimal(6,2);not null;default:5" json:"staking_boost_monthly_percent"`
+	StakingBoostMonthlyPercent  float64   `gorm:"type:decimal(6,2);not null;default:4" json:"staking_boost_monthly_percent"`
+	StakingTVLCapNanoton        int64     `gorm:"not null;default:200000000000" json:"staking_tvl_cap_nanoton"`
 	GiftBuyAdjustPercent        float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_buy_adjust_percent"`
 	GiftValuationAdjustPercent  float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_valuation_adjust_percent"`
 	UpdatedAt                   time.Time `json:"updated_at"`

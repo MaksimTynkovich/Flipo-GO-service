@@ -9,10 +9,13 @@ import { StakingActionBar } from "@/components/profile/StakingActionBar";
 import { Button } from "@/components/ui/button";
 import {
   getProfileGifts,
+  getStakingQuests,
   ProfileGift,
+  StakingQuestsResponse,
   StakingStats,
   stakeGift,
 } from "@/lib/api";
+import { StakingQuestsBlock } from "@/components/profile/StakingQuestsBlock";
 import { pluralizeGifts, weeklyYieldNanoton } from "@/lib/staking-ui";
 import { trackFlowViewed } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
@@ -25,9 +28,14 @@ const emptyStats: StakingStats = {
   active_daily_yield_nanoton: 0,
   active_monthly_yield_nanoton: 0,
   unlockable_monthly_nanoton: 0,
-  boost_wager_nanoton: 0,
-  boost_threshold_nanoton: 5_000_000_000,
+  boost_referral_count: 0,
+  boost_referral_target: 15,
   monthly_rate_percent: 3,
+  tvl_nanoton: 0,
+  tvl_cap_nanoton: 200_000_000_000,
+  tvl_remaining_nanoton: 200_000_000_000,
+  personal_limit_nanoton: 100_000_000_000,
+  personal_used_nanoton: 0,
 };
 
 type Tab = "staked" | "add";
@@ -42,14 +50,21 @@ export function StakingSection() {
   const [inspected, setInspected] = useState<ProfileGift | null>(null);
   const [tab, setTab] = useState<Tab>("staked");
   const [epochEndsAt, setEpochEndsAt] = useState<string | null>(null);
+  const [quests, setQuests] = useState<StakingQuestsResponse | null>(null);
+  const [questsLoading, setQuestsLoading] = useState(true);
 
   async function load() {
     setLoading(true);
+    setQuestsLoading(true);
     try {
-      const data = await getProfileGifts();
+      const [data, questData] = await Promise.all([
+        getProfileGifts(),
+        getStakingQuests().catch(() => null),
+      ]);
       setGifts(data.gifts);
       setStats(data.stats);
       setEpochEndsAt(data.epoch.ends_at);
+      setQuests(questData);
       setSelected(new Set(data.gifts.filter((g) => !g.is_staked).map((g) => g.slug)));
 
       if (data.stats.staked_count === 0 && data.gifts.some((g) => !g.is_staked)) {
@@ -59,6 +74,7 @@ export function StakingSection() {
       }
     } finally {
       setLoading(false);
+      setQuestsLoading(false);
     }
   }
 
@@ -119,16 +135,19 @@ export function StakingSection() {
   }
 
   const isBoost = user?.staking_tier === "boost";
+  const poolFull = (stats.tvl_remaining_nanoton ?? 1) <= 0;
   const allUnstakedSelected =
-    selectedGifts.length === unstakedGifts.length && unstakedGifts.length > 0;
+    selectedGifts.length > 0 && selectedGifts.length === unstakedGifts.length && unstakedGifts.length > 0;
 
   const stakeLabel = staking
     ? "Стейкаем…"
-    : selectedGifts.length > 0
-      ? allUnstakedSelected && unstakedGifts.length > 1
-        ? "Застейкать все"
-        : "Застейкать"
-      : "Выберите подарки";
+    : poolFull
+      ? "Пул заполнен"
+      : selectedGifts.length > 0
+        ? allUnstakedSelected && unstakedGifts.length > 1
+          ? "Застейкать все"
+          : "Застейкать"
+        : "Выберите подарки";
 
   return (
     <div className="space-y-4">
@@ -144,6 +163,8 @@ export function StakingSection() {
       ) : (
         <StakingOverview isBoost={isBoost} stats={stats} epochEndsAt={epochEndsAt} />
       )}
+
+      <StakingQuestsBlock data={quests} loading={questsLoading} />
 
       {loading ? (
         <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
@@ -262,7 +283,7 @@ export function StakingSection() {
                   </div>
                   <StakingActionBar
                     label={stakeLabel}
-                    disabled={staking || selectedGifts.length === 0}
+                    disabled={staking || poolFull || selectedGifts.length === 0}
                     giftCount={selectedGifts.length}
                     totalPriceNanoton={actionTotals.price}
                     weeklyYieldNanoton={actionTotals.weekly}

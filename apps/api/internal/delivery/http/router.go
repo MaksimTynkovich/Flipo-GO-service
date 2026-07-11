@@ -84,6 +84,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.GET("/staking/gifts", deps.StakingHandler.ListProfileGifts)
 			authed.GET("/staking/positions", deps.StakingHandler.ListPositions)
+			authed.GET("/staking/quests", deps.StakingHandler.ListQuests)
 			authed.POST("/staking/stake", deps.StakingHandler.Stake)
 			authed.POST("/staking/unstake/:id", deps.StakingHandler.Unstake)
 

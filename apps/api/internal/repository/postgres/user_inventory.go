@@ -176,6 +176,14 @@ func (r *UserRepo) UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier
 	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("staking_tier", tier).Error
 }
 
+func (r *UserRepo) ListIDsByStakingTier(ctx context.Context, tier domain.StakingTier) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	err := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("staking_tier = ?", tier).
+		Pluck("id", &ids).Error
+	return ids, err
+}
+
 func (r *UserRepo) SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error {
 	res := r.db.WithContext(ctx).Model(&domain.User{}).
 		Where("id = ? AND referrer_id IS NULL AND id != ?", userID, referrerID).

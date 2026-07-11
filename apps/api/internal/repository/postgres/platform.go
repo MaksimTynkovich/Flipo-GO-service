@@ -207,7 +207,8 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 			ID:                         1,
 			ReferralSharePercent:       3,
 			StakingBaseMonthlyPercent:  3,
-			StakingBoostMonthlyPercent: 5,
+			StakingBoostMonthlyPercent: 4,
+			StakingTVLCapNanoton:       domain.DefaultStakingTVLCapNanoton,
 			UpdatedAt:                  time.Now().UTC(),
 		}).Error; err != nil {
 			return err
