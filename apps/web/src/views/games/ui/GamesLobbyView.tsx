@@ -19,10 +19,6 @@ export function GamesLobbyView() {
 
         <div className="games-lobby__intro">
           <h2 className="games-lobby__intro-title">Режимы</h2>
-          <p className="games-lobby__intro-text">
-            Ознакомьтесь с доступными режимами — выберите подходящий формат и присоединяйтесь к раунду.
-          </p>
-     
         </div>
 
         <div className="games-lobby__grid">

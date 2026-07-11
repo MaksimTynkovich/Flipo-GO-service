@@ -1173,7 +1173,7 @@ export function CrashChart({
       </div>
 
       {autoScale && autoScale.target > 1 && !winFx && !loseFx ? (
-        <div className="crash-auto-scale pointer-events-none absolute inset-x-0 top-0 z-[13]">
+        <div className="crash-auto-scale pointer-events-none absolute inset-x-0 z-[13]">
           <div className="crash-auto-scale__track" aria-hidden>
             <div
               ref={autoFillRef}

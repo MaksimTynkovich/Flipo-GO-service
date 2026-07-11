@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
+import { BtnBusy } from "@/components/ui/BtnBusy";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
@@ -259,11 +260,6 @@ export function PvpHubView() {
         </div>
 
         <section className="pvp-create space-y-3">
-          <div className="pvp-create__intro">
-            <h2 className="pvp-create__title">Дуэль 1 на 1</h2>
-            <p className="pvp-create__text">Создай комнату или войди в открытый бой</p>
-          </div>
-
           <BetFundingControl
             mode={fundingMode}
             onModeChange={setFundingMode}
@@ -276,7 +272,6 @@ export function PvpHubView() {
             multiple
             combined
             title="Ставка комнаты"
-            subtitle="TON и подарки можно комбинировать"
           />
 
           <Button
@@ -285,7 +280,7 @@ export function PvpHubView() {
             disabled={creating}
             onClick={createRoom}
           >
-            {creating ? "Создаём…" : "Создать комнату"}
+            {creating ? <BtnBusy label="Создаём…" /> : "Создать комнату"}
           </Button>
 
           {error && !joinRoomId && (
@@ -347,10 +342,7 @@ export function PvpHubView() {
         ) : lobbyReady ? (
           <section className="pvp-empty pvp-room-enter">
             <div className="pvp-empty__glow" aria-hidden />
-            <p className="pvp-empty__title">Нет открытых дуэлей</p>
-            <p className="pvp-empty__text">
-              Создай первую комнату выше — соперник сможет присоединиться к твоей ставке.
-            </p>
+            <p className="pvp-empty__title">Нет открытых комнат</p>
           </section>
         ) : null}
 
@@ -409,7 +401,7 @@ export function PvpHubView() {
                     onClick={confirmJoin}
                     disabled={!!joiningId || !joinInRange}
                   >
-                    {joiningId ? "…" : "Войти"}
+                    {joiningId ? <BtnBusy label="Входим…" /> : "Войти"}
                   </Button>
                 </div>
               </div>
@@ -421,7 +413,7 @@ export function PvpHubView() {
           <ProofModal
             roundId={proofRoundId}
             gameType="pvp"
-            title="Проверка PvP"
+            title="Проверка комнаты"
             onClose={() => setProofRoundId(null)}
           />
         ) : null}

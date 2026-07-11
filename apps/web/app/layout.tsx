@@ -68,6 +68,23 @@ const tgThemeBootstrap = `
       const value = (platform || "").toLowerCase();
       return value === "android" || value === "ios";
     };
+    const isDesktopPlatform = (platform) => {
+      const value = (platform || "").toLowerCase();
+      return (
+        value === "tdesktop" ||
+        value === "macos" ||
+        value === "web" ||
+        value === "weba" ||
+        value.includes("desktop")
+      );
+    };
+    if (webApp.platform) {
+      const safePlatform = String(webApp.platform).toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      document.documentElement.classList.add("tg-platform-" + safePlatform);
+      if (isDesktopPlatform(webApp.platform)) {
+        document.documentElement.classList.add("tg-desktop");
+      }
+    }
     webApp.ready();
     webApp.expand();
     if (isMobilePlatform(webApp.platform)) {

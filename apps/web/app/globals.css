@@ -72,6 +72,71 @@ body {
   letter-spacing: -0.011em;
 }
 
+/*
+ * Cursor / selection:
+ * - App chrome is non-selectable (inputs stay selectable).
+ * - Telegram Desktop CEF flickers arrow ↔ hand when pointer and default compete.
+ *   On .tg-desktop we lock a single default cursor everywhere except fields.
+ */
+*,
+*::before,
+*::after {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
+}
+
+a,
+button,
+summary,
+label[for],
+[role="button"],
+[role="tab"],
+[role="link"],
+[role="menuitem"],
+.app-control,
+.segment-item,
+.quick-amount,
+.interactive-card,
+.games-card,
+.games-promo__slide,
+.games-promo__dot,
+.roulette-bet-btn,
+.roulette-history__chip,
+.gift-card,
+.balance-pill a,
+.tab-icon-wrap,
+.crash-history__mult,
+.pvp-room__proof {
+  cursor: pointer;
+}
+
+svg text {
+  pointer-events: none !important;
+}
+
+.admin-container,
+.admin-container * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Stable cursor in Telegram Desktop / macOS / Web — one cursor, no hand/I-beam flicker. */
+html.tg-desktop,
+html.tg-desktop *,
+html.tg-desktop *::before,
+html.tg-desktop *::after {
+  cursor: default !important;
+}
+
 /* Hide scrollbars app-wide (Telegram Desktop / WebKit / Firefox) — scrolling still works */
 html,
 body,
@@ -616,6 +681,16 @@ body::-webkit-scrollbar,
   animation: splash-spin 0.75s linear infinite;
 }
 
+.btn-spinner {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  animation: splash-spin 0.7s linear infinite;
+}
+
 @keyframes crash-flash {
   0% { transform: translate(0, 0); }
   20% { transform: translate(-2px, 1px); }
@@ -708,29 +783,14 @@ body::-webkit-scrollbar,
 
 .games-promo__glow {
   position: absolute;
-  inset: auto -20% -60% 40%;
-  height: 140%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 60%);
-  pointer-events: none;
+  top: -45%;
+  left: -28%;
   z-index: 0;
+  width: 62%;
+  height: 170%;
+  pointer-events: none;
+  background: radial-gradient(circle at 40% 45%, rgba(255, 255, 255, 0.14), transparent 68%);
   animation: games-promo-glow 6s ease-in-out infinite;
-}
-
-.games-promo__slide::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    105deg,
-    transparent 35%,
-    rgba(255, 255, 255, 0.1) 50%,
-    transparent 65%
-  );
-  background-size: 220% 100%;
-  animation: games-promo-shimmer 7s ease-in-out infinite;
-  opacity: 0.55;
 }
 
 .games-promo__icon {
@@ -780,7 +840,8 @@ body::-webkit-scrollbar,
   font-weight: 700;
   letter-spacing: 0.01em;
   color: #0c141c;
-  background: rgba(255, 255, 255, 0.92);
+  background: #f4f8fc;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .games-promo__dots {
@@ -1397,25 +1458,14 @@ body::-webkit-scrollbar,
     transform: translate3d(0, 0, 0);
   }
   50% {
-    opacity: 0.9;
-    transform: translate3d(-8%, -4%, 0);
-  }
-}
-
-@keyframes games-promo-shimmer {
-  0%,
-  100% {
-    background-position: 140% 0;
-  }
-  50% {
-    background-position: -40% 0;
+    opacity: 0.85;
+    transform: translate3d(4%, 3%, 0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .games-promo__track,
   .games-promo__glow,
-  .games-promo__slide::after,
   .games-promo__icon,
   .games-card__aura,
   .games-card__icon,
@@ -2246,6 +2296,11 @@ body::-webkit-scrollbar,
   transition: opacity 0.35s var(--ease-out);
 }
 
+.roulette-seg text {
+  pointer-events: none;
+  user-select: none;
+}
+
 .roulette-seg--dim {
   opacity: 0.38;
 }
@@ -2534,6 +2589,66 @@ body::-webkit-scrollbar,
   position: relative;
   isolation: isolate;
   margin-inline: -1rem;
+  /* Bleed into the shell content gap under the header. */
+  margin-top: calc(-1 * var(--app-content-gap));
+  padding-top: var(--app-content-gap);
+}
+
+.crash-arena__stars {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 0;
+  height: calc(var(--app-content-gap) + 4.25rem);
+  background-image:
+    radial-gradient(1px 1px at 8% 22%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1.2px 1.2px at 18% 58%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(0.9px 0.9px at 27% 14%, rgba(190, 220, 255, 0.5), transparent),
+    radial-gradient(1.4px 1.4px at 36% 72%, rgba(255, 255, 255, 0.28), transparent),
+    radial-gradient(1px 1px at 44% 34%, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(0.8px 0.8px at 53% 8%, rgba(255, 255, 255, 0.38), transparent),
+    radial-gradient(1.3px 1.3px at 61% 48%, rgba(180, 210, 255, 0.42), transparent),
+    radial-gradient(1px 1px at 69% 78%, rgba(255, 255, 255, 0.3), transparent),
+    radial-gradient(1.1px 1.1px at 77% 26%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(0.9px 0.9px at 85% 62%, rgba(255, 255, 255, 0.32), transparent),
+    radial-gradient(1.5px 1.5px at 92% 18%, rgba(200, 225, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 12% 86%, rgba(255, 255, 255, 0.25), transparent),
+    radial-gradient(1.2px 1.2px at 31% 42%, rgba(255, 255, 255, 0.36), transparent),
+    radial-gradient(0.85px 0.85px at 48% 90%, rgba(255, 255, 255, 0.22), transparent),
+    radial-gradient(1.1px 1.1px at 58% 16%, rgba(255, 255, 255, 0.48), transparent),
+    radial-gradient(1px 1px at 73% 54%, rgba(190, 215, 255, 0.34), transparent),
+    radial-gradient(1.3px 1.3px at 88% 88%, rgba(255, 255, 255, 0.28), transparent),
+    radial-gradient(0.75px 0.75px at 4% 48%, rgba(255, 255, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 22% 6%, rgba(255, 255, 255, 0.42), transparent),
+    radial-gradient(1.15px 1.15px at 66% 36%, rgba(255, 255, 255, 0.33), transparent);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  opacity: 0.9;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 42%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 42%,
+    transparent 100%
+  );
+  animation: crash-stars-twinkle 7.5s ease-in-out infinite;
+}
+
+@keyframes crash-stars-twinkle {
+  0%,
+  100% {
+    opacity: 0.78;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .crash-arena__glow {
@@ -2965,7 +3080,9 @@ body::-webkit-scrollbar,
 .crash-auto-scale {
   --auto-scale: #5eead4;
   --auto-scale-glow: rgba(94, 234, 212, 0.4);
-  padding-top: 0.15rem;
+  /* Sit below CrashHistory chips (absolute top overlay on the arena). */
+  top: 2.7rem;
+  padding-top: 0.1rem;
 }
 
 .crash-auto-scale__track {
@@ -3491,7 +3608,8 @@ body::-webkit-scrollbar,
   .crash-countdown__value,
   .crash-countdown__bloom,
   .crash-countdown__orbit,
-  .crash-countdown--urgent .crash-countdown__ring {
+  .crash-countdown--urgent .crash-countdown__ring,
+  .crash-arena__stars {
     animation: none !important;
   }
 }

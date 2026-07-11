@@ -9,6 +9,7 @@ import { BetFundingControl } from "@/components/games/BetFundingControl";
 import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { PageShell } from "@/components/PageShell";
+import { BtnBusy } from "@/components/ui/BtnBusy";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -284,7 +285,6 @@ export default function CrashPage() {
     (preparedTonNanoton > 0 ? 1 : 0) + preparedGiftIds.length;
 
   const betButtonLabel = (() => {
-    if (betting) return "…";
     if (canBet) {
       return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
     }
@@ -533,8 +533,9 @@ export default function CrashPage() {
 
   const primaryDisabled = betting || cashingOut || (!canCashout && !canBet);
   const primaryAction = canCashout ? cashout : bet;
+  const primaryBusy = betting || cashingOut;
+  const primaryBusyLabel = cashingOut ? "Забираем…" : "Ставим…";
   const primaryLabel = (() => {
-    if (cashingOut || betting) return "…";
     if (canCashout) return null; // rendered with live amount span
     if (canBet) {
       return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
@@ -547,6 +548,7 @@ export default function CrashPage() {
     <PageShell flush>
       <div className="crash-page flex flex-col gap-3.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="crash-arena">
+          <div className="crash-arena__stars" aria-hidden />
           <div className="crash-arena__glow" aria-hidden />
           <div className="crash-arena__frame">
             <CrashHistory
@@ -605,7 +607,9 @@ export default function CrashPage() {
                   : "bg-surface-raised text-muted",
             )}
           >
-            {canCashout ? (
+            {primaryBusy ? (
+              <BtnBusy label={primaryBusyLabel} />
+            ) : canCashout ? (
               <span className="inline-flex items-center gap-1.5 tabular-nums">
                 <span>{roundActiveBets.length > 1 ? "Забрать все ·" : "Забрать ·"}</span>
                 <span ref={cashoutAmountRef}>{cashoutTotalTon.toFixed(2)}</span>
