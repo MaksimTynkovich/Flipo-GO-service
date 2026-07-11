@@ -62,12 +62,12 @@ declare global {
 }
 
 export const TELEGRAM_THEME_DEFAULTS = {
-  bgColor: "#17212b",
-  textColor: "#f5f5f5",
-  hintColor: "#708499",
-  buttonColor: "#8774e1",
-  linkColor: "#9d8fe8",
-  secondaryBgColor: "#232e3c",
+  bgColor: "#0c141c",
+  textColor: "#f2f5f7",
+  hintColor: "#7a8b9a",
+  buttonColor: "#3390ec",
+  linkColor: "#6ab3f3",
+  secondaryBgColor: "#141c27",
 } as const;
 
 type Rgb = {
@@ -382,7 +382,7 @@ function getLuminance(color: string) {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
-import { BRAND_ACCENT, BRAND_LINK } from "@/src/shared/config/brand";
+import { BRAND_ACCENT, BRAND_ACCENT_FOREGROUND, BRAND_LINK } from "@/src/shared/config/brand";
 
 export function resolveThemeTokens(theme = readTelegramTheme()) {
   const isDark = getLuminance(theme.bgColor) < 0.45;
@@ -392,6 +392,7 @@ export function resolveThemeTokens(theme = readTelegramTheme()) {
     foreground: theme.textColor,
     muted: theme.hintColor,
     accent: BRAND_ACCENT,
+    accentForeground: isDark ? BRAND_ACCENT_FOREGROUND : "#ffffff",
     link: BRAND_LINK,
     surface: theme.secondaryBgColor || mixColors(theme.bgColor, theme.textColor, isDark ? 0.06 : 0.04),
     surfaceRaised: mixColors(
@@ -401,7 +402,7 @@ export function resolveThemeTokens(theme = readTelegramTheme()) {
     ),
     border: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
     primary: BRAND_ACCENT,
-    success: isDark ? "#4fae4e" : "#31a24c",
+    success: isDark ? "#3ecf8e" : "#1faa6a",
     danger: isDark ? "#e56555" : "#e53935",
     isDark,
   };
@@ -424,6 +425,7 @@ export function applyTelegramThemeToDocument(theme = readTelegramTheme()) {
   root.style.setProperty("--muted", tokens.muted);
   root.style.setProperty("--accent", tokens.accent);
   root.style.setProperty("--accent-subtle", `color-mix(in srgb, ${tokens.accent} 14%, transparent)`);
+  root.style.setProperty("--accent-foreground", tokens.accentForeground);
   root.style.setProperty("--link", tokens.link);
   root.style.setProperty("--surface", tokens.surface);
   root.style.setProperty("--surface-raised", tokens.surfaceRaised);

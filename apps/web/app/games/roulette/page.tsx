@@ -5,7 +5,7 @@ import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButton";
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
-import { BetFundingPanel } from "@/components/games/BetFundingPanel";
+import { BetFundingControl } from "@/components/games/BetFundingControl";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -20,10 +20,10 @@ import {
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
-import { RouletteRoundState } from "@/lib/roulette";
-import { BetFundingMode } from "@/lib/bet-funding";
+import { numberColor, RouletteRoundState } from "@/lib/roulette";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
+import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
@@ -35,7 +35,6 @@ export default function RoulettePage() {
   const [history, setHistory] = useState<RouletteHistoryEntry[]>([]);
   const [roundBets, setRoundBets] = useState<RouletteRoundBetsData | null>(null);
   const [amountTon, setAmountTon] = useState("0.1");
-  const [fundingMode, setFundingMode] = useState<BetFundingMode>("balance");
   const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
   const [betting, setBetting] = useState(false);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
@@ -73,12 +72,37 @@ export default function RoulettePage() {
     loadRoundBets();
   }, [state?.round_id, loadRoundBets]);
 
-  useEffect(() => {
-    if (state?.phase === "result" && lastPhase.current !== "result") {
-      loadHistory();
+  const myBets = useMemo(() => {
+    if (!user?.id) return [];
+    return (roundBets?.bets ?? []).filter((bet) => bet.user_id === user.id);
+  }, [roundBets?.bets, user?.id]);
+
+  const myColors = useMemo(() => {
+    const set = new Set<"red" | "green" | "black">();
+    for (const bet of myBets) {
+      if (bet.color === "red" || bet.color === "green" || bet.color === "black") {
+        set.add(bet.color);
+      }
     }
-    lastPhase.current = state?.phase ?? null;
-  }, [state?.phase, loadHistory]);
+    return set;
+  }, [myBets]);
+
+  useEffect(() => {
+    const phase = state?.phase ?? null;
+
+    if (phase === "result" && lastPhase.current != null && lastPhase.current !== "result") {
+      loadHistory();
+
+      const resultNum = state?.result_number;
+      if (resultNum != null && myBets.length > 0) {
+        const winColor = numberColor(resultNum);
+        const won = myBets.some((bet) => bet.color === winColor);
+        haptics.notificationOccurred(won ? "success" : "error");
+      }
+    }
+
+    lastPhase.current = phase;
+  }, [state?.phase, state?.result_number, loadHistory, myBets, haptics]);
 
   const excludedGiftIds = useMemo(() => {
     const ids = new Set<string>();
@@ -91,6 +115,7 @@ export default function RoulettePage() {
   }, [roundBets?.bets, user?.id]);
 
   const canBet = state?.phase === "betting" && !betting;
+  const canEditBet = !betting;
   const roundTotals = roundBets?.totals ?? { red: 0, green: 0, black: 0 };
 
   async function bet(color: string) {
@@ -103,46 +128,40 @@ export default function RoulettePage() {
       return;
     }
 
-    const giftIds =
-      fundingMode === "gift" ? selectedGiftIds.filter((id) => !excludedGiftIds.includes(id)) : [];
+    const giftIds = selectedGiftIds.filter((id) => !excludedGiftIds.includes(id));
+    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
 
-    if (fundingMode === "gift") {
-      if (giftIds.length === 0) {
-        showToast({ variant: "error", title: "Выберите подарок для ставки." });
-        haptics.notificationOccurred("error");
-        return;
-      }
-    } else {
-      const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
-      if (nanotons <= 0) {
-        showToast({ variant: "error", title: "Укажите корректную сумму ставки." });
-        haptics.notificationOccurred("error");
-        return;
-      }
-      if (user && user.betting_balance < nanotons) {
-        showToast({ variant: "error", title: "Недостаточно средств на балансе." });
-        haptics.notificationOccurred("error");
-        return;
-      }
+    if (nanotons <= 0 && giftIds.length === 0) {
+      showToast({ variant: "error", title: "Укажите сумму TON или выберите подарок." });
+      haptics.notificationOccurred("error");
+      return;
+    }
+    if (nanotons > 0 && user && user.betting_balance < nanotons) {
+      showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+      haptics.notificationOccurred("error");
+      return;
     }
 
     setBetting(true);
     betAmountInput.complete();
     try {
-      if (fundingMode === "gift") {
-        for (const giftId of giftIds) {
-          await placeRouletteBet(color, crypto.randomUUID(), {
-            mode: "gift",
-            inventoryItemId: giftId,
-          });
-        }
-        setSelectedGiftIds([]);
-      } else {
+      if (nanotons > 0) {
         await placeRouletteBet(color, crypto.randomUUID(), {
           mode: "balance",
-          amountNanoton: Math.floor(parseFloat(amountTon || "0") * 1_000_000_000),
+          amountNanoton: nanotons,
         });
       }
+      for (const giftId of giftIds) {
+        await placeRouletteBet(color, crypto.randomUUID(), {
+          mode: "gift",
+          inventoryItemId: giftId,
+        });
+      }
+      if (giftIds.length > 0) {
+        setSelectedGiftIds([]);
+        notifyBettableGiftsChanged();
+      }
+      haptics.notificationOccurred("success");
       loadRoundBets();
     } catch (e) {
       showToast({
@@ -166,23 +185,20 @@ export default function RoulettePage() {
           />
         </div>
 
-        <div className="flex justify-center">
-          <RouletteWheel state={state} />
-        </div>
+        <RouletteWheel state={state} />
 
         <div className="panel space-y-3">
-          <p className="section-label">Ставка</p>
-
-          <BetFundingPanel
-            mode={fundingMode}
-            onModeChange={setFundingMode}
+          <BetFundingControl
+            mode="balance"
+            onModeChange={() => {}}
             amountTon={amountTon}
             onAmountTonChange={setAmountTon}
             selectedGiftIds={selectedGiftIds}
             onSelectGifts={setSelectedGiftIds}
             excludedGiftIds={excludedGiftIds}
-            disabled={!canBet}
+            disabled={!canEditBet}
             quickAmounts={QUICK_AMOUNTS}
+            combined
             amountInputProps={betAmountInput.bind({
               onChange: (e) => setAmountTon(e.target.value),
             })}
@@ -194,6 +210,7 @@ export default function RoulettePage() {
               multiplier="×2"
               roundTotal={roundTotals.red}
               disabled={!canBet}
+              active={myColors.has("red")}
               onClick={() => bet("red")}
             />
             <RouletteColorBetButton
@@ -201,6 +218,7 @@ export default function RoulettePage() {
               multiplier="×14"
               roundTotal={roundTotals.green}
               disabled={!canBet}
+              active={myColors.has("green")}
               onClick={() => bet("green")}
             />
             <RouletteColorBetButton
@@ -208,12 +226,13 @@ export default function RoulettePage() {
               multiplier="×2"
               roundTotal={roundTotals.black}
               disabled={!canBet}
+              active={myColors.has("black")}
               onClick={() => bet("black")}
             />
           </div>
 
           <div className="hairline-top pt-3">
-            <RouletteRoundBets data={roundBets} />
+            <RouletteRoundBets data={roundBets} currentUserId={user?.id} />
           </div>
         </div>
       </div>

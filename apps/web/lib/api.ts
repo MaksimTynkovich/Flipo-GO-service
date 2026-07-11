@@ -138,7 +138,7 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    const message = err.error || "Request failed";
+    const message = err.error || "Запрос не выполнен";
     const requestId =
       res.headers.get("X-Request-ID") ||
       (res as Response & { requestId?: string }).requestId ||
@@ -368,6 +368,7 @@ export type CrashBetEntry = {
   gift?: BetGiftView;
   status: "pending" | "cashed_out" | "lost" | string;
   cashout_multiplier?: number;
+  auto_cashout_multiplier?: number;
   payout_nanoton?: number;
 };
 
@@ -383,11 +384,25 @@ export async function getCrashBets() {
 export async function placeCrashBet(
   key: string,
   funding: { mode: "balance"; amountNanoton: number } | { mode: "gift"; inventoryItemId: string },
+  options?: { autoCashoutMultiplier?: number | null },
 ) {
+  const auto =
+    options?.autoCashoutMultiplier != null && options.autoCashoutMultiplier >= 1.01
+      ? Math.floor(options.autoCashoutMultiplier * 100) / 100
+      : undefined;
   const body =
     funding.mode === "gift"
-      ? { idempotency_key: key, funding: "gift", inventory_item_id: funding.inventoryItemId }
-      : { idempotency_key: key, amount_nanoton: funding.amountNanoton };
+      ? {
+          idempotency_key: key,
+          funding: "gift",
+          inventory_item_id: funding.inventoryItemId,
+          ...(auto != null ? { auto_cashout_multiplier: auto } : {}),
+        }
+      : {
+          idempotency_key: key,
+          amount_nanoton: funding.amountNanoton,
+          ...(auto != null ? { auto_cashout_multiplier: auto } : {}),
+        };
   const amountNanoton = funding.mode === "gift" ? 0 : funding.amountNanoton;
   try {
     const result = await api("/api/v1/games/crash/bet", {
@@ -398,7 +413,12 @@ export async function placeCrashBet(
       event_name: "crash_bet_placed",
       event_category: "gameplay",
       status: "success",
-      properties: { mode: "crash", amount_nanoton: amountNanoton, funding: funding.mode },
+      properties: {
+        mode: "crash",
+        amount_nanoton: amountNanoton,
+        funding: funding.mode,
+        auto_cashout_multiplier: auto ?? null,
+      },
     });
     return result;
   } catch (error) {
@@ -435,11 +455,17 @@ export type CrashActiveBet = {
   funding_type?: string;
   inventory_item_id?: string;
   status: string;
+  auto_cashout_multiplier?: number;
+  selection?: { auto_cashout_multiplier?: number };
 };
 
 export async function getCrashActiveBets() {
   const bets = await api<CrashActiveBet[]>("/api/v1/games/crash/bet/active");
-  return bets ?? [];
+  return (bets ?? []).map((bet) => ({
+    ...bet,
+    auto_cashout_multiplier:
+      bet.auto_cashout_multiplier ?? bet.selection?.auto_cashout_multiplier,
+  }));
 }
 
 export async function cashoutCrash(betId: string, multiplier: number) {

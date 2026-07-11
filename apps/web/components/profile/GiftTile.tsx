@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { formatTON, ProfileGift } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { formatCollectionSlug, giftImageUrl } from "@/lib/gifts";
+import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 import { Check, Gift } from "lucide-react";
 
@@ -14,83 +14,40 @@ type Props = {
   onInspect?: (gift: ProfileGift) => void;
 };
 
-function GiftTileImage({
-  imageSrc,
-  name,
-  imgError,
-  onError,
-  overlay,
-}: {
-  imageSrc: string;
-  name: string;
-  imgError: boolean;
-  onError: () => void;
-  overlay?: ReactNode;
-}) {
-  return (
-    <div className="relative aspect-square overflow-hidden rounded-xl bg-surface-raised">
-      {!imgError ? (
-        <img
-          src={imageSrc}
-          alt={name}
-          loading="lazy"
-          className="h-full w-full rounded-[20px] object-contain p-2"
-          onError={onError}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <Gift className="h-6 w-6 text-muted/50" />
-        </div>
-      )}
-      {overlay}
-    </div>
-  );
-}
-
-function GiftTileMeta({
-  name,
-  collection,
-  children,
-}: {
-  name: string;
-  collection: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="min-w-0 space-y-1">
-      <p className="truncate text-xs font-semibold leading-tight">{name}</p>
-      <p className="truncate text-[10px] capitalize text-muted">{collection}</p>
-      {children}
-    </div>
-  );
-}
-
 export function GiftTile({ gift, selected, onToggle, onInspect }: Props) {
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(gift.slug, gift.image_url);
-  const collection = formatCollectionSlug(gift.collection_slug);
 
   if (gift.is_staked) {
     return (
       <button
         type="button"
         onClick={() => onInspect?.(gift)}
-        className="panel flex w-full flex-col gap-2 p-2 text-left transition-opacity active:opacity-80"
+        className="gift-card app-control"
       >
-        <GiftTileImage
-          imageSrc={imageSrc}
-          name={gift.name}
-          imgError={imgError}
-          onError={() => setImgError(true)}
-          overlay={
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-success shadow-[0_0_8px_var(--success)]" />
-          }
-        />
-        <GiftTileMeta name={gift.name} collection={collection}>
-          <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-surface-raised px-2 py-0.5 text-xs font-semibold tabular-nums text-success">
+        <div className="gift-card__media">
+          {!imgError ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageSrc}
+              alt={gift.name}
+              loading="lazy"
+              className="gift-card__img"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="gift-card__fallback">
+              <Gift className="h-5 w-5 text-muted/40" strokeWidth={1.5} />
+            </div>
+          )}
+          <span className="gift-card__dot" aria-hidden />
+        </div>
+        <div className="gift-card__meta">
+          <p className="gift-card__title">{gift.name}</p>
+          <span className="gift-card__price gift-card__price--success">
             +{formatTON(gift.earned_nanoton)}
           </span>
-        </GiftTileMeta>
+        </div>
       </button>
     );
   }
@@ -103,43 +60,49 @@ export function GiftTile({ gift, selected, onToggle, onInspect }: Props) {
       onClick={() => isSelectable && onToggle?.(gift.slug)}
       disabled={!isSelectable}
       className={cn(
-        "panel flex w-full flex-col gap-2 p-2 text-left transition-all active:opacity-80",
-        isSelectable && selected && "ring-2 ring-accent",
-        isSelectable && !selected && "opacity-80",
+        "gift-card app-control",
+        isSelectable && !selected && "gift-card--dimmed",
       )}
     >
-      <GiftTileImage
-        imageSrc={imageSrc}
-        name={gift.name}
-        imgError={imgError}
-        onError={() => setImgError(true)}
-        overlay={
-          isSelectable &&
-          selected && (
-            <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-surface shadow-sm">
-              <Check className="h-3 w-3" strokeWidth={3} />
-            </span>
-          )
-        }
-      />
-      <GiftTileMeta name={gift.name} collection={collection}>
-        <span className="inline-flex max-w-full items-center gap-1 rounded-lg bg-surface-raised px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground">
+      <div className="gift-card__media">
+        {!imgError ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt={gift.name}
+            loading="lazy"
+            className="gift-card__img"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="gift-card__fallback">
+            <Gift className="h-5 w-5 text-muted/40" strokeWidth={1.5} />
+          </div>
+        )}
+        {isSelectable && selected ? (
+          <span className="gift-card__check">
+            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+          </span>
+        ) : null}
+      </div>
+      <div className="gift-card__meta">
+        <p className="gift-card__title">{gift.name}</p>
+        <span className="gift-card__price">
           {formatTON(gift.price_nanoton)}
           <TonIcon variant="brand" className="h-3 w-3 shrink-0" />
         </span>
-      </GiftTileMeta>
+      </div>
     </button>
   );
 }
 
 export function GiftTileSkeleton() {
   return (
-    <div className="panel space-y-2 p-2">
-      <div className="aspect-square animate-pulse rounded-xl bg-surface-raised" />
-      <div className="space-y-1">
-        <div className="h-3 w-3/4 animate-pulse rounded-md bg-surface-raised" />
-        <div className="h-2.5 w-1/2 animate-pulse rounded-md bg-surface-raised" />
-        <div className="h-5 w-14 animate-pulse rounded-lg bg-surface-raised" />
+    <div className="gift-card gift-card--skeleton">
+      <div className="gift-card__media gift-card__media--pulse" />
+      <div className="gift-card__meta">
+        <div className="gift-card__skel gift-card__skel--title" />
+        <div className="gift-card__skel gift-card__skel--price" />
       </div>
     </div>
   );

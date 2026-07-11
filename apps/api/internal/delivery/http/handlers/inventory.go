@@ -54,7 +54,7 @@ func (h *InventoryHandler) Liquidate(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	itemID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
 	balance, err := h.inventory.Liquidate(c.Request.Context(), userID, itemID)
@@ -71,7 +71,7 @@ func (h *InventoryHandler) Withdraw(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	itemID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
 	if err := h.inventory.Withdraw(c.Request.Context(), userID, itemID); err != nil {
@@ -94,7 +94,7 @@ func (h *InventoryHandler) Stake(c *gin.Context) {
 	}
 	itemID, err := uuid.Parse(req.ItemID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID предмета"})
 		return
 	}
 	pos, err := h.staking.Stake(c.Request.Context(), userID, itemID)
@@ -109,7 +109,7 @@ func (h *InventoryHandler) Unstake(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	posID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
 	if err := h.staking.Unstake(c.Request.Context(), userID, posID); err != nil {

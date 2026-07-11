@@ -8,25 +8,24 @@ type Props = {
   hint: string;
 };
 
-export function AdminInfoHint({ label, hint }: Props) {
-  const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
+const EXIT_MS = 280;
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+export function AdminInfoHint({ label, hint }: Props) {
+  const [visible, setVisible] = useState(false);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const exitTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
       if (!ref.current?.contains(event.target as Node)) {
-        setOpen(false);
+        closeHint();
       }
     }
 
     function onEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setOpen(false);
+        closeHint();
       }
     }
 
@@ -35,8 +34,29 @@ export function AdminInfoHint({ label, hint }: Props) {
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onEscape);
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current);
+      }
     };
   }, []);
+
+  function openHint() {
+    setVisible(true);
+    window.requestAnimationFrame(() => setOpen(true));
+  }
+
+  function closeHint() {
+    setOpen(false);
+    exitTimerRef.current = window.setTimeout(() => setVisible(false), EXIT_MS);
+  }
+
+  function toggleHint() {
+    if (visible) {
+      closeHint();
+    } else {
+      openHint();
+    }
+  }
 
   return (
     <div ref={ref} className="relative inline-flex">
@@ -45,20 +65,24 @@ export function AdminInfoHint({ label, hint }: Props) {
         className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-raised text-[10px] text-muted transition hover:text-foreground active:scale-95"
         aria-label={`Что означает ${label}`}
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggleHint}
       >
         i
       </button>
-      {mounted && open
+      {visible
         ? createPortal(
-            <div className="fixed inset-0 z-[120] flex items-start justify-center bg-black/30 px-4 pt-24 backdrop-blur-[1px]">
+            <div className="fixed inset-0 z-[120] flex items-start justify-center px-4 pt-24">
               <button
                 type="button"
-                className="absolute inset-0 cursor-default"
+                className={`overlay-backdrop absolute inset-0 ${open ? "overlay-backdrop-open" : ""}`}
                 aria-label="Закрыть подсказку"
-                onClick={() => setOpen(false)}
+                onClick={closeHint}
               />
-              <div className="relative w-full max-w-sm animate-[adminHintIn_180ms_ease-out] rounded-2xl border border-[var(--border)] bg-surface px-4 py-3 text-left shadow-2xl">
+              <div
+                className={`overlay-popover-host relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-surface px-4 py-3 text-left ${
+                  open ? "overlay-popover-host-open" : ""
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-foreground">{label}</p>
@@ -67,7 +91,7 @@ export function AdminInfoHint({ label, hint }: Props) {
                   <button
                     type="button"
                     className="shrink-0 rounded-full px-2 py-1 text-xs text-muted transition hover:text-foreground"
-                    onClick={() => setOpen(false)}
+                    onClick={closeHint}
                   >
                     Закрыть
                   </button>

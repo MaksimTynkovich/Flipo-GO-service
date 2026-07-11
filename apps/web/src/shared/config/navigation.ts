@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { CircleDot, Gamepad2, Gift, ShoppingBag, TrendingUp, User, Users } from "lucide-react";
+import { CircleDot, Gamepad2, Gift, Rocket, ShoppingBag, User, Users } from "lucide-react";
 
 export const APP_ROUTES = {
   home: "/games",
@@ -172,6 +172,7 @@ export type GameLobbyItem = {
   description: string;
   badge: string;
   icon: LucideIcon;
+  tone: "crash" | "roulette" | "pvp";
 };
 
 export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
@@ -179,22 +180,25 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
     href: APP_ROUTES.crash,
     title: "Crash",
     description: "Лови множитель и успей забрать выигрыш до обвала.",
-    badge: "Live",
-    icon: TrendingUp,
+    badge: "Онлайн",
+    icon: Rocket,
+    tone: "crash",
   },
   {
     href: APP_ROUTES.roulette,
     title: "Рулетка",
     description: "Классические цвета, быстрые раунды и моментальный вход.",
-    badge: "Live",
+    badge: "Онлайн",
     icon: CircleDot,
+    tone: "roulette",
   },
   {
     href: APP_ROUTES.pvp,
     title: "PVP",
     description: "Комнаты 1 на 1 — создай бой или присоединись к открытому.",
-    badge: "Rooms",
+    badge: "Комнаты",
     icon: Users,
+    tone: "pvp",
   },
 ];
 

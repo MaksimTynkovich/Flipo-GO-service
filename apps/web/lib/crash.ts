@@ -82,8 +82,8 @@ export function calibrateClockOffsetMs(
 }
 
 /**
- * Smooth local extrapolation with a soft server cap.
- * Between ticks grows evenly; after a tick without update, won't run ahead.
+ * Smooth local extrapolation with soft server pull.
+ * Avoid hard caps that freeze the curve between WS ticks.
  */
 export function computeRunningMultiplier(params: {
   runStartMs: number;
@@ -93,15 +93,19 @@ export function computeRunningMultiplier(params: {
   nowMs?: number;
 }): number {
   const now = params.nowMs ?? Date.now();
-  const sinceTick = Math.max(0, now - params.lastTickAtMs);
   const elapsed = Math.max(0, now - params.clockOffsetMs - params.runStartMs);
-  const smooth = multiplierAtElapsedMs(elapsed);
+  const smooth = Math.max(1, multiplierAtElapsedMs(elapsed));
+  const server = Math.max(1, params.serverMultiplier);
+  const sinceTick = Math.max(0, now - params.lastTickAtMs);
 
-  if (sinceTick <= CRASH_TICK_MS) {
-    return Math.max(1, smooth);
+  // Fresh tick: trust local smooth growth.
+  if (sinceTick <= CRASH_TICK_MS * 1.5) {
+    return smooth;
   }
 
-  return Math.min(Math.max(1, smooth), Math.max(1, params.serverMultiplier));
+  // Stale tick: ease toward server instead of freezing.
+  const lag = Math.min(1, (sinceTick - CRASH_TICK_MS) / (CRASH_TICK_MS * 4));
+  return smooth * (1 - lag * 0.35) + server * (lag * 0.35);
 }
 
 export function liveMultiplier(elapsedMs: number): number {
@@ -124,6 +128,27 @@ export function elapsedMsForMultiplier(mult: number): number {
 export function chartProgress(mult: number): number {
   if (mult <= 1) return 0;
   return Math.min(1, Math.log(mult) / Math.log(CRASH_CHART_LOG_MAX));
+}
+
+/** Log-curve used by the rocket stage (~1–20× fills the first screen). */
+export const CRASH_FLIGHT_VISUAL_MAX = 20;
+
+/**
+ * Uncapped flight progress. Same early curve as the stage fill, but continues
+ * past 1 so the camera can keep climbing on high multipliers.
+ */
+export function flightProgressWorld(mult: number): number {
+  if (mult <= 1) return 0;
+  const raw = Math.log(mult) / Math.log(CRASH_FLIGHT_VISUAL_MAX);
+  return Math.pow(Math.max(0, raw), 0.78);
+}
+
+/**
+ * Visual flight progress for the rocket stage (0–1).
+ * Spreads early multipliers (1–3×) across more of the screen so the trail is readable.
+ */
+export function flightProgress(mult: number): number {
+  return Math.min(1, flightProgressWorld(mult));
 }
 
 export type CrashHistoryTier = {
@@ -170,3 +195,13 @@ export function historyTierStyle(mult: number): CrashHistoryTier {
     label: "Низкий",
   };
 }
+
+/** Curve / multiplier heat as mult climbs. */
+export function crashHeatTone(mult: number): "calm" | "warm" | "hot" | "blaze" {
+  if (mult >= 10) return "blaze";
+  if (mult >= 5) return "hot";
+  if (mult >= 2) return "warm";
+  return "calm";
+}
+
+export const CRASH_AUTO_PRESETS = ["1.5", "2", "3", "5", "10"] as const;

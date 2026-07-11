@@ -5,16 +5,27 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { trackModalAbandon, trackModalOpen } from "@/lib/analytics";
 
+const EXIT_MS = 300;
+
 type Props = {
   onClose: () => void;
-  children: React.ReactNode;
+  children: (close: () => void) => React.ReactNode;
   className?: string;
   analyticsModalId?: string;
 };
 
+function readKeyboardInset(): number {
+  const vv = window.visualViewport;
+  if (!vv) return 0;
+  return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+}
+
 export function ModalOverlay({ onClose, children, className, analyticsModalId }: Props) {
   const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const closedRef = useRef(false);
+  const exitTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -23,8 +34,35 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
     if (analyticsModalId) {
       trackModalOpen(analyticsModalId);
     }
+
+    // Double rAF so the closed transform paints before we open — otherwise the
+    // enter transition is skipped or starts mid-frame and feels sticky.
+    let outer = 0;
+    let inner = 0;
+    outer = window.requestAnimationFrame(() => {
+      inner = window.requestAnimationFrame(() => setOpen(true));
+    });
+
+    function syncKeyboard() {
+      setKeyboardInset(readKeyboardInset());
+    }
+    syncKeyboard();
+
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", syncKeyboard);
+    vv?.addEventListener("scroll", syncKeyboard);
+    window.addEventListener("resize", syncKeyboard);
+
     return () => {
+      window.cancelAnimationFrame(outer);
+      window.cancelAnimationFrame(inner);
       document.body.style.overflow = prev;
+      vv?.removeEventListener("resize", syncKeyboard);
+      vv?.removeEventListener("scroll", syncKeyboard);
+      window.removeEventListener("resize", syncKeyboard);
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current);
+      }
       if (analyticsModalId && !closedRef.current) {
         trackModalAbandon(analyticsModalId);
       }
@@ -32,11 +70,13 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
   }, [analyticsModalId]);
 
   function handleClose() {
-    if (analyticsModalId && !closedRef.current) {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    if (analyticsModalId) {
       trackModalAbandon(analyticsModalId);
-      closedRef.current = true;
     }
-    onClose();
+    setOpen(false);
+    exitTimerRef.current = window.setTimeout(() => onClose(), EXIT_MS);
   }
 
   if (!mounted) return null;
@@ -44,16 +84,27 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
   return createPortal(
     <div
       className={cn(
-        "fixed left-0 right-0 bottom-0 z-[100] flex flex-col justify-end bg-black/55 backdrop-blur-sm",
+        "fixed left-0 right-0 z-[100] flex flex-col justify-end",
         className,
       )}
       style={{
         top: "calc(-1 * env(safe-area-inset-top, 0px))",
-        height: "calc(100dvh + env(safe-area-inset-top, 0px))",
+        bottom: keyboardInset,
+        height: "auto",
+        transition: keyboardInset > 0 ? "bottom 180ms var(--ease-out)" : undefined,
       }}
     >
-      <button type="button" aria-label="Закрыть" className="absolute inset-0" onClick={handleClose} />
-      {children}
+      <button
+        type="button"
+        aria-label="Закрыть"
+        className={cn("overlay-backdrop absolute inset-0", open && "overlay-backdrop-open")}
+        onClick={handleClose}
+      />
+      <div
+        className={cn("overlay-sheet-host relative z-[1] w-full", open && "overlay-sheet-host-open")}
+      >
+        {children(handleClose)}
+      </div>
     </div>,
     document.body,
   );

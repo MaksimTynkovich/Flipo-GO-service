@@ -72,7 +72,7 @@ func Load() *Config {
 		RouletteBettingSeconds:     getEnvInt("ROULETTE_BETTING_SECONDS", 20),
 		RouletteSpinSeconds:        getEnvInt("ROULETTE_SPIN_SECONDS", 12),
 		RouletteResultPauseSeconds:   getEnvInt("ROULETTE_RESULT_PAUSE_SECONDS", 0),
-		RouletteResultDisplaySeconds: getEnvInt("ROULETTE_RESULT_DISPLAY_SECONDS", 1),
+		RouletteResultDisplaySeconds: getEnvInt("ROULETTE_RESULT_DISPLAY_SECONDS", 3),
 		CrashTickMs:            getEnvInt("CRASH_TICK_MS", 100),
 		CrashBettingSeconds:    getEnvInt("CRASH_BETTING_SECONDS", 8),
 		CrashGrowthPerMs:       getEnvFloat("CRASH_GROWTH_PER_MS", 0.00006),

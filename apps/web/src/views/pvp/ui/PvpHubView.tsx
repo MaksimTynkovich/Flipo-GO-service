@@ -1,54 +1,49 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
+import { BetFundingControl } from "@/components/games/BetFundingControl";
 import { BetFundingPanel } from "@/components/games/BetFundingPanel";
 import {
   PvpActiveRoomCard,
   PvpOpenRoomCard,
   PvpResultRoomCard,
 } from "@/components/games/pvp/PvpRoomCards";
+import {
+  PvpRoomExitShell,
+  usePvpFinishedVisibility,
+} from "@/components/games/pvp/PvpRecentResults";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { api, formatTON, getInventory } from "@/lib/api";
+import { api, getInventory } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { BetFundingMode } from "@/lib/bet-funding";
 import { formatGameBetError } from "@/lib/game-errors";
 import { giftValuationNanoton } from "@/lib/gifts";
-import { PvpLobbyState } from "@/lib/pvp";
+import { PvpLobbyState, PvpRoom } from "@/lib/pvp";
 import {
   estimateJoinWinChanceBps,
   formatWinChanceBps,
   pvpGiftWithinTolerance,
-  pvpStakeBounds,
 } from "@/lib/pvp-stake";
 import { connectGameWS } from "@/lib/ws";
+import { formatUserError } from "@/lib/user-errors";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 const PVP_MAX_PLAYERS = 2;
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
 function mapPvpError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes("room is full")) return "Комната уже заполнена";
-  if (lower.includes("already joined")) return "Вы уже в этой комнате";
-  if (lower.includes("insufficient balance")) return "Недостаточно средств на балансе";
-  if (lower.includes("invalid amount")) return "Укажите корректную ставку";
-  if (lower.includes("gift not available") || lower.includes("подарок недоступен")) {
-    return "Подарок недоступен для ставки.";
-  }
-  if (lower.includes("gift value") || lower.includes("стоимость подарка") || lower.includes("±10%")) {
-    return "Сумма подарка не подходит для ставки в этой комнате.";
-  }
-  return message;
+  return formatUserError(message, "Не удалось выполнить действие");
 }
 
 export function PvpHubView() {
   const { user } = useAuth();
   const haptics = useTelegramHaptics();
   const [state, setState] = useState<PvpLobbyState>({ active: [], history: [] });
+  const [lobbyReady, setLobbyReady] = useState(false);
   const [betAmount, setBetAmount] = useState("0.5");
   const [fundingMode, setFundingMode] = useState<BetFundingMode>("balance");
   const [selectedGiftIds, setSelectedGiftIds] = useState<string[]>([]);
@@ -60,6 +55,7 @@ export function PvpHubView() {
   const [joinGiftStakeNanoton, setJoinGiftStakeNanoton] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
+  const roomOrderRef = useRef<string[]>([]);
 
   const loadState = useCallback(async () => {
     try {
@@ -70,6 +66,8 @@ export function PvpHubView() {
       });
     } catch {
       // ignore polling errors
+    } finally {
+      setLobbyReady(true);
     }
   }, []);
 
@@ -191,7 +189,7 @@ export function PvpHubView() {
       const body =
         joinFundingMode === "gift" && joinGiftIds[0]
           ? { funding: "gift", inventory_item_id: joinGiftIds[0] }
-          : { funding: "balance" };
+          : { funding: "balance", amount_nanoton: room.bet_amount_nanoton };
       await api(`/api/v1/games/pvp/rooms/${joinRoomId}/join`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -220,11 +218,15 @@ export function PvpHubView() {
   }
 
   const userId = user?.id;
-  const openRooms = state.active.filter((room) => room.status === "open");
-  const liveRooms = state.active.filter((room) => room.status === "countdown" || room.status === "spinning");
-  const hasRooms = openRooms.length > 0 || liveRooms.length > 0 || state.history.length > 0;
+  const finished = usePvpFinishedVisibility(state.history);
+  const displayRooms = buildStickyRoomList(
+    state.active,
+    finished.recentById,
+    finished.goneIds,
+    roomOrderRef,
+  );
+  const hasRooms = displayRooms.length > 0;
   const joinRoom = state.active.find((room) => room.id === joinRoomId);
-  const joinBounds = joinRoom ? pvpStakeBounds(joinRoom.bet_amount_nanoton) : null;
   const joinGiftInRange =
     joinRoom && joinGiftStakeNanoton
       ? pvpGiftWithinTolerance(joinRoom.bet_amount_nanoton, joinGiftStakeNanoton)
@@ -241,7 +243,7 @@ export function PvpHubView() {
       <section className="panel space-y-3">
         <p className="section-label">Создать комнату 1 на 1</p>
 
-        <BetFundingPanel
+        <BetFundingControl
           mode={fundingMode}
           onModeChange={setFundingMode}
           amountTon={betAmount}
@@ -251,6 +253,8 @@ export function PvpHubView() {
           disabled={creating}
           quickAmounts={QUICK_AMOUNTS}
           multiple={false}
+          title="Ставка комнаты"
+          subtitle="Сумма TON или один подарок — это ставка комнаты"
         />
 
         <Button className="h-11 w-full rounded-xl" variant="accent" disabled={creating} onClick={createRoom}>
@@ -264,7 +268,24 @@ export function PvpHubView() {
 
       {hasRooms ? (
         <section className="space-y-2">
-          {openRooms.map((room) => {
+          {displayRooms.map((room) => {
+            if (room.status === "finished") {
+              return (
+                <PvpRoomExitShell key={room.id} leaving={finished.leavingIds.has(room.id)}>
+                  <PvpResultRoomCard
+                    room={room}
+                    onProof={
+                      room.game_round_id
+                        ? () => setProofRoundId(room.game_round_id!)
+                        : undefined
+                    }
+                  />
+                </PvpRoomExitShell>
+              );
+            }
+            if (room.status === "countdown" || room.status === "spinning") {
+              return <PvpActiveRoomCard key={room.id} room={room} />;
+            }
             const alreadyJoined = room.players.some((player) => player.user_id === userId);
             const isCreator = room.creator_id === userId;
             return (
@@ -277,32 +298,22 @@ export function PvpHubView() {
               />
             );
           })}
-          {liveRooms.map((room) => (
-            <PvpActiveRoomCard key={room.id} room={room} />
-          ))}
-          {state.history.map((room) => (
-            <PvpResultRoomCard
-              key={room.id}
-              room={room}
-              onProof={room.game_round_id ? () => setProofRoundId(room.game_round_id!) : undefined}
-            />
-          ))}
+        </section>
+      ) : lobbyReady ? (
+        <section className="panel flex flex-col items-center gap-2 py-10 text-center">
+          <p className="text-sm font-semibold text-foreground">Нет открытых дуэлей</p>
+          <p className="max-w-[16rem] text-xs leading-relaxed text-muted">
+            Создайте первую комнату выше — соперник сможет присоединиться к вашей ставке.
+          </p>
         </section>
       ) : null}
 
       {joinRoomId && joinRoom ? (
         <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
-          <div className="relative mx-auto w-full max-w-lg rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]">
+          {(close) => (
+          <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
-            <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
-            <p className="mb-1 text-center text-xs text-muted">
-              Ставка комнаты: {formatTON(joinRoom.bet_amount_nanoton)} TON · допуск ±10%
-            </p>
-            {joinBounds && (
-              <p className="mb-4 text-center text-[11px] text-muted">
-                Подарок: {formatTON(joinBounds.min)} – {formatTON(joinBounds.max)} TON
-              </p>
-            )}
+            <p className="mb-4 text-center text-[15px] font-semibold">Войти в комнату</p>
 
             <BetFundingPanel
               mode={joinFundingMode}
@@ -313,6 +324,8 @@ export function PvpHubView() {
               onSelectGifts={setJoinGiftIds}
               disabled={!!joiningId}
               multiple={false}
+              layout="sheet"
+              amountLocked
             />
 
             {joinWinChanceBps != null && (
@@ -332,7 +345,7 @@ export function PvpHubView() {
               <Button
                 variant="outline"
                 className="h-11 rounded-xl"
-                onClick={() => setJoinRoomId(null)}
+                onClick={close}
                 disabled={!!joiningId}
               >
                 Отмена
@@ -347,6 +360,7 @@ export function PvpHubView() {
               </Button>
             </div>
           </div>
+          )}
         </ModalOverlay>
       ) : null}
 
@@ -360,4 +374,43 @@ export function PvpHubView() {
       ) : null}
     </PageShell>
   );
+}
+
+/**
+ * Keep finished rooms in the same list position they had while active.
+ * New open rooms append; gone rooms drop out of the sticky order.
+ */
+function buildStickyRoomList(
+  active: PvpRoom[],
+  recentById: Map<string, PvpRoom>,
+  goneIds: Set<string>,
+  orderRef: { current: string[] },
+): PvpRoom[] {
+  const activeById = new Map(active.map((room) => [room.id, room]));
+  const presentIds = new Set<string>([
+    ...Array.from(activeById.keys()),
+    ...Array.from(recentById.keys()),
+  ]);
+
+  orderRef.current = orderRef.current.filter(
+    (id) => presentIds.has(id) && !goneIds.has(id),
+  );
+
+  for (const room of active) {
+    if (!orderRef.current.includes(room.id)) {
+      orderRef.current.push(room.id);
+    }
+  }
+  for (const id of Array.from(recentById.keys())) {
+    if (!orderRef.current.includes(id)) {
+      orderRef.current.push(id);
+    }
+  }
+
+  const rooms: PvpRoom[] = [];
+  for (const id of orderRef.current) {
+    const room = activeById.get(id) ?? recentById.get(id);
+    if (room) rooms.push(room);
+  }
+  return rooms;
 }

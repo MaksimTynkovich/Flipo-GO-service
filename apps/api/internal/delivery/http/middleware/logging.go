@@ -43,7 +43,7 @@ func Recovery() gin.HandlerFunc {
 				attrs := append(applog.RequestAttrs(c), "panic", recovered)
 				slog.ErrorContext(c.Request.Context(), "panic_recovered", attrs...)
 				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": "internal server error",
+					"error": "Внутренняя ошибка сервера",
 					"code":  "internal_error",
 				})
 			}

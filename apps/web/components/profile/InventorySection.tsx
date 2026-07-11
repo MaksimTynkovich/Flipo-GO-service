@@ -20,7 +20,11 @@ import { patchUserBalance } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
 import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { Gift } from "lucide-react";
+import { Gift, ArrowUpRight } from "lucide-react";
+import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
+import { formatUserError } from "@/lib/user-errors";
+import { openTelegramLink } from "@/src/shared/lib/twa";
+import { Button } from "@/components/ui/button";
 
 export function InventorySection() {
   const { setUser } = useAuth();
@@ -86,7 +90,7 @@ export function InventorySection() {
       closeSheet();
       load();
     } catch (e) {
-      setListError(e instanceof Error ? e.message : "Ошибка");
+      setListError(formatUserError(e, "Ошибка"));
     } finally {
       setLiquidating(false);
     }
@@ -101,7 +105,7 @@ export function InventorySection() {
       closeSheet();
       load();
     } catch (e) {
-      setListError(e instanceof Error ? e.message : "Ошибка");
+      setListError(formatUserError(e, "Ошибка"));
     } finally {
       setWithdrawing(false);
     }
@@ -131,7 +135,7 @@ export function InventorySection() {
           {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => <InventoryGiftCardSkeleton key={i} />)
             : visibleItems.map((item) => {
@@ -153,8 +157,24 @@ export function InventorySection() {
               <Gift className="h-5 w-5" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold">Здесь будут отображаться ваши подарки</p>
+              <p className="text-sm font-semibold">Инвентарь пуст</p>
+              <p className="text-xs leading-relaxed text-muted">
+                Отправьте подарок боту {depositBotMention()} — он появится здесь.
+              </p>
             </div>
+            <Button
+              variant="accent"
+              className="mt-1 h-11 rounded-xl px-5"
+              onClick={() => {
+                const url = depositBotTelegramUrl();
+                if (!openTelegramLink(url)) {
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }
+              }}
+            >
+              Открыть бота
+              <ArrowUpRight className="ml-1.5 h-4 w-4" />
+            </Button>
           </div>
         )}
       </section>

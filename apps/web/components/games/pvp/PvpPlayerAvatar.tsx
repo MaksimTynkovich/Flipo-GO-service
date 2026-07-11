@@ -31,8 +31,7 @@ export function PvpPlayerAvatar({
       className={cn(
         "pvp-player-avatar relative inline-flex shrink-0 overflow-hidden rounded-full bg-surface-raised",
         highlight === "active" && "pvp-player-avatar--active",
-        highlight === "winner" &&
-          "shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_28%,transparent),0_0_24px_color-mix(in_srgb,var(--accent)_18%,transparent)]",
+        highlight === "winner" && "ring-1 ring-accent/70",
         className,
       )}
       style={{
@@ -67,6 +66,6 @@ function activeHighlightStyle(strength: number) {
     opacity: 0.52 + strength * 0.48,
     transform: `scale(${0.94 + strength * 0.06})`,
     filter: `saturate(${0.7 + strength * 0.45}) brightness(${0.72 + strength * 0.34})`,
-    boxShadow: `0 0 0 ${1 + strength}px color-mix(in srgb, var(--accent) ${10 + strength * 18}%, transparent), 0 0 ${14 + strength * 22}px color-mix(in srgb, var(--accent) ${8 + strength * 16}%, transparent)`,
+    boxShadow: `0 0 0 ${1 + strength}px color-mix(in srgb, var(--accent) ${20 + strength * 30}%, transparent)`,
   };
 }

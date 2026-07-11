@@ -402,7 +402,11 @@ func (s *Service) buildLobbyState(ctx context.Context) (*LobbyState, error) {
 	if err != nil {
 		return nil, err
 	}
-	historyRooms, err := s.pvp.ListRecentFinishedRooms(ctx, HistoryLimit)
+	historyRooms, err := s.pvp.ListRecentFinishedRooms(
+		ctx,
+		time.Now().UTC().Add(-time.Duration(HistoryVisibleSeconds)*time.Second),
+		HistoryLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

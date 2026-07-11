@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	CountdownSeconds = 3
-	SpinSeconds      = 14
-	HistoryLimit     = 12
+	CountdownSeconds       = 3
+	SpinSeconds            = 14
+	HistoryLimit           = 12
+	HistoryVisibleSeconds  = 10
 )
 
 type TickNotifier interface {

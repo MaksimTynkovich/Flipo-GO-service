@@ -38,13 +38,13 @@ func (h *MarketHandler) List(c *gin.Context) {
 func (h *MarketHandler) Get(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
 	listing, err := h.market.Get(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "listing not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Лот не найден"})
 			return
 		}
 		respondInternal(c, err)
@@ -75,7 +75,7 @@ func (h *MarketHandler) Create(c *gin.Context) {
 	}
 	itemID, err := uuid.Parse(req.ItemID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID предмета"})
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *MarketHandler) Cancel(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
 	if err := h.market.CancelListing(c.Request.Context(), userID, id); err != nil {
@@ -120,7 +120,7 @@ func (h *MarketHandler) Buy(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
 

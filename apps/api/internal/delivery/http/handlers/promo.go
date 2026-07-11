@@ -91,6 +91,10 @@ func writePromoError(c *gin.Context, err error) {
 			"code":  "promo_already_redeemed",
 		})
 	default:
-		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": err.Error()})
+		msg := err.Error()
+		if msg == "" {
+			msg = "Не удалось активировать промокод"
+		}
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": msg})
 	}
 }

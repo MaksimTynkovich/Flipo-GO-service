@@ -45,7 +45,7 @@ func (h *WalletHandler) ConfirmDeposit(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	transferID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid transfer id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID перевода"})
 		return
 	}
 	var req struct {
@@ -107,7 +107,7 @@ func (h *WalletHandler) GetTransfer(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	transferID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid transfer id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID перевода"})
 		return
 	}
 	transfer, err := h.wallet.GetTransfer(c.Request.Context(), userID, transferID)

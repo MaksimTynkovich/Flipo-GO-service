@@ -4,7 +4,14 @@ import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { PvpPlayer } from "@/lib/pvp";
 import { PvpPlayerAvatar } from "@/components/games/pvp/PvpPlayerAvatar";
 import { highlightStrengthAtIndex } from "@/lib/pvp-highlight";
-import { computeSpinOffsets, PVP_LAND_CYCLE, spinOffsetAtTime, spinTimeProgress } from "@/lib/pvp-spin";
+import {
+  computeSpinOffsets,
+  PVP_LAND_CYCLE,
+  PVP_STRIP_COMPACT,
+  type PvpStripMetrics,
+  spinOffsetAtTime,
+  spinTimeProgress,
+} from "@/lib/pvp-spin";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 
@@ -16,8 +23,11 @@ type Props = {
   spinAt?: string;
   spinEndsAt?: string;
   dimmed?: boolean;
+  settled?: boolean;
   className?: string;
 };
+
+const METRICS: PvpStripMetrics = PVP_STRIP_COMPACT;
 
 export function PvpAvatarStrip({
   players,
@@ -27,6 +37,7 @@ export function PvpAvatarStrip({
   spinAt,
   spinEndsAt,
   dimmed = false,
+  settled = false,
   className,
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -34,6 +45,7 @@ export function PvpAvatarStrip({
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
   const rafRef = useRef<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [landed, setLanded] = useState(false);
 
   const playerKey = useMemo(
     () => players.map((player) => player.user_id).join(":"),
@@ -42,9 +54,18 @@ export function PvpAvatarStrip({
 
   const extendedPlayers = useMemo(() => {
     if (players.length === 0) return [];
-    const repeats = PVP_LAND_CYCLE + 4;
+    const repeats = PVP_LAND_CYCLE + 8;
     return Array.from({ length: repeats }, () => players).flat();
   }, [playerKey, players]);
+
+  const showExtended = spinning || previewSpinning || settled;
+
+  const winnerIndex = useMemo(
+    () => (winnerId ? players.findIndex((player) => player.user_id === winnerId) : -1),
+    [players, winnerId],
+  );
+  const landIndex =
+    winnerIndex >= 0 ? PVP_LAND_CYCLE * players.length + winnerIndex : -1;
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -57,6 +78,10 @@ export function PvpAvatarStrip({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    setLanded(false);
+  }, [spinAt, winnerId, spinning]);
 
   useEffect(() => {
     const strip = stripRef.current;
@@ -72,27 +97,51 @@ export function PvpAvatarStrip({
       return;
     }
 
-    if (!spinning || !winnerId || !spinAt || !spinEndsAt) {
-      if (previewSpinning) {
-        const previewIndex = players.length * PVP_LAND_CYCLE;
-        const previewOffset = -(previewIndex * (SLOT_SIZE + SLOT_GAP)) + (viewportWidth / 2 - SLOT_SIZE / 2);
-        strip.style.transform = `translateX(${previewOffset}px)`;
-      } else {
-        strip.style.transform = "translateX(0px)";
-      }
-      clearSlotHighlights(slotRefs.current);
+    const step = METRICS.slotSize + METRICS.slotGap;
+    const localWinnerIndex = winnerId
+      ? players.findIndex((player) => player.user_id === winnerId)
+      : -1;
+
+    if (settled && localWinnerIndex >= 0) {
+      const { targetOffset } = computeSpinOffsets(
+        localWinnerIndex,
+        players.length,
+        viewportWidth,
+        METRICS,
+      );
+      strip.style.transform = `translateX(${targetOffset}px)`;
+      updateSlotHighlights(
+        slotRefs.current,
+        getCenteredSlotPosition(targetOffset, viewportWidth, extendedPlayers.length, METRICS),
+      );
+      setLanded(true);
       return;
     }
 
-    const winnerIndex = players.findIndex((player) => player.user_id === winnerId);
-    if (winnerIndex < 0) return;
+    if (!spinning || localWinnerIndex < 0 || !spinAt || !spinEndsAt) {
+      if (previewSpinning) {
+        const previewIndex = players.length * Math.floor(PVP_LAND_CYCLE / 2);
+        const previewOffset =
+          -(previewIndex * step) +
+          (viewportWidth / 2 - METRICS.slotSize / 2 - METRICS.stripPaddingX);
+        strip.style.transform = `translateX(${previewOffset}px)`;
+        updateSlotHighlights(
+          slotRefs.current,
+          getCenteredSlotPosition(previewOffset, viewportWidth, extendedPlayers.length, METRICS),
+        );
+      } else {
+        strip.style.transform = "translateX(0px)";
+        clearSlotHighlights(slotRefs.current);
+      }
+      return;
+    }
 
     const { targetOffset } = computeSpinOffsets(
-      winnerIndex,
+      localWinnerIndex,
       players.length,
       viewportWidth,
+      METRICS,
     );
-
     const spinAtMs = new Date(spinAt).getTime();
     const spinEndsAtMs = new Date(spinEndsAt).getTime();
 
@@ -101,14 +150,16 @@ export function PvpAvatarStrip({
       const timeProgress = spinTimeProgress(now, spinAtMs, spinEndsAtMs);
       const offset = spinOffsetAtTime(timeProgress, targetOffset);
       strip.style.transform = `translateX(${offset}px)`;
-
-      const centerPosition = getCenteredSlotPosition(offset, viewportWidth, extendedPlayers.length);
-      updateSlotHighlights(slotRefs.current, centerPosition);
+      updateSlotHighlights(
+        slotRefs.current,
+        getCenteredSlotPosition(offset, viewportWidth, extendedPlayers.length, METRICS),
+      );
 
       if (timeProgress < 1) {
         rafRef.current = requestAnimationFrame(frame);
       } else {
         rafRef.current = null;
+        setLanded(true);
       }
     };
 
@@ -120,58 +171,90 @@ export function PvpAvatarStrip({
         rafRef.current = null;
       }
     };
-  }, [spinning, previewSpinning, winnerId, spinAt, spinEndsAt, viewportWidth, playerKey, players.length, extendedPlayers.length]);
+  }, [
+    spinning,
+    previewSpinning,
+    settled,
+    winnerId,
+    spinAt,
+    spinEndsAt,
+    viewportWidth,
+    playerKey,
+    players.length,
+    extendedPlayers.length,
+  ]);
 
   if (players.length === 0) {
     return null;
   }
 
+  const highlightMode = spinning || previewSpinning || settled ? "active" : "none";
+
   return (
-    <div className={cn("relative w-full", className)}>
-      <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 text-accent drop-shadow-[0_0_14px_color-mix(in_srgb,var(--accent)_55%,transparent)]">
-        <ChevronDown className="h-4 w-4" strokeWidth={2.5} />
+    <div
+      ref={viewportRef}
+      className={cn(
+        "relative w-full overflow-hidden pt-3",
+        dimmed && "opacity-40",
+        className,
+      )}
+    >
+      <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 text-accent">
+        <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
       </div>
 
       <div
-        ref={viewportRef}
-        className={cn(
-          "relative mt-4 overflow-hidden rounded-2xl bg-[linear-gradient(180deg,rgba(30,37,58,0.78),rgba(19,24,40,0.84))] py-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)]",
-          dimmed && "opacity-40",
-        )}
+        ref={stripRef}
+        className="flex w-max will-change-transform py-0.5"
+        style={{
+          gap: METRICS.slotGap,
+          paddingLeft: METRICS.stripPaddingX,
+          paddingRight: METRICS.stripPaddingX,
+        }}
       >
-        <div ref={stripRef} className="flex will-change-transform px-3" style={{ gap: SLOT_GAP }}>
-          {(spinning || previewSpinning ? extendedPlayers : players).map((player, index) => (
+        {(showExtended ? extendedPlayers : players).map((player, index) => {
+          const isWinnerSlot = landed && landIndex >= 0 && index === landIndex;
+          return (
             <div
               key={`${player.user_id}-${index}`}
               ref={(node) => {
                 slotRefs.current[index] = node;
               }}
-              className="relative flex h-[56px] w-[56px] items-center justify-center"
-              style={{ "--hl": 0 } as CSSProperties}
+              className="relative flex shrink-0 items-center justify-center"
+              style={
+                {
+                  width: METRICS.slotSize,
+                  height: METRICS.slotSize,
+                  minWidth: METRICS.slotSize,
+                  "--hl": 0,
+                } as CSSProperties
+              }
             >
               <PvpPlayerAvatar
                 player={player}
-                size={SLOT_SIZE}
-                highlight={spinning ? "active" : "none"}
+                size={METRICS.avatarSize}
+                highlight={isWinnerSlot ? "winner" : highlightMode}
               />
             </div>
-          ))}
-        </div>
-
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-[rgba(19,24,40,0.98)] via-[rgba(19,24,40,0.7)] to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-[rgba(19,24,40,0.98)] via-[rgba(19,24,40,0.7)] to-transparent" />
+          );
+        })}
       </div>
+
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-surface to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-surface to-transparent" />
     </div>
   );
 }
 
-const SLOT_SIZE = 44;
-const SLOT_GAP = 10;
-const STRIP_PADDING_X = 12;
-
-function getCenteredSlotPosition(offset: number, viewportWidth: number, totalSlots: number): number {
-  const centerX = viewportWidth / 2 - offset - STRIP_PADDING_X - SLOT_SIZE / 2;
-  const slot = centerX / (SLOT_SIZE + SLOT_GAP);
+function getCenteredSlotPosition(
+  offset: number,
+  viewportWidth: number,
+  totalSlots: number,
+  metrics: PvpStripMetrics,
+): number {
+  const step = metrics.slotSize + metrics.slotGap;
+  const centerX = viewportWidth / 2 - offset - metrics.stripPaddingX - metrics.slotSize / 2;
+  const slot = centerX / step;
   return Math.max(0, Math.min(totalSlots - 1, slot));
 }
 

@@ -35,7 +35,7 @@ export function InventoryDepositGuide({ variant = "inventory" }: Props) {
         href={depositBotTelegramUrl()}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex h-12 w-full items-center justify-center gap-2 bg-accent text-sm font-bold text-white transition-opacity active:opacity-90"
+        className="app-control btn-primary flex h-12 w-full items-center justify-center gap-2 rounded-none text-sm font-bold"
       >
         Открыть {depositBotMention()}
         <ArrowUpRight className="h-4 w-4" />

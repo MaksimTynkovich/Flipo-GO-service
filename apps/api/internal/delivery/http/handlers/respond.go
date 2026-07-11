@@ -13,7 +13,7 @@ func respondError(c *gin.Context, status int, err error, body gin.H) {
 
 func respondInternal(c *gin.Context, err error) {
 	httperr.Respond(c, http.StatusInternalServerError, err, gin.H{
-		"error": "internal server error",
+		"error": "Внутренняя ошибка сервера",
 		"code":  "internal_error",
 	})
 }

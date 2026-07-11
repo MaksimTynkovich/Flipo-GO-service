@@ -74,7 +74,7 @@ func (h *AuthHandler) TelegramAuth(c *gin.Context) {
 
 func (h *AuthHandler) DebugAuth(c *gin.Context) {
 	if !h.auth.DebugAuthEnabled() {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Не найдено"})
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	user, err := h.auth.GetUser(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Пользователь не найден"})
 		return
 	}
 	c.JSON(http.StatusOK, toUserView(h.auth, user))

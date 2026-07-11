@@ -314,10 +314,10 @@ func (r *PvPRepo) ListActiveRooms(ctx context.Context) ([]domain.PvPRoom, error)
 	return rooms, err
 }
 
-func (r *PvPRepo) ListRecentFinishedRooms(ctx context.Context, limit int) ([]domain.PvPRoom, error) {
+func (r *PvPRepo) ListRecentFinishedRooms(ctx context.Context, since time.Time, limit int) ([]domain.PvPRoom, error) {
 	var rooms []domain.PvPRoom
 	err := r.db.WithContext(ctx).
-		Where("status = ?", "finished").
+		Where("status = ? AND finished_at IS NOT NULL AND finished_at >= ?", "finished", since).
 		Order("finished_at DESC").
 		Limit(limit).
 		Find(&rooms).Error

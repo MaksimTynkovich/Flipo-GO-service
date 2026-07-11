@@ -1,8 +1,17 @@
 import type { Metadata, Viewport } from "next";
+import { Manrope } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers/Providers";
 import { AppLayout } from "@/src/widgets/app-shell/ui/AppLayout";
+import { BRAND_BG } from "@/src/shared/config/brand";
+import { cn } from "@/lib/utils";
+
+const sans = Manrope({
+  subsets: ["latin", "latin-ext", "cyrillic"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Flipo",
@@ -16,12 +25,12 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#17212b",
+  themeColor: BRAND_BG,
 };
 
 const tgThemeBootstrap = `
 (() => {
-  const fallback = "#17212b";
+  const fallback = "${BRAND_BG}";
   const isTooDark = (hex) => {
     if (!hex) return true;
     const value = hex.replace("#", "");
@@ -132,8 +141,8 @@ const tgThemeBootstrap = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className="bg-background">
-      <body className="bg-background">
+    <html lang="ru" className={cn(sans.variable, "bg-background")}>
+      <body className="bg-background font-sans antialiased">
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <Script id="tg-theme-bootstrap" strategy="beforeInteractive">
           {tgThemeBootstrap}

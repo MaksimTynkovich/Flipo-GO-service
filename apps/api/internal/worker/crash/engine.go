@@ -211,6 +211,7 @@ func (e *Engine) runRound(ctx context.Context) {
 
 		runState.Multiplier = multiplier
 		_ = e.svc.PublishState(ctx, runState)
+		e.svc.ProcessAutoCashouts(ctx, multiplier)
 
 		if multiplier >= crashPoint {
 			break
