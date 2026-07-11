@@ -25,6 +25,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  /** Keyboard overlays the UI instead of resizing / lifting the whole app. */
+  interactiveWidget: "overlays-content",
   themeColor: BRAND_BG,
 };
 
@@ -89,6 +91,9 @@ const tgThemeBootstrap = `
     webApp.expand();
     if (isMobilePlatform(webApp.platform)) {
       webApp.disableVerticalSwipes?.();
+      try {
+        webApp.lockOrientation?.();
+      } catch (_) {}
     }
     try {
       if (isMobilePlatform(webApp.platform) && !webApp.isFullscreen) {
@@ -145,6 +150,10 @@ const tgThemeBootstrap = `
       document.documentElement.style.setProperty("--app-safe-right", inset.right + "px");
       document.documentElement.style.setProperty("--app-header-offset", headerOffset + "px");
       document.documentElement.style.setProperty("--app-tabbar-offset", tabbarOffset + "px");
+      const stableH = webApp.viewportStableHeight || window.innerHeight;
+      if (stableH > 0) {
+        document.documentElement.style.setProperty("--app-height", Math.round(stableH) + "px");
+      }
     };
     syncInsets();
     [50, 150, 400, 800].forEach((ms) => window.setTimeout(syncInsets, ms));

@@ -25,6 +25,7 @@ type Deps struct {
 	PromoHandler     *handlers.PromoHandler
 	AdminHandler     *handlers.AdminHandler
 	AnalyticsHandler *handlers.AnalyticsHandler
+	PresenceHandler  *handlers.PresenceHandler
 	AdminTelegramIDs []int64
 	Hub              *websocket.Hub
 }
@@ -62,6 +63,7 @@ func NewRouter(deps Deps) *gin.Engine {
 		v1.GET("/market/listings", deps.MarketHandler.List)
 		v1.GET("/market/listings/:id", deps.MarketHandler.Get)
 		v1.GET("/games/:game/rounds/:id/proof", deps.GameHandler.RoundProof)
+		v1.GET("/presence", deps.PresenceHandler.Get)
 
 		authed := v1.Group("")
 		authed.Use(middleware.JWTAuth(deps.Auth))
@@ -124,6 +126,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.GET("/games/stats", deps.AdminHandler.GameStats)
 			admin.GET("/games/configs", deps.AdminHandler.ListGameConfigs)
 			admin.PATCH("/games/configs", deps.AdminHandler.UpdateGameConfig)
+			admin.GET("/social-sim", deps.AdminHandler.GetSocialSimSettings)
+			admin.PATCH("/social-sim", deps.AdminHandler.UpdateSocialSimSettings)
 			admin.POST("/games/:game/rotate-seed", deps.AdminHandler.RotateSeed)
 			admin.GET("/games/:game/seeds", deps.AdminHandler.SeedHistory)
 			admin.GET("/risk/users", deps.AdminHandler.RiskUsers)

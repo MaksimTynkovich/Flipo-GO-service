@@ -19,12 +19,13 @@ import (
 )
 
 type AdminHandler struct {
-	admin     *admin.Service
-	analytics *analyticsuc.Service
-	fairness  *fairness.Service
-	treasury  *treasury.Service
-	telegram  *telegramadmin.Service
-	hotAddr   string
+	admin             *admin.Service
+	analytics         *analyticsuc.Service
+	fairness          *fairness.Service
+	treasury          *treasury.Service
+	telegram          *telegramadmin.Service
+	hotAddr           string
+	onSocialSimUpdate func(domain.SocialSimSettings)
 }
 
 func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
@@ -36,6 +37,10 @@ func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service,
 		telegram:  telegramSvc,
 		hotAddr:   hotAddr,
 	}
+}
+
+func (h *AdminHandler) SetSocialSimUpdater(fn func(domain.SocialSimSettings)) {
+	h.onSocialSimUpdate = fn
 }
 
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {
@@ -394,6 +399,32 @@ func (h *AdminHandler) GetYieldSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) GetSocialSimSettings(c *gin.Context) {
+	settings, err := h.admin.GetSocialSimSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateSocialSimSettings(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var settings domain.SocialSimSettings
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.UpdateSocialSimSettings(c.Request.Context(), adminID, settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if h.onSocialSimUpdate != nil {
+		h.onSocialSimUpdate(settings)
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (h *AdminHandler) UpdateYieldSettings(c *gin.Context) {

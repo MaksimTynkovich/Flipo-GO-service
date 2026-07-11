@@ -87,6 +87,20 @@ export default function RoulettePage() {
     return set;
   }, [myBets]);
 
+  const myStakeByColor = useMemo(() => {
+    const map: Record<"red" | "green" | "black", number> = {
+      red: 0,
+      green: 0,
+      black: 0,
+    };
+    for (const bet of myBets) {
+      if (bet.color === "red" || bet.color === "green" || bet.color === "black") {
+        map[bet.color] += bet.amount_nanoton;
+      }
+    }
+    return map;
+  }, [myBets]);
+
   useEffect(() => {
     const phase = state?.phase ?? null;
 
@@ -212,6 +226,7 @@ export default function RoulettePage() {
               color="red"
               multiplier="×2"
               roundTotal={roundTotals.red}
+              myStake={myStakeByColor.red}
               disabled={!canBet}
               active={myColors.has("red")}
               onClick={() => bet("red")}
@@ -220,6 +235,7 @@ export default function RoulettePage() {
               color="green"
               multiplier="×14"
               roundTotal={roundTotals.green}
+              myStake={myStakeByColor.green}
               disabled={!canBet}
               active={myColors.has("green")}
               onClick={() => bet("green")}
@@ -228,6 +244,7 @@ export default function RoulettePage() {
               color="black"
               multiplier="×2"
               roundTotal={roundTotals.black}
+              myStake={myStakeByColor.black}
               disabled={!canBet}
               active={myColors.has("black")}
               onClick={() => bet("black")}
@@ -235,7 +252,16 @@ export default function RoulettePage() {
           </div>
 
           <div className="hairline-top pt-3">
-            <RouletteRoundBets data={roundBets} currentUserId={user?.id} />
+            <RouletteRoundBets
+              data={roundBets}
+              currentUserId={user?.id}
+              resultColor={
+                state?.phase === "result"
+                  ? state.result ||
+                    (state.result_number != null ? numberColor(state.result_number) : null)
+                  : null
+              }
+            />
           </div>
         </div>
       </div>

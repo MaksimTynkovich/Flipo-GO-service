@@ -5,9 +5,10 @@ import {
   CrashBetEntry,
   CrashRoundBets as CrashRoundBetsData,
   BetGiftView,
+  formatTON,
 } from "@/lib/api";
 import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
-import { TonAmount, TonIcon } from "@/components/icons/TonIcon";
+import { TonIcon } from "@/components/icons/TonIcon";
 import { crashPlayerName, formatMultiplier } from "@/lib/crash";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,8 @@ type AggregatedPlayer = {
   gifts: BetGiftView[];
   status: "pending" | "cashed_out" | "lost";
   cashout_multiplier?: number;
+  /** Net profit after cashout (stake × (mult − 1)). */
+  profit_nanoton?: number;
   bet_ids: string[];
 };
 
@@ -66,16 +69,28 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
 
     const cashed = list.filter((bet) => bet.status === "cashed_out");
     let cashoutMultiplier: number | undefined;
+    let profitNanoton: number | undefined;
 
     if (cashed.length > 0) {
       let weighted = 0;
       let weight = 0;
+      let profit = 0;
       for (const bet of cashed) {
         const mult = bet.cashout_multiplier ?? 0;
         weighted += mult * bet.amount_nanoton;
         weight += bet.amount_nanoton;
+        // Prefer server payout when present; else derive from multiplier.
+        if (bet.payout_nanoton != null && bet.payout_nanoton > 0) {
+          const isGift = bet.funding_type === "gift" || !!bet.gift;
+          profit += isGift
+            ? bet.payout_nanoton
+            : Math.max(0, bet.payout_nanoton - bet.amount_nanoton);
+        } else if (mult > 1) {
+          profit += Math.max(0, Math.floor(bet.amount_nanoton * (mult - 1)));
+        }
       }
       if (weight > 0) cashoutMultiplier = weighted / weight;
+      profitNanoton = profit;
     }
 
     const allGift = list.every((bet) => bet.funding_type === "gift" || !!bet.gift);
@@ -94,12 +109,105 @@ function aggregateBets(bets: CrashBetEntry[]): AggregatedPlayer[] {
       gifts: uniqueGifts,
       status,
       cashout_multiplier: cashoutMultiplier,
+      profit_nanoton: profitNanoton,
       bet_ids: list.map((bet) => bet.id),
     });
   }
 
-  // Biggest stake first
-  return rows.sort((a, b) => b.amount_nanoton - a.amount_nanoton);
+  return rows;
+}
+
+/**
+ * Crash lobby order during a round:
+ * - Cashed-out / lost players freeze at their current index forever.
+ * - Still-holding players reshuffle only among the remaining open slots
+ *   (by stake, largest first) — they can climb into free slots above,
+ *   but never move a frozen row.
+ * - When nobody is pending anymore (crash / round over), the whole order locks.
+ */
+function stickyOrderPlayers(
+  players: AggregatedPlayer[],
+  orderRef: { current: string[] },
+  frozenRef: { current: Set<string> },
+  lockedRef: { current: boolean },
+  roundId: string | null,
+  roundRef: { current: string | null },
+): AggregatedPlayer[] {
+  if (roundId !== roundRef.current) {
+    roundRef.current = roundId;
+    orderRef.current = [];
+    frozenRef.current = new Set();
+    lockedRef.current = false;
+  }
+
+  const byKey = new Map(players.map((player) => [player.key, player]));
+  const present = new Set(byKey.keys());
+
+  // Drop anyone who left the round payload entirely.
+  orderRef.current = orderRef.current.filter((key) => present.has(key));
+  for (const key of Array.from(frozenRef.current)) {
+    if (!present.has(key)) frozenRef.current.delete(key);
+  }
+
+  if (lockedRef.current) {
+    const locked: AggregatedPlayer[] = [];
+    for (const key of orderRef.current) {
+      const player = byKey.get(key);
+      if (player) locked.push(player);
+    }
+    return locked;
+  }
+
+  // Freeze anyone who left the holding state at their current berth.
+  for (const player of players) {
+    if (player.status !== "pending") {
+      frozenRef.current.add(player.key);
+    }
+  }
+
+  // Newcomers append — redistribution places them without shifting frozen indices.
+  const newcomers = players
+    .filter((player) => !orderRef.current.includes(player.key))
+    .sort((a, b) => b.amount_nanoton - a.amount_nanoton);
+  for (const player of newcomers) {
+    orderRef.current.push(player.key);
+    if (player.status !== "pending") {
+      frozenRef.current.add(player.key);
+    }
+  }
+
+  const pendingSorted = players
+    .filter((player) => player.status === "pending")
+    .sort((a, b) => {
+      const stakeDiff = b.amount_nanoton - a.amount_nanoton;
+      if (stakeDiff !== 0) return stakeDiff;
+      return b.pending_nanoton - a.pending_nanoton;
+    });
+
+  const openIndices: number[] = [];
+  for (let i = 0; i < orderRef.current.length; i++) {
+    if (!frozenRef.current.has(orderRef.current[i])) openIndices.push(i);
+  }
+
+  const next = orderRef.current.slice();
+  for (let i = 0; i < openIndices.length; i++) {
+    const player = pendingSorted[i];
+    if (player) next[openIndices[i]] = player.key;
+  }
+  orderRef.current = next;
+
+  const ordered: AggregatedPlayer[] = [];
+  for (const key of orderRef.current) {
+    const player = byKey.get(key);
+    if (player) ordered.push(player);
+  }
+
+  // Round finished / crashed — freeze the list as-is.
+  if (players.length > 0 && pendingSorted.length === 0) {
+    lockedRef.current = true;
+  }
+
+  return ordered;
 }
 
 function liveGainNanoton(
@@ -195,9 +303,9 @@ function PlayerRow({
   return (
     <div
       className={cn(
-        "crash-player-row flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-[background,opacity] duration-200",
-        flash && "crash-bet-flash",
+        "crash-player-row flex items-center gap-2.5 rounded-lg px-2 py-1.5",
         isCashedOut && "crash-player-row--won",
+        isCashedOut && flash && "crash-bet-flash",
         isLost && "crash-player-row--lost",
       )}
     >
@@ -217,7 +325,7 @@ function PlayerRow({
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-foreground/90">{name}</p>
-        <p className="text-[11px] tabular-nums text-muted">
+        <p className="flex min-w-0 items-center gap-1.5 text-[11px] tabular-nums text-muted">
           {player.gifts.length > 1 ? (
             <GiftStakeIcons
               gifts={player.gifts}
@@ -231,19 +339,28 @@ function PlayerRow({
               gift={player.gift}
             />
           )}
+          {isCashedOut && player.cashout_multiplier != null ? (
+            <span className="crash-cashout-result__mult shrink-0">
+              {formatMultiplier(player.cashout_multiplier)}
+            </span>
+          ) : null}
         </p>
       </div>
 
       <div className="shrink-0 text-right">
-        {isCashedOut && player.cashout_multiplier != null ? (
-          <p className="text-[11px] font-semibold tabular-nums text-success">
-            {formatMultiplier(player.cashout_multiplier)}
+        {isCashedOut && player.profit_nanoton != null && player.profit_nanoton > 0 ? (
+          <p className="crash-cashout-result__profit">
+            <span className="tabular-nums">+{formatTON(player.profit_nanoton)}</span>
+            <TonIcon variant="brand" size="xs" className="text-success" />
           </p>
         ) : isLost ? (
-          <p className="text-[11px] font-medium text-danger">Краш</p>
+          <p className="crash-crash-result__loss">
+            <span className="tabular-nums">−{formatTON(player.amount_nanoton)}</span>
+            <TonIcon variant="brand" size="xs" className="text-danger" />
+          </p>
         ) : showLiveGain ? (
           <LiveGainPlaque valueNanoton={liveGain} hot={hotGain} />
-        ) : (
+        ) : isCashedOut ? null : (
           <p className="text-[11px] font-medium text-muted">В игре</p>
         )}
       </div>
@@ -253,21 +370,56 @@ function PlayerRow({
 
 export function CrashRoundBets({ data, liveMultiplier = null }: Props) {
   const bets = data?.bets ?? [];
-  const players = useMemo(() => aggregateBets(bets), [bets]);
+  const aggregated = useMemo(() => aggregateBets(bets), [bets]);
+  const orderRef = useRef<string[]>([]);
+  const frozenRef = useRef<Set<string>>(new Set());
+  const lockedRef = useRef(false);
+  const orderRoundRef = useRef<string | null>(null);
+  const players = stickyOrderPlayers(
+    aggregated,
+    orderRef,
+    frozenRef,
+    lockedRef,
+    data?.round_id ?? null,
+    orderRoundRef,
+  );
   const [flashKeys, setFlashKeys] = useState<Set<string>>(() => new Set());
   const seenCashed = useRef<Set<string>>(new Set());
+  const flashTimers = useRef<Map<string, number>>(new Map());
   const roundRef = useRef<string | null>(null);
+
+  const cashedSignature = useMemo(() => {
+    const parts: string[] = [];
+    for (const player of aggregated) {
+      if (player.status !== "cashed_out") continue;
+      parts.push(`${player.key}:${player.bet_ids.slice().sort().join(",")}`);
+    }
+    return parts.sort().join("|");
+  }, [aggregated]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of Array.from(flashTimers.current.values())) {
+        window.clearTimeout(timer);
+      }
+      flashTimers.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const roundId = data?.round_id ?? null;
     if (roundId !== roundRef.current) {
       roundRef.current = roundId;
       seenCashed.current = new Set();
+      for (const timer of Array.from(flashTimers.current.values())) {
+        window.clearTimeout(timer);
+      }
+      flashTimers.current.clear();
       setFlashKeys(new Set());
     }
 
     const newly: string[] = [];
-    for (const player of players) {
+    for (const player of aggregated) {
       if (player.status !== "cashed_out") continue;
       const fresh = player.bet_ids.filter((id) => !seenCashed.current.has(id));
       if (fresh.length === 0) continue;
@@ -281,15 +433,22 @@ export function CrashRoundBets({ data, liveMultiplier = null }: Props) {
       for (const key of newly) next.add(key);
       return next;
     });
-    const timer = window.setTimeout(() => {
-      setFlashKeys((prev) => {
-        const next = new Set(prev);
-        for (const key of newly) next.delete(key);
-        return next;
-      });
-    }, 900);
-    return () => window.clearTimeout(timer);
-  }, [players, data?.round_id]);
+
+    for (const key of newly) {
+      const prevTimer = flashTimers.current.get(key);
+      if (prevTimer) window.clearTimeout(prevTimer);
+      const timer = window.setTimeout(() => {
+        flashTimers.current.delete(key);
+        setFlashKeys((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }, 1000);
+      flashTimers.current.set(key, timer);
+    }
+  }, [cashedSignature, aggregated, data?.round_id]);
 
   if (bets.length === 0) {
     return <p className="py-2 text-center text-xs text-muted">Пока нет ставок</p>;
@@ -298,7 +457,7 @@ export function CrashRoundBets({ data, liveMultiplier = null }: Props) {
   return (
     <div className="space-y-2">
       <p className="section-label">Игроки</p>
-      <div className="max-h-52 space-y-0.5 overflow-y-auto overscroll-contain">
+      <div className="space-y-0.5">
         {players.map((player) => (
           <PlayerRow
             key={player.key}

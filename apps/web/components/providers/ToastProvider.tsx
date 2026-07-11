@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type ToastVariant = "success" | "error" | "info";
@@ -10,16 +10,18 @@ export type ToastItem = {
   title: string;
   subtitle?: string;
   variant?: ToastVariant;
+  leaving?: boolean;
 };
 
 type ToastContextValue = {
-  showToast: (toast: Omit<ToastItem, "id">) => void;
+  showToast: (toast: Omit<ToastItem, "id" | "leaving">) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const MAX_VISIBLE = 3;
 const TOAST_TTL_MS = 3000;
+const TOAST_EXIT_MS = 180;
 const STACK_OFFSET_PX = 4;
 const TOAST_HEIGHT_PX = 28;
 
@@ -40,16 +42,36 @@ const VARIANT_STYLES: Record<ToastVariant, { pill: string; text: string }> = {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const timersRef = useRef<Map<number, number>>(new Map());
 
-  const showToast = useCallback((toast: Omit<ToastItem, "id">) => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) =>
-      [...prev, { variant: toast.variant ?? "success", ...toast, id }].slice(-MAX_VISIBLE),
-    );
-    window.setTimeout(() => {
+  const dismissToast = useCallback((id: number) => {
+    const existing = timersRef.current.get(id);
+    if (existing) window.clearTimeout(existing);
+
+    setToasts((prev) => {
+      const target = prev.find((t) => t.id === id);
+      if (!target || target.leaving) return prev;
+      return prev.map((t) => (t.id === id ? { ...t, leaving: true } : t));
+    });
+
+    const exitTimer = window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, TOAST_TTL_MS);
+      timersRef.current.delete(id);
+    }, TOAST_EXIT_MS);
+    timersRef.current.set(id, exitTimer);
   }, []);
+
+  const showToast = useCallback(
+    (toast: Omit<ToastItem, "id" | "leaving">) => {
+      const id = Date.now() + Math.random();
+      setToasts((prev) =>
+        [...prev, { variant: toast.variant ?? "success", ...toast, id }].slice(-MAX_VISIBLE),
+      );
+      const ttlTimer = window.setTimeout(() => dismissToast(id), TOAST_TTL_MS);
+      timersRef.current.set(id, ttlTimer);
+    },
+    [dismissToast],
+  );
 
   const visible = toasts.slice(-MAX_VISIBLE);
   const stackHeight =
@@ -75,11 +97,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               return (
                 <div
                   key={toast.id}
-                  className="absolute inset-x-0 flex justify-center transition-[top,opacity] duration-300 ease-out"
+                  className="absolute inset-x-0 flex justify-center transition-[top,opacity,transform] duration-base ease-out"
                   style={{
                     top: depth * STACK_OFFSET_PX,
                     zIndex: 20 - depth,
-                    opacity: 1 - depth * 0.2,
+                    opacity: toast.leaving ? 0 : 1 - depth * 0.2,
                     transform: `scale(${1 - depth * 0.03})`,
                   }}
                 >
@@ -87,7 +109,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                     className={cn(
                       "pointer-events-auto mx-auto w-max max-w-full rounded-full px-3.5 py-1.5",
                       styles.pill,
-                      isFront && "toast-enter",
+                      isFront && !toast.leaving && "toast-enter",
+                      toast.leaving && "toast-exit",
                     )}
                   >
                     <p

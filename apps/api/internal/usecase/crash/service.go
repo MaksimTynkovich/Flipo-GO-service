@@ -46,6 +46,14 @@ type BetView struct {
 	CashoutMultiplier      *float64  `json:"cashout_multiplier,omitempty"`
 	AutoCashoutMultiplier  *float64  `json:"auto_cashout_multiplier,omitempty"`
 	PayoutNanoton          int64     `json:"payout_nanoton,omitempty"`
+	// Internal-only: never expose bot/sim markers to clients.
+	Simulated bool `json:"-"`
+}
+
+// BetOverlay merges visual-only ghost bets into round bet feeds.
+type BetOverlay interface {
+	OnCrashState(roundID uuid.UUID, phase string, multiplier float64, endsAt *time.Time)
+	CrashBets(roundID uuid.UUID) []BetView
 }
 
 type betSelection struct {
@@ -69,6 +77,7 @@ type Service struct {
 	cache     domain.GameStateCache
 	tickMs    int
 	notifier  TickNotifier
+	overlay   BetOverlay
 	memState  atomic.Pointer[RoundState]
 	persistCh chan []byte
 }
@@ -109,6 +118,10 @@ func (s *Service) persistWorker() {
 
 func (s *Service) SetTickNotifier(notifier TickNotifier) {
 	s.notifier = notifier
+}
+
+func (s *Service) SetBetOverlay(overlay BetOverlay) {
+	s.overlay = overlay
 }
 
 func (s *Service) CurrentState(ctx context.Context) (*RoundState, error) {
@@ -320,6 +333,10 @@ func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 	copy := *state
 	s.memState.Store(&copy)
 
+	if s.overlay != nil {
+		s.overlay.OnCrashState(state.RoundID, state.Phase, state.Multiplier, state.EndsAt)
+	}
+
 	if s.notifier != nil {
 		s.notifier.NotifyGameTick("crash", data)
 	}
@@ -412,6 +429,10 @@ func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*Round
 			view.PhotoURL = bet.User.PhotoURL
 		}
 		views = append(views, view)
+	}
+
+	if s.overlay != nil {
+		views = append(views, s.overlay.CrashBets(roundID)...)
 	}
 
 	return &RoundBetsState{

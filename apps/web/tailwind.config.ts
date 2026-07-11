@@ -37,6 +37,7 @@ const config: Config = {
       transitionDuration: {
         fast: "150ms",
         base: "200ms",
+        slow: "300ms",
       },
     },
   },

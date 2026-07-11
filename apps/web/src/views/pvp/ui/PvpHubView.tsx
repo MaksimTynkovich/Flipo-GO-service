@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { BtnBusy } from "@/components/ui/BtnBusy";
@@ -9,13 +9,12 @@ import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
 import { BetFundingPanel } from "@/components/games/BetFundingPanel";
 import {
-  PvpActiveRoomCard,
-  PvpOpenRoomCard,
-  PvpResultRoomCard,
+  PvpRoomCardView,
 } from "@/components/games/pvp/PvpRoomCards";
 import {
+  PvpEmptyRoomSlot,
   PvpRoomExitShell,
-  usePvpFinishedVisibility,
+  usePvpRoomSlots,
 } from "@/components/games/pvp/PvpRecentResults";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { api, getInventory } from "@/lib/api";
@@ -23,7 +22,7 @@ import { trackEvent } from "@/lib/analytics";
 import { BetFundingMode, buildPvpStakeBody } from "@/lib/bet-funding";
 import { formatGameBetError } from "@/lib/game-errors";
 import { giftValuationNanoton } from "@/lib/gifts";
-import { PvpLobbyState, PvpRoom } from "@/lib/pvp";
+import { PvpLobbyState } from "@/lib/pvp";
 import {
   estimateJoinWinChanceBps,
   formatWinChanceBps,
@@ -63,7 +62,6 @@ export function PvpHubView() {
   const [joinGiftStakeNanoton, setJoinGiftStakeNanoton] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
-  const roomOrderRef = useRef<string[]>([]);
 
   const loadState = useCallback(async () => {
     try {
@@ -230,14 +228,7 @@ export function PvpHubView() {
   }
 
   const userId = user?.id;
-  const finished = usePvpFinishedVisibility(state.history);
-  const displayRooms = buildStickyRoomList(
-    state.active,
-    finished.recentById,
-    finished.goneIds,
-    roomOrderRef,
-  );
-  const hasRooms = displayRooms.length > 0;
+  const { slots, occupied } = usePvpRoomSlots(state.active, state.history);
   const joinRoom = state.active.find((room) => room.id === joinRoomId);
   const joinTonNanoton = tonToNanoton(joinAmountTon);
   const joinTotalNanoton = joinTonNanoton + joinGiftStakeNanoton;
@@ -288,63 +279,41 @@ export function PvpHubView() {
           )}
         </section>
 
-        {hasRooms ? (
-          <section className="pvp-rooms space-y-2.5">
-            <div className="pvp-rooms__head">
-              <h2 className="pvp-rooms__title">Комнаты</h2>
-              <span className="pvp-rooms__count">{displayRooms.length}</span>
-            </div>
-            {displayRooms.map((room) => {
-              const phase =
-                room.status === "finished"
-                  ? "result"
-                  : room.status === "countdown" || room.status === "spinning"
-                    ? "live"
-                    : "open";
-
-              const card =
-                phase === "result" ? (
-                  <PvpResultRoomCard
-                    room={room}
+        <section className="pvp-rooms">
+          <div className="pvp-rooms__head">
+            <h2 className="pvp-rooms__title">Комнаты</h2>
+            <span className="pvp-rooms__count">{occupied}</span>
+          </div>
+          <div className="pvp-rooms__list">
+            {slots.map((slot) => (
+              <PvpRoomExitShell
+                key={slot.index}
+                empty={!slot.room}
+                entering={slot.entering}
+                leaving={slot.leaving}
+              >
+                {slot.room ? (
+                  <PvpRoomCardView
+                    room={slot.room}
+                    userId={userId}
+                    joining={joiningId === slot.room.id}
+                    onJoin={() => openJoin(slot.room!.id)}
                     onProof={
-                      room.game_round_id
-                        ? () => setProofRoundId(room.game_round_id!)
+                      slot.room.game_round_id
+                        ? () => setProofRoundId(slot.room!.game_round_id!)
                         : undefined
                     }
                   />
-                ) : phase === "live" ? (
-                  <PvpActiveRoomCard room={room} />
                 ) : (
-                  <PvpOpenRoomCard
-                    room={room}
-                    canJoin={
-                      !room.players.some((player) => player.user_id === userId) &&
-                      room.creator_id !== userId
-                    }
-                    joining={joiningId === room.id}
-                    onJoin={() => openJoin(room.id)}
-                  />
-                );
-
-              return (
-                <PvpRoomExitShell
-                  key={room.id}
-                  leaving={phase === "result" && finished.leavingIds.has(room.id)}
-                  className="pvp-room-enter"
-                >
-                  <div key={phase} className="pvp-phase-swap">
-                    {card}
-                  </div>
-                </PvpRoomExitShell>
-              );
-            })}
-          </section>
-        ) : lobbyReady ? (
-          <section className="pvp-empty pvp-room-enter">
-            <div className="pvp-empty__glow" aria-hidden />
-            <p className="pvp-empty__title">Нет открытых комнат</p>
-          </section>
-        ) : null}
+                  <PvpEmptyRoomSlot />
+                )}
+              </PvpRoomExitShell>
+            ))}
+          </div>
+          {!lobbyReady ? null : occupied === 0 ? (
+            <p className="pvp-rooms__hint">Свободные места ждут первую комнату</p>
+          ) : null}
+        </section>
 
         {joinRoomId && joinRoom ? (
           <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
@@ -420,43 +389,4 @@ export function PvpHubView() {
       </div>
     </PageShell>
   );
-}
-
-/**
- * Keep finished rooms in the same list position they had while active.
- * New open rooms append; gone rooms drop out of the sticky order.
- */
-function buildStickyRoomList(
-  active: PvpRoom[],
-  recentById: Map<string, PvpRoom>,
-  goneIds: Set<string>,
-  orderRef: { current: string[] },
-): PvpRoom[] {
-  const activeById = new Map(active.map((room) => [room.id, room]));
-  const presentIds = new Set<string>([
-    ...Array.from(activeById.keys()),
-    ...Array.from(recentById.keys()),
-  ]);
-
-  orderRef.current = orderRef.current.filter(
-    (id) => presentIds.has(id) && !goneIds.has(id),
-  );
-
-  for (const room of active) {
-    if (!orderRef.current.includes(room.id)) {
-      orderRef.current.push(room.id);
-    }
-  }
-  for (const id of Array.from(recentById.keys())) {
-    if (!orderRef.current.includes(id)) {
-      orderRef.current.push(id);
-    }
-  }
-
-  const rooms: PvpRoom[] = [];
-  for (const id of orderRef.current) {
-    const room = activeById.get(id) ?? recentById.get(id);
-    if (room) rooms.push(room);
-  }
-  return rooms;
 }

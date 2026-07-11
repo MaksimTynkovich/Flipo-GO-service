@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -46,6 +47,60 @@ func (r *UserRepo) Upsert(ctx context.Context, user *domain.User) error {
 		Columns:   []clause.Column{{Name: "telegram_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"username", "first_name", "last_name", "photo_url", "last_login_at", "updated_at"}),
 	}).Create(user).Error
+}
+
+func (r *UserRepo) EnsureSocialBotUser(ctx context.Context, id uuid.UUID, telegramID int64, username, firstName, photoURL string) (*domain.User, error) {
+	var user domain.User
+	err := r.db.WithContext(ctx).First(&user, "id = ?", id).Error
+	if err == nil {
+		_ = r.db.WithContext(ctx).Model(&user).Updates(map[string]interface{}{
+			"username":   username,
+			"first_name": firstName,
+			"photo_url":  photoURL,
+			"updated_at": time.Now().UTC(),
+		}).Error
+		user.Username = username
+		user.FirstName = firstName
+		user.PhotoURL = photoURL
+		return &user, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	err = r.db.WithContext(ctx).Where("telegram_id = ?", telegramID).First(&user).Error
+	if err == nil {
+		_ = r.db.WithContext(ctx).Model(&user).Updates(map[string]interface{}{
+			"username":   username,
+			"first_name": firstName,
+			"photo_url":  photoURL,
+			"updated_at": time.Now().UTC(),
+		}).Error
+		user.Username = username
+		user.FirstName = firstName
+		user.PhotoURL = photoURL
+		return &user, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	user = domain.User{
+		ID:             id,
+		TelegramID:     telegramID,
+		Username:       username,
+		FirstName:      firstName,
+		PhotoURL:       photoURL,
+		BettingBalance: 0,
+		StakingTier:    domain.TierBase,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := r.db.WithContext(ctx).Create(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (r *UserRepo) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error {

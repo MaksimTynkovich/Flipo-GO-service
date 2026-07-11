@@ -26,11 +26,20 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
   const [keyboardInset, setKeyboardInset] = useState(0);
   const closedRef = useRef(false);
   const exitTimerRef = useRef<number | null>(null);
+  const scrollLockRef = useRef<{ main: HTMLElement | null; overflow: string }>({
+    main: null,
+    overflow: "",
+  });
 
   useEffect(() => {
     setMounted(true);
-    const prev = document.body.style.overflow;
+    const prevBody = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    const main = document.querySelector<HTMLElement>(".app-frame__main");
+    scrollLockRef.current = { main, overflow: main?.style.overflow ?? "" };
+    if (main) main.style.overflow = "hidden";
+
     if (analyticsModalId) {
       trackModalOpen(analyticsModalId);
     }
@@ -56,7 +65,9 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
     return () => {
       window.cancelAnimationFrame(outer);
       window.cancelAnimationFrame(inner);
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBody;
+      const { main: lockedMain, overflow } = scrollLockRef.current;
+      if (lockedMain) lockedMain.style.overflow = overflow;
       vv?.removeEventListener("resize", syncKeyboard);
       vv?.removeEventListener("scroll", syncKeyboard);
       window.removeEventListener("resize", syncKeyboard);
@@ -91,7 +102,7 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
         top: "calc(-1 * env(safe-area-inset-top, 0px))",
         bottom: keyboardInset,
         height: "auto",
-        transition: keyboardInset > 0 ? "bottom 180ms var(--ease-out)" : undefined,
+        transition: keyboardInset > 0 ? "bottom var(--duration-base) var(--ease-out)" : undefined,
       }}
     >
       <button

@@ -11,6 +11,7 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*User, error)
 	FindByTelegramID(ctx context.Context, telegramID int64) (*User, error)
 	Upsert(ctx context.Context, user *User) error
+	EnsureSocialBotUser(ctx context.Context, id uuid.UUID, telegramID int64, username, firstName, photoURL string) (*User, error)
 	UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (int64, error)
 	ReleasePromoBalance(ctx context.Context, userID uuid.UUID) error
@@ -131,6 +132,8 @@ type PlatformRepository interface {
 	ListQueuedBroadcasts(ctx context.Context, limit int) ([]TelegramBroadcast, error)
 	CreateSweep(ctx context.Context, sweep *TreasurySweep) error
 	ListSweeps(ctx context.Context, limit int) ([]TreasurySweep, error)
+	GetSocialSimSettings(ctx context.Context) (*SocialSimSettings, error)
+	UpdateSocialSimSettings(ctx context.Context, settings *SocialSimSettings) error
 	EnsureDefaults(ctx context.Context) error
 }
 

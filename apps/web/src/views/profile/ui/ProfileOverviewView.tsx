@@ -56,6 +56,15 @@ export function ProfileOverviewView() {
     return () => window.clearTimeout(timer);
   }, [promoOpen]);
 
+  // Keep keyboard open after a failed activation so the code can be corrected.
+  useEffect(() => {
+    if (!promoOpen || !promoError || promoLoading) return;
+    const timer = window.setTimeout(() => {
+      promoInputRef.current?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [promoOpen, promoError, promoLoading]);
+
   function openPromo() {
     setPromoError(null);
     setPromoChannelLink(null);
@@ -266,7 +275,11 @@ export function ProfileOverviewView() {
                   variant="accent"
                   className="h-11 w-full rounded-xl"
                   disabled={promoLoading || !promoCode.trim()}
-                  onClick={() => activatePromo(close).catch(() => {})}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    promoInputRef.current?.focus({ preventScroll: true });
+                    void activatePromo(close);
+                  }}
                 >
                   {promoLoading ? "…" : "Активировать"}
                 </Button>

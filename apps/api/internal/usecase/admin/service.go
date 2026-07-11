@@ -160,6 +160,30 @@ func (s *Service) GetYieldSettings(ctx context.Context) (*domain.PlatformYieldSe
 	return s.platform.GetYieldSettings(ctx)
 }
 
+func (s *Service) GetSocialSimSettings(ctx context.Context) (*domain.SocialSimSettings, error) {
+	return s.platform.GetSocialSimSettings(ctx)
+}
+
+func (s *Service) UpdateSocialSimSettings(ctx context.Context, adminID uuid.UUID, settings domain.SocialSimSettings) error {
+	// Keep knobs in safe ranges before persist.
+	if settings.OnlineBaseMin < 0 {
+		settings.OnlineBaseMin = 0
+	}
+	if settings.OnlineBaseMax < settings.OnlineBaseMin {
+		settings.OnlineBaseMax = settings.OnlineBaseMin
+	}
+	if err := s.platform.UpdateSocialSimSettings(ctx, &settings); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "social_sim_settings_updated", "social_sim_settings", "1", map[string]any{
+		"enabled":         settings.Enabled,
+		"online_base_min": settings.OnlineBaseMin,
+		"online_base_max": settings.OnlineBaseMax,
+		"bet_intensity":   settings.BetIntensity,
+		"chaos":           settings.Chaos,
+	})
+}
+
 func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformYieldSettings) error {
 	if err := s.platform.UpdateYieldSettings(ctx, &settings); err != nil {
 		return err

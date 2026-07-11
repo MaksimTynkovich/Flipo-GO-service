@@ -10,7 +10,7 @@ type Props = {
 
 export function PageShell({ title, description, children, className, flush }: Props) {
   return (
-    <div className={cn("page-enter space-y-5", className)}>
+    <div className={cn("space-y-5", className)}>
       {(title || description) && (
         <div className="space-y-1.5">
           {title && (

@@ -83,6 +83,12 @@ export function MarketToolbar({
             type="search"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
+            onFocus={() => {
+              // Keep the app frame pinned when the soft keyboard opens.
+              window.scrollTo(0, 0);
+              document.documentElement.scrollTop = 0;
+              document.body.scrollTop = 0;
+            }}
             placeholder="Поиск"
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
             enterKeyHint="search"

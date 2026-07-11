@@ -910,6 +910,48 @@ export type AdminGameConfig = {
   platform_fee_bps: number;
 };
 
+export type AdminSocialSimSettings = {
+  id: number;
+  enabled: boolean;
+  crash_enabled: boolean;
+  roulette_enabled: boolean;
+  pvp_enabled: boolean;
+  lobby_enabled: boolean;
+  online_base_min: number;
+  online_base_max: number;
+  online_jitter: number;
+  tod_multipliers: number[];
+  bet_intensity: number;
+  bet_burst_chance: number;
+  idle_gap_ms_min: number;
+  idle_gap_ms_max: number;
+  stake_p50: number;
+  stake_p90: number;
+  crash_auto_cashout_share: number;
+  crash_cashout_min: number;
+  crash_cashout_max: number;
+  roulette_red_weight: number;
+  roulette_black_weight: number;
+  roulette_green_weight: number;
+  pvp_max_ghost_rooms: number;
+  pvp_room_ttl_sec_min: number;
+  pvp_room_ttl_sec_max: number;
+  pvp_stake_min_frac: number;
+  pvp_stake_max_frac: number;
+  chaos: number;
+  updated_at?: string;
+};
+
+export type PresenceSnapshot = {
+  online: number;
+  by_game: {
+    crash?: number;
+    roulette?: number;
+    pvp?: number;
+  };
+  updated_at: string;
+};
+
 export type AdminRiskSettings = {
   max_daily_win_nanoton: number;
   max_round_exposure_nanoton: number;
@@ -1093,6 +1135,21 @@ export async function getAdminAuditLogs() {
 
 export async function getAdminGameConfigs() {
   return api<AdminGameConfig[]>("/api/v1/admin/games/configs");
+}
+
+export async function getAdminSocialSimSettings() {
+  return api<AdminSocialSimSettings>("/api/v1/admin/social-sim");
+}
+
+export async function updateAdminSocialSimSettings(settings: AdminSocialSimSettings) {
+  return api<{ ok: boolean }>("/api/v1/admin/social-sim", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
+}
+
+export async function getPresence() {
+  return api<PresenceSnapshot>("/api/v1/presence");
 }
 
 export async function updateAdminMarketListingPrice(id: string, priceNanoton: number) {

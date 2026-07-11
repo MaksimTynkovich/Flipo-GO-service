@@ -18,19 +18,25 @@ export function AppHeader() {
   const mainBalance = user ? mainBalanceNanoton(user) : 0;
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 bg-background/90 pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)] backdrop-blur-xl hairline-bottom">
-      <div className="app-container flex h-14 items-center justify-between gap-3">
+    <header className="app-header absolute left-0 right-0 top-0 z-50 bg-background/90 pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)] backdrop-blur-xl hairline-bottom">
+      <div className="app-container relative flex h-14 items-center justify-between gap-3">
         <Link
           href={APP_ROUTES.profile}
           aria-label="Открыть профиль"
           onClick={() => haptics.impactOccurred("light")}
-          className="app-control flex h-11 w-11 shrink-0 items-center justify-center rounded-full ring-0 transition-[box-shadow] duration-200 hover:ring-2 hover:ring-accent/25"
+          className="app-control relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full ring-0 transition-[box-shadow] duration-200 hover:ring-2 hover:ring-accent/25"
         >
           <UserAvatar user={user} size={36} />
         </Link>
 
-        <div className="relative flex min-w-0 items-center overflow-visible">
+        <div
+          className="pointer-events-none absolute inset-x-0 flex items-center justify-center"
+          aria-live="polite"
+        >
           <BalanceGainFx />
+        </div>
+
+        <div className="relative z-10 flex min-w-0 items-center overflow-visible">
           <div className="balance-pill flex min-w-0 items-center overflow-visible rounded-full">
             <div className="flex min-w-0 items-center gap-1.5 px-3 py-1.5">
               <span className="truncate text-[15px] font-semibold tabular-nums leading-none tracking-tight text-foreground">

@@ -38,6 +38,14 @@ export type TelegramWebApp = {
   exitFullscreen?: () => void;
   isFullscreen?: boolean;
   disableVerticalSwipes?: () => void;
+  /** Bot API 8.0+ — lock Mini App to the current orientation. */
+  lockOrientation?: () => void;
+  unlockOrientation?: () => void;
+  isOrientationLocked?: boolean;
+  /** Current visible height (shrinks with the on-screen keyboard). */
+  viewportHeight?: number;
+  /** Stable height without the virtual keyboard — use this for app chrome. */
+  viewportStableHeight?: number;
   safeAreaInset?: SafeAreaInset;
   contentSafeAreaInset?: SafeAreaInset;
   onEvent?: (eventType: string, callback: () => void) => void;
@@ -149,6 +157,11 @@ export function initTelegramWebApp() {
   webApp.expand();
   if (isTelegramMobilePlatform(webApp.platform)) {
     webApp.disableVerticalSwipes?.();
+    try {
+      webApp.lockOrientation?.();
+    } catch {
+      // Older clients without Bot API 8.0+ orientation lock.
+    }
   }
 
   try {
@@ -258,6 +271,41 @@ export function getAppTabbarOffset(bottomInset: number) {
   return bottomInset + APP_TABBAR_HEIGHT_PX + APP_CONTENT_GAP_PX;
 }
 
+/**
+ * Lock the app frame to the stable viewport height so the on-screen keyboard
+ * overlays content instead of compressing / lifting the whole shell.
+ */
+let lastViewportWidth = 0;
+
+export function applyTelegramViewportHeightToDocument() {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+
+  const root = document.documentElement;
+  const webApp = getTelegramWebApp();
+  const stable = webApp?.viewportStableHeight;
+  const prev = Number.parseFloat(root.style.getPropertyValue("--app-height")) || 0;
+  const layout = window.innerHeight;
+  const width = window.innerWidth;
+  const orientationChanged = lastViewportWidth > 0 && Math.abs(width - lastViewportWidth) > 40;
+  lastViewportWidth = width;
+
+  let height = 0;
+  if (typeof stable === "number" && stable > 0) {
+    height = stable;
+  } else if (!orientationChanged && prev > 0 && prev - layout > 120) {
+    // Keyboard likely shrank the layout viewport — keep the previous height.
+    height = prev;
+  } else {
+    height = layout > 0 ? layout : prev;
+  }
+
+  if (height > 0) {
+    root.style.setProperty("--app-height", `${Math.round(height)}px`);
+  }
+}
+
 /** Apply Telegram content/safe area insets (required in fullscreen under native controls). */
 export function applyTelegramSafeAreaToDocument() {
   if (typeof document === "undefined") {
@@ -266,6 +314,8 @@ export function applyTelegramSafeAreaToDocument() {
 
   const webApp = getTelegramWebApp();
   const root = document.documentElement;
+
+  applyTelegramViewportHeightToDocument();
 
   if (!webApp) {
     return;

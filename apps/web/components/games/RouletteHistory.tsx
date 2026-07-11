@@ -65,7 +65,6 @@ export function RouletteHistory({ history, onSelectRound, className }: Props) {
                   "roulette-history__chip",
                   index === 0 && "roulette-history__chip--latest",
                   !fill && "bg-surface-raised",
-                  entry.color === "green" && "roulette-history__chip--green",
                   clickable && "transition active:scale-95",
                   !clickable && "opacity-50",
                 )}

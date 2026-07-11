@@ -14,6 +14,7 @@ import (
 	httpx "github.com/flipo/flipo/apps/api/internal/delivery/http"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/handlers"
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
@@ -36,6 +37,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/flipo/flipo/apps/api/internal/usecase/risk"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
+	"github.com/flipo/flipo/apps/api/internal/usecase/socialsim"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
@@ -47,6 +49,7 @@ import (
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
 	treasuryworker "github.com/flipo/flipo/apps/api/internal/worker/treasury"
 	walletworker "github.com/flipo/flipo/apps/api/internal/worker/wallet"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -182,6 +185,28 @@ func main() {
 	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, betFundingSvc, invRepo, cfg.PlatformFeeBps)
 	pvpSvc.SetTickNotifier(hub)
 
+	socialSim := socialsim.NewSimulator(platformRepo, platformRepo, func(ctx context.Context, snap domain.PresenceSnapshot) {
+		data := socialsim.MarshalPresence(snap)
+		_ = cacheIface.Publish(ctx, "pubsub:game:presence", data)
+		msg := websocket.JSONMessage("presence", data)
+		for _, game := range []string{"crash", "roulette", "pvp"} {
+			hub.Broadcast(game, msg)
+		}
+	})
+	socialSim.SetCrashRepublish(func(ctx context.Context, roundID uuid.UUID) {
+		_ = crashSvc.PublishBets(ctx, roundID)
+	})
+	socialSim.SetRouletteRepublish(func(ctx context.Context, roundID uuid.UUID) {
+		_ = rouletteSvc.PublishBets(ctx, roundID)
+	})
+	crashSvc.SetBetOverlay(socialsim.CrashBridge{Sim: socialSim})
+	rouletteSvc.SetBetOverlay(socialsim.RouletteBridge{Sim: socialSim})
+	pvpBridge := socialsim.PvPBridge{Sim: socialSim}
+	pvpSvc.SetRoomOverlay(pvpBridge)
+	pvpSvc.SetGhostClaimer(pvpBridge)
+	pvpSvc.SetBotMatchmaker(pvpBridge)
+	socialSim.Start(ctx)
+
 	if cache != nil {
 		bridge := websocket.NewRedisBridge(cache, hub)
 		bridge.Start(ctx)
@@ -229,6 +254,12 @@ func main() {
 		}
 	}
 
+	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
+	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
+		socialsim.Normalize(&settings)
+		socialSim.ApplySettings(settings)
+	})
+
 	router := httpx.NewRouter(httpx.Deps{
 		DB:               db,
 		Auth:             authSvc,
@@ -241,8 +272,9 @@ func main() {
 		PromoHandler:     handlers.NewPromoHandler(promoSvc, analyticsSvc),
 		WalletHandler:    handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		TelegramHandler:  handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
-		AdminHandler:     handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress),
+		AdminHandler:     adminHandler,
 		AnalyticsHandler: handlers.NewAnalyticsHandler(authSvc, analyticsSvc),
+		PresenceHandler:  handlers.NewPresenceHandler(socialSim),
 		AdminTelegramIDs: cfg.AdminTelegramIDs,
 		Hub:              hub,
 	})

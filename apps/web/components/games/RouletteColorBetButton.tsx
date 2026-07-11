@@ -10,6 +10,8 @@ type Props = {
   color: "red" | "green" | "black";
   multiplier: string;
   roundTotal: number;
+  /** Current user's stake on this color in the round. */
+  myStake?: number;
   disabled?: boolean;
   /** User already has a stake on this color in the round. */
   active?: boolean;
@@ -20,18 +22,24 @@ export function RouletteColorBetButton({
   color,
   multiplier,
   roundTotal,
+  myStake = 0,
   disabled,
   active,
   onClick,
 }: Props) {
   const style = ROULETTE_COLOR_STYLES[color];
+  const hasMine = myStake > 0;
   const hasTotal = roundTotal > 0;
 
   return (
     <button
       type="button"
       disabled={disabled}
-      aria-label={`${style.label} ${multiplier}`}
+      aria-label={
+        hasMine
+          ? `${style.label}, ваша ставка ${formatTON(myStake)} TON`
+          : `${style.label} ${multiplier}`
+      }
       onPointerDown={() => {
         if (disabled) {
           trackDisabledClick(`roulette_bet_${color}`, "round_not_betting");
@@ -46,7 +54,14 @@ export function RouletteColorBetButton({
         disabled ? "cursor-default saturate-[0.55] brightness-[0.72]" : "hover:brightness-110",
       )}
     >
-      <span className="roulette-bet-btn__mult">{multiplier}</span>
+      {hasMine ? (
+        <span className="roulette-bet-btn__mult roulette-bet-btn__mult--stake">
+          {formatTON(myStake)}
+          <TonIcon variant="mono" size="sm" className="text-white/95" />
+        </span>
+      ) : (
+        <span className="roulette-bet-btn__mult">{multiplier}</span>
+      )}
 
       {hasTotal ? (
         <span className="roulette-bet-btn__pool">
