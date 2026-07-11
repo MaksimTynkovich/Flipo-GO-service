@@ -198,6 +198,7 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 			_ = s.funding.SettleLoss(ctx, bet)
 		}
 	}
+	_ = s.PublishBets(ctx, roundID)
 	return nil
 }
 
@@ -213,7 +214,8 @@ func (s *Service) GetCurrentRoundBets(ctx context.Context) (*RoundBetsState, err
 }
 
 func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*RoundBetsState, error) {
-	bets, err := s.games.ListPendingBetsByRoundWithUser(ctx, roundID)
+	// Include settled bets so the player list stays visible through the result phase.
+	bets, err := s.games.ListBetsByRoundWithUser(ctx, roundID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +225,9 @@ func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*Round
 	counts := ColorCounts{}
 
 	for _, bet := range bets {
+		if bet.Status == domain.BetRefunded {
+			continue
+		}
 		var sel map[string]string
 		_ = json.Unmarshal(bet.Selection, &sel)
 		color := sel["color"]

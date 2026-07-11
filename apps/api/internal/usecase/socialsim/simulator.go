@@ -560,13 +560,14 @@ func (s *Simulator) PlanBotJoins(rooms []HumanOpenRoom) []PlannedHumanJoin {
 			continue
 		}
 		stake := room.BetAmountNanoton
-		// Small stake jitter within typical ±10% tolerance window.
-		if s.rng.Float64() < 0.35 {
-			delta := int64(float64(stake) * 0.04 * (s.rng.Float64()*2 - 1))
+		// Match human rooms with a slightly varied stake (±~8%), then humanize decimals.
+		if s.rng.Float64() < 0.55 {
+			delta := int64(float64(stake) * (0.02 + s.rng.Float64()*0.06) * (s.rng.Float64()*2 - 1))
 			stake += delta
-			if stake < room.BetAmountNanoton*9/10 {
-				stake = room.BetAmountNanoton
-			}
+		}
+		stake = humanizeStakeNanoton(stake, room.BetAmountNanoton*9/10, room.BetAmountNanoton*11/10, s.rng, s.cfg.Chaos)
+		if stake < room.BetAmountNanoton*9/10 {
+			stake = room.BetAmountNanoton*9/10
 		}
 		out = append(out, PlannedHumanJoin{
 			RoomID:       room.ID,
@@ -777,28 +778,111 @@ func (s *Simulator) pickRouletteColorLocked() string {
 func (s *Simulator) sampleStakeLocked(_ context.Context, gameType domain.GameType) int64 {
 	minBet := s.minBet[gameType]
 	maxBet := s.maxBet[gameType]
+	return sampleHumanStake(s.rng, minBet, maxBet, s.cfg.StakeP50, s.cfg.StakeP90, s.cfg.Chaos)
+}
+
+func (s *Simulator) samplePvPStakeLocked(_ context.Context) int64 {
+	minBet := s.minBet[domain.GamePvP]
+	maxBet := s.maxBet[domain.GamePvP]
+	// Map PvP frac knobs into the same humanized sampler.
+	p50 := (s.cfg.PvPStakeMinFrac + s.cfg.PvPStakeMaxFrac) / 2
+	p90 := s.cfg.PvPStakeMaxFrac
+	return sampleHumanStake(s.rng, minBet, maxBet, p50, p90, s.cfg.Chaos)
+}
+
+// sampleHumanStake draws a realistic-looking bet: skewed toward smaller stakes,
+// with mixed decimal precision so amounts are rarely identical round numbers.
+func sampleHumanStake(rng *rand.Rand, minBet, maxBet int64, p50, p90, chaos float64) int64 {
 	if minBet <= 0 {
-		minBet = 100_000_000
+		minBet = 100_000_000 // 0.1 TON
 	}
 	if maxBet <= minBet {
 		maxBet = minBet * 50
 	}
-	u := s.rng.Float64()
-	frac := s.cfg.StakeP50
-	if u > 0.5 {
-		frac = s.cfg.StakeP50 + (s.cfg.StakeP90-s.cfg.StakeP50)*((u-0.5)/0.4)
+	p50 = clamp(p50, 0.02, 0.95)
+	p90 = clamp(p90, p50, 1)
+	chaos = clamp(chaos, 0, 1)
+
+	// Soft cap: most bets stay below p90 of the allowed range; rare spikes go higher.
+	u := rng.Float64()
+	var targetFrac float64
+	switch {
+	case u < 0.62:
+		// Dense cluster around/below median (log-ish within low band).
+		targetFrac = p50 * math.Pow(rng.Float64(), 0.55+chaos*0.25)
+	case u < 0.90:
+		// Mid band between p50 and p90.
+		targetFrac = p50 + (p90-p50)*math.Pow(rng.Float64(), 0.85)
+	default:
+		// Occasional larger bets.
+		targetFrac = p90 + (1-p90)*math.Pow(rng.Float64(), 1.4-chaos*0.4)
 	}
-	if u > 0.9 {
-		frac = s.cfg.StakeP90 + (1-s.cfg.StakeP90)*s.rng.Float64()
+	targetFrac = clamp(targetFrac, 0.01, 1)
+
+	lo := float64(minBet)
+	hi := float64(minBet) + float64(maxBet-minBet)*targetFrac
+	if hi <= lo {
+		hi = lo * 1.15
 	}
-	frac = clamp(frac, 0.01, 1)
-	amount := minBet + int64(float64(maxBet-minBet)*frac)
-	step := int64(100_000_000)
-	amount = (amount / step) * step
-	if amount < minBet {
-		amount = minBet
-	}
+	// Log-uniform inside the band → many distinct values, not one bucket.
+	amount := int64(math.Exp(math.Log(lo) + rng.Float64()*(math.Log(hi)-math.Log(lo))))
+
+	amount = humanizeStakeNanoton(amount, minBet, maxBet, rng, chaos)
 	return amount
+}
+
+func humanizeStakeNanoton(amount, minBet, maxBet int64, rng *rand.Rand, chaos float64) int64 {
+	ton := float64(amount) / 1e9
+	if ton <= 0 {
+		ton = float64(minBet) / 1e9
+	}
+
+	roll := rng.Float64()
+	// Bias toward "messy" decimals; whole TON only sometimes.
+	switch {
+	case roll < 0.42-chaos*0.08:
+		// 0.01 TON precision (e.g. 0.37, 1.28)
+		ton = math.Round(ton*100) / 100
+	case roll < 0.62:
+		// 0.05 TON (e.g. 0.15, 0.45)
+		ton = math.Round(ton*20) / 20
+	case roll < 0.78:
+		// 0.1 TON
+		ton = math.Round(ton*10) / 10
+	case roll < 0.90:
+		// 0.25 TON
+		ton = math.Round(ton*4) / 4
+	default:
+		// Half / whole TON (rarer — looks less bot-like if overused)
+		if rng.Float64() < 0.55 {
+			ton = math.Round(ton*2) / 2
+		} else {
+			ton = math.Round(ton)
+		}
+	}
+
+	// Tiny extra jitter so two "0.01-rounded" draws rarely collide exactly.
+	if rng.Float64() < 0.28+chaos*0.2 {
+		ton += float64(rng.Intn(7)-3) * 0.01
+		ton = math.Round(ton*100) / 100
+	}
+
+	out := int64(math.Round(ton * 1e9))
+	if out < minBet {
+		out = minBet
+	}
+	if out > maxBet {
+		out = maxBet
+	}
+	// Keep at least 0.01 TON granularity when above min.
+	const cent = int64(10_000_000)
+	if out > minBet {
+		out = (out / cent) * cent
+		if out < minBet {
+			out = minBet
+		}
+	}
+	return out
 }
 
 func (s *Simulator) pickPersonaLocked(now time.Time) Persona {
@@ -882,27 +966,6 @@ func (s *Simulator) spawnGhostRoomLocked(ctx context.Context, now time.Time) gho
 		expireAt: now.Add(time.Duration(ttl) * time.Second),
 		joinAt:   now.Add(time.Duration(joinDelay) * time.Second),
 	}
-}
-
-func (s *Simulator) samplePvPStakeLocked(_ context.Context) int64 {
-	minBet := s.minBet[domain.GamePvP]
-	maxBet := s.maxBet[domain.GamePvP]
-	if minBet <= 0 {
-		minBet = 100_000_000
-	}
-	if maxBet <= minBet {
-		maxBet = minBet * 50
-	}
-	lo := s.cfg.PvPStakeMinFrac
-	hi := s.cfg.PvPStakeMaxFrac
-	frac := lo + s.rng.Float64()*(hi-lo)
-	amount := minBet + int64(float64(maxBet-minBet)*frac)
-	step := int64(100_000_000)
-	amount = (amount / step) * step
-	if amount < minBet {
-		amount = minBet
-	}
-	return amount
 }
 
 func (s *Simulator) advanceGhostRoomLocked(room *ghostRoomInternal, now time.Time) {

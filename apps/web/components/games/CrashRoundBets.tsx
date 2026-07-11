@@ -325,7 +325,7 @@ function PlayerRow({
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-foreground/90">{name}</p>
-        <p className="text-[11px] tabular-nums text-muted">
+        <p className="flex min-w-0 items-center gap-1.5 text-[11px] tabular-nums text-muted">
           {player.gifts.length > 1 ? (
             <GiftStakeIcons
               gifts={player.gifts}
@@ -339,33 +339,28 @@ function PlayerRow({
               gift={player.gift}
             />
           )}
+          {isCashedOut && player.cashout_multiplier != null ? (
+            <span className="crash-cashout-result__mult shrink-0">
+              {formatMultiplier(player.cashout_multiplier)}
+            </span>
+          ) : null}
         </p>
       </div>
 
       <div className="shrink-0 text-right">
-        {isCashedOut && player.cashout_multiplier != null ? (
-          <div className="crash-cashout-result">
-            <p className="crash-cashout-result__mult tabular-nums">
-              {formatMultiplier(player.cashout_multiplier)}
-            </p>
-            {player.profit_nanoton != null && player.profit_nanoton > 0 ? (
-              <p className="crash-cashout-result__profit">
-                <span className="tabular-nums">+{formatTON(player.profit_nanoton)}</span>
-                <TonIcon variant="brand" size="xs" className="text-success" />
-              </p>
-            ) : null}
-          </div>
+        {isCashedOut && player.profit_nanoton != null && player.profit_nanoton > 0 ? (
+          <p className="crash-cashout-result__profit">
+            <span className="tabular-nums">+{formatTON(player.profit_nanoton)}</span>
+            <TonIcon variant="brand" size="xs" className="text-success" />
+          </p>
         ) : isLost ? (
-          <div className="crash-crash-result">
-            <p className="crash-crash-result__label">Краш</p>
-            <p className="crash-crash-result__loss">
-              <span className="tabular-nums">−{formatTON(player.amount_nanoton)}</span>
-              <TonIcon variant="brand" size="xs" className="text-danger" />
-            </p>
-          </div>
+          <p className="crash-crash-result__loss">
+            <span className="tabular-nums">−{formatTON(player.amount_nanoton)}</span>
+            <TonIcon variant="brand" size="xs" className="text-danger" />
+          </p>
         ) : showLiveGain ? (
           <LiveGainPlaque valueNanoton={liveGain} hot={hotGain} />
-        ) : (
+        ) : isCashedOut ? null : (
           <p className="text-[11px] font-medium text-muted">В игре</p>
         )}
       </div>

@@ -252,7 +252,16 @@ export default function RoulettePage() {
           </div>
 
           <div className="hairline-top pt-3">
-            <RouletteRoundBets data={roundBets} currentUserId={user?.id} />
+            <RouletteRoundBets
+              data={roundBets}
+              currentUserId={user?.id}
+              resultColor={
+                state?.phase === "result"
+                  ? state.result ||
+                    (state.result_number != null ? numberColor(state.result_number) : null)
+                  : null
+              }
+            />
           </div>
         </div>
       </div>

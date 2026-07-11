@@ -2,6 +2,7 @@ package socialsim
 
 import (
 	"encoding/json"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -89,6 +90,30 @@ func TestGhostBetsNeverTouchDBShape(t *testing.T) {
 	}
 	if strings.Contains(string(raw), "simulated") {
 		t.Fatalf("public bet JSON leaked simulated marker: %s", raw)
+	}
+}
+
+func TestSampleHumanStakeHasSpread(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	minBet := int64(100_000_000)  // 0.1 TON
+	maxBet := int64(10_000_000_000) // 10 TON
+	seen := map[int64]int{}
+	whole := 0
+	for i := 0; i < 400; i++ {
+		amt := sampleHumanStake(rng, minBet, maxBet, 0.15, 0.55, 0.35)
+		if amt < minBet || amt > maxBet {
+			t.Fatalf("out of range: %d", amt)
+		}
+		seen[amt]++
+		if amt%1_000_000_000 == 0 {
+			whole++
+		}
+	}
+	if len(seen) < 40 {
+		t.Fatalf("too little variety: %d unique stakes", len(seen))
+	}
+	if whole > 120 {
+		t.Fatalf("too many whole-TON stakes: %d/400", whole)
 	}
 }
 
