@@ -36,7 +36,6 @@ export function ProfileOverviewView() {
   const [promoOpen, setPromoOpen] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
-  const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [promoChannelLink, setPromoChannelLink] = useState<{ url: string; label: string } | null>(
     null,
@@ -58,33 +57,28 @@ export function ProfileOverviewView() {
   }, [promoOpen]);
 
   function openPromo() {
-    setPromoMessage(null);
     setPromoError(null);
     setPromoChannelLink(null);
     setPromoOpen(true);
     haptics.impactOccurred("light");
   }
 
-  async function activatePromo() {
+  async function activatePromo(closeModal?: () => void) {
     if (!promoCode.trim()) return;
     setPromoLoading(true);
-    setPromoMessage(null);
     setPromoError(null);
     setPromoChannelLink(null);
     try {
-      const status = await activatePromoCode(promoCode.trim());
+      await activatePromoCode(promoCode.trim());
       setPromoCode("");
       try {
         setUser(await getMe());
       } catch {
         // WS balance update may still refresh balances.
       }
-      setPromoMessage(
-        status.replaced_promo_code
-          ? `Активирован. ${status.replaced_promo_code} отменён`
-          : "Промокод активирован",
-      );
       haptics.notificationOccurred("success");
+      closeModal?.();
+      setPromoOpen(false);
     } catch (e) {
       setPromoError(e instanceof Error ? e.message : "Не удалось активировать");
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
@@ -232,7 +226,6 @@ export function ProfileOverviewView() {
                     setPromoCode(e.target.value.toUpperCase());
                     if (promoError) setPromoError(null);
                     if (promoChannelLink) setPromoChannelLink(null);
-                    if (promoMessage) setPromoMessage(null);
                   }}
                   onFocus={(e) => {
                     window.setTimeout(() => {
@@ -248,7 +241,7 @@ export function ProfileOverviewView() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      void activatePromo();
+                      void activatePromo(close);
                     }
                   }}
                 />
@@ -269,26 +262,14 @@ export function ProfileOverviewView() {
                   </div>
                 ) : null}
 
-                {promoMessage ? (
-                  <p className="rounded-xl bg-[color:var(--success)]/10 px-3 py-2 text-center text-xs text-[color:var(--success)]">
-                    {promoMessage}
-                  </p>
-                ) : null}
-
                 <Button
                   variant="accent"
                   className="h-11 w-full rounded-xl"
                   disabled={promoLoading || !promoCode.trim()}
-                  onClick={() => activatePromo().catch(() => {})}
+                  onClick={() => activatePromo(close).catch(() => {})}
                 >
                   {promoLoading ? "…" : "Активировать"}
                 </Button>
-
-                {promoMessage ? (
-                  <Button variant="outline" className="h-11 w-full rounded-xl" onClick={close}>
-                    Готово
-                  </Button>
-                ) : null}
               </div>
             </div>
           )}

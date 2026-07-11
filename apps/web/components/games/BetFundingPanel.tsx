@@ -90,6 +90,18 @@ function BetGiftCard({
   );
 }
 
+function BetGiftCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("gift-card gift-card--skeleton", className)} aria-hidden>
+      <div className="gift-card__media gift-card__media--pulse" />
+      <div className="gift-card__meta">
+        <div className="gift-card__skel gift-card__skel--title" />
+        <div className="gift-card__skel gift-card__skel--price" />
+      </div>
+    </div>
+  );
+}
+
 export function BetFundingPanel({
   mode,
   onModeChange,
@@ -139,6 +151,7 @@ export function BetFundingPanel({
       : null;
 
   const isSheet = layout === "sheet";
+  const showGiftSkeletons = loadingGifts && availableGifts.length === 0;
 
   return (
     <div className="space-y-3">
@@ -220,18 +233,45 @@ export function BetFundingPanel({
             ) : null}
           </div>
           <div className={cn(!combined && "segment-panel", "space-y-2.5")}>
-            {loadingGifts ? (
-              <p className="text-center text-xs text-muted">Загружаем подарки…</p>
+            {showGiftSkeletons ? (
+              isSheet ? (
+                <div
+                  className="gift-bet-grid gift-bet-grid--sheet"
+                  aria-busy
+                  aria-label="Загружаем подарки"
+                >
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <BetGiftCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  className="gift-bet-grid gift-bet-grid--inline"
+                  aria-busy
+                  aria-label="Загружаем подарки"
+                >
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <BetGiftCardSkeleton key={i} className="w-[6.75rem] shrink-0" />
+                  ))}
+                </div>
+              )
             ) : availableGifts.length === 0 ? (
-              <p className="rounded-xl bg-surface-raised px-3 py-4 text-center text-xs text-muted">
-                {fixedStakeNanoton
-                  ? "Нет подарка с нужной стоимостью для этой комнаты"
-                  : excludedGiftIds.length > 0
-                    ? "Все доступные подарки уже в ставках"
-                    : "Нет доступных подарков в инвентаре"}
-              </p>
+              <div
+                className={cn(
+                  "gift-bet-grid",
+                  isSheet ? "gift-bet-grid--sheet" : "gift-bet-grid--inline",
+                )}
+              >
+                <p className="gift-bet-empty col-span-full w-full rounded-xl bg-surface-raised px-3 py-4 text-center text-xs text-muted">
+                  {fixedStakeNanoton
+                    ? "Нет подарка с нужной стоимостью для этой комнаты"
+                    : excludedGiftIds.length > 0
+                      ? "Все доступные подарки уже в ставках"
+                      : "Нет доступных подарков в инвентаре"}
+                </p>
+              </div>
             ) : isSheet ? (
-              <div className="grid max-h-[min(42dvh,340px)] grid-cols-3 gap-x-2.5 gap-y-3 overflow-y-auto overscroll-contain pr-0.5">
+              <div className="gift-bet-grid gift-bet-grid--sheet">
                 {availableGifts.map((item) => (
                   <BetGiftCard
                     key={item.id}
@@ -243,7 +283,7 @@ export function BetFundingPanel({
                 ))}
               </div>
             ) : (
-              <div className="flex gap-2.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="gift-bet-grid gift-bet-grid--inline">
                 {availableGifts.map((item) => (
                   <BetGiftCard
                     key={item.id}

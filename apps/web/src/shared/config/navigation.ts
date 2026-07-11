@@ -61,7 +61,7 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
     backLabel: "Игры",
   },
   [APP_ROUTES.pvp]: {
-    title: "PVP",
+    title: "Комнаты",
     backHref: APP_ROUTES.games,
     backLabel: "Игры",
   },
@@ -87,7 +87,7 @@ export const APP_SCREENS: AppScreenItem[] = [
     href: APP_ROUTES.games,
     label: "Игры",
     level: "tab",
-    description: "Лобби с Crash, Рулетка и PVP.",
+    description: "Лобби с Crash, Рулетка и Комнаты.",
   },
   {
     id: "market",
@@ -179,7 +179,7 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   {
     href: APP_ROUTES.crash,
     title: "Crash",
-    description: "Лови множитель и успей забрать выигрыш до обвала.",
+    description: "Ставь и забери выигрыш до того, как множитель упадёт.",
     badge: "Онлайн",
     icon: Rocket,
     tone: "crash",
@@ -187,16 +187,16 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   {
     href: APP_ROUTES.roulette,
     title: "Рулетка",
-    description: "Классические цвета, быстрые раунды и моментальный вход.",
+    description: "Выбери цвет — красный, чёрный или зелёный — и жди результат.",
     badge: "Онлайн",
     icon: CircleDot,
     tone: "roulette",
   },
   {
     href: APP_ROUTES.pvp,
-    title: "PVP",
-    description: "Комнаты 1 на 1 — создай бой или присоединись к открытому.",
-    badge: "Комнаты",
+    title: "Комнаты",
+    description: "Дуэль один на один: создай комнату или зайди в открытую.",
+    badge: "Онлайн",
     icon: Users,
     tone: "pvp",
   },

@@ -194,18 +194,18 @@ export function PvpAvatarStrip({
     <div
       ref={viewportRef}
       className={cn(
-        "relative w-full overflow-hidden pt-3",
-        dimmed && "opacity-40",
+        "pvp-strip relative w-full overflow-hidden",
+        dimmed && "pvp-strip--dimmed",
         className,
       )}
     >
-      <div className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 text-accent">
+      <div className="pvp-strip__pointer pointer-events-none" aria-hidden>
         <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
       </div>
 
       <div
         ref={stripRef}
-        className="flex w-max will-change-transform py-0.5"
+        className="pvp-strip__track flex w-max will-change-transform"
         style={{
           gap: METRICS.slotGap,
           paddingLeft: METRICS.stripPaddingX,
@@ -239,9 +239,6 @@ export function PvpAvatarStrip({
           );
         })}
       </div>
-
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-surface to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-surface to-transparent" />
     </div>
   );
 }

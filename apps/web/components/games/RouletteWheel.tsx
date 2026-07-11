@@ -99,7 +99,9 @@ export function RouletteWheel({ state }: Props) {
   } | null>(null);
 
   const phase = state?.phase;
-  const countdown = Math.ceil(useCountdown(state?.ends_at, phase === "betting"));
+  const rawCountdown = useCountdown(state?.ends_at, phase === "betting");
+  const countdown = Math.max(1, Math.ceil(rawCountdown));
+  const awaitingStart = phase === "betting" && rawCountdown <= 0;
   const winIndex = state ? resolveWheelIndex(state) : undefined;
   const showHeldResult = heldResult != null && phase !== "betting" && phase !== "spinning";
   const highlightWin =
@@ -249,7 +251,7 @@ export function RouletteWheel({ state }: Props) {
     >
       <div className="roulette-stage__glow" aria-hidden />
 
-      <div className="roulette-wheel relative mx-auto aspect-square w-full max-w-[min(82vw,300px)]">
+      <div className="roulette-wheel relative mx-auto aspect-square w-full max-w-[min(88vw,340px)]">
         <div className="roulette-pointer" aria-hidden>
           <span className="roulette-pointer__pin" />
         </div>
@@ -326,12 +328,12 @@ export function RouletteWheel({ state }: Props) {
           className={cn(
             "roulette-hub pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[44%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center",
             phase === "betting" && countdown <= 3 && countdown > 0 && "roulette-hub--urgent",
-            phase === "spinning" && "roulette-hub--spinning",
+            (phase === "spinning" || awaitingStart) && "roulette-hub--spinning",
             (phase === "result" || showHeldResult) && resultColor && `roulette-hub--${resultColor}`,
           )}
         >
           <div className="roulette-hub__ring" aria-hidden />
-          {phase === "betting" ? (
+          {phase === "betting" && !awaitingStart ? (
             <>
               <span className="roulette-hub__value tabular-nums">
                 {countdown.toString().padStart(2, "0")}
@@ -339,7 +341,7 @@ export function RouletteWheel({ state }: Props) {
               <span className="roulette-hub__label">Ставки</span>
             </>
           ) : null}
-          {phase === "spinning" ? (
+          {phase === "spinning" || awaitingStart ? (
             <span className="roulette-hub__spin">Крутим</span>
           ) : null}
           {(phase === "result" || showHeldResult) && displayResultNumber != null ? (
@@ -350,7 +352,7 @@ export function RouletteWheel({ state }: Props) {
               </span>
             </>
           ) : null}
-          {phase === "waiting" && !showHeldResult ? (
+          {phase === "waiting" && !showHeldResult && !awaitingStart ? (
             <span className="roulette-hub__idle">Скоро</span>
           ) : null}
         </div>

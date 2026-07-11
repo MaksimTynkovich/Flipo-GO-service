@@ -176,18 +176,21 @@ export default function RoulettePage() {
 
   return (
     <PageShell flush>
-      <div className="flex flex-col gap-2.5 pb-3">
-        <div className="border-b border-border pb-2.5">
-          <RouletteHistory
-            history={history}
-            roundNumber={state?.round_number}
-            onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
-          />
+      <div className="roulette-page flex flex-col gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="roulette-page__aurora" aria-hidden>
+          <span className="roulette-page__blob roulette-page__blob--a" />
+          <span className="roulette-page__blob roulette-page__blob--b" />
+          <span className="roulette-page__blob roulette-page__blob--c" />
         </div>
 
         <RouletteWheel state={state} />
 
-        <div className="panel space-y-3">
+        <RouletteHistory
+          history={history}
+          onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
+        />
+
+        <div className="roulette-controls panel space-y-3 !rounded-[1.35rem] !p-3.5">
           <BetFundingControl
             mode="balance"
             onModeChange={() => {}}

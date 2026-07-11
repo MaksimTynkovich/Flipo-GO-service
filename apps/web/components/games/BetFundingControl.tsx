@@ -58,11 +58,11 @@ export function BetFundingControl({
   combined = false,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const needsGifts = combined || mode === "gift" || open;
-  const { gifts, reload } = useBettableGifts(needsGifts);
+  // Prefetch gifts while the control is on screen so the sheet opens at full height.
+  const { gifts, reload } = useBettableGifts(true);
 
   useEffect(() => {
-    if (open) void reload();
+    if (open) void reload({ silent: true });
   }, [open, reload]);
 
   const selectedGifts = useMemo(

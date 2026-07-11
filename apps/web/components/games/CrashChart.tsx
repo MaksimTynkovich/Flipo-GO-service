@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export type CrashStageFx =
-  | { kind: "win"; amountTon: string; multiplier: number }
+  | { kind: "win"; amountTon: string }
   | { kind: "lose"; multiplier: number }
   | null;
 
@@ -390,6 +390,7 @@ export function CrashChart({
   const betting = phase === "betting";
 
   const [countdown, setCountdown] = useState(0);
+  const [awaitingStart, setAwaitingStart] = useState(false);
   const [staticMult, setStaticMult] = useState("1.00×");
   const [milestoneFx, setMilestoneFx] = useState<{
     value: number;
@@ -449,6 +450,7 @@ export function CrashChart({
   useEffect(() => {
     if (!betting || !state?.ends_at) {
       setCountdown(0);
+      setAwaitingStart(false);
       if (countdownRingRef.current) {
         countdownRingRef.current.style.setProperty("--cd-p", "0");
       }
@@ -458,9 +460,18 @@ export function CrashChart({
     const duration = Math.max(1, deadline - Date.now());
     let frame = 0;
     let lastSec = -1;
+    setAwaitingStart(false);
     const tick = () => {
-      const leftMs = Math.max(0, deadline - Date.now());
-      const sec = Math.max(0, Math.ceil(leftMs / 1000));
+      const leftMs = deadline - Date.now();
+      // Skip the "00" flash — hand off to the live mult as soon as time is up.
+      if (leftMs <= 0) {
+        setAwaitingStart(true);
+        if (countdownRingRef.current) {
+          countdownRingRef.current.style.setProperty("--cd-p", "0");
+        }
+        return;
+      }
+      const sec = Math.max(1, Math.ceil(leftMs / 1000));
       if (sec !== lastSec) {
         lastSec = sec;
         setCountdown(sec);
@@ -468,7 +479,7 @@ export function CrashChart({
       if (countdownRingRef.current) {
         countdownRingRef.current.style.setProperty("--cd-p", String(leftMs / duration));
       }
-      if (leftMs > 0) frame = requestAnimationFrame(tick);
+      frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
@@ -635,88 +646,114 @@ export function CrashChart({
       ctx.translate(x, y);
       ctx.rotate(angle + (crashedRocket ? 0.8 : 0));
 
-      // Engine glow
+      // Soft engine bloom
       if (!crashedRocket) {
-        const flicker = 0.75 + Math.sin(flame * 28) * 0.25;
-        const grd = ctx.createRadialGradient(-16, 0, 0, -16, 0, 22 * flicker);
+        const flicker = 0.78 + Math.sin(flame * 28) * 0.22;
+        const grd = ctx.createRadialGradient(-14, 0, 0, -14, 0, 26 * flicker);
         grd.addColorStop(0, c.flame);
-        grd.addColorStop(0.45, c.glow);
+        grd.addColorStop(0.4, c.glow);
         grd.addColorStop(1, "transparent");
         ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.arc(-14, 0, 18 * flicker, 0, Math.PI * 2);
+        ctx.arc(-12, 0, 20 * flicker, 0, Math.PI * 2);
         ctx.fill();
 
-        // Flame tongues
         ctx.fillStyle = c.flame;
-        ctx.globalAlpha = 0.9;
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
-        ctx.moveTo(-8, -5);
-        ctx.quadraticCurveTo(-22 - flicker * 10, 0, -8, 5);
+        ctx.moveTo(-7, -4.5);
+        ctx.quadraticCurveTo(-20 - flicker * 9, 0, -7, 4.5);
         ctx.closePath();
         ctx.fill();
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = "#fff6d5";
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = "#fff8e0";
         ctx.beginPath();
-        ctx.moveTo(-8, -2.5);
-        ctx.quadraticCurveTo(-16 - flicker * 5, 0, -8, 2.5);
+        ctx.moveTo(-7, -2.2);
+        ctx.quadraticCurveTo(-15 - flicker * 4, 0, -7, 2.2);
         ctx.closePath();
         ctx.fill();
         ctx.globalAlpha = 1;
       }
 
-      // Body
-      ctx.fillStyle = crashedRocket ? "#c45a4e" : "#f3f7fb";
-      ctx.strokeStyle = crashedRocket ? "#8f3a32" : "#7f97b3";
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(18, 0);
-      ctx.quadraticCurveTo(10, -8, -2, -7.5);
-      ctx.lineTo(-11, -6);
-      ctx.lineTo(-11, 6);
-      ctx.lineTo(-2, 7.5);
-      ctx.quadraticCurveTo(10, 8, 18, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      // Sleek body — no hard outline
+      const body = new Path2D();
+      body.moveTo(17, 0);
+      body.quadraticCurveTo(11, -7.2, 2, -6.4);
+      body.quadraticCurveTo(-6, -5.6, -10, -4.2);
+      body.quadraticCurveTo(-12.5, -2, -12.5, 0);
+      body.quadraticCurveTo(-12.5, 2, -10, 4.2);
+      body.quadraticCurveTo(-6, 5.6, 2, 6.4);
+      body.quadraticCurveTo(11, 7.2, 17, 0);
+      body.closePath();
 
-      // Stripe
+      const bodyGrad = ctx.createLinearGradient(-12, -8, 17, 8);
+      if (crashedRocket) {
+        bodyGrad.addColorStop(0, "#a34840");
+        bodyGrad.addColorStop(1, "#c45a4e");
+      } else {
+        bodyGrad.addColorStop(0, "#dce7f4");
+        bodyGrad.addColorStop(0.55, "#f5f9fd");
+        bodyGrad.addColorStop(1, "#e8f0f8");
+      }
+      ctx.fillStyle = bodyGrad;
+      ctx.fill(body);
+
+      // Soft rim light instead of a stroke
+      ctx.strokeStyle = crashedRocket ? "rgba(143,58,50,0.35)" : "rgba(255,255,255,0.22)";
+      ctx.lineWidth = 1;
+      ctx.stroke(body);
+
+      // Accent band
       if (!crashedRocket) {
-        ctx.fillStyle = "#3390EC";
-        ctx.fillRect(-6, -2.2, 12, 4.4);
+        ctx.fillStyle = "rgba(51,144,236,0.92)";
+        ctx.beginPath();
+        ctx.moveTo(-5.5, -1.8);
+        ctx.quadraticCurveTo(-5.5, -2.2, -4.8, -2.2);
+        ctx.lineTo(4.8, -2.2);
+        ctx.quadraticCurveTo(5.5, -2.2, 5.5, -1.8);
+        ctx.lineTo(5.5, 1.8);
+        ctx.quadraticCurveTo(5.5, 2.2, 4.8, 2.2);
+        ctx.lineTo(-4.8, 2.2);
+        ctx.quadraticCurveTo(-5.5, 2.2, -5.5, 1.8);
+        ctx.closePath();
+        ctx.fill();
       }
 
       // Window
-      ctx.fillStyle = crashedRocket ? "#6b2e2a" : "#1b4f86";
+      ctx.fillStyle = crashedRocket ? "#6b2e2a" : "#1a4a7c";
       ctx.beginPath();
-      ctx.arc(6, 0, 3.2, 0, Math.PI * 2);
+      ctx.arc(5.5, 0, 2.9, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
       ctx.beginPath();
-      ctx.arc(5, -1, 1.2, 0, Math.PI * 2);
+      ctx.arc(4.6, -0.9, 1.05, 0, Math.PI * 2);
       ctx.fill();
 
-      // Fins
-      ctx.fillStyle = crashedRocket ? "#a34840" : "#3390EC";
+      // Soft fins
+      ctx.fillStyle = crashedRocket ? "#a34840" : "#2f86dc";
       ctx.beginPath();
-      ctx.moveTo(-1, -7.5);
-      ctx.lineTo(-13, -15);
-      ctx.lineTo(-8, -5.5);
+      ctx.moveTo(-2, -6);
+      ctx.quadraticCurveTo(-8, -11, -12, -13.5);
+      ctx.quadraticCurveTo(-9, -7, -7.5, -4.5);
       ctx.closePath();
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(-1, 7.5);
-      ctx.lineTo(-13, 15);
-      ctx.lineTo(-8, 5.5);
+      ctx.moveTo(-2, 6);
+      ctx.quadraticCurveTo(-8, 11, -12, 13.5);
+      ctx.quadraticCurveTo(-9, 7, -7.5, 4.5);
       ctx.closePath();
       ctx.fill();
 
-      // Nose tip
-      ctx.fillStyle = crashedRocket ? "#d07066" : "#ffb454";
+      // Nose
+      const nose = ctx.createLinearGradient(12, 0, 18, 0);
+      nose.addColorStop(0, crashedRocket ? "#c45a4e" : "#ff9d3d");
+      nose.addColorStop(1, crashedRocket ? "#d07066" : "#ffc56e");
+      ctx.fillStyle = nose;
       ctx.beginPath();
-      ctx.moveTo(18, 0);
-      ctx.lineTo(12, -3.2);
-      ctx.lineTo(12, 3.2);
+      ctx.moveTo(17.5, 0);
+      ctx.quadraticCurveTo(13.5, -3.4, 12, -2.8);
+      ctx.lineTo(12, 2.8);
+      ctx.quadraticCurveTo(13.5, 3.4, 17.5, 0);
       ctx.closePath();
       ctx.fill();
 
@@ -732,25 +769,17 @@ export function CrashChart({
 
       ctx.clearRect(0, 0, w, h);
 
-      // Atmosphere
-      const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, "#0a121c");
-      g.addColorStop(0.55, "#0e1824");
-      g.addColorStop(1, "#121f2e");
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
-
-      // Soft vignette accent
-      const vg = ctx.createRadialGradient(w * 0.65, h * 0.35, 10, w * 0.5, h * 0.6, w * 0.75);
+      // Keep the page background visible — only a soft phase tint on top.
+      const vg = ctx.createRadialGradient(w * 0.65, h * 0.35, 10, w * 0.5, h * 0.6, w * 0.8);
       const phaseNow = s?.phase;
       if (phaseNow === "crashed" || fxRef.current?.kind === "lose") {
-        vg.addColorStop(0, "rgba(229,101,85,0.16)");
+        vg.addColorStop(0, "rgba(229,101,85,0.14)");
       } else if (fxRef.current?.kind === "win") {
-        vg.addColorStop(0, "rgba(62,207,142,0.18)");
+        vg.addColorStop(0, "rgba(62,207,142,0.15)");
       } else if (phaseNow === "running") {
-        vg.addColorStop(0, "rgba(51,144,236,0.10)");
+        vg.addColorStop(0, "rgba(51,144,236,0.08)");
       } else {
-        vg.addColorStop(0, "rgba(51,144,236,0.06)");
+        vg.addColorStop(0, "rgba(51,144,236,0.04)");
       }
       vg.addColorStop(1, "transparent");
       ctx.fillStyle = vg;
@@ -1045,7 +1074,7 @@ export function CrashChart({
     <div
       ref={wrapRef}
       className={cn(
-        "crash-stage relative mx-auto aspect-[16/10] w-full max-w-md overflow-hidden rounded-2xl",
+        "crash-stage relative h-[min(34dvh,310px)] w-full overflow-hidden",
         running && "crash-stage--running",
         crashed && "crash-stage--crashed",
         winFx && "crash-stage--win",
@@ -1058,7 +1087,7 @@ export function CrashChart({
         <div
           key={milestoneFx.id}
           className={cn(
-            "crash-milestone pointer-events-none absolute inset-x-0 top-2 z-[8]",
+            "crash-milestone pointer-events-none absolute inset-x-0 z-[8]",
             `crash-milestone--${milestoneFx.tier}`,
           )}
           aria-hidden
@@ -1089,9 +1118,7 @@ export function CrashChart({
               <span key={i} style={{ "--i": i } as CSSProperties} />
             ))}
           </div>
-          <p className="crash-outcome__title">Забрано</p>
           <p className="crash-outcome__amount">+{winFx.amountTon} TON</p>
-          <p className="crash-outcome__mult">{formatMultiplier(winFx.multiplier)}</p>
         </div>
       ) : null}
 
@@ -1102,13 +1129,12 @@ export function CrashChart({
       ) : null}
 
       <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1">
-        {betting ? (
+        {betting && !awaitingStart ? (
           <div
             className={cn(
               "crash-countdown",
-              countdown <= 3 && countdown > 0 && "crash-countdown--urgent",
+              countdown <= 3 && "crash-countdown--urgent",
               countdown === 1 && "crash-countdown--final",
-              countdown === 0 && "crash-countdown--go",
             )}
           >
             <div ref={countdownRingRef} className="crash-countdown__ring" aria-hidden>
@@ -1119,21 +1145,20 @@ export function CrashChart({
             <span key={countdown} className="crash-countdown__value">
               {countdown.toString().padStart(2, "0")}
             </span>
-            <span className="crash-countdown__label">
-              {countdown === 0 ? "Старт" : "До старта"}
-            </span>
+            <span className="crash-countdown__label">До старта</span>
           </div>
         ) : !winFx && !loseFx ? (
           <>
             <span
-              ref={running ? multLabelRef : undefined}
+              ref={running || awaitingStart ? multLabelRef : undefined}
               className={cn(
                 "crash-mult text-5xl font-bold tabular-nums tracking-tight",
                 crashed && "text-danger crash-mult--crashed",
                 running && "crash-mult--live",
+                awaitingStart && !running && "crash-mult--enter",
               )}
             >
-              {running ? "1.00×" : staticMult}
+              {running || awaitingStart ? "1.00×" : staticMult}
             </span>
             <span
               className={cn(
@@ -1141,20 +1166,14 @@ export function CrashChart({
                 crashed ? "text-danger/80" : "text-white/45",
               )}
             >
-              {statusSubtext(phase)}
+              {awaitingStart && !running ? "В раунде" : statusSubtext(phase)}
             </span>
           </>
         ) : null}
       </div>
 
-      {state?.round_number != null ? (
-        <span className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] font-medium tabular-nums text-white/35">
-          #{state.round_number}
-        </span>
-      ) : null}
-
       {autoScale && autoScale.target > 1 && !winFx && !loseFx ? (
-        <div className="crash-auto-scale pointer-events-none absolute inset-x-0 top-0 z-[13]">
+        <div className="crash-auto-scale pointer-events-none absolute inset-x-0 z-[13]">
           <div className="crash-auto-scale__track" aria-hidden>
             <div
               ref={autoFillRef}

@@ -17,31 +17,69 @@ function bettableGifts(items: InventoryItem[]): InventoryItem[] {
   );
 }
 
-export function useBettableGifts(enabled: boolean) {
-  const [gifts, setGifts] = useState<InventoryItem[]>([]);
-  const [loading, setLoading] = useState(false);
+/** Shared across BetFundingControl prefetch and BetFundingPanel so the sheet opens warm. */
+let sharedGifts: InventoryItem[] = [];
+let sharedLoaded = false;
+let inflight: Promise<void> | null = null;
+const listeners = new Set<() => void>();
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+function emit() {
+  listeners.forEach((listener) => listener());
+}
+
+async function fetchBettableGifts(opts?: { silent?: boolean }) {
+  if (inflight) return inflight;
+
+  const silent = opts?.silent ?? (sharedLoaded || sharedGifts.length > 0);
+
+  inflight = (async () => {
     try {
       const items = await getInventory();
-      setGifts(bettableGifts(items));
+      sharedGifts = bettableGifts(items);
+      sharedLoaded = true;
+      emit();
     } catch {
-      setGifts([]);
+      if (!silent) {
+        sharedGifts = [];
+      }
+      sharedLoaded = true;
+      emit();
     } finally {
-      setLoading(false);
+      inflight = null;
     }
+  })();
+
+  return inflight;
+}
+
+export function useBettableGifts(enabled: boolean) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const onUpdate = () => setTick((n) => n + 1);
+    listeners.add(onUpdate);
+    return () => {
+      listeners.delete(onUpdate);
+    };
+  }, []);
+
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
+    await fetchBettableGifts(opts);
   }, []);
 
   useEffect(() => {
     if (!enabled) return;
-    void reload();
+    void fetchBettableGifts({ silent: sharedLoaded });
     const onChange = () => {
-      void reload();
+      void fetchBettableGifts({ silent: true });
     };
     window.addEventListener(BETTABLE_GIFTS_CHANGED_EVENT, onChange);
     return () => window.removeEventListener(BETTABLE_GIFTS_CHANGED_EVENT, onChange);
-  }, [enabled, reload]);
+  }, [enabled]);
 
-  return { gifts, loading, reload };
+  return {
+    gifts: sharedGifts,
+    loading: enabled && !sharedLoaded,
+    reload,
+  };
 }
