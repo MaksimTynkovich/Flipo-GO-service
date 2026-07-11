@@ -213,7 +213,7 @@ func (h *GameHandler) CrashCashout(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	betID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid bet id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID ставки"})
 		return
 	}
 	var req struct {
@@ -264,7 +264,7 @@ func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 		req.MaxPlayers = 2
 	}
 	if req.MaxPlayers != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "pvp rooms support exactly 2 players"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "В PVP-комнате ровно 2 игрока"})
 		return
 	}
 	stake, err := parseStakeInput(req.Funding, req.BetAmountNanoton, req.InventoryItemID)
@@ -299,7 +299,7 @@ func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid room id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID комнаты"})
 		return
 	}
 	var req struct {
@@ -327,7 +327,7 @@ func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
 func (h *GameHandler) RoundProof(c *gin.Context) {
 	roundID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid round id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID раунда"})
 		return
 	}
 	proof, err := h.fairness.RoundProof(c.Request.Context(), roundID)
@@ -346,7 +346,8 @@ func writeGameBetError(c *gin.Context, err error) {
 			"code":  "invalid_amount",
 		})
 	case errors.Is(err, domain.ErrInsufficientFunds),
-		strings.Contains(strings.ToLower(err.Error()), "insufficient balance"):
+		strings.Contains(strings.ToLower(err.Error()), "insufficient balance"),
+		strings.Contains(strings.ToLower(err.Error()), "недостаточно средств"):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Недостаточно средств на балансе.",
 			"code":  "insufficient_funds",
@@ -386,7 +387,39 @@ func writeGameBetError(c *gin.Context, err error) {
 			"error": "Ставка должна быть в пределах ±10% от ставки комнаты.",
 			"code":  "gift_value_mismatch",
 		})
+	case errors.Is(err, domain.ErrRoomFull):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Комната уже заполнена.",
+			"code":  "room_full",
+		})
+	case errors.Is(err, domain.ErrAlreadyJoined):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Вы уже в этой комнате.",
+			"code":  "already_joined",
+		})
 	default:
-		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": err.Error()})
+		msg := err.Error()
+		if msg == "" || looksLikeEnglishError(msg) {
+			msg = "Не удалось выполнить действие. Попробуйте ещё раз."
+		}
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": msg})
 	}
+}
+
+func looksLikeEnglishError(msg string) bool {
+	lower := strings.ToLower(msg)
+	if strings.HasPrefix(msg, "Key:") || strings.Contains(lower, "binding") {
+		return true
+	}
+	// Heuristic: mostly ASCII letters → likely English leftover.
+	letters, ascii := 0, 0
+	for _, r := range lower {
+		if (r >= 'a' && r <= 'z') || (r >= 'а' && r <= 'я') || r == 'ё' {
+			letters++
+			if r >= 'a' && r <= 'z' {
+				ascii++
+			}
+		}
+	}
+	return letters > 0 && ascii*2 >= letters
 }

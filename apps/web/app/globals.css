@@ -621,6 +621,15 @@ body::-webkit-scrollbar,
 }
 
 /* —— Games lobby —— */
+.games-lobby__intro-text {
+  max-width: 18.5rem;
+  padding: 0 0.15rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+}
+
 .games-lobby__grid {
   display: flex;
   flex-direction: column;
@@ -2939,4 +2948,67 @@ body::-webkit-scrollbar,
   .gift-card__skel {
     animation: none !important;
   }
+}
+
+/* —— Market filter sheet —— */
+.market-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-bottom: 0.5rem;
+}
+
+.market-filter-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.75rem;
+  margin: 0;
+  border: 0;
+  border-radius: 0.95rem;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  transition:
+    background-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+}
+
+.market-filter-row--checked {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.market-filter-check {
+  display: inline-flex;
+  height: 1.35rem;
+  width: 1.35rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--foreground) 14%, transparent);
+  color: transparent;
+  transition:
+    background-color 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out),
+    color 160ms var(--ease-out);
+}
+
+.market-filter-check--on {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--accent-foreground);
+}
+
+.market-filter-row__label {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
 }

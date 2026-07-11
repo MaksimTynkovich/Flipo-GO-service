@@ -103,7 +103,7 @@ func (s *Service) createStake(
 	}
 	for _, p := range positions {
 		if p.GiftSlug == item.TelegramGiftID {
-			return nil, errors.New("gift already staked this week")
+			return nil, errors.New("подарок уже застейкан на этой неделе")
 		}
 	}
 

@@ -29,24 +29,14 @@ import {
   pvpGiftWithinTolerance,
 } from "@/lib/pvp-stake";
 import { connectGameWS } from "@/lib/ws";
+import { formatUserError } from "@/lib/user-errors";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 const PVP_MAX_PLAYERS = 2;
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
 function mapPvpError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes("room is full")) return "Комната уже заполнена";
-  if (lower.includes("already joined")) return "Вы уже в этой комнате";
-  if (lower.includes("insufficient balance")) return "Недостаточно средств на балансе";
-  if (lower.includes("invalid amount")) return "Укажите корректную ставку";
-  if (lower.includes("gift not available") || lower.includes("подарок недоступен")) {
-    return "Подарок недоступен для ставки.";
-  }
-  if (lower.includes("gift value") || lower.includes("стоимость подарка") || lower.includes("±10%")) {
-    return "Сумма подарка не подходит для ставки в этой комнате.";
-  }
-  return message;
+  return formatUserError(message, "Не удалось выполнить действие");
 }
 
 export function PvpHubView() {

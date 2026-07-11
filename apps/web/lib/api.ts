@@ -138,7 +138,7 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    const message = err.error || "Request failed";
+    const message = err.error || "Запрос не выполнен";
     const requestId =
       res.headers.get("X-Request-ID") ||
       (res as Response & { requestId?: string }).requestId ||

@@ -45,7 +45,7 @@ func (b *BotAPI) IsChannelMember(ctx context.Context, channel string, userID int
 	}
 	chatID := normalizeChannelChatID(channel)
 	if chatID == "" || userID == 0 {
-		return false, fmt.Errorf("invalid channel membership check")
+		return false, fmt.Errorf("не удалось проверить подписку на канал")
 	}
 
 	endpoint := fmt.Sprintf(
@@ -78,7 +78,7 @@ func (b *BotAPI) IsChannelMember(ctx context.Context, channel string, userID int
 	}
 	if !result.OK {
 		desc := strings.ToLower(result.Description)
-		if strings.Contains(desc, "user not found") || strings.Contains(desc, "not a member") {
+		if strings.Contains(desc, "Пользователь не найден") || strings.Contains(desc, "not a member") {
 			return false, nil
 		}
 		return false, fmt.Errorf("telegram getChatMember: %s", result.Description)

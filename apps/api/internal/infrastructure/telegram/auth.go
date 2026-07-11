@@ -32,8 +32,8 @@ type InitData struct {
 }
 
 var (
-	ErrInvalidInitData = errors.New("invalid telegram init data")
-	ErrExpiredInitData = errors.New("telegram init data expired")
+	ErrInvalidInitData = errors.New("неверные данные Telegram")
+	ErrExpiredInitData = errors.New("данные Telegram устарели")
 )
 
 func ValidateInitData(initData, botToken string, maxAge time.Duration) (*InitData, error) {

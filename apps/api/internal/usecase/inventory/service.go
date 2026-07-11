@@ -150,7 +150,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) error 
 		return domain.ErrInvalidAmount
 	}
 	if s.giftTransfer == nil {
-		return fmt.Errorf("gift withdrawal is not configured")
+		return fmt.Errorf("вывод подарков временно недоступен")
 	}
 
 	user, err := s.users.FindByID(ctx, userID)
@@ -165,13 +165,13 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) error 
 
 	if err := s.giftTransfer.SendGift(ctx, item.TelegramGiftID, recipient); err != nil {
 		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
-			return fmt.Errorf("gift withdrawal is not configured")
+			return fmt.Errorf("вывод подарков временно недоступен")
 		}
 		if errors.Is(err, telegram.ErrGiftNotOnAccount) {
-			return fmt.Errorf("gift is not available for withdrawal")
+			return fmt.Errorf("подарок недоступен для вывода")
 		}
 		if errors.Is(err, telegram.ErrInsufficientStars) {
-			return fmt.Errorf("deposit account has insufficient Telegram Stars for gift transfer")
+			return fmt.Errorf("недостаточно Stars на аккаунте депозита")
 		}
 		return err
 	}

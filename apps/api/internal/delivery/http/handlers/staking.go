@@ -49,12 +49,12 @@ func (h *StakingHandler) Stake(c *gin.Context) {
 	case req.ItemID != "":
 		itemID, parseErr := uuid.Parse(req.ItemID)
 		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item_id"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID предмета"})
 			return
 		}
 		pos, err = h.staking.Stake(c.Request.Context(), userID, itemID)
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "slug or item_id required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Укажите slug или item_id"})
 		return
 	}
 
@@ -71,7 +71,7 @@ func (h *StakingHandler) Unstake(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	posID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
 	if err := h.staking.Unstake(c.Request.Context(), userID, posID); err != nil {

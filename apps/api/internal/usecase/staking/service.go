@@ -106,7 +106,7 @@ func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID uuid.UUID) error {
-	return errors.New("unstaking is not available during the weekly epoch; wait for the week to end")
+	return errors.New("вывод из стейка доступен только в конце недели")
 }
 
 func (s *Service) ListPositions(ctx context.Context, userID uuid.UUID) ([]domain.StakingPosition, error) {

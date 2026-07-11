@@ -29,6 +29,7 @@ import {
   crashPhaseBetMessage,
   formatGameBetError,
 } from "@/lib/game-errors";
+import { formatUserError } from "@/lib/user-errors";
 import { connectGameWS } from "@/lib/ws";
 import { cn } from "@/lib/utils";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
@@ -413,7 +414,7 @@ export default function CrashPage() {
     } catch (e) {
       showToast({
         variant: "error",
-        title: e instanceof Error ? e.message : crashCashoutMessage(state?.phase),
+        title: formatUserError(e, crashCashoutMessage(state?.phase)),
       });
       haptics.notificationOccurred("error");
     } finally {

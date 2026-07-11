@@ -11,6 +11,7 @@ import {
   User,
 } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { formatUserError } from "@/lib/user-errors";
 import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
 import { getTelegramWebApp, hasTelegramInitData, initTelegramWebApp } from "@/src/shared/lib/twa";
 import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
@@ -129,9 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           event_category: "auth",
           status: "error",
           error_code: "auth_failed",
-          error_message: e instanceof Error ? e.message : "Auth failed",
+          error_message: e instanceof Error ? e.message : "auth_failed",
         });
-        setError(e instanceof Error ? e.message : "Auth failed");
+        setError(formatUserError(e, "Не удалось войти"));
       } finally {
         setLoading(false);
         setReady(true);

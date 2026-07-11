@@ -94,6 +94,7 @@ export function InventoryGiftDetailSheet({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
           <div className="relative mx-auto mb-3 flex size-[min(100%,240px,34dvh)] max-w-full items-center justify-center">
             {!imgError ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={imageSrc}
                 alt={item.name}
@@ -132,11 +133,11 @@ export function InventoryGiftDetailSheet({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+        <div className="relative shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
           {listError && <p className="mb-3 text-center text-sm text-danger">{listError}</p>}
 
           {item.status === "available" && (
-            <div className="mb-3">
+            <div className="relative mb-3">
               <button
                 type="button"
                 onClick={() => setShowWithdrawHint((value) => !value)}
@@ -150,7 +151,7 @@ export function InventoryGiftDetailSheet({
               </button>
 
               {showWithdrawHint && (
-                <div className="mt-2 rounded-2xl bg-surface-raised/60 px-3.5 py-3">
+                <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-10 rounded-2xl bg-surface-raised px-3.5 py-3 shadow-[0_-8px_28px_rgba(0,0,0,0.35)] ring-1 ring-inset ring-white/[0.06]">
                   <p className="text-xs leading-relaxed text-muted">
                     Перед выводом отправьте боту {depositBotMention()} любое сообщение — без этого Telegram не
                     сможет доставить подарок обратно вам.

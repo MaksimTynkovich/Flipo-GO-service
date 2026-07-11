@@ -123,7 +123,7 @@ func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
 func (h *AdminHandler) AnalyticsUserDrilldown(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "60"))
@@ -140,7 +140,7 @@ func (h *AdminHandler) ReviewTransfer(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	transferID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid transfer id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID перевода"})
 		return
 	}
 	var req struct {
@@ -170,7 +170,7 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 func (h *AdminHandler) UserBets(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
 		return
 	}
 	bets, err := h.admin.UserBets(c.Request.Context(), userID)
@@ -231,7 +231,7 @@ func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	listingID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid listing id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID лота"})
 		return
 	}
 	var body struct {

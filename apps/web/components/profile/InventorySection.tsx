@@ -22,6 +22,7 @@ import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimePr
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Gift, ArrowUpRight } from "lucide-react";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
+import { formatUserError } from "@/lib/user-errors";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Button } from "@/components/ui/button";
 
@@ -89,7 +90,7 @@ export function InventorySection() {
       closeSheet();
       load();
     } catch (e) {
-      setListError(e instanceof Error ? e.message : "Ошибка");
+      setListError(formatUserError(e, "Ошибка"));
     } finally {
       setLiquidating(false);
     }
@@ -104,7 +105,7 @@ export function InventorySection() {
       closeSheet();
       load();
     } catch (e) {
-      setListError(e instanceof Error ? e.message : "Ошибка");
+      setListError(formatUserError(e, "Ошибка"));
     } finally {
       setWithdrawing(false);
     }

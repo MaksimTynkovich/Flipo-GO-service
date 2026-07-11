@@ -56,7 +56,7 @@ export function formatWalletError(
       return "Нет связи с сервером. Проверь интернет и попробуй снова.";
     }
 
-    if (raw && !raw.startsWith("Key:")) {
+    if (raw && !raw.startsWith("Key:") && /[а-яё]/i.test(raw)) {
       return raw;
     }
   }

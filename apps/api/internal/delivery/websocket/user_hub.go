@@ -142,7 +142,7 @@ func ServeUserWS(hub *Hub, authSvc *auth.Service, w http.ResponseWriter, r *http
 	}
 	claims, err := authSvc.ParseToken(token)
 	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		http.Error(w, "Недействительный токен", http.StatusUnauthorized)
 		return
 	}
 
