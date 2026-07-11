@@ -34,6 +34,7 @@ function countFitting(
   latestFont: string,
   regularFont: string,
   gapPx: number,
+  chipPadPx: number,
 ): number {
   if (availablePx <= 0 || labels.length === 0) return 0;
 
@@ -42,7 +43,7 @@ function countFitting(
 
   for (let i = 0; i < labels.length; i++) {
     const font = i === 0 ? latestFont : regularFont;
-    const chip = measureTextWidth(labels[i], font);
+    const chip = measureTextWidth(labels[i], font) + chipPadPx;
     const next = count === 0 ? chip : used + gapPx + chip;
     if (next > availablePx + 0.5) break;
     used = next;
@@ -90,7 +91,7 @@ export function CrashHistory({ history, onSelectRound, className }: Props) {
         (Number.parseFloat(styles.paddingLeft) || 0) +
         (Number.parseFloat(styles.paddingRight) || 0);
       const width = el.clientWidth - pad;
-      const next = countFitting(labels, width, latestFont, regularFont, 10);
+      const next = countFitting(labels, width, latestFont, regularFont, 4, 16);
       setFitCount((prev) => (prev === next ? prev : Math.max(next, 1)));
     }
 

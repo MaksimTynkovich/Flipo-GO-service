@@ -17,9 +17,13 @@ export function GamesLobbyView() {
       <section className="games-lobby space-y-4">
         <GamesPromoBanner />
 
-        <p className="games-lobby__intro-text">
-          Ставь TON или подарки — выигрыш сразу на баланс
-        </p>
+        <div className="games-lobby__intro">
+          <h2 className="games-lobby__intro-title">Режимы</h2>
+          <p className="games-lobby__intro-text">
+            Ознакомьтесь с доступными режимами — выберите подходящий формат и присоединяйтесь к раунду.
+          </p>
+     
+        </div>
 
         <div className="games-lobby__grid">
           {GAME_LOBBY_ITEMS.map((item, index) => (
