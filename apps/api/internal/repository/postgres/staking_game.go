@@ -305,6 +305,15 @@ func (r *PvPRepo) ListOpenRooms(ctx context.Context) ([]domain.PvPRoom, error) {
 	return rooms, err
 }
 
+func (r *PvPRepo) ListOpenExpired(ctx context.Context, olderThan time.Time) ([]domain.PvPRoom, error) {
+	var rooms []domain.PvPRoom
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND created_at <= ?", "open", olderThan).
+		Order("created_at ASC").
+		Find(&rooms).Error
+	return rooms, err
+}
+
 func (r *PvPRepo) ListActiveRooms(ctx context.Context) ([]domain.PvPRoom, error) {
 	var rooms []domain.PvPRoom
 	err := r.db.WithContext(ctx).
@@ -350,6 +359,25 @@ func (r *PvPRepo) HasPlayer(ctx context.Context, roomID, userID uuid.UUID) (bool
 
 func (r *PvPRepo) AddPlayer(ctx context.Context, player *domain.PvPRoomPlayer) error {
 	return r.db.WithContext(ctx).Create(player).Error
+}
+
+func (r *PvPRepo) ReplacePlayerGifts(ctx context.Context, roomID, userID uuid.UUID, gifts []domain.PvPRoomPlayerGift) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("room_id = ? AND user_id = ?", roomID, userID).
+			Delete(&domain.PvPRoomPlayerGift{}).Error; err != nil {
+			return err
+		}
+		if len(gifts) == 0 {
+			return nil
+		}
+		return tx.Create(&gifts).Error
+	})
+}
+
+func (r *PvPRepo) ListRoomPlayerGifts(ctx context.Context, roomID uuid.UUID) ([]domain.PvPRoomPlayerGift, error) {
+	var gifts []domain.PvPRoomPlayerGift
+	err := r.db.WithContext(ctx).Where("room_id = ?", roomID).Find(&gifts).Error
+	return gifts, err
 }
 
 func (r *PvPRepo) ListPlayers(ctx context.Context, roomID uuid.UUID) ([]domain.PvPRoomPlayer, error) {

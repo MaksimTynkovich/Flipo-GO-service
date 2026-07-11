@@ -252,6 +252,32 @@ func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *AdminHandler) GetGiftPriceSettings(c *gin.Context) {
+	settings, err := h.admin.GetGiftPriceSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateGiftPriceSettings(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var body struct {
+		BuyAdjustPercent       float64 `json:"buy_adjust_percent"`
+		ValuationAdjustPercent float64 `json:"valuation_adjust_percent"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.UpdateGiftPriceSettings(c.Request.Context(), adminID, body.BuyAdjustPercent, body.ValuationAdjustPercent); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (h *AdminHandler) RotateSeed(c *gin.Context) {
 	gameType := domain.GameType(c.Param("game"))
 	_, err := h.fairness.RotateSeed(c.Request.Context(), gameType, "")

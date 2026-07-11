@@ -74,7 +74,6 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/inventory/deposit", deps.InventoryHandler.Deposit)
 			authed.POST("/inventory/:id/liquidate", deps.InventoryHandler.Liquidate)
 			authed.POST("/inventory/:id/withdraw", deps.InventoryHandler.Withdraw)
-			authed.POST("/admin/floor-price", deps.InventoryHandler.SetFloorPrice)
 
 			authed.GET("/market/listings/mine", deps.MarketHandler.ListMine)
 			authed.POST("/market/listings", deps.MarketHandler.Create)
@@ -134,6 +133,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.GET("/users", deps.AdminHandler.ListUsers)
 			admin.GET("/users/:id/bets", deps.AdminHandler.UserBets)
 			admin.PATCH("/market/listings/:id", deps.AdminHandler.UpdateMarketListingPrice)
+			admin.GET("/gift-price-settings", deps.AdminHandler.GetGiftPriceSettings)
+			admin.PATCH("/gift-price-settings", deps.AdminHandler.UpdateGiftPriceSettings)
 			admin.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)
 			admin.GET("/marketing/settings", deps.AdminHandler.GetYieldSettings)
 			admin.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)

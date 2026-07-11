@@ -211,16 +211,15 @@ export function BetFundingPanel({
 
       {showGifts ? (
         <div className="space-y-2">
-          {combined ? (
+          <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] font-medium text-muted">Подарки</p>
-          ) : null}
-          <div className={cn(!combined && "segment-panel", "space-y-2.5")}>
-            {multiple && selectedGiftIds.length > 0 && (
-              <p className="text-center text-[11px] text-muted">
+            {multiple && selectedGiftIds.length > 0 ? (
+              <p className="text-[11px] tabular-nums text-muted">
                 Выбрано: {selectedGiftIds.length}
               </p>
-            )}
-
+            ) : null}
+          </div>
+          <div className={cn(!combined && "segment-panel", "space-y-2.5")}>
             {loadingGifts ? (
               <p className="text-center text-xs text-muted">Загружаем подарки…</p>
             ) : availableGifts.length === 0 ? (

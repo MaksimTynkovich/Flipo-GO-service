@@ -142,7 +142,7 @@ func main() {
 		slog.Warn("telegram mtproto gift scanner disabled; set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH and run make tg-auth")
 	}
 	giftScanner := telegram.NewProfileGiftScanner(mtprotoCfg, cfg.DebugAuthEnabled && !mtprotoCfg.Enabled())
-	giftValuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo)
+	giftValuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo, platformRepo)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
 	giftTransfer := telegram.NewGiftTransferService(mtprotoCfg)
 	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)

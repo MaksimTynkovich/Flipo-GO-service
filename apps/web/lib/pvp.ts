@@ -12,11 +12,19 @@ export type PvpPlayer = {
   username: string;
   photo_url?: string;
   stake_nanoton?: number;
+  balance_nanoton?: number;
   win_chance_bps?: number;
-  funding_type?: "balance" | "gift" | string;
+  funding_type?: "balance" | "gift" | "combined" | string;
   gift?: PvpGift;
+  gifts?: PvpGift[];
   is_winner?: boolean;
 };
+
+export function pvpPlayerGifts(player: PvpPlayer): PvpGift[] {
+  if (player.gifts && player.gifts.length > 0) return player.gifts;
+  if (player.gift) return [player.gift];
+  return [];
+}
 
 export type PvpRoom = {
   id: string;
@@ -24,7 +32,7 @@ export type PvpRoom = {
   bet_amount_nanoton: number;
   stake_tolerance_bps?: number;
   max_players: number;
-  status: "open" | "countdown" | "spinning" | "finished";
+  status: "open" | "countdown" | "spinning" | "finished" | "cancelled";
   player_count: number;
   players: PvpPlayer[];
   winner_id?: string;

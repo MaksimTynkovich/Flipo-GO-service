@@ -12,9 +12,24 @@ export function giftGradient(slug: string): string {
   return `linear-gradient(135deg, hsl(${hue} 45% 28%) 0%, hsl(${(hue + 40) % 360} 35% 18%) 100%)`;
 }
 
-const BUYBACK_HAIRCUT = 0.12;
-
+/** Stake / game valuation — prefers admin valuation, then buyback, then floor. */
 export function giftValuationNanoton(item: {
+  valuation_nanoton?: number;
+  buyback_price_nanoton?: number;
+  floor_price_nanoton: number;
+}): number {
+  if (item.valuation_nanoton && item.valuation_nanoton > 0) {
+    return item.valuation_nanoton;
+  }
+  if (item.buyback_price_nanoton && item.buyback_price_nanoton > 0) {
+    return item.buyback_price_nanoton;
+  }
+  if (item.floor_price_nanoton <= 0) return 0;
+  return item.floor_price_nanoton;
+}
+
+/** Platform buy price for liquidate. */
+export function giftBuyPriceNanoton(item: {
   buyback_price_nanoton?: number;
   floor_price_nanoton: number;
 }): number {
@@ -22,7 +37,7 @@ export function giftValuationNanoton(item: {
     return item.buyback_price_nanoton;
   }
   if (item.floor_price_nanoton <= 0) return 0;
-  return Math.round(item.floor_price_nanoton * (1 - BUYBACK_HAIRCUT));
+  return item.floor_price_nanoton;
 }
 
 export function formatCollectionSlug(slug: string): string {

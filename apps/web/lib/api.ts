@@ -43,6 +43,7 @@ export type InventoryItem = {
   telegram_gift_id?: string;
   floor_price_nanoton: number;
   buyback_price_nanoton?: number;
+  valuation_nanoton?: number;
   model?: string;
   symbol?: string;
   backdrop?: string;
@@ -1098,6 +1099,22 @@ export async function updateAdminMarketListingPrice(id: string, priceNanoton: nu
   return api<{ ok: boolean }>(`/api/v1/admin/market/listings/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ price_nanoton: priceNanoton }),
+  });
+}
+
+export type AdminGiftPriceSettings = {
+  buy_adjust_percent: number;
+  valuation_adjust_percent: number;
+};
+
+export async function getAdminGiftPriceSettings() {
+  return api<AdminGiftPriceSettings>("/api/v1/admin/gift-price-settings");
+}
+
+export async function updateAdminGiftPriceSettings(settings: AdminGiftPriceSettings) {
+  return api<{ ok: boolean }>("/api/v1/admin/gift-price-settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
   });
 }
 

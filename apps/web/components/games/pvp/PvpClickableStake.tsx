@@ -1,9 +1,9 @@
 "use client";
 
-import { BetStakeLabel } from "@/components/games/BetStakeLabel";
+import { GiftStakeIcons } from "@/components/games/BetStakeLabel";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { formatTON } from "@/lib/api";
-import { PvpPlayer } from "@/lib/pvp";
+import { PvpPlayer, pvpPlayerGifts } from "@/lib/pvp";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -21,26 +21,21 @@ export function PvpClickableStake({
   className,
   onOpen,
 }: Props) {
-  const isGift = player.funding_type === "gift" && !!player.gift;
+  const gifts = pvpPlayerGifts(player);
+  const hasGifts = gifts.length > 0;
 
-  const content =
-    isGift && player.gift ? (
-      <BetStakeLabel
-        amountNanoton={amountNanoton}
-        fundingType={player.funding_type}
-        gift={player.gift}
-        iconSize={iconSize}
-      />
-    ) : (
-      <TonAmount
-        amount={formatTON(amountNanoton)}
-        variant="brand"
-        iconSize={iconSize}
-        iconClassName={iconSize === "sm" ? "h-3.5 w-3.5" : undefined}
-      />
-    );
+  const content = hasGifts ? (
+    <GiftStakeIcons gifts={gifts} size={iconSize} amountNanoton={amountNanoton} />
+  ) : (
+    <TonAmount
+      amount={formatTON(amountNanoton)}
+      variant="brand"
+      iconSize={iconSize}
+      iconClassName={iconSize === "sm" ? "h-3.5 w-3.5" : undefined}
+    />
+  );
 
-  if (!isGift || !onOpen) {
+  if (!hasGifts || !onOpen) {
     return <span className={cn("inline-flex", className)}>{content}</span>;
   }
 

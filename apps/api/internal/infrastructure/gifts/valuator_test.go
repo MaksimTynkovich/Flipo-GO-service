@@ -2,30 +2,19 @@ package gifts
 
 import "testing"
 
-func TestApplyBuybackHaircut(t *testing.T) {
-	got := ApplyBuybackHaircut(2_520_000_000)
-	want := int64(2_520_000_000 * 88 / 100)
+func TestApplyPercentAdjust(t *testing.T) {
+	got := ApplyPercentAdjust(2_520_000_000, -12)
+	want := int64(float64(2_520_000_000) * 0.88)
 	if got != want {
-		t.Fatalf("applyBuybackHaircut(2.52 TON) = %d, want %d", got, want)
+		t.Fatalf("ApplyPercentAdjust(2.52 TON, -12) = %d, want %d", got, want)
 	}
-	if ApplyBuybackHaircut(0) != 0 {
-		t.Fatal("zero price should stay zero")
+	if ApplyPercentAdjust(1_000_000_000, 10) != 1_100_000_000 {
+		t.Fatal("expected +10% markup")
 	}
-}
-
-func TestStakingQuoteAppliesHaircut(t *testing.T) {
-	price, source := finalizeQuote(2_520_000_000, PriceSourceTraits, true)
-	if price != 2_217_600_000 {
-		t.Fatalf("staking quote should apply haircut, got %d", price)
+	if ApplyPercentAdjust(0, -12) != 0 {
+		t.Fatal("zero stays zero")
 	}
-	if source != PriceSourceTraits {
-		t.Fatalf("unexpected source %q", source)
-	}
-}
-
-func TestBuybackQuoteAppliesHaircut(t *testing.T) {
-	price, _ := finalizeQuote(2_520_000_000, PriceSourceTraits, true)
-	if price != 2_217_600_000 {
-		t.Fatalf("buyback quote = %d, want 2217600000", price)
+	if ApplyPercentAdjust(1_000_000_000, 0) != 1_000_000_000 {
+		t.Fatal("0% should keep price")
 	}
 }

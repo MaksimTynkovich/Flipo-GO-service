@@ -5,7 +5,7 @@ import { TonAmount } from "@/components/icons/TonIcon";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON } from "@/lib/api";
 import { formatCollectionSlug, giftImageUrl } from "@/lib/gifts";
-import { PvpGift, PvpPlayer, pvpPlayerName } from "@/lib/pvp";
+import { PvpGift, PvpPlayer, pvpPlayerGifts, pvpPlayerName } from "@/lib/pvp";
 
 type Props = {
   player: PvpPlayer;
@@ -19,7 +19,8 @@ function giftValueNanoton(gift: PvpGift, fallback: number): number {
 }
 
 export function PvpStakeDetailSheet({ player, stakeNanoton, onClose }: Props) {
-  const gifts = player.gift ? [player.gift] : [];
+  const gifts = pvpPlayerGifts(player);
+  const balanceNanoton = player.balance_nanoton ?? 0;
 
   return (
     <ModalOverlay onClose={onClose} analyticsModalId="pvp_stake_detail">
@@ -49,12 +50,20 @@ export function PvpStakeDetailSheet({ player, stakeNanoton, onClose }: Props) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
-          {gifts.length === 0 ? (
+          {gifts.length === 0 && balanceNanoton <= 0 ? (
             <p className="rounded-xl bg-surface-raised/60 px-3 py-4 text-center text-sm text-muted">
               Ставка в TON
             </p>
           ) : (
             <ul className="space-y-2">
+              {balanceNanoton > 0 ? (
+                <li className="flex items-center justify-between gap-3 rounded-xl bg-surface-raised/60 px-3 py-2.5">
+                  <span className="text-sm font-medium">TON</span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    <TonAmount amount={formatTON(balanceNanoton)} iconSize="xs" />
+                  </span>
+                </li>
+              ) : null}
               {gifts.map((gift) => {
                 const value = giftValueNanoton(gift, stakeNanoton);
                 const imageSrc = giftImageUrl(gift.collection_slug ?? gift.id, gift.image_url);

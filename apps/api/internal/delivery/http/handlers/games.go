@@ -79,7 +79,7 @@ func (h *GameHandler) RouletteBet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID)
+	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID, nil)
 	if err != nil {
 		writeGameBetError(c, err)
 		return
@@ -162,7 +162,7 @@ func (h *GameHandler) CrashBet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID)
+	stake, err := parseStakeInput(req.Funding, req.AmountNanoton, req.InventoryItemID, nil)
 	if err != nil {
 		writeGameBetError(c, err)
 		return
@@ -251,10 +251,11 @@ func (h *GameHandler) PvPListRooms(c *gin.Context) {
 func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		Funding          string `json:"funding"`
-		BetAmountNanoton int64  `json:"bet_amount_nanoton"`
-		InventoryItemID  string `json:"inventory_item_id"`
-		MaxPlayers       int    `json:"max_players"`
+		Funding           string   `json:"funding"`
+		BetAmountNanoton  int64    `json:"bet_amount_nanoton"`
+		InventoryItemID   string   `json:"inventory_item_id"`
+		InventoryItemIDs  []string `json:"inventory_item_ids"`
+		MaxPlayers        int      `json:"max_players"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -267,7 +268,7 @@ func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "В PVP-комнате ровно 2 игрока"})
 		return
 	}
-	stake, err := parseStakeInput(req.Funding, req.BetAmountNanoton, req.InventoryItemID)
+	stake, err := parseStakeInput(req.Funding, req.BetAmountNanoton, req.InventoryItemID, req.InventoryItemIDs)
 	if err != nil {
 		writeGameBetError(c, err)
 		return
@@ -303,13 +304,14 @@ func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Funding         string `json:"funding"`
-		AmountNanoton   int64  `json:"amount_nanoton"`
-		InventoryItemID string `json:"inventory_item_id"`
+		Funding          string   `json:"funding"`
+		AmountNanoton    int64    `json:"amount_nanoton"`
+		InventoryItemID  string   `json:"inventory_item_id"`
+		InventoryItemIDs []string `json:"inventory_item_ids"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	// Balance join uses the room stake; amount may be omitted and filled in JoinRoom.
-	stake, err := parseStakeInputAllowZeroBalance(req.Funding, req.AmountNanoton, req.InventoryItemID)
+	// Balance-only join may omit amount; JoinRoom fills room stake. Combined/gift must send stake.
+	stake, err := parseStakeInputAllowZeroBalance(req.Funding, req.AmountNanoton, req.InventoryItemID, req.InventoryItemIDs)
 	if err != nil {
 		writeGameBetError(c, err)
 		return

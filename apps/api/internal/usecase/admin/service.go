@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -167,6 +168,52 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 		"referral_share_percent":        settings.ReferralSharePercent,
 		"staking_base_monthly_percent":  settings.StakingBaseMonthlyPercent,
 		"staking_boost_monthly_percent": settings.StakingBoostMonthlyPercent,
+	})
+}
+
+type GiftPriceSettings struct {
+	BuyAdjustPercent       float64 `json:"buy_adjust_percent"`
+	ValuationAdjustPercent float64 `json:"valuation_adjust_percent"`
+}
+
+func (s *Service) GetGiftPriceSettings(ctx context.Context) (*GiftPriceSettings, error) {
+	settings, err := s.platform.GetYieldSettings(ctx)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return &GiftPriceSettings{}, nil
+		}
+		return nil, err
+	}
+	return &GiftPriceSettings{
+		BuyAdjustPercent:       settings.GiftBuyAdjustPercent,
+		ValuationAdjustPercent: settings.GiftValuationAdjustPercent,
+	}, nil
+}
+
+func (s *Service) UpdateGiftPriceSettings(ctx context.Context, adminID uuid.UUID, buyAdjust, valuationAdjust float64) error {
+	if buyAdjust < -90 || buyAdjust > 100 || valuationAdjust < -90 || valuationAdjust > 100 {
+		return domain.ErrInvalidAmount
+	}
+	settings, err := s.platform.GetYieldSettings(ctx)
+	if err != nil {
+		if !errors.Is(err, domain.ErrNotFound) {
+			return err
+		}
+		settings = &domain.PlatformYieldSettings{
+			ID:                         1,
+			ReferralSharePercent:       3,
+			StakingBaseMonthlyPercent:  3,
+			StakingBoostMonthlyPercent: 5,
+		}
+	}
+	settings.GiftBuyAdjustPercent = buyAdjust
+	settings.GiftValuationAdjustPercent = valuationAdjust
+	if err := s.platform.UpdateYieldSettings(ctx, settings); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "gift_price_settings_updated", "platform_yield_settings", "1", map[string]any{
+		"buy_adjust_percent":       buyAdjust,
+		"valuation_adjust_percent": valuationAdjust,
 	})
 }
 

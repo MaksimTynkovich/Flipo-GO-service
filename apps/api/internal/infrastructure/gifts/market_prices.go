@@ -180,6 +180,18 @@ func (m *MarketPrices) loadTraits(ctx context.Context, collectionKey string) (*t
 	return &traits, nil
 }
 
+func (m *MarketPrices) ListCollections(ctx context.Context) ([]collectionQuote, error) {
+	catalog, err := m.loadCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]collectionQuote, 0, len(catalog.byShortName))
+	for _, quote := range catalog.byShortName {
+		out = append(out, quote)
+	}
+	return out, nil
+}
+
 func (m *MarketPrices) fetchJSON(ctx context.Context, url string, dest any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

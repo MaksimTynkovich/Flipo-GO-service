@@ -19,7 +19,7 @@ import {
 import { useAuth } from "@/components/providers/AuthProvider";
 import { api, getInventory } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { BetFundingMode } from "@/lib/bet-funding";
+import { BetFundingMode, buildPvpStakeBody } from "@/lib/bet-funding";
 import { formatGameBetError } from "@/lib/game-errors";
 import { giftValuationNanoton } from "@/lib/gifts";
 import { PvpLobbyState, PvpRoom } from "@/lib/pvp";
@@ -27,6 +27,7 @@ import {
   estimateJoinWinChanceBps,
   formatWinChanceBps,
   pvpGiftWithinTolerance,
+  pvpStakeBounds,
 } from "@/lib/pvp-stake";
 import { connectGameWS } from "@/lib/ws";
 import { formatUserError } from "@/lib/user-errors";
@@ -37,6 +38,11 @@ const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
 function mapPvpError(message: string): string {
   return formatUserError(message, "Не удалось выполнить действие");
+}
+
+function tonToNanoton(amountTon: string): number {
+  const n = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 export function PvpHubView() {
@@ -51,8 +57,9 @@ export function PvpHubView() {
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [joinRoomId, setJoinRoomId] = useState<string | null>(null);
   const [joinFundingMode, setJoinFundingMode] = useState<BetFundingMode>("balance");
+  const [joinAmountTon, setJoinAmountTon] = useState("0");
   const [joinGiftIds, setJoinGiftIds] = useState<string[]>([]);
-  const [joinGiftStakeNanoton, setJoinGiftStakeNanoton] = useState<number | null>(null);
+  const [joinGiftStakeNanoton, setJoinGiftStakeNanoton] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [proofRoundId, setProofRoundId] = useState<string | null>(null);
   const roomOrderRef = useRef<string[]>([]);
@@ -91,41 +98,39 @@ export function PvpHubView() {
 
   useEffect(() => {
     if (!joinRoomId || joinGiftIds.length === 0) {
-      setJoinGiftStakeNanoton(null);
+      setJoinGiftStakeNanoton(0);
       return;
     }
     void getInventory().then((items) => {
-      const item = items.find((entry) => entry.id === joinGiftIds[0]);
-      setJoinGiftStakeNanoton(item ? giftValuationNanoton(item) : null);
+      const total = joinGiftIds.reduce((sum, id) => {
+        const item = items.find((entry) => entry.id === id);
+        return sum + (item ? giftValuationNanoton(item) : 0);
+      }, 0);
+      setJoinGiftStakeNanoton(total);
     });
   }, [joinRoomId, joinGiftIds]);
 
   async function createRoom() {
-    if (fundingMode === "gift") {
-      if (selectedGiftIds.length === 0) {
-        setError("Выберите подарок для ставки.");
-        return;
-      }
-    } else {
-      const nanotons = Math.floor(parseFloat(betAmount || "0") * 1_000_000_000);
-      if (nanotons <= 0) return;
-      if (user && user.betting_balance < nanotons) {
-        setError("Недостаточно средств на балансе.");
-        return;
-      }
+    const tonNanoton = tonToNanoton(betAmount);
+    if (tonNanoton <= 0 && selectedGiftIds.length === 0) {
+      setError("Укажите TON и/или выберите подарки для ставки.");
+      return;
+    }
+    if (tonNanoton > 0 && user && user.betting_balance < tonNanoton) {
+      setError("Недостаточно средств на балансе.");
+      return;
     }
 
     setCreating(true);
     setError(null);
     try {
       haptics.impactOccurred("medium");
-      const body =
-        fundingMode === "gift" && selectedGiftIds[0]
-          ? { funding: "gift", inventory_item_id: selectedGiftIds[0], max_players: PVP_MAX_PLAYERS }
-          : {
-              bet_amount_nanoton: Math.floor(parseFloat(betAmount || "0") * 1_000_000_000),
-              max_players: PVP_MAX_PLAYERS,
-            };
+      const body = buildPvpStakeBody({
+        amountNanoton: tonNanoton,
+        giftIds: selectedGiftIds,
+        amountKey: "bet_amount_nanoton",
+        extra: { max_players: PVP_MAX_PLAYERS },
+      });
       await api("/api/v1/games/pvp/rooms", {
         method: "POST",
         body: JSON.stringify(body),
@@ -134,7 +139,7 @@ export function PvpHubView() {
         event_name: "pvp_room_created",
         event_category: "pvp",
         status: "success",
-        properties: { mode: "pvp", funding: fundingMode },
+        properties: { mode: "pvp", funding: body.funding },
       });
       await loadState();
     } catch (e) {
@@ -153,10 +158,14 @@ export function PvpHubView() {
   }
 
   function openJoin(roomId: string) {
+    const room = state.active.find((item) => item.id === roomId);
     setJoinRoomId(roomId);
     setJoinFundingMode("balance");
+    setJoinAmountTon(
+      room ? (room.bet_amount_nanoton / 1_000_000_000).toFixed(2) : "0",
+    );
     setJoinGiftIds([]);
-    setJoinGiftStakeNanoton(null);
+    setJoinGiftStakeNanoton(0);
     setError(null);
   }
 
@@ -165,19 +174,20 @@ export function PvpHubView() {
     const room = state.active.find((item) => item.id === joinRoomId);
     if (!room) return;
 
-    if (joinFundingMode === "gift") {
-      if (joinGiftIds.length === 0) {
-        setError("Выберите подарок для ставки.");
-        return;
-      }
-      if (
-        joinGiftStakeNanoton != null &&
-        !pvpGiftWithinTolerance(room.bet_amount_nanoton, joinGiftStakeNanoton)
-      ) {
-        setError("Сумма подарка не подходит для ставки в этой комнате.");
-        return;
-      }
-    } else if (user && user.betting_balance < room.bet_amount_nanoton) {
+    const tonNanoton = tonToNanoton(joinAmountTon);
+    const joinTotal = tonNanoton + joinGiftStakeNanoton;
+    if (joinTotal <= 0) {
+      setError("Укажите TON и/или выберите подарки для ставки.");
+      return;
+    }
+    if (!pvpGiftWithinTolerance(room.bet_amount_nanoton, joinTotal)) {
+      const { min, max } = pvpStakeBounds(room.bet_amount_nanoton);
+      setError(
+        `Сумма ставки должна быть от ${(min / 1e9).toFixed(2)} до ${(max / 1e9).toFixed(2)} TON.`,
+      );
+      return;
+    }
+    if (tonNanoton > 0 && user && user.betting_balance < tonNanoton) {
       setError("Недостаточно средств на балансе.");
       return;
     }
@@ -186,10 +196,11 @@ export function PvpHubView() {
     setError(null);
     try {
       haptics.impactOccurred("medium");
-      const body =
-        joinFundingMode === "gift" && joinGiftIds[0]
-          ? { funding: "gift", inventory_item_id: joinGiftIds[0] }
-          : { funding: "balance", amount_nanoton: room.bet_amount_nanoton };
+      const body = buildPvpStakeBody({
+        amountNanoton: tonNanoton,
+        giftIds: joinGiftIds,
+        amountKey: "amount_nanoton",
+      });
       await api(`/api/v1/games/pvp/rooms/${joinRoomId}/join`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -198,7 +209,7 @@ export function PvpHubView() {
         event_name: "pvp_room_joined",
         event_category: "pvp",
         status: "success",
-        properties: { mode: "pvp", room_id: joinRoomId, funding: joinFundingMode },
+        properties: { mode: "pvp", room_id: joinRoomId, funding: body.funding },
       });
       setJoinRoomId(null);
       await loadState();
@@ -227,16 +238,16 @@ export function PvpHubView() {
   );
   const hasRooms = displayRooms.length > 0;
   const joinRoom = state.active.find((room) => room.id === joinRoomId);
-  const joinGiftInRange =
-    joinRoom && joinGiftStakeNanoton
-      ? pvpGiftWithinTolerance(joinRoom.bet_amount_nanoton, joinGiftStakeNanoton)
+  const joinTonNanoton = tonToNanoton(joinAmountTon);
+  const joinTotalNanoton = joinTonNanoton + joinGiftStakeNanoton;
+  const joinInRange =
+    joinRoom && joinTotalNanoton > 0
+      ? pvpGiftWithinTolerance(joinRoom.bet_amount_nanoton, joinTotalNanoton)
       : false;
   const joinWinChanceBps =
-    joinRoom && joinGiftStakeNanoton && joinGiftInRange
-      ? estimateJoinWinChanceBps(joinRoom.bet_amount_nanoton, joinGiftStakeNanoton)
-      : joinRoom && joinFundingMode === "balance"
-        ? estimateJoinWinChanceBps(joinRoom.bet_amount_nanoton, joinRoom.bet_amount_nanoton)
-        : null;
+    joinRoom && joinInRange
+      ? estimateJoinWinChanceBps(joinRoom.bet_amount_nanoton, joinTotalNanoton)
+      : null;
 
   return (
     <PageShell flush>
@@ -252,9 +263,10 @@ export function PvpHubView() {
           onSelectGifts={setSelectedGiftIds}
           disabled={creating}
           quickAmounts={QUICK_AMOUNTS}
-          multiple={false}
+          multiple
+          combined
           title="Ставка комнаты"
-          subtitle="Сумма TON или один подарок — это ставка комнаты"
+          subtitle="TON и подарки можно комбинировать — это ставка комнаты"
         />
 
         <Button className="h-11 w-full rounded-xl" variant="accent" disabled={creating} onClick={createRoom}>
@@ -313,19 +325,24 @@ export function PvpHubView() {
           {(close) => (
           <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
-            <p className="mb-4 text-center text-[15px] font-semibold">Войти в комнату</p>
+            <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
+            <p className="mb-4 text-center text-xs text-muted">
+              Нужна ставка ≈ {(joinRoom.bet_amount_nanoton / 1_000_000_000).toFixed(2)} TON
+              (±10%)
+            </p>
 
             <BetFundingPanel
               mode={joinFundingMode}
               onModeChange={setJoinFundingMode}
-              amountTon={(joinRoom.bet_amount_nanoton / 1_000_000_000).toFixed(2)}
-              onAmountTonChange={() => {}}
+              amountTon={joinAmountTon}
+              onAmountTonChange={setJoinAmountTon}
               selectedGiftIds={joinGiftIds}
               onSelectGifts={setJoinGiftIds}
               disabled={!!joiningId}
-              multiple={false}
+              multiple
               layout="sheet"
-              amountLocked
+              combined
+              quickAmounts={QUICK_AMOUNTS}
             />
 
             {joinWinChanceBps != null && (
@@ -354,7 +371,7 @@ export function PvpHubView() {
                 variant="accent"
                 className="h-11 rounded-xl"
                 onClick={confirmJoin}
-                disabled={!!joiningId}
+                disabled={!!joiningId || !joinInRange}
               >
                 {joiningId ? "…" : "Войти"}
               </Button>

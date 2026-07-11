@@ -10,15 +10,19 @@ import (
 )
 
 type StakeInput struct {
-	FundingType     domain.BetFundingType
-	AmountNanoton   int64
-	InventoryItemID *uuid.UUID
+	FundingType      domain.BetFundingType
+	AmountNanoton    int64
+	InventoryItemID  *uuid.UUID
+	InventoryItemIDs []uuid.UUID
 }
 
 type ResolvedStake struct {
-	AmountNanoton   int64
-	FundingType     domain.BetFundingType
-	InventoryItemID *uuid.UUID
+	AmountNanoton    int64
+	BalanceNanoton   int64
+	FundingType      domain.BetFundingType
+	InventoryItemID  *uuid.UUID
+	InventoryItemIDs []uuid.UUID
+	GiftValues       map[uuid.UUID]int64
 }
 
 type Service struct {
@@ -42,6 +46,28 @@ func NewService(
 	}
 }
 
+func (in StakeInput) GiftIDs() []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{})
+	out := make([]uuid.UUID, 0, len(in.InventoryItemIDs)+1)
+	add := func(id uuid.UUID) {
+		if id == uuid.Nil {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if in.InventoryItemID != nil {
+		add(*in.InventoryItemID)
+	}
+	for _, id := range in.InventoryItemIDs {
+		add(id)
+	}
+	return out
+}
+
 func (s *Service) QuoteGift(ctx context.Context, userID, itemID uuid.UUID) (int64, error) {
 	item, err := s.inventory.FindByID(ctx, itemID)
 	if err != nil {
@@ -50,9 +76,9 @@ func (s *Service) QuoteGift(ctx context.Context, userID, itemID uuid.UUID) (int6
 	if item.UserID != userID || item.Status != domain.InvAvailable || domain.IsProfileVirtualItem(*item) {
 		return 0, domain.ErrGiftNotAvailable
 	}
-	valuation, _ := s.valuator.QuoteInventoryBuyback(ctx, *item)
+	valuation, _ := s.valuator.QuoteInventoryValuation(ctx, *item)
 	if valuation <= 0 {
-		valuation = gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
+		valuation = item.FloorPriceNanoton
 	}
 	if valuation <= 0 {
 		return 0, domain.ErrInvalidAmount
@@ -60,52 +86,116 @@ func (s *Service) QuoteGift(ctx context.Context, userID, itemID uuid.UUID) (int6
 	return valuation, nil
 }
 
-func (s *Service) ResolveAndLock(ctx context.Context, userID, refID uuid.UUID, in StakeInput, ledgerRefType string) (*ResolvedStake, error) {
-	switch in.FundingType {
-	case domain.BetFundingGift:
-		if in.InventoryItemID == nil {
-			return nil, domain.ErrGiftNotAvailable
-		}
-		valuation, err := s.QuoteGift(ctx, userID, *in.InventoryItemID)
+func (s *Service) QuoteStake(ctx context.Context, userID uuid.UUID, in StakeInput) (int64, error) {
+	giftIDs := in.GiftIDs()
+	total := in.AmountNanoton
+	if total < 0 {
+		total = 0
+	}
+	for _, id := range giftIDs {
+		valuation, err := s.QuoteGift(ctx, userID, id)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
-		if err := s.inventory.LockForBet(ctx, userID, *in.InventoryItemID); err != nil {
+		total += valuation
+	}
+	if total <= 0 {
+		return 0, domain.ErrInvalidAmount
+	}
+	return total, nil
+}
+
+func (s *Service) ResolveAndLock(ctx context.Context, userID, refID uuid.UUID, in StakeInput, ledgerRefType string) (*ResolvedStake, error) {
+	giftIDs := in.GiftIDs()
+	balanceAmount := in.AmountNanoton
+	if balanceAmount < 0 {
+		balanceAmount = 0
+	}
+
+	// Legacy exclusive modes: gift requires IDs; balance requires amount when no gifts.
+	if len(giftIDs) == 0 {
+		if in.FundingType == domain.BetFundingGift || in.FundingType == domain.BetFundingCombined {
 			return nil, domain.ErrGiftNotAvailable
 		}
-		itemID := *in.InventoryItemID
-		return &ResolvedStake{
-			AmountNanoton:   valuation,
-			FundingType:     domain.BetFundingGift,
-			InventoryItemID: &itemID,
-		}, nil
-	default:
-		if in.AmountNanoton <= 0 {
+		if balanceAmount <= 0 {
 			return nil, domain.ErrInvalidAmount
 		}
-		if _, err := s.balance.Debit(ctx, userID, in.AmountNanoton, domain.LedgerBet, ledgerRefType, refID); err != nil {
+		if _, err := s.balance.Debit(ctx, userID, balanceAmount, domain.LedgerBet, ledgerRefType, refID); err != nil {
 			return nil, err
 		}
 		return &ResolvedStake{
-			AmountNanoton: in.AmountNanoton,
-			FundingType:   domain.BetFundingBalance,
+			AmountNanoton:  balanceAmount,
+			BalanceNanoton: balanceAmount,
+			FundingType:    domain.BetFundingBalance,
 		}, nil
 	}
+
+	locked := make([]uuid.UUID, 0, len(giftIDs))
+	giftValues := make(map[uuid.UUID]int64, len(giftIDs))
+	var giftTotal int64
+
+	rollbackGifts := func() {
+		for _, id := range locked {
+			_ = s.inventory.ReleaseFromBet(ctx, id)
+		}
+	}
+
+	for _, id := range giftIDs {
+		valuation, err := s.QuoteGift(ctx, userID, id)
+		if err != nil {
+			rollbackGifts()
+			return nil, err
+		}
+		if err := s.inventory.LockForBet(ctx, userID, id); err != nil {
+			rollbackGifts()
+			return nil, domain.ErrGiftNotAvailable
+		}
+		locked = append(locked, id)
+		giftValues[id] = valuation
+		giftTotal += valuation
+	}
+
+	if balanceAmount > 0 {
+		if _, err := s.balance.Debit(ctx, userID, balanceAmount, domain.LedgerBet, ledgerRefType, refID); err != nil {
+			rollbackGifts()
+			return nil, err
+		}
+	}
+
+	ft := domain.BetFundingGift
+	if balanceAmount > 0 {
+		ft = domain.BetFundingCombined
+	}
+	first := giftIDs[0]
+	return &ResolvedStake{
+		AmountNanoton:    balanceAmount + giftTotal,
+		BalanceNanoton:   balanceAmount,
+		FundingType:      ft,
+		InventoryItemID:  &first,
+		InventoryItemIDs: append([]uuid.UUID(nil), giftIDs...),
+		GiftValues:       giftValues,
+	}, nil
 }
 
 func (s *Service) Rollback(ctx context.Context, userID, refID uuid.UUID, stake *ResolvedStake, ledgerRefType string) {
 	if stake == nil {
 		return
 	}
-	switch stake.FundingType {
-	case domain.BetFundingGift:
-		if stake.InventoryItemID != nil {
-			_ = s.inventory.ReleaseFromBet(ctx, *stake.InventoryItemID)
-		}
-	default:
-		if stake.AmountNanoton > 0 {
-			_, _ = s.balance.Credit(ctx, userID, stake.AmountNanoton, domain.LedgerRefund, ledgerRefType, refID)
-		}
+
+	giftIDs := stake.InventoryItemIDs
+	if len(giftIDs) == 0 && stake.InventoryItemID != nil {
+		giftIDs = []uuid.UUID{*stake.InventoryItemID}
+	}
+	for _, id := range giftIDs {
+		_ = s.inventory.ReleaseFromBet(ctx, id)
+	}
+
+	refund := stake.BalanceNanoton
+	if refund <= 0 && stake.FundingType == domain.BetFundingBalance && stake.AmountNanoton > 0 {
+		refund = stake.AmountNanoton
+	}
+	if refund > 0 {
+		_, _ = s.balance.Credit(ctx, userID, refund, domain.LedgerRefund, ledgerRefType, refID)
 	}
 }
 
@@ -137,15 +227,22 @@ func (s *Service) SettleLoss(ctx context.Context, bet domain.GameBet) error {
 }
 
 func (s *Service) TransferLossToWinner(ctx context.Context, bet domain.GameBet, winnerID uuid.UUID) error {
-	if bet.FundingType != domain.BetFundingGift || bet.InventoryItemID == nil {
+	if bet.InventoryItemID == nil {
+		return nil
+	}
+	if bet.FundingType != domain.BetFundingGift && bet.FundingType != domain.BetFundingCombined {
 		return nil
 	}
 	return s.inventory.TransferFromBet(ctx, *bet.InventoryItemID, winnerID)
 }
 
 func ParseFundingType(raw string) domain.BetFundingType {
-	if raw == string(domain.BetFundingGift) {
+	switch raw {
+	case string(domain.BetFundingGift):
 		return domain.BetFundingGift
+	case string(domain.BetFundingCombined):
+		return domain.BetFundingCombined
+	default:
+		return domain.BetFundingBalance
 	}
-	return domain.BetFundingBalance
 }

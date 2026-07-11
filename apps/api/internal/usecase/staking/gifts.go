@@ -251,20 +251,20 @@ func (s *Service) enrichScannedGifts(ctx context.Context, scanned []telegram.Sca
 
 func (s *Service) giftDisplayPrice(ctx context.Context, gift telegram.ScannedGift) int64 {
 	if s.valuator != nil {
-		if price, _ := s.valuator.QuoteBuyback(ctx, gift); price > 0 {
+		if price, _ := s.valuator.QuoteValuation(ctx, gift); price > 0 {
 			return price
 		}
 	}
-	return gifts.ApplyBuybackHaircut(gift.PriceNanoton)
+	return gift.PriceNanoton
 }
 
 func (s *Service) itemDisplayPrice(ctx context.Context, item domain.InventoryItem) int64 {
 	if s.valuator != nil {
-		if price, _ := s.valuator.QuoteInventoryBuyback(ctx, item); price > 0 {
+		if price, _ := s.valuator.QuoteInventoryValuation(ctx, item); price > 0 {
 			return price
 		}
 	}
-	return gifts.ApplyBuybackHaircut(item.FloorPriceNanoton)
+	return item.FloorPriceNanoton
 }
 
 func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string) (*domain.StakingPosition, error) {

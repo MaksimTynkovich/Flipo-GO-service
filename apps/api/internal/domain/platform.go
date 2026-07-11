@@ -91,13 +91,15 @@ type TelegramBotSettings struct {
 
 func (TelegramBotSettings) TableName() string { return "telegram_bot_settings" }
 
-// PlatformYieldSettings - singleton row (id=1) for staking and referral percentages.
+// PlatformYieldSettings - singleton row (id=1) for staking, referral and gift price adjustments.
 type PlatformYieldSettings struct {
-	ID                         int       `gorm:"primaryKey" json:"id"`
-	ReferralSharePercent       float64   `gorm:"type:decimal(6,2);not null;default:3" json:"referral_share_percent"`
-	StakingBaseMonthlyPercent  float64   `gorm:"type:decimal(6,2);not null;default:3" json:"staking_base_monthly_percent"`
-	StakingBoostMonthlyPercent float64   `gorm:"type:decimal(6,2);not null;default:5" json:"staking_boost_monthly_percent"`
-	UpdatedAt                  time.Time `json:"updated_at"`
+	ID                          int       `gorm:"primaryKey" json:"id"`
+	ReferralSharePercent        float64   `gorm:"type:decimal(6,2);not null;default:3" json:"referral_share_percent"`
+	StakingBaseMonthlyPercent   float64   `gorm:"type:decimal(6,2);not null;default:3" json:"staking_base_monthly_percent"`
+	StakingBoostMonthlyPercent  float64   `gorm:"type:decimal(6,2);not null;default:5" json:"staking_boost_monthly_percent"`
+	GiftBuyAdjustPercent        float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_buy_adjust_percent"`
+	GiftValuationAdjustPercent  float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_valuation_adjust_percent"`
+	UpdatedAt                   time.Time `json:"updated_at"`
 }
 
 func (PlatformYieldSettings) TableName() string { return "platform_yield_settings" }

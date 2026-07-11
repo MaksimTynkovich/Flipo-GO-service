@@ -143,6 +143,17 @@ func (r *PlatformRepo) GetYieldSettings(ctx context.Context) (*domain.PlatformYi
 	return &settings, err
 }
 
+func (r *PlatformRepo) GiftAdjustPercents(ctx context.Context) (buyAdjustPercent, valuationAdjustPercent float64, err error) {
+	settings, err := r.GetYieldSettings(ctx)
+	if errors.Is(err, domain.ErrNotFound) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	return settings.GiftBuyAdjustPercent, settings.GiftValuationAdjustPercent, nil
+}
+
 func (r *PlatformRepo) UpdateYieldSettings(ctx context.Context, settings *domain.PlatformYieldSettings) error {
 	settings.ID = 1
 	settings.UpdatedAt = time.Now().UTC()

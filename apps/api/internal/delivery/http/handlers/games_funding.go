@@ -8,30 +8,41 @@ import (
 	"github.com/google/uuid"
 )
 
-func parseStakeInput(funding string, amountNanoton int64, inventoryItemID string) (betfunding.StakeInput, error) {
-	return parseStakeInputOpts(funding, amountNanoton, inventoryItemID, false)
+func parseStakeInput(funding string, amountNanoton int64, inventoryItemID string, inventoryItemIDs []string) (betfunding.StakeInput, error) {
+	return parseStakeInputOpts(funding, amountNanoton, inventoryItemID, inventoryItemIDs, false)
 }
 
-// parseStakeInputAllowZeroBalance is for PvP join: room stake is applied server-side.
-func parseStakeInputAllowZeroBalance(funding string, amountNanoton int64, inventoryItemID string) (betfunding.StakeInput, error) {
-	return parseStakeInputOpts(funding, amountNanoton, inventoryItemID, true)
+// parseStakeInputAllowZeroBalance is for PvP join: room stake is applied server-side for TON-only joins.
+func parseStakeInputAllowZeroBalance(funding string, amountNanoton int64, inventoryItemID string, inventoryItemIDs []string) (betfunding.StakeInput, error) {
+	return parseStakeInputOpts(funding, amountNanoton, inventoryItemID, inventoryItemIDs, true)
 }
 
-func parseStakeInputOpts(funding string, amountNanoton int64, inventoryItemID string, allowZeroBalance bool) (betfunding.StakeInput, error) {
-	ft := betfunding.ParseFundingType(funding)
-	in := betfunding.StakeInput{
-		FundingType:   ft,
-		AmountNanoton: amountNanoton,
+func parseStakeInputOpts(funding string, amountNanoton int64, inventoryItemID string, inventoryItemIDs []string, allowZeroBalance bool) (betfunding.StakeInput, error) {
+	ids, err := parseInventoryItemIDs(inventoryItemID, inventoryItemIDs)
+	if err != nil {
+		return betfunding.StakeInput{}, err
 	}
-	if ft == domain.BetFundingGift {
-		if inventoryItemID == "" {
-			return betfunding.StakeInput{}, domain.ErrGiftNotAvailable
-		}
-		id, err := uuid.Parse(inventoryItemID)
-		if err != nil {
-			return betfunding.StakeInput{}, domain.ErrGiftNotAvailable
-		}
-		in.InventoryItemID = &id
+
+	ft := betfunding.ParseFundingType(funding)
+	if len(ids) > 0 && amountNanoton > 0 {
+		ft = domain.BetFundingCombined
+	} else if len(ids) > 0 {
+		ft = domain.BetFundingGift
+	} else if funding == "" {
+		ft = domain.BetFundingBalance
+	}
+
+	in := betfunding.StakeInput{
+		FundingType:      ft,
+		AmountNanoton:    amountNanoton,
+		InventoryItemIDs: ids,
+	}
+	if len(ids) > 0 {
+		first := ids[0]
+		in.InventoryItemID = &first
+	}
+
+	if len(ids) > 0 {
 		return in, nil
 	}
 	if amountNanoton <= 0 && !allowZeroBalance {
@@ -40,12 +51,35 @@ func parseStakeInputOpts(funding string, amountNanoton int64, inventoryItemID st
 	return in, nil
 }
 
-func (h *GameHandler) stakeAmount(ctx context.Context, userID uuid.UUID, stake betfunding.StakeInput) (int64, error) {
-	if stake.FundingType == domain.BetFundingGift {
-		if stake.InventoryItemID == nil {
-			return 0, domain.ErrGiftNotAvailable
+func parseInventoryItemIDs(singular string, plural []string) ([]uuid.UUID, error) {
+	seen := make(map[uuid.UUID]struct{})
+	out := make([]uuid.UUID, 0, len(plural)+1)
+	add := func(raw string) error {
+		if raw == "" {
+			return nil
 		}
-		return h.funding.QuoteGift(ctx, userID, *stake.InventoryItemID)
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return domain.ErrGiftNotAvailable
+		}
+		if _, ok := seen[id]; ok {
+			return nil
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+		return nil
 	}
-	return stake.AmountNanoton, nil
+	if err := add(singular); err != nil {
+		return nil, err
+	}
+	for _, raw := range plural {
+		if err := add(raw); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func (h *GameHandler) stakeAmount(ctx context.Context, userID uuid.UUID, stake betfunding.StakeInput) (int64, error) {
+	return h.funding.QuoteStake(ctx, userID, stake)
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatTON, InventoryItem } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { giftImageUrl, giftValuationNanoton } from "@/lib/gifts";
+import { giftBuyPriceNanoton, giftImageUrl } from "@/lib/gifts";
 import { Gift } from "lucide-react";
 
 export function inventoryItemSlug(item: InventoryItem): string {
@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function InventoryGiftCard({ item, listingPrice, onClick }: Props) {
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
-  const price = listingPrice ?? giftValuationNanoton(item);
+  const price = listingPrice ?? giftBuyPriceNanoton(item);
   const statusLabel = STATUS_LABEL[item.status];
 
   return (

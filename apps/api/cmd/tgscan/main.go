@@ -77,7 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	valuator := flipogifts.NewValuator(flipogifts.NewMarketPrices(""), nil)
+	valuator := flipogifts.NewValuator(flipogifts.NewMarketPrices(""), nil, nil)
 	result.Gifts = valuator.Enrich(ctx, result.Gifts)
 	bySlug := make(map[string]flipotg.ScannedGift, len(result.Gifts))
 	for _, gift := range result.Gifts {

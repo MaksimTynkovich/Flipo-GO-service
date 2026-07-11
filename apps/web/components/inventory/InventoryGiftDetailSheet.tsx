@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatTON, InventoryItem, MarketListing } from "@/lib/api";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { formatCollectionSlug, giftImageUrl, giftValuationNanoton, traitValue } from "@/lib/gifts";
+import { formatCollectionSlug, giftBuyPriceNanoton, giftImageUrl, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 
@@ -47,8 +47,8 @@ export function InventoryGiftDetailSheet({
   const [showWithdrawHint, setShowWithdrawHint] = useState(false);
 
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
-  const valuation = giftValuationNanoton(item);
-  const displayPrice = marketListing?.price_nanoton ?? valuation;
+  const buyPrice = giftBuyPriceNanoton(item);
+  const displayPrice = marketListing?.price_nanoton ?? buyPrice;
 
   useEffect(() => {
     setImgError(false);

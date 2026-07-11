@@ -55,7 +55,9 @@ func IsProfileVirtualItem(item InventoryItem) bool {
 }
 
 type NFTFloorPrice struct {
-	CollectionSlug    string    `gorm:"size:128;primaryKey" json:"collection_slug"`
-	PriceNanoton      int64     `gorm:"not null" json:"price_nanoton"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	CollectionSlug   string    `gorm:"size:128;primaryKey" json:"collection_slug"`
+	PriceNanoton     int64     `gorm:"not null" json:"price_nanoton"`
+	BuyPriceNanoton  int64     `gorm:"not null;default:0" json:"buy_price_nanoton"`
+	ValuationNanoton int64     `gorm:"not null;default:0" json:"valuation_nanoton"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }

@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	CountdownSeconds       = 3
-	SpinSeconds            = 14
-	HistoryLimit           = 12
-	HistoryVisibleSeconds  = 10
+	CountdownSeconds      = 3
+	SpinSeconds           = 14
+	HistoryLimit          = 12
+	HistoryVisibleSeconds = 10
+	OpenRoomTTL           = 5 * time.Minute
 )
 
 type TickNotifier interface {
@@ -27,15 +28,17 @@ type GiftView struct {
 }
 
 type PlayerView struct {
-	UserID       uuid.UUID `json:"user_id"`
-	FirstName    string    `json:"first_name"`
-	Username     string    `json:"username"`
-	PhotoURL     string    `json:"photo_url,omitempty"`
-	StakeNanoton int64     `json:"stake_nanoton"`
-	WinChanceBps int       `json:"win_chance_bps,omitempty"`
-	FundingType  string    `json:"funding_type,omitempty"`
-	Gift         *GiftView `json:"gift,omitempty"`
-	IsWinner     bool      `json:"is_winner,omitempty"`
+	UserID         uuid.UUID  `json:"user_id"`
+	FirstName      string     `json:"first_name"`
+	Username       string     `json:"username"`
+	PhotoURL       string     `json:"photo_url,omitempty"`
+	StakeNanoton   int64      `json:"stake_nanoton"`
+	BalanceNanoton int64      `json:"balance_nanoton,omitempty"`
+	WinChanceBps   int        `json:"win_chance_bps,omitempty"`
+	FundingType    string     `json:"funding_type,omitempty"`
+	Gift           *GiftView  `json:"gift,omitempty"`
+	Gifts          []GiftView `json:"gifts,omitempty"`
+	IsWinner       bool       `json:"is_winner,omitempty"`
 }
 
 type RoomView struct {
