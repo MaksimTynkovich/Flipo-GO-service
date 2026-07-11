@@ -45,7 +45,6 @@ func (b CrashBridge) CrashBets(roundID uuid.UUID) []crash.BetView {
 			CashoutMultiplier:     g.CashoutMultiplier,
 			AutoCashoutMultiplier: g.AutoCashoutMultiplier,
 			PayoutNanoton:         g.PayoutNanoton,
-			Simulated:             true,
 		})
 	}
 	return out
@@ -84,7 +83,6 @@ func (b RouletteBridge) RouletteBets(roundID uuid.UUID) []roulette.BetView {
 			Color:         g.Color,
 			AmountNanoton: g.AmountNanoton,
 			FundingType:   g.FundingType,
-			Simulated:     true,
 		})
 	}
 	return out
@@ -129,7 +127,6 @@ func (b PvPBridge) PvPGhostRooms() []pvp.RoomView {
 			SpinEndsAt:        g.SpinEndsAt,
 			FinishedAt:        g.FinishedAt,
 			CreatedAt:         g.CreatedAt,
-			Simulated:         true,
 		})
 	}
 	return out

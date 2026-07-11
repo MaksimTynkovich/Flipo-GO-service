@@ -27,22 +27,25 @@ export function AppTabBar() {
               onClick={() => haptics.selectionChanged()}
               className={cn(
                 "app-control flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl",
-                active ? "text-accent" : "text-muted hover:text-foreground",
+                active ? "text-accent" : "text-muted",
               )}
             >
-              <span
-                className={cn(
-                  "tab-icon-wrap flex h-7 w-7 items-center justify-center rounded-lg",
-                  active && "tab-icon-wrap-active",
-                )}
-              >
+              <span className="tab-icon-wrap flex h-7 w-7 items-center justify-center">
                 <Icon
                   size={20}
                   strokeWidth={active ? 2.4 : 1.75}
-                  className={cn(active && "transition-transform duration-200 ease-out")}
+                  className={cn(
+                    "transition-[transform] duration-base ease-out",
+                    active && "scale-105",
+                  )}
                 />
               </span>
-              <span className={cn("truncate text-[10px]", active ? "font-semibold" : "font-medium")}>
+              <span
+                className={cn(
+                  "truncate text-[10px] transition-colors duration-base ease-out",
+                  active ? "font-semibold" : "font-medium",
+                )}
+              >
                 {label}
               </span>
             </Link>

@@ -1,6 +1,8 @@
 package socialsim
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,12 +70,25 @@ func TestGhostBetsNeverTouchDBShape(t *testing.T) {
 		t.Fatal("expected ghost bets")
 	}
 	for _, b := range bets {
-		if !b.Simulated {
-			t.Fatal("ghost must be simulated")
-		}
 		if b.FundingType != "balance" {
 			t.Fatalf("funding=%s", b.FundingType)
 		}
+		if b.Username == "" || b.FirstName == "" {
+			t.Fatal("ghost bet missing display profile")
+		}
+	}
+
+	// Public JSON must not reveal that overlay bets are simulated bots.
+	views := CrashBridge{Sim: sim}.CrashBets(sim.personas[0].ID)
+	if len(views) == 0 {
+		t.Fatal("expected bridged bets")
+	}
+	raw, err := json.Marshal(views[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "simulated") {
+		t.Fatalf("public bet JSON leaked simulated marker: %s", raw)
 	}
 }
 

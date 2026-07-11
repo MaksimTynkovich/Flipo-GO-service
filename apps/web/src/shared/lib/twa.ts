@@ -38,6 +38,10 @@ export type TelegramWebApp = {
   exitFullscreen?: () => void;
   isFullscreen?: boolean;
   disableVerticalSwipes?: () => void;
+  /** Bot API 8.0+ — lock Mini App to the current orientation. */
+  lockOrientation?: () => void;
+  unlockOrientation?: () => void;
+  isOrientationLocked?: boolean;
   /** Current visible height (shrinks with the on-screen keyboard). */
   viewportHeight?: number;
   /** Stable height without the virtual keyboard — use this for app chrome. */
@@ -153,6 +157,11 @@ export function initTelegramWebApp() {
   webApp.expand();
   if (isTelegramMobilePlatform(webApp.platform)) {
     webApp.disableVerticalSwipes?.();
+    try {
+      webApp.lockOrientation?.();
+    } catch {
+      // Older clients without Bot API 8.0+ orientation lock.
+    }
   }
 
   try {

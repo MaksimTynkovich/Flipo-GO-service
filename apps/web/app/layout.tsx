@@ -91,6 +91,9 @@ const tgThemeBootstrap = `
     webApp.expand();
     if (isMobilePlatform(webApp.platform)) {
       webApp.disableVerticalSwipes?.();
+      try {
+        webApp.lockOrientation?.();
+      } catch (_) {}
     }
     try {
       if (isMobilePlatform(webApp.platform) && !webApp.isFullscreen) {

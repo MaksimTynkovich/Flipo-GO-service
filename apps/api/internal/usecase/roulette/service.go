@@ -43,7 +43,8 @@ type BetView struct {
 	AmountNanoton int64     `json:"amount_nanoton"`
 	FundingType   string    `json:"funding_type"`
 	Gift          *GiftView `json:"gift,omitempty"`
-	Simulated     bool      `json:"simulated,omitempty"`
+	// Internal-only: never expose bot/sim markers to clients.
+	Simulated bool `json:"-"`
 }
 
 // BetOverlay merges visual-only ghost bets into roulette bet feeds.

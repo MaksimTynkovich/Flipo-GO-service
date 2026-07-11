@@ -340,7 +340,7 @@ body::-webkit-scrollbar,
   }
 
   .segment-panel {
-    animation: fade-slide-in 0.28s var(--ease-out) both;
+    animation: fade-slide-in 0.24s var(--ease-out) both;
   }
 
   .quick-amount {
@@ -514,26 +514,14 @@ body::-webkit-scrollbar,
 
   .tab-icon-wrap {
     position: relative;
-    transition:
-      background-color var(--duration-base) var(--ease-out),
-      transform var(--duration-fast) var(--ease-out);
+    transition: transform var(--duration-fast) var(--ease-out);
   }
 
-  .tab-icon-wrap-active {
-    background: var(--accent-subtle);
-  }
-
-  .tab-icon-wrap-active::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: -0.35rem;
-    width: 0.85rem;
-    height: 0.16rem;
-    border-radius: 9999px;
-    background: var(--accent);
-    transform: translateX(-50%);
-    animation: tab-dot-in 0.28s var(--ease-out) both;
+  .app-tabbar .app-control:hover,
+  .app-tabbar .app-control:focus-visible {
+    background: transparent;
+    box-shadow: none;
+    filter: none;
   }
 
   .hairline-top {
@@ -578,7 +566,7 @@ body::-webkit-scrollbar,
   }
 
   .page-enter {
-    animation: page-enter 0.36s var(--ease-out) both;
+    animation: page-enter 0.28s var(--ease-out) both;
   }
 }
 
@@ -593,7 +581,7 @@ body::-webkit-scrollbar,
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -680,16 +668,31 @@ body::-webkit-scrollbar,
 @keyframes toast-enter {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-6px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .toast-enter {
-  animation: toast-enter 0.22s var(--ease-out);
+  animation: toast-enter 0.22s var(--ease-out) both;
+}
+
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+
+.toast-exit {
+  animation: toast-exit 0.18s var(--ease-out) both;
 }
 
 @keyframes splash-spin {
@@ -4088,13 +4091,17 @@ body::-webkit-scrollbar,
 
 .overlay-sheet-host {
   transform: translate3d(0, 100%, 0);
-  transition: transform var(--duration-slow) var(--ease-out);
-  will-change: transform;
+  opacity: 0;
+  transition:
+    transform var(--duration-slow) var(--ease-out),
+    opacity var(--duration-base) var(--ease-out);
+  will-change: transform, opacity;
   backface-visibility: hidden;
 }
 
 .overlay-sheet-host-open {
   transform: translate3d(0, 0, 0);
+  opacity: 1;
 }
 
 .overlay-popover-host {
@@ -4116,6 +4123,9 @@ body::-webkit-scrollbar,
   .overlay-sheet-host,
   .overlay-popover-host,
   .segment-panel,
+  .page-enter,
+  .toast-enter,
+  .toast-exit,
   .pvp-room-enter,
   .pvp-room-exit,
   .pvp-room-slot.pvp-room-enter,
@@ -4133,6 +4143,7 @@ body::-webkit-scrollbar,
 
 .sheet-panel {
   @apply rounded-t-[1.75rem] bg-surface;
+  transform: translateZ(0);
 }
 
 .proof-sheet {

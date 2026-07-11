@@ -339,7 +339,6 @@ export type RouletteBetEntry = {
   amount_nanoton: number;
   funding_type?: "balance" | "gift" | string;
   gift?: BetGiftView;
-  simulated?: boolean;
 };
 
 export type RouletteColorTotals = {
@@ -372,7 +371,6 @@ export type CrashBetEntry = {
   cashout_multiplier?: number;
   auto_cashout_multiplier?: number;
   payout_nanoton?: number;
-  simulated?: boolean;
 };
 
 export type CrashRoundBets = {

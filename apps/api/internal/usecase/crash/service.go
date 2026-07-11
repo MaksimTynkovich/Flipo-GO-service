@@ -46,7 +46,8 @@ type BetView struct {
 	CashoutMultiplier      *float64  `json:"cashout_multiplier,omitempty"`
 	AutoCashoutMultiplier  *float64  `json:"auto_cashout_multiplier,omitempty"`
 	PayoutNanoton          int64     `json:"payout_nanoton,omitempty"`
-	Simulated              bool      `json:"simulated,omitempty"`
+	// Internal-only: never expose bot/sim markers to clients.
+	Simulated bool `json:"-"`
 }
 
 // BetOverlay merges visual-only ghost bets into round bet feeds.
