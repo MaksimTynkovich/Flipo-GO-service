@@ -557,48 +557,52 @@ export default function CrashPage() {
 
   return (
     <PageShell flush>
-      <div className="flex flex-col gap-2.5 pb-3">
-        <CrashHistory
-          history={history}
-          onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
-        />
+      <div className="flex flex-col gap-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <div className="relative">
+          <CrashHistory
+            overlay
+            history={history}
+            className="absolute right-2.5 top-2.5 z-20"
+            onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
+          />
 
-        <CrashChart
-          state={state}
-          fx={stageFx}
-          stakeHud={
-            roundActiveBets.length > 0 && state?.phase === "running"
-              ? {
-                  stakeTon: formatTON(totalStakeNanoton),
-                  betCount: roundActiveBets.length,
-                  bets: roundActiveBets.map((bet) => ({
-                    amount_nanoton: bet.amount_nanoton,
-                    funding_type: bet.funding_type,
-                  })),
-                  gifts: activeGiftIcons.map((gift) => ({
-                    id: gift.id,
-                    image_url: gift.image_url,
-                  })),
-                }
-              : null
-          }
-          autoScale={
-            activeAutoTarget != null &&
-            roundActiveBets.length > 0 &&
-            state?.phase === "running"
-              ? { target: activeAutoTarget }
-              : null
-          }
-          onLiveMultiplier={onLiveMultiplier}
-          onLiveFrame={onLiveFrame}
-          onMilestone={(m) => {
-            if (m >= 10) haptics.notificationOccurred("success");
-            else if (m >= 5) haptics.impactOccurred("medium");
-            else haptics.impactOccurred("light");
-          }}
-        />
+          <CrashChart
+            state={state}
+            fx={stageFx}
+            stakeHud={
+              roundActiveBets.length > 0 && state?.phase === "running"
+                ? {
+                    stakeTon: formatTON(totalStakeNanoton),
+                    betCount: roundActiveBets.length,
+                    bets: roundActiveBets.map((bet) => ({
+                      amount_nanoton: bet.amount_nanoton,
+                      funding_type: bet.funding_type,
+                    })),
+                    gifts: activeGiftIcons.map((gift) => ({
+                      id: gift.id,
+                      image_url: gift.image_url,
+                    })),
+                  }
+                : null
+            }
+            autoScale={
+              activeAutoTarget != null &&
+              roundActiveBets.length > 0 &&
+              state?.phase === "running"
+                ? { target: activeAutoTarget }
+                : null
+            }
+            onLiveMultiplier={onLiveMultiplier}
+            onLiveFrame={onLiveFrame}
+            onMilestone={(m) => {
+              if (m >= 10) haptics.notificationOccurred("success");
+              else if (m >= 5) haptics.impactOccurred("medium");
+              else haptics.impactOccurred("light");
+            }}
+          />
+        </div>
 
-        <div className="panel space-y-3">
+        <div className="panel space-y-2.5 !p-3">
           <BetFundingControl
             mode="balance"
             onModeChange={() => {}}
@@ -628,7 +632,7 @@ export default function CrashPage() {
             disabled={primaryDisabled}
             onClick={primaryAction}
             className={cn(
-              "app-control flex h-12 w-full items-center justify-center rounded-xl text-[15px] font-bold transition-[background-color,color,opacity,transform] duration-200",
+              "app-control flex h-14 w-full items-center justify-center rounded-xl text-base font-bold transition-[background-color,color,opacity,transform] duration-200",
               canCashout
                 ? "crash-cashout-btn bg-success text-white hover:brightness-110 active:scale-[0.99]"
                 : canBet
@@ -646,7 +650,7 @@ export default function CrashPage() {
             )}
           </button>
 
-          <div className="hairline-top pt-3">
+          <div className="hairline-top pt-2.5">
             <CrashRoundBets
               data={roundBets}
               liveMultiplier={state?.phase === "running" ? liveMult : null}

@@ -1045,7 +1045,7 @@ export function CrashChart({
     <div
       ref={wrapRef}
       className={cn(
-        "crash-stage relative mx-auto aspect-[16/10] w-full max-w-md overflow-hidden rounded-2xl",
+        "crash-stage relative mx-auto min-h-[min(46dvh,380px)] aspect-[5/4] w-full overflow-hidden rounded-2xl",
         running && "crash-stage--running",
         crashed && "crash-stage--crashed",
         winFx && "crash-stage--win",
