@@ -1430,11 +1430,118 @@ body::-webkit-scrollbar,
 }
 
 /* —— Roulette stage —— */
+.roulette-page {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  /* Do not clip — blur halos must fade past the page box. */
+  overflow: visible;
+}
+
+.roulette-page__aurora {
+  pointer-events: none;
+  position: absolute;
+  inset: -40% -45% 10%;
+  z-index: 0;
+  overflow: visible;
+}
+
+.roulette-page__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(88px);
+  will-change: transform, opacity;
+  opacity: 0.55;
+}
+
+.roulette-page__blob--a {
+  top: 0%;
+  left: -5%;
+  width: 85%;
+  height: 55%;
+  background: radial-gradient(
+    circle at 40% 40%,
+    rgba(51, 144, 236, 0.45) 0%,
+    rgba(51, 144, 236, 0.12) 38%,
+    transparent 72%
+  );
+  animation: roulette-aurora-a 16s ease-in-out infinite;
+}
+
+.roulette-page__blob--b {
+  top: 8%;
+  right: -12%;
+  width: 78%;
+  height: 52%;
+  background: radial-gradient(
+    circle at 55% 45%,
+    rgba(130, 210, 255, 0.28) 0%,
+    rgba(51, 144, 236, 0.08) 40%,
+    transparent 74%
+  );
+  animation: roulette-aurora-b 20s ease-in-out infinite;
+}
+
+.roulette-page__blob--c {
+  top: 28%;
+  left: 12%;
+  width: 70%;
+  height: 48%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(62, 207, 142, 0.16) 0%,
+    rgba(62, 207, 142, 0.04) 42%,
+    transparent 76%
+  );
+  animation: roulette-aurora-c 18s ease-in-out infinite;
+}
+
+.roulette-page > :not(.roulette-page__aurora) {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes roulette-aurora-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate3d(6%, 5%, 0) scale(1.08);
+    opacity: 0.7;
+  }
+}
+
+@keyframes roulette-aurora-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate3d(-5%, 6%, 0) scale(1.1);
+    opacity: 0.6;
+  }
+}
+
+@keyframes roulette-aurora-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate3d(-4%, -5%, 0) scale(1.12);
+    opacity: 0.5;
+  }
+}
+
 .roulette-stage {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 0;
-  padding: 1rem 0.25rem 1rem;
+  padding: 0.35rem 0.15rem 0.15rem;
   isolation: isolate;
   background: transparent;
   max-width: 100%;
@@ -1445,24 +1552,30 @@ body::-webkit-scrollbar,
   left: 50%;
   top: 48%;
   z-index: 0;
-  width: min(78vw, 280px);
-  height: min(78vw, 280px);
+  width: min(120vw, 520px);
+  height: min(120vw, 520px);
   pointer-events: none;
   border-radius: 999px;
   transform: translate(-50%, -50%);
   background: radial-gradient(
     circle,
-    rgba(255, 255, 255, 0.06) 0%,
-    transparent 68%
+    rgba(51, 144, 236, 0.2) 0%,
+    rgba(51, 144, 236, 0.08) 28%,
+    rgba(51, 144, 236, 0.02) 52%,
+    transparent 72%
   );
+  filter: blur(28px);
   opacity: 0.85;
+  animation: roulette-stage-breathe 4.8s ease-in-out infinite;
 }
 
 .roulette-stage--betting .roulette-stage__glow {
   background: radial-gradient(
     circle,
-    rgba(232, 238, 244, 0.1) 0%,
-    transparent 68%
+    rgba(51, 144, 236, 0.22) 0%,
+    rgba(110, 200, 255, 0.08) 30%,
+    rgba(51, 144, 236, 0.02) 55%,
+    transparent 74%
   );
   animation: roulette-stage-breathe 3.2s ease-in-out infinite;
 }
@@ -1474,8 +1587,10 @@ body::-webkit-scrollbar,
 .roulette-stage--spinning .roulette-stage__glow {
   background: radial-gradient(
     circle,
-    rgba(232, 238, 244, 0.14) 0%,
-    transparent 68%
+    rgba(51, 144, 236, 0.28) 0%,
+    rgba(150, 210, 255, 0.1) 32%,
+    rgba(51, 144, 236, 0.03) 55%,
+    transparent 74%
   );
   animation: roulette-stage-spin-glow 1.4s ease-in-out infinite;
 }
@@ -1487,9 +1602,11 @@ body::-webkit-scrollbar,
 .roulette-stage--result .roulette-stage__glow {
   background: radial-gradient(
     circle,
-    rgba(62, 207, 142, 0.12) 0%,
-    transparent 68%
+    rgba(62, 207, 142, 0.18) 0%,
+    rgba(51, 144, 236, 0.06) 35%,
+    transparent 72%
   );
+  animation: none;
 }
 
 .roulette-wheel {
@@ -1520,17 +1637,15 @@ body::-webkit-scrollbar,
   height: 100%;
   width: 100%;
   border-radius: 999px;
-  padding: 4px;
+  padding: 3px;
   background:
     linear-gradient(
       145deg,
-      rgba(255, 255, 255, 0.3),
-      rgba(255, 255, 255, 0.08) 42%,
-      rgba(180, 196, 214, 0.16)
+      rgba(255, 255, 255, 0.22),
+      rgba(255, 255, 255, 0.06) 42%,
+      rgba(180, 196, 214, 0.12)
     );
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 8px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28);
 }
 
 .roulette-wheel__inner {
@@ -1538,7 +1653,7 @@ body::-webkit-scrollbar,
   width: 100%;
   border-radius: 999px;
   padding: 3px;
-  background: #0a121c;
+  background: color-mix(in srgb, var(--background) 88%, #000);
 }
 
 .roulette-seg {
@@ -1673,9 +1788,7 @@ body::-webkit-scrollbar,
 }
 
 .roulette-bet-btn--active {
-  box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.28),
-    0 0 18px rgba(255, 255, 255, 0.12);
+  filter: brightness(1.08);
 }
 
 .roulette-bet-btn__mult {
@@ -1703,38 +1816,48 @@ body::-webkit-scrollbar,
 }
 
 .roulette-history {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
+  display: block;
+  min-width: 0;
 }
 
-.roulette-history__chips {
+.roulette-history__row {
   display: flex;
-  min-width: 0;
-  flex: 1;
+  width: 100%;
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.22rem;
-  overflow: hidden;
-  padding-block: 0.25rem;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0 0.1rem;
 }
 
 .roulette-history__chip {
   display: flex;
-  height: 1.4rem;
-  width: 1.4rem;
+  height: 1.55rem;
+  width: 1.55rem;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  border: 0;
   border-radius: 999px;
-  font-size: 0.58rem;
+  font-size: 0.62rem;
   font-weight: 800;
   color: #fff;
+  box-shadow: none;
   animation: roulette-chip-in 0.35s var(--ease-out);
 }
 
+.roulette-history__chip--latest {
+  height: 1.7rem;
+  width: 1.7rem;
+  font-size: 0.68rem;
+}
+
 .roulette-history__chip--green {
-  box-shadow: inset 0 0 0 1.5px rgba(180, 240, 190, 0.65);
+  box-shadow: inset 0 0 0 1.5px rgba(180, 240, 190, 0.5);
+}
+
+.roulette-history__empty {
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 .roulette-player-row--mine {
@@ -1808,7 +1931,8 @@ body::-webkit-scrollbar,
   .roulette-hub--urgent .roulette-hub__ring,
   .roulette-hub--spinning .roulette-hub__ring,
   .roulette-hub__spin,
-  .roulette-history__chip {
+  .roulette-history__chip,
+  .roulette-page__blob {
     animation: none !important;
   }
 }

@@ -132,7 +132,7 @@ export function RouletteRoundBets({ data, currentUserId }: Props) {
   const rows = useMemo(() => aggregateBets(data?.bets ?? []), [data?.bets]);
 
   if (rows.length === 0) {
-    return <p className="text-center text-xs text-muted">Пока нет ставок в раунде</p>;
+    return <p className="text-center text-xs text-muted">Пока нет ставок</p>;
   }
 
   return (
