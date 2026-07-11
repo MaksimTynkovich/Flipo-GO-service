@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export type CrashStageFx =
-  | { kind: "win"; amountTon: string; multiplier: number }
+  | { kind: "win"; amountTon: string }
   | { kind: "lose"; multiplier: number }
   | null;
 
@@ -1045,7 +1045,7 @@ export function CrashChart({
     <div
       ref={wrapRef}
       className={cn(
-        "crash-stage relative mx-auto min-h-[min(46dvh,380px)] aspect-[5/4] w-full overflow-hidden rounded-2xl",
+        "crash-stage relative h-[min(38dvh,340px)] w-full overflow-hidden",
         running && "crash-stage--running",
         crashed && "crash-stage--crashed",
         winFx && "crash-stage--win",
@@ -1058,7 +1058,7 @@ export function CrashChart({
         <div
           key={milestoneFx.id}
           className={cn(
-            "crash-milestone pointer-events-none absolute inset-x-0 top-2 z-[8]",
+            "crash-milestone pointer-events-none absolute inset-x-0 z-[8]",
             `crash-milestone--${milestoneFx.tier}`,
           )}
           aria-hidden
@@ -1089,9 +1089,7 @@ export function CrashChart({
               <span key={i} style={{ "--i": i } as CSSProperties} />
             ))}
           </div>
-          <p className="crash-outcome__title">Забрано</p>
           <p className="crash-outcome__amount">+{winFx.amountTon} TON</p>
-          <p className="crash-outcome__mult">{formatMultiplier(winFx.multiplier)}</p>
         </div>
       ) : null}
 
@@ -1148,7 +1146,7 @@ export function CrashChart({
       </div>
 
       {state?.round_number != null ? (
-        <span className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] font-medium tabular-nums text-white/35">
+        <span className="pointer-events-none absolute bottom-2.5 right-3 z-10 text-[10px] font-medium tabular-nums text-white/25">
           #{state.round_number}
         </span>
       ) : null}

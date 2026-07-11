@@ -1,122 +1,136 @@
 "use client";
 
-import { useState } from "react";
-import { History, X } from "lucide-react";
-import { ModalOverlay } from "@/components/ui/ModalOverlay";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CrashHistoryEntry } from "@/lib/api";
-import { formatMultiplierCompact, historyTierStyle } from "@/lib/crash";
+import { formatMultiplierCompact } from "@/lib/crash";
 import { cn } from "@/lib/utils";
-
-const HISTORY_LIMIT = 24;
 
 type Props = {
   history: CrashHistoryEntry[];
   onSelectRound?: (entry: CrashHistoryEntry) => void;
-  /** Overlay on chart — absolute, doesn't steal layout space. */
-  overlay?: boolean;
   className?: string;
 };
 
-export function CrashHistory({ history, onSelectRound, overlay = false, className }: Props) {
-  const [open, setOpen] = useState(false);
-  const recent = history.slice(0, HISTORY_LIMIT);
-  const last = recent[0];
-  const lastTier = last ? historyTierStyle(last.crash_point) : null;
+function tierTone(mult: number): "crash" | "low" | "mid" | "high" | "moon" {
+  if (mult >= 10) return "moon";
+  if (mult >= 5) return "high";
+  if (mult >= 2) return "mid";
+  if (mult < 1.35) return "crash";
+  return "low";
+}
+
+function measureTextWidth(text: string, font: string): number {
+  if (typeof document === "undefined") return text.length * 7;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return text.length * 7;
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+
+function countFitting(
+  labels: string[],
+  availablePx: number,
+  latestFont: string,
+  regularFont: string,
+  gapPx: number,
+): number {
+  if (availablePx <= 0 || labels.length === 0) return 0;
+
+  let used = 0;
+  let count = 0;
+
+  for (let i = 0; i < labels.length; i++) {
+    const font = i === 0 ? latestFont : regularFont;
+    const chip = measureTextWidth(labels[i], font);
+    const next = count === 0 ? chip : used + gapPx + chip;
+    if (next > availablePx + 0.5) break;
+    used = next;
+    count += 1;
+  }
+
+  return count;
+}
+
+export function CrashHistory({ history, onSelectRound, className }: Props) {
+  const [fitCount, setFitCount] = useState(8);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  const labels = useMemo(
+    () => history.map((entry) => `${formatMultiplierCompact(entry.crash_point)}×`),
+    [history],
+  );
+
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+
+    function readFonts() {
+      const probe = document.createElement("span");
+      probe.className = "crash-history__mult";
+      probe.style.cssText =
+        "position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none";
+      probe.textContent = "1.00×";
+      document.body.appendChild(probe);
+      const regular = getComputedStyle(probe);
+      const regularFont = `${regular.fontWeight} ${regular.fontSize} ${regular.fontFamily}`;
+      probe.classList.add("crash-history__mult--latest");
+      const latest = getComputedStyle(probe);
+      const latestFont = `${latest.fontWeight} ${latest.fontSize} ${latest.fontFamily}`;
+      probe.remove();
+      return { regularFont, latestFont };
+    }
+
+    function recalc() {
+      const el = rowRef.current;
+      if (!el) return;
+      const { regularFont, latestFont } = readFonts();
+      const styles = getComputedStyle(el);
+      const pad =
+        (Number.parseFloat(styles.paddingLeft) || 0) +
+        (Number.parseFloat(styles.paddingRight) || 0);
+      const width = el.clientWidth - pad;
+      const next = countFitting(labels, width, latestFont, regularFont, 10);
+      setFitCount((prev) => (prev === next ? prev : Math.max(next, 1)));
+    }
+
+    recalc();
+    const ro = new ResizeObserver(() => recalc());
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [labels]);
+
+  const visible = history.slice(0, fitCount);
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="История раундов"
-        className={cn(
-          "app-control inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold",
-          overlay
-            ? "bg-black/45 text-white/90 backdrop-blur-md ring-1 ring-white/10"
-            : "bg-surface text-muted",
-          className,
-        )}
-      >
-        <History className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={2.25} />
-        <span className={overlay ? "text-white/55" : "text-muted/90"}>История</span>
-        {last && lastTier ? (
-          <span className={cn("tabular-nums", lastTier.value)}>
-            {formatMultiplierCompact(last.crash_point)}×
-          </span>
+    <div className={cn("crash-history", className)}>
+      <div className="crash-history__fade" aria-hidden />
+      <div ref={rowRef} className="crash-history__row">
+        {visible.length === 0 ? (
+          <span className="crash-history__empty">Нет игр</span>
         ) : (
-          <span className={overlay ? "text-white/40" : "text-muted"}>—</span>
-        )}
-      </button>
-
-      {open ? (
-        <ModalOverlay onClose={() => setOpen(false)} analyticsModalId="crash_history">
-          {(close) => (
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label="История Crash"
-              className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(78dvh,100%)] flex-col"
-            >
-              <div className="shrink-0 px-4 pt-2">
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
-                <div className="relative flex items-center justify-center pb-3">
-                  <p className="text-[15px] font-semibold">История раундов</p>
-                  <button
-                    type="button"
-                    onClick={close}
-                    aria-label="Закрыть"
-                    className="absolute right-0 flex size-8 items-center justify-center rounded-full text-muted"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="pb-3 text-center text-xs text-muted">
-                  Нажмите на множитель, чтобы проверить честность раунда
-                </p>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                {recent.length === 0 ? (
-                  <p className="rounded-xl bg-surface-raised/60 px-3 py-8 text-center text-sm text-muted">
-                    История пуста
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                    {recent.map((entry) => {
-                      const tier = historyTierStyle(entry.crash_point);
-                      const clickable = !!entry.round_id && !!onSelectRound;
-                      return (
-                        <button
-                          key={entry.round_id || entry.round_number}
-                          type="button"
-                          title={`Раунд #${entry.round_number}`}
-                          disabled={!clickable}
-                          onClick={() => {
-                            if (!clickable) return;
-                            onSelectRound?.(entry);
-                            close();
-                          }}
-                          className={cn(
-                            "flex flex-col items-center gap-1 rounded-xl bg-surface-raised/70 px-2 py-2.5 text-center transition active:opacity-70",
-                            !clickable && "opacity-60",
-                          )}
-                        >
-                          <span className={cn("text-sm font-bold tabular-nums leading-none", tier.value)}>
-                            {formatMultiplierCompact(entry.crash_point)}×
-                          </span>
-                          <span className="text-[10px] tabular-nums text-muted">
-                            #{entry.round_number}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+          visible.map((entry, index) => {
+            const clickable = !!entry.round_id && !!onSelectRound;
+            return (
+              <button
+                key={entry.round_id || entry.round_number}
+                type="button"
+                title={`Раунд #${entry.round_number}`}
+                disabled={!clickable}
+                onClick={() => clickable && onSelectRound?.(entry)}
+                data-tone={tierTone(entry.crash_point)}
+                className={cn(
+                  "crash-history__mult",
+                  index === 0 && "crash-history__mult--latest",
+                  !clickable && "opacity-50",
                 )}
-              </div>
-            </div>
-          )}
-        </ModalOverlay>
-      ) : null}
-    </>
+              >
+                {formatMultiplierCompact(entry.crash_point)}×
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
