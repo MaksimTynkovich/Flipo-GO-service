@@ -1,43 +1,48 @@
+# Production-oriented stack. Copy ../.env.example → ../.env and set real secrets.
+# Do not publish postgres/redis ports on a public host; use a reverse proxy for api/web.
+
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: flipo
-      POSTGRES_PASSWORD: flipo
-      POSTGRES_DB: flipo
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-flipo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-flipo}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U flipo"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flipo}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   api:
     build:
       context: ..
       dockerfile: deploy/docker/api.Dockerfile
-    ports:
-      - "8080:8080"
+    env_file:
+      - ../.env
     environment:
       API_PORT: "8080"
+      ENV: ${ENV:-production}
       LOG_FILE: /var/log/flipo/api.log
-      DATABASE_URL: postgres://flipo:flipo@postgres:5432/flipo?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-flipo}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-flipo}?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      BOT_TOKEN: ${BOT_TOKEN}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      DEBUG_AUTH_ENABLED: "false"
+      TON_CHAIN_DEV_MODE: "false"
+      BOTS_DATA_DIR: /assets/bots
+    ports:
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,18 +50,40 @@ services:
         condition: service_healthy
     volumes:
       - ../logs:/var/log/flipo
+      - telegram_session:/app/data/telegram
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
   web:
     build:
       context: ..
       dockerfile: deploy/docker/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+        NEXT_PUBLIC_DEBUG_AUTH: "false"
+        NEXT_PUBLIC_BOT_NAME: ${NEXT_PUBLIC_BOT_NAME:-Flipo}
+        NEXT_PUBLIC_GIFT_TRANSFER_BOT_USERNAME: ${NEXT_PUBLIC_GIFT_TRANSFER_BOT_USERNAME:-}
+        NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL: ${NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL:-}
+        API_UPSTREAM: http://api:8080
+    environment:
+      API_UPSTREAM: http://api:8080
     ports:
       - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080
-      NEXT_PUBLIC_WS_URL: ws://localhost:8080
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  telegram_session:

@@ -7,7 +7,7 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// IncomingGift is a collectible gift received on the deposit MTProto account.
+// IncomingGift is a collectible gift on the deposit MTProto account.
 type IncomingGift struct {
 	ScannedGift
 	SenderTelegramID int64
@@ -15,12 +15,13 @@ type IncomingGift struct {
 	SavedID          int64
 }
 
-func ScanIncomingGiftsOnce(ctx context.Context, cfg MTProtoConfig) ([]IncomingGift, error) {
+// ScanOwnedGiftsOnce returns all unique collectible gifts currently on the MTProto account.
+func ScanOwnedGiftsOnce(ctx context.Context, cfg MTProtoConfig) ([]IncomingGift, error) {
 	if !cfg.Enabled() {
 		return nil, ErrMTProtoNotConfigured
 	}
 
-	var incoming []IncomingGift
+	var owned []IncomingGift
 	err := WithMTProtoAPI(ctx, cfg, func(ctx context.Context, api *tg.Client) error {
 		users, err := api.UsersGetUsers(ctx, []tg.InputUserClass{&tg.InputUserSelf{}})
 		if err != nil {
@@ -55,16 +56,12 @@ func ScanIncomingGiftsOnce(ctx context.Context, cfg MTProtoConfig) ([]IncomingGi
 				if !ok || unique.Slug == "" {
 					continue
 				}
-				senderID := peerUserID(saved)
-				if senderID == 0 {
-					continue
-				}
 				mapped := mapUniqueGift(unique)
 				msgID, _ := saved.GetMsgID()
 				savedID, _ := saved.GetSavedID()
-				incoming = append(incoming, IncomingGift{
+				owned = append(owned, IncomingGift{
 					ScannedGift:      mapped,
-					SenderTelegramID: senderID,
+					SenderTelegramID: peerUserID(saved),
 					MsgID:            msgID,
 					SavedID:          savedID,
 				})
@@ -80,6 +77,22 @@ func ScanIncomingGiftsOnce(ctx context.Context, cfg MTProtoConfig) ([]IncomingGi
 	})
 	if err != nil {
 		return nil, err
+	}
+	return owned, nil
+}
+
+// ScanIncomingGiftsOnce returns gifts that have a known sender (for user deposit matching).
+func ScanIncomingGiftsOnce(ctx context.Context, cfg MTProtoConfig) ([]IncomingGift, error) {
+	owned, err := ScanOwnedGiftsOnce(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	incoming := make([]IncomingGift, 0, len(owned))
+	for _, gift := range owned {
+		if gift.SenderTelegramID == 0 {
+			continue
+		}
+		incoming = append(incoming, gift)
 	}
 	return incoming, nil
 }

@@ -13,6 +13,7 @@ import (
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
+	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,7 @@ type AdminHandler struct {
 	outcome           *outcome.Service
 	treasury          *treasury.Service
 	telegram          *telegramadmin.Service
+	botSync           *market.BotSyncService
 	hotAddr           string
 	onSocialSimUpdate func(domain.SocialSimSettings)
 }
@@ -44,6 +46,10 @@ func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service,
 
 func (h *AdminHandler) SetSocialSimUpdater(fn func(domain.SocialSimSettings)) {
 	h.onSocialSimUpdate = fn
+}
+
+func (h *AdminHandler) SetBotGiftSync(sync *market.BotSyncService) {
+	h.botSync = sync
 }
 
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {
@@ -258,6 +264,19 @@ func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) SyncBotMarketGifts(c *gin.Context) {
+	if h.botSync == nil || !h.botSync.Enabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MTProto не настроен"})
+		return
+	}
+	result, err := h.botSync.Sync(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *AdminHandler) GetGiftPriceSettings(c *gin.Context) {

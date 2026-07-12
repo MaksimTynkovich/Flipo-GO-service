@@ -1237,6 +1237,22 @@ export async function updateAdminMarketListingPrice(id: string, priceNanoton: nu
   });
 }
 
+export type AdminBotGiftSyncResult = {
+  scanned: number;
+  listed: number;
+  skipped_owned: number;
+  skipped_pending_deposit: number;
+  skipped_unpriced: number;
+  listed_slugs?: string[];
+  errors?: string[];
+};
+
+export async function syncAdminBotMarketGifts() {
+  return api<AdminBotGiftSyncResult>("/api/v1/admin/market/sync-bot-gifts", {
+    method: "POST",
+  });
+}
+
 export type AdminGiftPriceSettings = {
   buy_adjust_percent: number;
   valuation_adjust_percent: number;

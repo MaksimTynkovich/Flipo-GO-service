@@ -58,9 +58,18 @@ func corsAllowHeaders(c *gin.Context) string {
 	return headers
 }
 
-func CORS() gin.HandlerFunc {
+func CORS(allowedOrigins ...string) gin.HandlerFunc {
+	origins := normalizeOrigins(allowedOrigins)
+	allowAll := len(origins) == 0 || (len(origins) == 1 && origins[0] == "*")
+
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if allowAll {
+			c.Header("Access-Control-Allow-Origin", "*")
+		} else if origin != "" && originAllowed(origin, origins) {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", corsAllowHeaders(c))
 		if c.Request.Method == http.MethodOptions {
@@ -69,6 +78,26 @@ func CORS() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func normalizeOrigins(origins []string) []string {
+	out := make([]string, 0, len(origins))
+	for _, o := range origins {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+func originAllowed(origin string, allowed []string) bool {
+	for _, o := range allowed {
+		if o == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func RequestMeta() gin.HandlerFunc {

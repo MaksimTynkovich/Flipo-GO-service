@@ -30,12 +30,13 @@ type Deps struct {
 	AdminTelegramIDs []int64
 	Hub              *websocket.Hub
 	BotsDataDir      string
+	CORSOrigins      []string
 }
 
 func NewRouter(deps Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(middleware.Recovery())
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(deps.CORSOrigins...))
 	r.Use(middleware.RequestMeta())
 	r.Use(middleware.AccessLog())
 
@@ -152,6 +153,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.GET("/users", deps.AdminHandler.ListUsers)
 			admin.GET("/users/:id/bets", deps.AdminHandler.UserBets)
 			admin.PATCH("/market/listings/:id", deps.AdminHandler.UpdateMarketListingPrice)
+			admin.POST("/market/sync-bot-gifts", deps.AdminHandler.SyncBotMarketGifts)
 			admin.GET("/gift-price-settings", deps.AdminHandler.GetGiftPriceSettings)
 			admin.PATCH("/gift-price-settings", deps.AdminHandler.UpdateGiftPriceSettings)
 			admin.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)

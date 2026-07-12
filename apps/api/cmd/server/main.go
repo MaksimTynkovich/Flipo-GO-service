@@ -50,6 +50,7 @@ import (
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
 	treasuryworker "github.com/flipo/flipo/apps/api/internal/worker/treasury"
 	walletworker "github.com/flipo/flipo/apps/api/internal/worker/wallet"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -61,6 +62,13 @@ func main() {
 
 	cfg := config.Load()
 	log.Init("api", cfg.Env)
+	if cfg.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	if err := validateProductionConfig(cfg); err != nil {
+		slog.Error("production config invalid", "error", err)
+		os.Exit(1)
+	}
 	if err := validateWalletConfig(cfg); err != nil {
 		slog.Error("wallet config invalid", "error", err)
 		os.Exit(1)
@@ -245,6 +253,7 @@ func main() {
 	stakeWorker.Start(ctx)
 	defer stakeWorker.Stop()
 
+	botSyncSvc := market.NewBotSyncService(mtprotoCfg, marketSvc, invRepo, userRepo, giftValuator)
 	giftDepositWorker := giftdepositworker.NewWorker(mtprotoCfg, autoDepositSvc)
 	giftDepositWorker.Start(ctx)
 
@@ -286,6 +295,7 @@ func main() {
 	}
 
 	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
+	adminHandler.SetBotGiftSync(botSyncSvc)
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
 		socialSim.ApplySettings(settings)
@@ -309,6 +319,7 @@ func main() {
 		AdminTelegramIDs: cfg.AdminTelegramIDs,
 		Hub:              hub,
 		BotsDataDir:      cfg.BotsDataDir,
+		CORSOrigins:      cfg.CORSOrigins,
 	})
 
 	srv := &http.Server{
@@ -354,6 +365,38 @@ func (n *noopCache) AcquireLock(ctx context.Context, key string, ttl time.Durati
 	return true, nil
 }
 func (n *noopCache) ReleaseLock(ctx context.Context, key string) error {
+	return nil
+}
+
+func validateProductionConfig(cfg *config.Config) error {
+	if cfg.Env != "production" {
+		return nil
+	}
+	if cfg.DebugAuthEnabled {
+		return fmt.Errorf("DEBUG_AUTH_ENABLED must be false when ENV=production")
+	}
+	if cfg.TonChainDevMode {
+		return fmt.Errorf("TON_CHAIN_DEV_MODE must be false when ENV=production")
+	}
+	switch cfg.JWTSecret {
+	case "", "dev-secret", "dev-secret-change-me", "change-me-in-production":
+		return fmt.Errorf("JWT_SECRET must be a strong unique value when ENV=production")
+	}
+	if cfg.BotToken == "" {
+		return fmt.Errorf("BOT_TOKEN is required when ENV=production")
+	}
+	if len(cfg.AdminTelegramIDs) == 0 {
+		return fmt.Errorf("ADMIN_TELEGRAM_IDS is required when ENV=production")
+	}
+	if cfg.TelegramWebhookURL == "" {
+		return fmt.Errorf("TELEGRAM_WEBHOOK_URL is required when ENV=production")
+	}
+	if cfg.TelegramWebhookSecret == "" {
+		return fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is required when ENV=production")
+	}
+	if cfg.WebAppURL == "" {
+		return fmt.Errorf("TELEGRAM_WEBAPP_URL (or WEBAPP_URL) is required when ENV=production")
+	}
 	return nil
 }
 

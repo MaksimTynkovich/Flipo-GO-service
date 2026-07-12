@@ -117,9 +117,6 @@ func MigrateOnly(ctx context.Context, dsn string) error {
 	if err := AutoMigrate(db); err != nil {
 		return err
 	}
-	if err := SeedMarketMockData(ctx, db); err != nil {
-		return err
-	}
 	slog.InfoContext(ctx, "database migration completed")
 	return nil
 }

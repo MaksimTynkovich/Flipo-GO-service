@@ -9,6 +9,7 @@ import {
   formatTON,
   getAdminGiftPriceSettings,
   getMarketListings,
+  syncAdminBotMarketGifts,
   updateAdminGiftPriceSettings,
   updateAdminMarketListingPrice,
   type AdminGiftPriceSettings,
@@ -77,6 +78,7 @@ export default function MarketAdminSection() {
   const [valuationDraft, setValuationDraft] = useState("0");
   const [giftLoading, setGiftLoading] = useState(true);
   const [savingGift, setSavingGift] = useState(false);
+  const [syncingBot, setSyncingBot] = useState(false);
 
   async function loadListings() {
     setLoading(true);
@@ -193,12 +195,46 @@ export default function MarketAdminSection() {
     }
   }
 
+  async function handleSyncBotGifts() {
+    setSyncingBot(true);
+    try {
+      const result = await syncAdminBotMarketGifts();
+      await loadListings();
+      const parts = [
+        `скан: ${result.scanned}`,
+        `выгружено: ${result.listed}`,
+        `уже в инвентаре: ${result.skipped_owned}`,
+        `ждут депозита: ${result.skipped_pending_deposit}`,
+        `без цены: ${result.skipped_unpriced}`,
+      ];
+      showToast({
+        variant: result.listed > 0 ? "success" : "info",
+        title: "Синхронизация бота",
+        subtitle: parts.join(" · "),
+      });
+      if (result.errors?.length) {
+        showToast({
+          variant: "error",
+          title: `Ошибки: ${result.errors.length}`,
+          subtitle: result.errors.slice(0, 3).join("; "),
+        });
+      }
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: err instanceof Error ? err.message : "Не удалось синхронизировать",
+      });
+    } finally {
+      setSyncingBot(false);
+    }
+  }
+
   const settings = giftSettings ?? DEFAULT_GIFT_SETTINGS;
 
   return (
     <PageShell
       title="Маркет"
-      description="Корректировка оценки подарков и цены активных лотов."
+      description="Корректировка оценки подарков, выгрузка ничьих гифтов бота и цены лотов."
     >
       <AdminToolbar>
         <AdminChip active={tab === "gift-prices"} onClick={() => setTab("gift-prices")}>
@@ -207,6 +243,13 @@ export default function MarketAdminSection() {
         <AdminChip active={tab === "listings"} onClick={() => setTab("listings")}>
           Лоты
         </AdminChip>
+        <AdminButton
+          variant="secondary"
+          disabled={syncingBot}
+          onClick={() => handleSyncBotGifts().catch(() => {})}
+        >
+          {syncingBot ? "Синхронизация…" : "Выгрузить подарки бота"}
+        </AdminButton>
         <AdminButton
           variant="secondary"
           onClick={() => {
