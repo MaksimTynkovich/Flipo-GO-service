@@ -3,6 +3,22 @@ export type StakingTier = "base" | "boost";
 const MSK = "Europe/Moscow";
 export const STAKING_DAYS_PER_WEEK = 7;
 export const STAKING_DAYS_PER_MONTH = 30;
+export const STAKING_MONTHS_PER_YEAR = 12;
+
+export const STAKING_BASE_MONTHLY_PERCENT = 3;
+export const STAKING_BOOST_MONTHLY_PERCENT = 4;
+
+/** Simple APR from monthly percent (3 → 36, 4 → 48). */
+export function monthlyPercentToApr(monthlyPercent: number): number {
+  if (!Number.isFinite(monthlyPercent) || monthlyPercent <= 0) return 0;
+  return Math.round(monthlyPercent * STAKING_MONTHS_PER_YEAR * 10) / 10;
+}
+
+export function aprFromTier(tier?: StakingTier | null): number {
+  if (tier === "boost") return monthlyPercentToApr(STAKING_BOOST_MONTHLY_PERCENT);
+  if (tier === "base") return monthlyPercentToApr(STAKING_BASE_MONTHLY_PERCENT);
+  return 0;
+}
 
 /** Доход за неделю из дневного начисления (7 дней эпохи). */
 export function weeklyYieldNanoton(dailyNanoton: number): number {
@@ -41,11 +57,15 @@ export function pluralizeGifts(count: number): string {
   return `${count} подарков`;
 }
 
-/** Короткая подпись для плиток профиля. */
+/** Короткая подпись ставки в APR. */
 export function formatStakingRate(tier?: StakingTier | null): string {
-  if (tier === "boost") return "4%/мес";
-  if (tier === "base") return "3%/мес";
-  return "—";
+  const apr = aprFromTier(tier);
+  return apr > 0 ? `${apr}% APR` : "—";
+}
+
+export function formatStakingApr(monthlyPercent: number): string {
+  const apr = monthlyPercentToApr(monthlyPercent);
+  return apr > 0 ? `${apr}% APR` : "—";
 }
 
 /** Название уровня доходности для пользователя. */
@@ -55,20 +75,20 @@ export function formatStakingTierName(tier?: StakingTier | null): string {
   return "—";
 }
 
-/** Одна строка: уровень и ставка. */
+/** Одна строка: уровень и APR. */
 export function formatStakingTierSummary(tier?: StakingTier | null): string {
-  if (tier === "boost") return "Повышенный · 4%/мес";
-  if (tier === "base") return "Базовый · 3%/мес";
+  if (tier === "boost") return `Повышенный · ${formatStakingRate("boost")}`;
+  if (tier === "base") return `Базовый · ${formatStakingRate("base")}`;
   return "—";
 }
 
 /** Пояснение, как получить повышенную ставку. */
-export function stakingBoostHint(target = 15): string {
-  return `пригласи ${target} человек — повышенный процент до конца месяца`;
+export function stakingBoostHint(target = 20): string {
+  return `Пригласи ${target} друзей за месяц — ${formatStakingRate("boost")} до конца месяца`;
 }
 
 export function stakingBoostReferralTarget(): number {
-  return 15;
+  return 20;
 }
 
 export function pluralizePeople(count: number): string {

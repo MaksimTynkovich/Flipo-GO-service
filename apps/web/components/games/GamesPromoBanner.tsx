@@ -47,7 +47,7 @@ function buildSlides(): PromoSlide[] {
       id: "staking",
       tone: "staking",
       title: "Стейкинг подарков",
-      subtitle: "До 5% в месяц — пассивный доход без лишних действий",
+      subtitle: "До 48% APR — пассивный доход без лишних действий",
       cta: "К стейкингу",
       icon: Coins,
       href: APP_ROUTES.profileStaking,

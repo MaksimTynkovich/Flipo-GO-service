@@ -68,7 +68,10 @@ func seedStakingQuests100To200(db *gorm.DB) error {
 	if err := db.Exec(`
 		UPDATE staking_quests
 		SET active = FALSE
-		WHERE code IN ('roulette_wager_10', 'crash_wager_10')
+		WHERE code IN (
+			'roulette_wager_10', 'crash_wager_10',
+			'comment_1', 'comment_5'
+		)
 	`).Error; err != nil {
 		return fmt.Errorf("deactivate replaced staking quests: %w", err)
 	}
@@ -81,8 +84,8 @@ func seedStakingQuests100To200(db *gorm.DB) error {
 			('roulette_wager_25', 'Рулетка ×25', 'Поставь суммарно 25 TON в рулетке', 10000000000, 25, TRUE),
 			('crash_wager_5', 'Crash ×5', 'Поставь суммарно 5 TON в crash', 5000000000, 30, TRUE),
 			('crash_wager_25', 'Crash ×25', 'Поставь суммарно 25 TON в crash', 10000000000, 35, TRUE),
-			('pvp_one_match', 'PvP-бой', 'Сыграй 1 PvP-бой (создание или вход)', 5000000000, 40, TRUE),
-			('pvp_five_matches', 'PvP ×5', 'Сыграй 5 PvP-боёв', 10000000000, 45, TRUE),
+			('pvp_one_match', '1 комната', 'Сыграй в 1 комнате', 5000000000, 40, TRUE),
+			('pvp_five_matches', '5 комнат', 'Сыграй в 5 комнатах', 10000000000, 45, TRUE),
 			('deposit_5', 'Пополнение 5', 'Пополни баланс на ≥ 5 TON', 10000000000, 50, TRUE),
 			('deposit_30', 'Пополнение 30', 'Пополни баланс на ≥ 30 TON', 15000000000, 55, TRUE),
 			('referral_active_1', '1 реферал', '1 реферал, который сделал ставку', 10000000000, 60, TRUE),

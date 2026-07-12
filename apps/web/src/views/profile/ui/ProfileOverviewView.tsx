@@ -175,7 +175,7 @@ export function ProfileOverviewView() {
           href={APP_ROUTES.profileStaking}
           icon={<Sparkles className="h-4 w-4" />}
           title="Стейкинг"
-          subtitle="Доход с подарков"
+          subtitle="До 48% APR с подарков"
           onClick={() => haptics.impactOccurred("medium")}
         />
         <div className="mx-4 hairline-top" />

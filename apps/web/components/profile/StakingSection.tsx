@@ -6,6 +6,7 @@ import { GiftTile, GiftTileSkeleton } from "@/components/profile/GiftTile";
 import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
 import { StakingOverview } from "@/components/profile/StakingOverview";
 import { StakingActionBar } from "@/components/profile/StakingActionBar";
+import { StakingQuestsBlock } from "@/components/profile/StakingQuestsBlock";
 import { Button } from "@/components/ui/button";
 import {
   getProfileGifts,
@@ -15,11 +16,12 @@ import {
   StakingStats,
   stakeGift,
 } from "@/lib/api";
-import { StakingQuestsBlock } from "@/components/profile/StakingQuestsBlock";
-import { pluralizeGifts, weeklyYieldNanoton } from "@/lib/staking-ui";
+import {
+  pluralizeGifts,
+} from "@/lib/staking-ui";
 import { trackFlowViewed } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
-import { Eye, Gift } from "lucide-react";
+import { Gift } from "lucide-react";
 
 const emptyStats: StakingStats = {
   staked_count: 0,
@@ -29,7 +31,7 @@ const emptyStats: StakingStats = {
   active_monthly_yield_nanoton: 0,
   unlockable_monthly_nanoton: 0,
   boost_referral_count: 0,
-  boost_referral_target: 15,
+  boost_referral_target: 20,
   monthly_rate_percent: 3,
   tvl_nanoton: 0,
   tvl_cap_nanoton: 200_000_000_000,
@@ -91,14 +93,6 @@ export function StakingSection() {
     [unstakedGifts, selected],
   );
 
-  const actionTotals = useMemo(
-    () => ({
-      price: selectedGifts.reduce((s, g) => s + g.price_nanoton, 0),
-      weekly: selectedGifts.reduce((s, g) => s + weeklyYieldNanoton(g.daily_yield_nanoton), 0),
-    }),
-    [selectedGifts],
-  );
-
   function toggleGift(slug: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -134,10 +128,12 @@ export function StakingSection() {
     }
   }
 
-  const isBoost = user?.staking_tier === "boost";
+  const isBoost = user?.staking_tier === "boost" || stats.monthly_rate_percent >= 4;
   const poolFull = (stats.tvl_remaining_nanoton ?? 1) <= 0;
   const allUnstakedSelected =
-    selectedGifts.length > 0 && selectedGifts.length === unstakedGifts.length && unstakedGifts.length > 0;
+    selectedGifts.length > 0 &&
+    selectedGifts.length === unstakedGifts.length &&
+    unstakedGifts.length > 0;
 
   const stakeLabel = staking
     ? "Стейкаем…"
@@ -151,20 +147,11 @@ export function StakingSection() {
 
   return (
     <div className="space-y-4">
-      <header className="space-y-1 pt-1">
-        <h1 className="text-[1.25rem] font-semibold tracking-tight">Стейкинг</h1>
-        <p className="text-sm leading-relaxed text-muted">
-          Подарки из профиля приносят TON каждый день — без передачи боту.
-        </p>
-      </header>
-
       {loading ? (
-        <div className="h-44 animate-pulse rounded-2xl bg-surface-raised" />
+        <div className="h-40 animate-pulse rounded-2xl bg-surface-raised" />
       ) : (
         <StakingOverview isBoost={isBoost} stats={stats} epochEndsAt={epochEndsAt} />
       )}
-
-      <StakingQuestsBlock data={quests} loading={questsLoading} />
 
       {loading ? (
         <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
@@ -180,12 +167,12 @@ export function StakingSection() {
           <div className="space-y-1.5">
             <p className="text-sm font-semibold">Подарков пока нет</p>
             <p className="mx-auto max-w-[17rem] text-xs leading-relaxed text-muted">
-              Если у вас есть подарки в Telegram — включите их отображение в профиле, и они появятся здесь автоматически.
+              Включите отображение в Telegram-профиле — подарки появятся здесь сами, без передачи боту.
             </p>
           </div>
         </section>
       ) : (
-        <>
+        <div className="space-y-3">
           <div className="segment-control">
             <button
               type="button"
@@ -213,9 +200,9 @@ export function StakingSection() {
             <section key="staked" className="segment-panel space-y-3">
               {stakedGifts.length === 0 ? (
                 <div className="panel flex flex-col items-center gap-3 py-9 text-center">
-                  <p className="text-sm font-semibold">Стейкинг пуст</p>
+                  <p className="text-sm font-semibold">Стейк пуст</p>
                   <p className="max-w-[16rem] text-xs leading-relaxed text-muted">
-                    Добавьте подарки — они начнут приносить доход каждый день.
+                    Добавьте подарки — доход начнёт капать каждый день.
                   </p>
                   {unstakedGifts.length > 0 ? (
                     <Button
@@ -229,8 +216,14 @@ export function StakingSection() {
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
-                  {stakedGifts.map((gift) => (
-                    <GiftTile key={gift.slug} gift={gift} onInspect={setInspected} />
+                  {stakedGifts.map((gift, index) => (
+                    <div
+                      key={gift.slug}
+                      className="stagger-item"
+                      style={{ animationDelay: `${index * 40}ms` }}
+                    >
+                      <GiftTile gift={gift} onInspect={setInspected} />
+                    </div>
                   ))}
                 </div>
               )}
@@ -240,17 +233,17 @@ export function StakingSection() {
               {unstakedGifts.length === 0 ? (
                 <div className="panel flex flex-col items-center gap-2 py-9 text-center">
                   <p className="text-sm font-semibold text-success">Всё в стейке</p>
-                  <p className="text-xs text-muted">Новых подарков для добавления нет</p>
+                  <p className="text-xs text-muted">Новых подарков нет</p>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between px-0.5">
-                    <p className="text-xs text-muted">
+                  <div className="flex items-center justify-between gap-3 px-0.5">
+                    <p className="min-w-0 text-xs text-muted">
                       {selectedGifts.length > 0
                         ? `Выбрано ${pluralizeGifts(selectedGifts.length)}`
                         : "Выберите подарки"}
                     </p>
-                    <div className="flex items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-3">
                       {selectedGifts.length > 0 ? (
                         <button
                           type="button"
@@ -271,30 +264,39 @@ export function StakingSection() {
                       ) : null}
                     </div>
                   </div>
+
+                  <p className="w-fit max-w-full text-[11px] leading-snug text-muted/70">
+                    Подарки стейкаются прямо из вашего профиля, передавать боту не требуется
+                  </p>
+
                   <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
-                    {unstakedGifts.map((gift) => (
-                      <GiftTile
+                    {unstakedGifts.map((gift, index) => (
+                      <div
                         key={gift.slug}
-                        gift={gift}
-                        selected={selected.has(gift.slug)}
-                        onToggle={toggleGift}
-                      />
+                        className="stagger-item"
+                        style={{ animationDelay: `${index * 40}ms` }}
+                      >
+                        <GiftTile
+                          gift={gift}
+                          selected={selected.has(gift.slug)}
+                          onToggle={toggleGift}
+                        />
+                      </div>
                     ))}
                   </div>
                   <StakingActionBar
                     label={stakeLabel}
                     disabled={staking || poolFull || selectedGifts.length === 0}
-                    giftCount={selectedGifts.length}
-                    totalPriceNanoton={actionTotals.price}
-                    weeklyYieldNanoton={actionTotals.weekly}
                     onStake={handleStake}
                   />
                 </>
               )}
             </section>
           )}
-        </>
+        </div>
       )}
+
+      <StakingQuestsBlock data={quests} loading={questsLoading} />
 
       {inspected ? (
         <StakingGiftSheet

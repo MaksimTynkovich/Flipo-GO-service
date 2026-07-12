@@ -79,7 +79,7 @@ func Load() *Config {
 		CrashGrowthPerMs:       getEnvFloat("CRASH_GROWTH_PER_MS", 0.00006),
 		PlatformFeeBps:         getEnvInt("PLATFORM_FEE_BPS", 500),
 		BoostWagerThreshold:    int64(getEnvInt("BOOST_WAGER_THRESHOLD_NANOTON", 5_000_000_000)),
-		BoostReferralThreshold: getEnvInt("BOOST_REFERRAL_THRESHOLD", 15),
+		BoostReferralThreshold: getEnvInt("BOOST_REFERRAL_THRESHOLD", 20),
 		TonDepositAddress:      getEnv("TON_DEPOSIT_ADDRESS", ""),
 		TonAPIBaseURL:          getEnv("TON_API_BASE_URL", "https://toncenter.com/api/v2"),
 		TonAPIKey:              getEnv("TON_API_KEY", ""),

@@ -20,6 +20,7 @@ type UserRepository interface {
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
 	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	CountReferralsSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
 	ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error)
 	CountUsers(ctx context.Context) (int64, error)

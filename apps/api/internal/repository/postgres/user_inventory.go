@@ -202,6 +202,14 @@ func (r *UserRepo) CountReferrals(ctx context.Context, referrerID uuid.UUID) (in
 	return count, err
 }
 
+func (r *UserRepo) CountReferralsSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("referrer_id = ? AND created_at >= ?", referrerID, since.UTC()).
+		Count(&count).Error
+	return count, err
+}
+
 func (r *UserRepo) SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var total int64
 	err := r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).

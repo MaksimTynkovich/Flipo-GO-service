@@ -7,7 +7,7 @@ import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, ProfileGift, StakingStats } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
-import { formatStakingEpochEnd, weeklyYieldNanoton } from "@/lib/staking-ui";
+import { formatStakingApr, formatStakingEpochEnd, weeklyYieldNanoton } from "@/lib/staking-ui";
 import { cn } from "@/lib/utils";
 import { Gift } from "lucide-react";
 
@@ -72,7 +72,7 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
             Стоимость <TonAmount amount={formatTON(gift.price_nanoton)} variant="brand" iconClassName="h-5 w-5" />
           </p>
           {gift.source === "profile" && (
-            <p className="mt-1 text-xs text-muted">Из профиля Telegram</p>
+            <p className="mt-1 text-xs text-muted">Из профиля · без передачи боту</p>
           )}
           {gift.source === "inventory" && (
             <p className="mt-1 text-xs text-muted">Из инвентаря</p>
@@ -107,10 +107,17 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
             </p>
           </div>
         ) : (
-          <p className="rounded-xl bg-surface-raised px-3 py-3 text-center text-xs leading-relaxed text-muted">
-            Ставка {stats.monthly_rate_percent}% в месяц от стоимости подарка.
-            Доход зачисляется на баланс каждый день.
-          </p>
+          <div className="space-y-2">
+            <p className="rounded-xl bg-surface-raised px-3 py-3 text-center text-xs leading-relaxed text-muted">
+              {formatStakingApr(stats.monthly_rate_percent)} от стоимости подарка.
+              Доход зачисляется на баланс каждый день.
+            </p>
+            {gift.source === "profile" ? (
+              <p className="text-center text-[11px] leading-relaxed text-accent">
+                Подарок остаётся у вас — передавать боту не нужно
+              </p>
+            ) : null}
+          </div>
         )}
       </div>
       )}

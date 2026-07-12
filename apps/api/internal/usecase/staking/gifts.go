@@ -111,9 +111,11 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	personalUsed, _ := s.staking.SumActivePrincipalByUser(ctx, userID)
 
 	var boostUntil *string
-	referralCount, _ := s.users.CountReferrals(ctx, userID)
+	mskNow := time.Now().In(MoscowLocation())
+	monthStart := time.Date(mskNow.Year(), mskNow.Month(), 1, 0, 0, 0, 0, MoscowLocation())
+	referralCount, _ := s.users.CountReferralsSince(ctx, userID, monthStart)
 	if user.StakingTier == domain.TierBoost {
-		until := endOfMonthMSK(time.Now().In(MoscowLocation())).Format(time.RFC3339)
+		until := endOfMonthMSK(mskNow).Format(time.RFC3339)
 		boostUntil = &until
 	}
 

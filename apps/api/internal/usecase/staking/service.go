@@ -19,7 +19,7 @@ import (
 const (
 	DefaultBaseMonthlyPercent     = 3.0
 	DefaultBoostMonthlyPercent    = 4.0
-	DefaultBoostReferralThreshold = 15
+	DefaultBoostReferralThreshold = 20
 	DaysPerMonth                  = 30
 )
 
@@ -148,17 +148,18 @@ func (s *Service) RecalculateTiers(ctx context.Context) error {
 	return nil
 }
 
-// SyncBoostTier sets boost when the user has enough referrals; boost lasts until end of MSK month.
+// SyncBoostTier sets boost when the user invited enough people this MSK month.
 func (s *Service) SyncBoostTier(ctx context.Context, userID uuid.UUID) (domain.StakingTier, error) {
-	count, err := s.users.CountReferrals(ctx, userID)
+	mskNow := time.Now().In(MoscowLocation())
+	monthStart := time.Date(mskNow.Year(), mskNow.Month(), 1, 0, 0, 0, 0, MoscowLocation())
+	monthEnd := endOfMonthMSK(mskNow)
+
+	count, err := s.users.CountReferralsSince(ctx, userID, monthStart)
 	if err != nil {
 		return domain.TierBase, err
 	}
 
 	now := time.Now().UTC()
-	mskNow := now.In(MoscowLocation())
-	monthEnd := endOfMonthMSK(mskNow)
-
 	boostEligible := count >= s.referralThreshold
 	tier := domain.TierBase
 	var boostUntil *time.Time
