@@ -11,3 +11,4 @@ ngrok.log
 logs/
 apps/api/data/telegram/
 .DS_Store
+apps/api/assets/bots/
