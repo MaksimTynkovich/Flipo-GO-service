@@ -1431,3 +1431,64 @@ export type TreasurySweep = {
 export async function getAdminTreasurySweeps() {
   return api<TreasurySweep[]>("/api/v1/admin/treasury/sweeps");
 }
+
+// --- Admin game outcome control ---
+
+export type AdminOutcomeOverride = {
+  id: string;
+  game_type: string;
+  target: any;
+  rounds_remaining: number;
+  created_by: string;
+  note: string;
+  expires_at?: string;
+  created_at: string;
+};
+
+export type AdminOutcomeRouletteTarget = {
+  color: string;
+  number?: number;
+  mode: "force" | "bias";
+  weight: number;
+};
+
+export type AdminOutcomeCrashTarget = {
+  min_point: number;
+  max_point: number;
+  exact_point?: number;
+  mode: "force" | "bias";
+  weight: number;
+};
+
+export type AdminOutcomePvPTarget = {
+  winner_id: string;
+  mode: "force" | "bias";
+  weight: number;
+};
+
+export async function listOutcomeOverrides() {
+  return api<AdminOutcomeOverride[]>("/api/v1/admin/outcome/overrides");
+}
+
+export async function createOutcomeOverride(
+  gameType: string,
+  target: AdminOutcomeRouletteTarget | AdminOutcomeCrashTarget | AdminOutcomePvPTarget,
+  roundsRemaining: number,
+  durationMinutes: number,
+  note: string,
+) {
+  return api<AdminOutcomeOverride>("/api/v1/admin/outcome/overrides", {
+    method: "POST",
+    body: JSON.stringify({
+      game_type: gameType,
+      target,
+      rounds_remaining: roundsRemaining,
+      duration_minutes: durationMinutes,
+      note,
+    }),
+  });
+}
+
+export async function deleteOutcomeOverride(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/outcome/overrides/${id}`, { method: "DELETE" });
+}

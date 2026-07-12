@@ -15,6 +15,9 @@ type Config struct {
 	BotUsername                  string
 	WebAppShortName              string
 	WebAppURL                    string
+	ChannelURL                   string
+	SupportURL                   string
+	WelcomeText                  string
 	TelegramWebhookURL           string
 	TelegramWebhookSecret        string
 	DatabaseURL                  string
@@ -67,6 +70,9 @@ func Load() *Config {
 		),
 		WebAppShortName:              firstNonEmpty(getEnv("WEBAPP_SHORT_NAME", ""), getEnv("NEXT_PUBLIC_WEBAPP_SHORT_NAME", "")),
 		WebAppURL:                    firstNonEmpty(getEnv("TELEGRAM_WEBAPP_URL", ""), getEnv("WEBAPP_URL", "")),
+		ChannelURL:                   getEnv("TELEGRAM_CHANNEL_URL", ""),
+		SupportURL:                   getEnv("TELEGRAM_SUPPORT_URL", ""),
+		WelcomeText:                  getEnv("TELEGRAM_WELCOME_TEXT", ""),
 		TelegramWebhookURL:           getEnv("TELEGRAM_WEBHOOK_URL", ""),
 		TelegramWebhookSecret:        getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 		DatabaseURL:                  getEnv("DATABASE_URL", "postgres://flipo:flipo@localhost:5432/flipo?sslmode=disable"),

@@ -29,14 +29,14 @@ func (b *BotAPI) Enabled() bool {
 }
 
 func (b *BotAPI) SendMessage(ctx context.Context, chatID int64, text string) error {
-	return b.sendMessage(ctx, chatID, text, nil)
+	return b.sendMessage(ctx, chatID, text, nil, "")
 }
 
 func (b *BotAPI) SendMessageWithMarkup(ctx context.Context, chatID int64, text string, replyMarkup any) error {
-	return b.sendMessage(ctx, chatID, text, replyMarkup)
+	return b.sendMessage(ctx, chatID, text, replyMarkup, "")
 }
 
-func (b *BotAPI) sendMessage(ctx context.Context, chatID int64, text string, replyMarkup any) error {
+func (b *BotAPI) sendMessage(ctx context.Context, chatID int64, text string, replyMarkup any, parseMode string) error {
 	if !b.Enabled() || chatID == 0 {
 		return nil
 	}
@@ -44,6 +44,9 @@ func (b *BotAPI) sendMessage(ctx context.Context, chatID int64, text string, rep
 	payload := map[string]any{
 		"chat_id": chatID,
 		"text":    text,
+	}
+	if parseMode != "" {
+		payload["parse_mode"] = parseMode
 	}
 	if replyMarkup != nil {
 		payload["reply_markup"] = replyMarkup

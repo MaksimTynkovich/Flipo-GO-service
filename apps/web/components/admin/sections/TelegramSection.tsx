@@ -126,7 +126,7 @@ export default function TelegramSection() {
 
             <AdminField
               label="Текст кнопки"
-              hint="Подпись на кнопке открытия приложения в рассылке и в /start. Если пусто — «🚀 Открыть Flipo»."
+              hint="Подпись на кнопке открытия приложения в рассылке и в /start. Если пусто — «🚀 Открыть приложение."
             >
               <input
                 className="input-field"
@@ -134,7 +134,7 @@ export default function TelegramSection() {
                 onChange={(e) =>
                   setSettings({ ...formSettings, webapp_button_text: e.target.value })
                 }
-                placeholder="🚀 Открыть Flipo"
+                placeholder="🚀 Открыть приложение"
                 maxLength={64}
               />
             </AdminField>

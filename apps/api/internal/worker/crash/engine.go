@@ -12,6 +12,7 @@ import (
 	crashuc "github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
+	outcomeuc "github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 )
@@ -19,6 +20,7 @@ import (
 type Engine struct {
 	svc         *crashuc.Service
 	games       domain.GameRepository
+	outcome     *outcomeuc.Service
 	chain       []string
 	chainIx     int
 	tickMs      int
@@ -26,12 +28,12 @@ type Engine struct {
 	growthPerMs float64
 }
 
-func NewEngine(svc *crashuc.Service, games domain.GameRepository, tickMs, betS int, growthPerMs float64) *Engine {
+func NewEngine(svc *crashuc.Service, games domain.GameRepository, tickMs, betS int, growthPerMs float64, outcomeSvc *outcomeuc.Service) *Engine {
 	seedBytes := make([]byte, 32)
 	_, _ = rand.Read(seedBytes)
 	seed := hex.EncodeToString(seedBytes)
 	chain := provablyfair.HashChain(seed, 10000)
-	return &Engine{svc: svc, games: games, chain: chain, chainIx: 0, tickMs: tickMs, betS: betS, growthPerMs: growthPerMs}
+	return &Engine{svc: svc, games: games, outcome: outcomeSvc, chain: chain, chainIx: 0, tickMs: tickMs, betS: betS, growthPerMs: growthPerMs}
 }
 
 func (e *Engine) Run(ctx context.Context) {
@@ -133,7 +135,29 @@ func (e *Engine) runRound(ctx context.Context) {
 	if e.chainIx >= len(e.chain) {
 		e.chainIx = 0
 	}
-	hash := e.chain[e.chainIx]
+
+	adminInfluenced := false
+	hash := ""
+	if e.outcome != nil {
+		if override, ok, oerr := e.outcome.TakePending(ctx, domain.GameCrash); oerr == nil && ok {
+			if t, terr := e.outcome.DecodeCrashTarget(override); terr == nil {
+				mode, weight := e.outcome.CrashMode(t)
+				if outcomeuc.ShouldApply(mode, weight) {
+					exact := float64(0)
+					if t.ExactPoint != nil {
+						exact = *t.ExactPoint
+					}
+					if found, foundOk := provablyfair.FindCrashHash(t.MinPoint, t.MaxPoint, exact, 500000); foundOk {
+						hash = found
+						adminInfluenced = true
+					}
+				}
+			}
+		}
+	}
+	if hash == "" {
+		hash = e.chain[e.chainIx]
+	}
 	e.chainIx++
 	crashPoint := provablyfair.CrashPoint(hash)
 
@@ -161,6 +185,13 @@ func (e *Engine) runRound(ctx context.Context) {
 		slog.Error("crash create round failed", "error", err)
 		time.Sleep(time.Second)
 		return
+	}
+
+	if adminInfluenced {
+		round.AdminInfluenced = true
+		if uerr := e.games.UpdateRound(ctx, round); uerr != nil {
+			slog.Warn("mark crash round admin-influenced", "error", uerr)
+		}
 	}
 
 	betEnds := now.Add(time.Duration(e.betS) * time.Second)

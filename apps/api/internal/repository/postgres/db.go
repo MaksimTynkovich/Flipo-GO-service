@@ -87,6 +87,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.SocialSimSettings{},
 		&domain.ReferralPerk{},
 		&domain.ReferralMilestone{},
+		&domain.GameOutcomeOverride{},
 	); err != nil {
 		return err
 	}

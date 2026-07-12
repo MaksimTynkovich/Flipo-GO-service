@@ -15,6 +15,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
+	outcomeuc "github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -32,8 +33,13 @@ type Service struct {
 	overlay   RoomOverlay
 	ghosts    GhostClaimer
 	bots      BotMatchmaker
+	outcome   *outcomeuc.Service
 	roomMu    sync.Map
 	betHook   func(context.Context, uuid.UUID, int64)
+}
+
+func (s *Service) SetOutcome(svc *outcomeuc.Service) {
+	s.outcome = svc
 }
 
 func (s *Service) SetQualifyingBetHook(hook func(context.Context, uuid.UUID, int64)) {
@@ -613,18 +619,43 @@ func (s *Service) scheduleSpin(ctx context.Context, room *domain.PvPRoom) error 
 		weights[i] = e.stake
 	}
 
-	seedBytes := make([]byte, 32)
-	if _, err := rand.Read(seedBytes); err != nil {
-		return err
-	}
-	serverSeed := hex.EncodeToString(seedBytes)
-	serverSeedHash := provablyfair.HashSHA256(serverSeed)
-	clientSeed := room.ID.String()
-
 	roundNumber, err := s.games.GetNextRoundNumber(ctx, domain.GamePvP)
 	if err != nil {
 		return err
 	}
+
+	serverSeed := ""
+	adminInfluenced := false
+	if s.outcome != nil {
+		if override, ok, oerr := s.outcome.TakePending(ctx, domain.GamePvP); oerr == nil && ok {
+			if t, terr := s.outcome.DecodePvPTarget(override); terr == nil {
+				mode, weight := s.outcome.PvPMode(t)
+				if outcomeuc.ShouldApply(mode, weight) {
+					targetID, perr := uuid.Parse(t.WinnerID)
+					if perr == nil {
+						for idx, id := range playerIDs {
+							if id == targetID {
+								if found, foundOk := provablyfair.FindPvPSeed(idx, roundNumber, playerIDs, weights, 200000); foundOk {
+									serverSeed = found
+									adminInfluenced = true
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if serverSeed == "" {
+		seedBytes := make([]byte, 32)
+		if _, err := rand.Read(seedBytes); err != nil {
+			return err
+		}
+		serverSeed = hex.EncodeToString(seedBytes)
+	}
+	serverSeedHash := provablyfair.HashSHA256(serverSeed)
+	clientSeed := room.ID.String()
 
 	now := time.Now().UTC()
 	gameRound := &domain.GameRound{
@@ -641,6 +672,13 @@ func (s *Service) scheduleSpin(ctx context.Context, room *domain.PvPRoom) error 
 	}
 	if err := s.games.CreateRound(ctx, gameRound); err != nil {
 		return err
+	}
+
+	if adminInfluenced {
+		gameRound.AdminInfluenced = true
+		if uerr := s.games.UpdateRound(ctx, gameRound); uerr != nil {
+			slog.Warn("mark pvp round admin-influenced", "error", uerr)
+		}
 	}
 
 	winnerIdx := provablyfair.PvPWeightedWinnerIndex(serverSeed, roundNumber, playerIDs, weights)

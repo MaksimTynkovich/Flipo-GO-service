@@ -243,3 +243,13 @@ type TonTransferRepository interface {
 	ApproveWithdrawal(ctx context.Context, transferID, adminID uuid.UUID) error
 	RejectWithdrawalAtomic(ctx context.Context, transferID, adminID uuid.UUID, reason string) (int64, error)
 }
+
+// OutcomeOverrideRepository — admin-scheduled game outcome overrides.
+type OutcomeOverrideRepository interface {
+	CreateOutcomeOverride(ctx context.Context, override *GameOutcomeOverride) error
+	ListOutcomeOverrides(ctx context.Context) ([]GameOutcomeOverride, error)
+	DeleteOutcomeOverride(ctx context.Context, id uuid.UUID) error
+	// TakePending atomically fetches and decrements the next active override for a
+	// game type. Returns (nil, false) when none remain or all are expired.
+	TakePending(ctx context.Context, gameType GameType) (*GameOutcomeOverride, bool, error)
+}

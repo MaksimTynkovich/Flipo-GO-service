@@ -6,12 +6,12 @@ import (
 )
 
 func TestOpenAppMarkupMiniAppLink(t *testing.T) {
-	h := NewBotUpdates(NewBotAPI("token"), "", "flipo_bot", "app")
+	h := NewBotUpdates(NewBotAPI("token"), "", "flipo_bot", "app", "", "", "")
 	markup := h.openAppMarkup(context.Background(), "ref_abc")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
 
-	if btn["text"] != "🚀 Открыть Flipo" {
+	if btn["text"] != "🚀 Открыть приложение" {
 		t.Fatalf("unexpected button text: %v", btn["text"])
 	}
 	if got := btn["url"]; got != "https://t.me/flipo_bot/app?startapp=ref_abc" {
@@ -20,7 +20,7 @@ func TestOpenAppMarkupMiniAppLink(t *testing.T) {
 }
 
 func TestOpenAppMarkupWebAppURL(t *testing.T) {
-	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "")
+	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "")
 	markup := h.openAppMarkup(context.Background(), "")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
@@ -35,7 +35,7 @@ func TestOpenAppMarkupWebAppURL(t *testing.T) {
 }
 
 func TestOpenAppMarkupWebAppURLWithPayload(t *testing.T) {
-	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "")
+	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "")
 	markup := h.openAppMarkup(context.Background(), "ref_xyz")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]

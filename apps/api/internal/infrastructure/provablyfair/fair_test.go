@@ -1,47 +1,54 @@
-package provablyfair_test
+package provablyfair
 
 import (
 	"testing"
 
-	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
+	"github.com/google/uuid"
 )
 
-func TestRouletteResultDeterministic(t *testing.T) {
-	i1 := provablyfair.RouletteResultIndex("testseed", 1)
-	i2 := provablyfair.RouletteResultIndex("testseed", 1)
-	if i1 != i2 {
-		t.Fatalf("expected deterministic index, got %d and %d", i1, i2)
-	}
-	if i1 < 0 || i1 > 14 {
-		t.Fatalf("invalid index: %d", i1)
-	}
-	n := provablyfair.RouletteWheelNumber(i1)
-	c := provablyfair.RouletteNumberColor(n)
-	if c != "red" && c != "black" && c != "green" {
-		t.Fatalf("invalid color: %s", c)
+func TestFindRouletteSeed(t *testing.T) {
+	nonce := int64(12345)
+	for _, color := range []string{"red", "black", "green"} {
+		seed, ok := FindRouletteSeed(color, nil, nonce, 200000)
+		if !ok {
+			t.Fatalf("no seed found for color %s", color)
+		}
+		if RouletteResult(seed, nonce) != color {
+			t.Fatalf("seed produced wrong color for %s", color)
+		}
 	}
 }
 
-func TestWheelOrder(t *testing.T) {
-	order := provablyfair.WheelOrder
-	if len(order) != 15 {
-		t.Fatalf("expected 15 segments, got %d", len(order))
+func TestFindCrashHash(t *testing.T) {
+	hash, ok := FindCrashHash(2.0, 5.0, 0, 200000)
+	if !ok {
+		t.Fatal("no crash hash found in [2,5]")
 	}
-	if order[0] != 0 || order[1] != 1 || order[2] != 8 {
-		t.Fatalf("unexpected wheel order start: %v", order[:3])
-	}
-}
-
-func TestCrashPointMinimum(t *testing.T) {
-	cp := provablyfair.CrashPoint("abc123")
-	if cp < 1.0 {
-		t.Fatalf("crash point must be >= 1.0, got %f", cp)
+	p := CrashPoint(hash)
+	if p < 2.0 || p > 5.0 {
+		t.Fatalf("crash point %v out of range", p)
 	}
 }
 
-func TestHashChainLength(t *testing.T) {
-	chain := provablyfair.HashChain("seed", 10)
-	if len(chain) != 10 {
-		t.Fatalf("expected chain length 10, got %d", len(chain))
+func TestFindCrashHashExact(t *testing.T) {
+	const exact = 2.0
+	hash, ok := FindCrashHash(0, 0, exact, 200000)
+	if !ok {
+		t.Fatalf("no crash hash found for exact %v", exact)
+	}
+	if CrashPoint(hash) != exact {
+		t.Fatalf("crash point %v != exact %v", CrashPoint(hash), exact)
+	}
+}
+
+func TestFindPvPSeed(t *testing.T) {
+	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	weights := []int64{100, 100, 100}
+	seed, ok := FindPvPSeed(2, 999, ids, weights, 200000)
+	if !ok {
+		t.Fatal("no pvp seed found for index 2")
+	}
+	if PvPWeightedWinnerIndex(seed, 999, ids, weights) != 2 {
+		t.Fatalf("pvp seed produced wrong winner")
 	}
 }

@@ -212,5 +212,6 @@ type RoundProof struct {
 	ClientSeed     string    `json:"client_seed,omitempty"`
 	Nonce          int64     `json:"nonce"`
 	Result         string    `json:"result,omitempty"`
+	AdminInfluenced bool     `json:"admin_influenced"`
 	Verified       bool      `json:"verified"`
 }
