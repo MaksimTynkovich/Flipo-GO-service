@@ -783,6 +783,13 @@ export async function getReferralInviteeStatus() {
   return api<ReferralInviteeStatus>("/api/v1/referrals/invitee");
 }
 
+export async function reportReferralShare(action: "copy" | "share") {
+  return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
 export type AdminYieldSettings = {
   id: number;
   referral_share_percent: number;

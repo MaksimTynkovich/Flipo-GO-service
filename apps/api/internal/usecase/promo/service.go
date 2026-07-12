@@ -7,9 +7,14 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 )
+
+type AdminPromoNotifier interface {
+	NotifyPromoActivated(ctx context.Context, actor telegram.AdminActor, code string, bonusNanoton int64)
+}
 
 type ChannelNotSubscribedError struct {
 	Channel string
@@ -31,6 +36,7 @@ type Service struct {
 	notifier        balance.BalanceNotifier
 	requiredChannel string
 	channelChecker  ChannelChecker
+	admin           AdminPromoNotifier
 }
 
 func NewService(platform domain.PlatformRepository, games domain.GameRepository, users domain.UserRepository, balance *balance.Service) *Service {
@@ -44,6 +50,10 @@ func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
 	s.requiredChannel = strings.TrimSpace(channel)
 	s.channelChecker = checker
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminPromoNotifier) {
+	s.admin = notifier
 }
 
 func (s *Service) RequiredChannel() string {
@@ -134,6 +144,17 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 		return nil, err
 	}
 	_ = s.platform.IncrementPromoUsed(ctx, promo.Code)
+
+	if s.admin != nil {
+		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+			s.admin.NotifyPromoActivated(ctx, telegram.AdminActor{
+				TelegramID: user.TelegramID,
+				Username:   user.Username,
+				FirstName:  user.FirstName,
+				LastName:   user.LastName,
+			}, promo.Code, promo.BonusNanoton)
+		}
+	}
 
 	status, err := s.Status(ctx, userID)
 	if err != nil {

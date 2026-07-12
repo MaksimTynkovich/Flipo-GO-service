@@ -2,7 +2,10 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 type Update struct {
@@ -11,9 +14,17 @@ type Update struct {
 }
 
 type Message struct {
-	MessageID int64  `json:"message_id"`
-	Text      string `json:"text"`
-	Chat      Chat   `json:"chat"`
+	MessageID int64        `json:"message_id"`
+	Text      string       `json:"text"`
+	Chat      Chat         `json:"chat"`
+	From      *MessageFrom `json:"from"`
+}
+
+type MessageFrom struct {
+	ID        int64  `json:"id"`
+	Username  string `json:"username"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 }
 
 type Chat struct {
@@ -22,6 +33,11 @@ type Chat struct {
 
 type WebAppURLResolver func(ctx context.Context) string
 type WebAppButtonTextResolver func(ctx context.Context) string
+
+// UserLookup finds whether a Telegram user is already registered.
+type UserLookup interface {
+	FindByTelegramID(ctx context.Context, telegramID int64) (exists bool, err error)
+}
 
 type BotUpdates struct {
 	api                      *BotAPI
@@ -33,6 +49,8 @@ type BotUpdates struct {
 	welcomeText              string
 	webAppURLResolver        WebAppURLResolver
 	webAppButtonTextResolver WebAppButtonTextResolver
+	adminNotifier            *AdminNotifier
+	users                    UserLookup
 }
 
 func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName, channelURL, supportURL, welcomeText string) *BotUpdates {
@@ -55,6 +73,14 @@ func (h *BotUpdates) SetWebAppButtonTextResolver(resolver WebAppButtonTextResolv
 	h.webAppButtonTextResolver = resolver
 }
 
+func (h *BotUpdates) SetAdminNotifier(notifier *AdminNotifier) {
+	h.adminNotifier = notifier
+}
+
+func (h *BotUpdates) SetUserLookup(users UserLookup) {
+	h.users = users
+}
+
 func (h *BotUpdates) Enabled() bool {
 	return h.api != nil && h.api.Enabled()
 }
@@ -69,8 +95,50 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 		return nil
 	}
 
+	h.maybeNotifyNewUser(ctx, update.Message)
+
 	payload := strings.TrimSpace(strings.TrimPrefix(text, "/start"))
 	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload)
+}
+
+func (h *BotUpdates) maybeNotifyNewUser(ctx context.Context, msg *Message) {
+	if h.adminNotifier == nil || msg == nil || msg.From == nil || msg.From.ID == 0 {
+		return
+	}
+	if h.users != nil {
+		exists, err := h.users.FindByTelegramID(ctx, msg.From.ID)
+		if err != nil {
+			return
+		}
+		if exists {
+			return
+		}
+	}
+	h.adminNotifier.NotifyNewUser(ctx, AdminActor{
+		TelegramID: msg.From.ID,
+		Username:   msg.From.Username,
+		FirstName:  msg.From.FirstName,
+		LastName:   msg.From.LastName,
+	})
+}
+
+// UserRepoLookup adapts a FindByTelegramID that returns (user, error).
+type UserRepoLookup struct {
+	Find func(ctx context.Context, telegramID int64) (any, error)
+}
+
+func (u UserRepoLookup) FindByTelegramID(ctx context.Context, telegramID int64) (bool, error) {
+	if u.Find == nil {
+		return false, nil
+	}
+	_, err := u.Find(ctx, telegramID)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	return false, err
 }
 
 func (h *BotUpdates) sendStartWelcome(ctx context.Context, chatID int64, startPayload string) error {

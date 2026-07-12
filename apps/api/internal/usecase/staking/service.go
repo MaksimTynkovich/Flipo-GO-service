@@ -23,6 +23,10 @@ const (
 	DaysPerMonth                  = 30
 )
 
+type AdminStakeNotifier interface {
+	NotifyStake(ctx context.Context, actor telegram.AdminActor, giftName string, principalNanoton int64)
+}
+
 type Service struct {
 	staking            domain.StakingRepository
 	inventory          domain.InventoryRepository
@@ -35,6 +39,7 @@ type Service struct {
 	referralThreshold  int64
 	analytics          *analyticsuc.Service
 	referralRewards    ReferralRewardsProvider
+	admin              AdminStakeNotifier
 }
 
 // ReferralPerkProvider exposes invitee perks and first-stake activation.
@@ -103,6 +108,10 @@ func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 
 func (s *Service) SetReferralRewards(provider ReferralRewardsProvider) {
 	s.referralRewards = provider
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminStakeNotifier) {
+	s.admin = notifier
 }
 
 func monthlyRateFraction(tier domain.StakingTier, basePercent, boostPercent float64) float64 {

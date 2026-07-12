@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/google/uuid"
 )
 
@@ -172,6 +173,15 @@ func (s *Service) createStake(
 
 	if s.referralRewards != nil {
 		_ = s.referralRewards.OnFirstStake(ctx, userID)
+	}
+
+	if s.admin != nil {
+		s.admin.NotifyStake(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, item.Name, principal)
 	}
 
 	return pos, nil

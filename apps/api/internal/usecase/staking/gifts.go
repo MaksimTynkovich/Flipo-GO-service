@@ -117,6 +117,15 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		referralLimitBonus = s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
 		rate += referralBoost / 100
 	}
+	perkActive := referralLimitBonus > 0
+	perkPending := user.ReferrerID != nil && !perkActive
+	displayBoost := referralBoost
+	displayLimitBonus := referralLimitBonus
+	if perkPending {
+		// Show promised invitee perk values before first stake activates them.
+		displayBoost = domain.DefaultReferralPerkBoostPercent
+		displayLimitBonus = domain.DefaultReferralPerkLimitBonusNano
+	}
 	tvl, tvlCap, tvlRemaining, _ := s.TVLSnapshot(ctx)
 	personalLimit, _ := s.PersonalStakeLimit(ctx, userID)
 	personalUsed, _ := s.staking.SumActivePrincipalByUser(ctx, userID)
@@ -135,19 +144,19 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		Epoch:              epochView(epoch),
 		MonthlyRatePercent: rate * 100,
 		Stats: StakingStats{
-			BoostReferralCount:    referralCount,
-			BoostReferralTarget:   s.referralThreshold,
-			BoostUntil:            boostUntil,
-			MonthlyRatePercent:    rate * 100,
-			TVLNanoton:            tvl,
-			TVLCapNanoton:         tvlCap,
-			TVLRemainingNanoton:   tvlRemaining,
+			BoostReferralCount:        referralCount,
+			BoostReferralTarget:       s.referralThreshold,
+			BoostUntil:                boostUntil,
+			MonthlyRatePercent:        rate * 100,
+			TVLNanoton:                tvl,
+			TVLCapNanoton:             tvlCap,
+			TVLRemainingNanoton:       tvlRemaining,
 			PersonalLimitNanoton:      personalLimit,
 			PersonalUsedNanoton:       personalUsed,
-			ReferralPerkActive:        referralLimitBonus > 0,
-			ReferralPerkPending:       user.ReferrerID != nil && referralLimitBonus == 0,
-			ReferralLimitBonusNanoton: referralLimitBonus,
-			ReferralBoostPercent:      referralBoost,
+			ReferralPerkActive:        perkActive,
+			ReferralPerkPending:       perkPending,
+			ReferralLimitBonusNanoton: displayLimitBonus,
+			ReferralBoostPercent:      displayBoost,
 		},
 	}
 

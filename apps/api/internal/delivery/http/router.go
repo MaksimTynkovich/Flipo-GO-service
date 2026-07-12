@@ -99,6 +99,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.GET("/referrals/stats", deps.ReferralHandler.Stats)
 			authed.GET("/referrals/invitee", deps.ReferralHandler.InviteeStatus)
+			authed.POST("/referrals/share-event", deps.ReferralHandler.ShareEvent)
 
 			authed.POST("/promos/activate", deps.PromoHandler.Activate)
 			authed.GET("/promos/status", deps.PromoHandler.Status)

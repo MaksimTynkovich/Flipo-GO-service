@@ -134,18 +134,22 @@ func main() {
 	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
+	adminNotifier := telegram.NewAdminNotifier(botAPI, cfg.AdminTelegramIDs)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),
 		auth.WithAnalytics(analyticsSvc),
+		auth.WithAdminEvents(adminNotifier),
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
 	balanceSvc := balance.NewService(userRepo)
 	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
+	promoSvc.SetAdminNotifier(adminNotifier)
 	referralSvc.SetPromoActivator(promoSvc)
 	walletSvc.SetPromoGate(promoSvc)
+	walletSvc.SetAdminNotifier(adminNotifier)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
 	if mtprotoCfg.Enabled() {
@@ -168,12 +172,14 @@ func main() {
 	walletSvc.SetBalanceNotifier(hub)
 	promoSvc.SetBalanceNotifier(hub)
 	adminSvc.SetBalanceNotifier(hub)
-	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
+	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator, adminNotifier)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
+	invSvc.SetAdminNotifier(adminNotifier)
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), int64(cfg.BoostReferralThreshold))
 	stakeSvc.SetAnalytics(analyticsSvc)
 	stakeSvc.SetBalanceNotifier(hub)
 	stakeSvc.SetReferralRewards(referralSvc)
+	stakeSvc.SetAdminNotifier(adminNotifier)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error
@@ -251,6 +257,12 @@ func main() {
 	defer treasuryWorker.Stop()
 
 	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName, cfg.ChannelURL, cfg.SupportURL, cfg.WelcomeText)
+	botUpdates.SetAdminNotifier(adminNotifier)
+	botUpdates.SetUserLookup(telegram.UserRepoLookup{
+		Find: func(ctx context.Context, telegramID int64) (any, error) {
+			return userRepo.FindByTelegramID(ctx, telegramID)
+		},
+	})
 	botUpdates.SetWebAppURLResolver(func(ctx context.Context) string {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {
@@ -287,7 +299,7 @@ func main() {
 		StakingHandler:   handlers.NewStakingHandler(stakeSvc, analyticsSvc),
 		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc, analyticsSvc, betFundingSvc),
 		MarketHandler:    handlers.NewMarketHandler(marketSvc, analyticsSvc),
-		ReferralHandler:  handlers.NewReferralHandler(referralSvc),
+		ReferralHandler:  handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:     handlers.NewPromoHandler(promoSvc, analyticsSvc),
 		WalletHandler:    handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		TelegramHandler:  handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),

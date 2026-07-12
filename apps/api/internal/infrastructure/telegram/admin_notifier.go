@@ -1,0 +1,162 @@
+package telegram
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+)
+
+// AdminNotifier sends private Telegram alerts to configured admin chat IDs.
+// Events from admins themselves are ignored.
+type AdminNotifier struct {
+	api      *BotAPI
+	adminIDs []int64
+	adminSet map[int64]struct{}
+	// Dedupes "new user" alerts across /start + first auth in the same process.
+	newUserSeen sync.Map
+}
+
+func NewAdminNotifier(api *BotAPI, adminIDs []int64) *AdminNotifier {
+	set := make(map[int64]struct{}, len(adminIDs))
+	ids := make([]int64, 0, len(adminIDs))
+	for _, id := range adminIDs {
+		if id == 0 {
+			continue
+		}
+		if _, ok := set[id]; ok {
+			continue
+		}
+		set[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return &AdminNotifier{api: api, adminIDs: ids, adminSet: set}
+}
+
+func (n *AdminNotifier) Enabled() bool {
+	return n != nil && n.api != nil && n.api.Enabled() && len(n.adminIDs) > 0
+}
+
+func (n *AdminNotifier) IsAdmin(telegramID int64) bool {
+	if n == nil || telegramID == 0 {
+		return false
+	}
+	_, ok := n.adminSet[telegramID]
+	return ok
+}
+
+type AdminActor struct {
+	TelegramID int64
+	Username   string
+	FirstName  string
+	LastName   string
+}
+
+func FormatActor(a AdminActor) string {
+	name := strings.TrimSpace(strings.TrimSpace(a.FirstName + " " + a.LastName))
+	if name == "" {
+		name = "без имени"
+	}
+	if a.Username != "" {
+		return fmt.Sprintf("%s (@%s, id=%d)", name, a.Username, a.TelegramID)
+	}
+	return fmt.Sprintf("%s (id=%d)", name, a.TelegramID)
+}
+
+func (n *AdminNotifier) NotifyNewUser(ctx context.Context, actor AdminActor) {
+	if !n.Enabled() || actor.TelegramID == 0 || n.IsAdmin(actor.TelegramID) {
+		return
+	}
+	if _, loaded := n.newUserSeen.LoadOrStore(actor.TelegramID, struct{}{}); loaded {
+		return
+	}
+	n.notify(ctx, actor, fmt.Sprintf("🆕 Новый пользователь\n%s", FormatActor(actor)))
+}
+
+func (n *AdminNotifier) NotifyDeposit(ctx context.Context, actor AdminActor, amountNanoton int64) {
+	n.notify(ctx, actor, fmt.Sprintf(
+		"💰 Депозит\n%s\nСумма: %s TON",
+		FormatActor(actor),
+		formatTON(amountNanoton),
+	))
+}
+
+func (n *AdminNotifier) NotifyWithdraw(ctx context.Context, actor AdminActor, amountNanoton int64) {
+	n.notify(ctx, actor, fmt.Sprintf(
+		"📤 Вывод\n%s\nСумма: %s TON",
+		FormatActor(actor),
+		formatTON(amountNanoton),
+	))
+}
+
+func (n *AdminNotifier) NotifyReferralShare(ctx context.Context, actor AdminActor, action string) {
+	label := "скопировал"
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "share", "send":
+		label = "отправил"
+	case "copy":
+		label = "скопировал"
+	}
+	n.notify(ctx, actor, fmt.Sprintf("🔗 Реферальная ссылка\n%s\nДействие: %s", FormatActor(actor), label))
+}
+
+func (n *AdminNotifier) NotifyStake(ctx context.Context, actor AdminActor, giftName string, principalNanoton int64) {
+	name := strings.TrimSpace(giftName)
+	if name == "" {
+		name = "подарок"
+	}
+	n.notify(ctx, actor, fmt.Sprintf(
+		"🎁 Стейкинг\n%s\nПредмет: %s\nОценка: %s TON",
+		FormatActor(actor),
+		name,
+		formatTON(principalNanoton),
+	))
+}
+
+func (n *AdminNotifier) NotifyPromoActivated(ctx context.Context, actor AdminActor, code string, bonusNanoton int64) {
+	n.notify(ctx, actor, fmt.Sprintf(
+		"🏷 Промокод\n%s\nКод: %s\nБонус: %s TON",
+		FormatActor(actor),
+		strings.TrimSpace(code),
+		formatTON(bonusNanoton),
+	))
+}
+
+func (n *AdminNotifier) NotifyReferralJoined(ctx context.Context, actor, referrer AdminActor) {
+	n.notify(ctx, actor, fmt.Sprintf(
+		"👥 Пришёл по реф.ссылке\n%s\nОт: %s",
+		FormatActor(actor),
+		FormatActor(referrer),
+	))
+}
+
+func (n *AdminNotifier) NotifyGiftInventory(ctx context.Context, actor AdminActor, giftName string, floorNanoton int64) {
+	name := strings.TrimSpace(giftName)
+	if name == "" {
+		name = "подарок"
+	}
+	text := fmt.Sprintf("📥 Инвентарь\n%s\nПодарок: %s", FormatActor(actor), name)
+	if floorNanoton > 0 {
+		text += fmt.Sprintf("\nОценка: %s TON", formatTON(floorNanoton))
+	}
+	n.notify(ctx, actor, text)
+}
+
+func (n *AdminNotifier) notify(_ context.Context, actor AdminActor, text string) {
+	if !n.Enabled() || actor.TelegramID == 0 || n.IsAdmin(actor.TelegramID) {
+		return
+	}
+
+	for _, adminID := range n.adminIDs {
+		adminID := adminID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := n.api.SendMessage(ctx, adminID, text); err != nil {
+				slog.Warn("admin notify failed", "admin_id", adminID, "error", err)
+			}
+		}()
+	}
+}

@@ -186,7 +186,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
       ) : null}
 
       {stats.referral_perk_pending ? (
-        <section className="panel border border-accent/20 bg-accent/5 p-3.5">
+        <section className="panel bg-accent/5 p-3.5">
           <p className="text-sm font-medium">Бонус по реферальной ссылке</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
             Застейкайте первый подарок — включится +{stats.referral_boost_percent ?? 0.5}% к доходу

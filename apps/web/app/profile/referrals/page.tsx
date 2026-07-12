@@ -8,6 +8,7 @@ import {
   formatTON,
   getReferralInviteeStatus,
   getReferralStats,
+  reportReferralShare,
   ReferralInviteeStatus,
   ReferralStats,
 } from "@/lib/api";
@@ -49,16 +50,19 @@ export default function ProfileReferralsPage() {
     await navigator.clipboard.writeText(referralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    reportReferralShare("copy").catch(() => {});
   }
 
   async function handleShare() {
     if (!referralLink) return;
     if (openTelegramShare({ url: referralLink, text: shareText })) {
+      reportReferralShare("share").catch(() => {});
       return;
     }
     await navigator.clipboard.writeText(`${referralLink}\n\n${shareText}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    reportReferralShare("share").catch(() => {});
   }
 
   const sharePercent = stats?.share_percent ?? REFERRAL_MONTHLY_SHARE_PERCENT;

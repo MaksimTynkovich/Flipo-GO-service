@@ -21,6 +21,11 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+type AdminEventNotifier interface {
+	NotifyNewUser(ctx context.Context, actor telegram.AdminActor)
+	NotifyReferralJoined(ctx context.Context, actor, referrer telegram.AdminActor)
+}
+
 type Service struct {
 	users               domain.UserRepository
 	referrals           *referral.Service
@@ -33,6 +38,7 @@ type Service struct {
 	debugUsername       string
 	debugInitialBalance int64
 	analytics           *analyticsuc.Service
+	adminEvents         AdminEventNotifier
 }
 
 func NewService(users domain.UserRepository, botToken string, jwtSecret string, jwtExpiry time.Duration, referrals *referral.Service, opts ...ServiceOption) *Service {
@@ -74,6 +80,12 @@ func WithAdminTelegramIDs(ids []int64) ServiceOption {
 func WithAnalytics(analyticsSvc *analyticsuc.Service) ServiceOption {
 	return func(s *Service) {
 		s.analytics = analyticsSvc
+	}
+}
+
+func WithAdminEvents(notifier AdminEventNotifier) ServiceOption {
+	return func(s *Service) {
+		s.adminEvents = notifier
 	}
 }
 
@@ -119,26 +131,55 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 		return "", nil, err
 	}
 
+	if isNew && s.adminEvents != nil {
+		s.adminEvents.NotifyNewUser(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		})
+	}
+
 	if isNew && s.referrals != nil && code != "" {
 		_ = s.referrals.TryAssignReferrer(ctx, user.ID, code)
 		if refreshed, err := s.users.FindByID(ctx, user.ID); err == nil && refreshed != nil {
 			user = refreshed
 		}
-		s.analytics.Track(ctx, analyticsuc.EventInput{
-			UserID:        &user.ID,
-			ReferrerID:    user.ReferrerID,
-			TelegramID:    &user.TelegramID,
-			Source:        "api",
-			EventName:     "referral_assigned",
-			EventCategory: "acquisition",
-			Status:        "success",
-			StartParam:    code,
-			StakingTier:   string(user.StakingTier),
-			Properties: map[string]any{
-				"source": "referral",
-				"is_new": isNew,
-			},
-		})
+		if user.ReferrerID != nil {
+			s.analytics.Track(ctx, analyticsuc.EventInput{
+				UserID:        &user.ID,
+				ReferrerID:    user.ReferrerID,
+				TelegramID:    &user.TelegramID,
+				Source:        "api",
+				EventName:     "referral_assigned",
+				EventCategory: "acquisition",
+				Status:        "success",
+				StartParam:    code,
+				StakingTier:   string(user.StakingTier),
+				Properties: map[string]any{
+					"source": "referral",
+					"is_new": isNew,
+				},
+			})
+			if s.adminEvents != nil {
+				if referrer, err := s.users.FindByID(ctx, *user.ReferrerID); err == nil && referrer != nil {
+					s.adminEvents.NotifyReferralJoined(ctx,
+						telegram.AdminActor{
+							TelegramID: user.TelegramID,
+							Username:   user.Username,
+							FirstName:  user.FirstName,
+							LastName:   user.LastName,
+						},
+						telegram.AdminActor{
+							TelegramID: referrer.TelegramID,
+							Username:   referrer.Username,
+							FirstName:  referrer.FirstName,
+							LastName:   referrer.LastName,
+						},
+					)
+				}
+			}
+		}
 	}
 
 	token, err := s.issueToken(user)

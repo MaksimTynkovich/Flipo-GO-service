@@ -27,6 +27,7 @@ type Service struct {
 	giftTransfer *telegram.GiftTransferService
 	valuator     *gifts.Valuator
 	market       LiquidationBroker
+	admin        *telegram.AdminNotifier
 }
 
 func NewService(
@@ -96,12 +97,34 @@ func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.In
 	return view
 }
 
+func (s *Service) SetAdminNotifier(notifier *telegram.AdminNotifier) {
+	s.admin = notifier
+}
+
 func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*domain.InventoryItem, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return s.deposit.ProcessDeposit(ctx, user, txRef)
+	item, err := s.deposit.ProcessDeposit(ctx, user, txRef)
+	if err != nil {
+		return nil, err
+	}
+	if s.admin != nil && item != nil {
+		floor := item.FloorPriceNanoton
+		if s.valuator != nil {
+			if price, _ := s.valuator.QuoteInventoryValuation(ctx, *item); price > 0 {
+				floor = price
+			}
+		}
+		s.admin.NotifyGiftInventory(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, item.Name, floor)
+	}
+	return item, nil
 }
 
 func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int64, error) {

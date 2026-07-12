@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
@@ -32,6 +33,11 @@ type WithdrawalPromoGate interface {
 	HasActivePromoRedemption(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
+type AdminWalletNotifier interface {
+	NotifyDeposit(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
+	NotifyWithdraw(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
+}
+
 type Service struct {
 	users     domain.UserRepository
 	transfers domain.TonTransferRepository
@@ -41,6 +47,7 @@ type Service struct {
 	analytics *analyticsuc.Service
 	notifier  balance.BalanceNotifier
 	promoGate WithdrawalPromoGate
+	admin     AdminWalletNotifier
 }
 
 func NewService(users domain.UserRepository, transfers domain.TonTransferRepository, chain *ton.Client, cfg Config) *Service {
@@ -66,6 +73,10 @@ func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 
 func (s *Service) SetPromoGate(gate WithdrawalPromoGate) {
 	s.promoGate = gate
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminWalletNotifier) {
+	s.admin = notifier
 }
 
 type DepositIntentView struct {
@@ -140,6 +151,14 @@ func (s *Service) CreateDepositIntent(ctx context.Context, userID uuid.UUID, amo
 			"amount_nanoton": amountNanoton,
 		},
 	})
+	if s.admin != nil {
+		s.admin.NotifyDeposit(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, amountNanoton)
+	}
 
 	return &DepositIntentView{
 		ID:            transfer.ID.String(),
@@ -290,8 +309,8 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 		EventName:     "withdraw_requested",
 		EventCategory: "wallet",
 		Status:        "success",
-		StakingTier:   string(user.StakingTier),
 		ErrorCode:     "",
+		StakingTier:   string(user.StakingTier),
 		Properties: map[string]any{
 			"amount_nanoton":  receiveNanoton,
 			"fee_nanoton":     s.cfg.WithdrawFeeNanoton,
@@ -300,6 +319,14 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 			"review_required": initialStatus == domain.TonStatusPendingReview,
 		},
 	})
+	if s.admin != nil {
+		s.admin.NotifyWithdraw(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, receiveNanoton)
+	}
 	if initialStatus == domain.TonStatusPendingReview {
 		s.analytics.Track(ctx, analyticsuc.EventInput{
 			UserID:        &userID,
