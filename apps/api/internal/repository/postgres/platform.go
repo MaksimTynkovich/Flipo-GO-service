@@ -204,11 +204,15 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	var yield domain.PlatformYieldSettings
 	if err := r.db.WithContext(ctx).First(&yield, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		if err := r.db.WithContext(ctx).Create(&domain.PlatformYieldSettings{
-			ID:                         1,
-			ReferralSharePercent:       3,
-			StakingBaseMonthlyPercent:  3,
-			StakingBoostMonthlyPercent: 5,
-			UpdatedAt:                  time.Now().UTC(),
+			ID:                          1,
+			ReferralSharePercent:        5,
+			ReferralGGRSharePercent:       domain.DefaultReferralGGRSharePercent,
+			ReferralMilestoneNanoton:      domain.DefaultReferralMilestoneNanoton,
+			ReferralMilestoneMonthlyCap:   domain.DefaultReferralMilestoneMonthlyCap,
+			StakingBaseMonthlyPercent:     3,
+			StakingBoostMonthlyPercent:    4,
+			StakingTVLCapNanoton:          domain.DefaultStakingTVLCapNanoton,
+			UpdatedAt:                   time.Now().UTC(),
 		}).Error; err != nil {
 			return err
 		}

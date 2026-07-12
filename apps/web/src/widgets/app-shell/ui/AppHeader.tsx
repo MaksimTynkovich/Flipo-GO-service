@@ -18,7 +18,7 @@ export function AppHeader() {
   const mainBalance = user ? mainBalanceNanoton(user) : 0;
 
   return (
-    <header className="app-header absolute left-0 right-0 top-0 z-50 bg-background/90 pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)] backdrop-blur-xl hairline-bottom">
+    <header className="app-header absolute left-0 right-0 top-0 z-50 bg-background pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)] hairline-bottom">
       <div className="app-container relative flex h-14 items-center justify-between gap-3">
         <Link
           href={APP_ROUTES.profile}

@@ -1,6 +1,7 @@
 package provablyfair
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -229,4 +230,76 @@ func VerifyRound(gameType string, serverSeedHash, serverSeed string, nonce int64
 	default:
 		return false
 	}
+}
+
+// FindRouletteSeed searches for a random server seed whose roulette outcome
+// matches targetColor (and optionally targetNumber) at the given nonce.
+// Returns the seed and true, or ("", false) if maxTries were exhausted.
+// The found seed keeps the round provably-fair (VerifyRound still passes).
+func FindRouletteSeed(targetColor string, targetNumber *int, nonce int64, maxTries int) (string, bool) {
+	for i := 0; i < maxTries; i++ {
+		seed := randomSeed()
+		idx := RouletteResultIndex(seed, nonce)
+		num := RouletteWheelNumber(idx)
+		color := RouletteNumberColor(num)
+		if color != targetColor {
+			continue
+		}
+		if targetNumber != nil && num != *targetNumber {
+			continue
+		}
+		return seed, true
+	}
+	return "", false
+}
+
+// FindCrashHash searches for a random hash whose CrashPoint lies within
+// [minPoint, maxPoint]. If exactPoint > 0 the hash must produce exactly that
+// point. Returns the hash and true, or ("", false) otherwise.
+func FindCrashHash(minPoint, maxPoint, exactPoint float64, maxTries int) (string, bool) {
+	if exactPoint > 0 {
+		for i := 0; i < maxTries; i++ {
+			hash := randomHash()
+			if CrashPoint(hash) == exactPoint {
+				return hash, true
+			}
+		}
+		return "", false
+	}
+	if minPoint < 1 {
+		minPoint = 1
+	}
+	if maxPoint < minPoint {
+		maxPoint = minPoint
+	}
+	for i := 0; i < maxTries; i++ {
+		hash := randomHash()
+		point := CrashPoint(hash)
+		if point >= minPoint && point <= maxPoint {
+			return hash, true
+		}
+	}
+	return "", false
+}
+
+// FindPvPSeed searches for a random server seed whose weighted winner index
+// equals targetIdx at the given nonce for the provided players/weights.
+func FindPvPSeed(targetIdx int, nonce int64, playerIDs []uuid.UUID, weights []int64, maxTries int) (string, bool) {
+	for i := 0; i < maxTries; i++ {
+		seed := randomSeed()
+		if PvPWeightedWinnerIndex(seed, nonce, playerIDs, weights) == targetIdx {
+			return seed, true
+		}
+	}
+	return "", false
+}
+
+func randomSeed() string {
+	seedBytes := make([]byte, 32)
+	_, _ = rand.Read(seedBytes)
+	return hex.EncodeToString(seedBytes)
+}
+
+func randomHash() string {
+	return randomSeed()
 }

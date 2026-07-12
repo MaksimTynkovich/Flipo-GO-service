@@ -9,6 +9,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"path/filepath"
 )
 
 type Deps struct {
@@ -28,6 +29,7 @@ type Deps struct {
 	PresenceHandler  *handlers.PresenceHandler
 	AdminTelegramIDs []int64
 	Hub              *websocket.Hub
+	BotsDataDir      string
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -36,6 +38,13 @@ func NewRouter(deps Deps) *gin.Engine {
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestMeta())
 	r.Use(middleware.AccessLog())
+
+	// Curated bot roster (assets/bots) for the live-online overlay avatars.
+	if deps.BotsDataDir != "" {
+		if abs, err := filepath.Abs(deps.BotsDataDir); err == nil {
+			r.Static("/static/bots", abs)
+		}
+	}
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -84,10 +93,13 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.GET("/staking/gifts", deps.StakingHandler.ListProfileGifts)
 			authed.GET("/staking/positions", deps.StakingHandler.ListPositions)
+			authed.GET("/staking/quests", deps.StakingHandler.ListQuests)
 			authed.POST("/staking/stake", deps.StakingHandler.Stake)
 			authed.POST("/staking/unstake/:id", deps.StakingHandler.Unstake)
 
 			authed.GET("/referrals/stats", deps.ReferralHandler.Stats)
+			authed.GET("/referrals/invitee", deps.ReferralHandler.InviteeStatus)
+			authed.POST("/referrals/share-event", deps.ReferralHandler.ShareEvent)
 
 			authed.POST("/promos/activate", deps.PromoHandler.Activate)
 			authed.GET("/promos/status", deps.PromoHandler.Status)
@@ -130,6 +142,9 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.PATCH("/social-sim", deps.AdminHandler.UpdateSocialSimSettings)
 			admin.POST("/games/:game/rotate-seed", deps.AdminHandler.RotateSeed)
 			admin.GET("/games/:game/seeds", deps.AdminHandler.SeedHistory)
+			admin.GET("/outcome/overrides", deps.AdminHandler.ListOutcomeOverrides)
+			admin.POST("/outcome/overrides", deps.AdminHandler.CreateOutcomeOverride)
+			admin.DELETE("/outcome/overrides/:id", deps.AdminHandler.DeleteOutcomeOverride)
 			admin.GET("/risk/users", deps.AdminHandler.RiskUsers)
 			admin.GET("/risk/settings", deps.AdminHandler.GetRiskSettings)
 			admin.PATCH("/risk/settings", deps.AdminHandler.UpdateRiskSettings)

@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultSharePercent is the default referrer's share of a referral's staking income.
-const DefaultSharePercent = 3.0
+const DefaultSharePercent = 5.0
 
 // DaysPerMonth matches staking accrual (see staking.DaysPerMonth).
 const DaysPerMonth = 30

@@ -14,11 +14,11 @@ import (
 )
 
 type CrashStateHook struct {
-	RoundID     uuid.UUID
-	Phase       string
-	Multiplier  float64
-	EndsAt      *time.Time
-	CrashPoint  float64
+	RoundID    uuid.UUID
+	Phase      string
+	Multiplier float64
+	EndsAt     *time.Time
+	CrashPoint float64
 }
 
 type RouletteStateHook struct {
@@ -97,13 +97,13 @@ type GameLimits interface {
 }
 
 type Simulator struct {
-	store     ConfigStore
-	limits    GameLimits
-	publish   PresencePublisher
+	store             ConfigStore
+	limits            GameLimits
+	publish           PresencePublisher
 	republishCrash    RepublishFn
 	republishRoulette RepublishFn
-	personas  []Persona
-	rng       *rand.Rand
+	personas          []Persona
+	rng               *rand.Rand
 
 	mu       sync.RWMutex
 	cfg      domain.SocialSimSettings
@@ -154,7 +154,7 @@ type pendingHumanJoin struct {
 	bot    Persona
 }
 
-func NewSimulator(store ConfigStore, limits GameLimits, publish PresencePublisher) *Simulator {
+func NewSimulator(store ConfigStore, limits GameLimits, publish PresencePublisher, opts ...SimulatorOption) *Simulator {
 	s := &Simulator{
 		store:          store,
 		limits:         limits,
@@ -172,6 +172,9 @@ func NewSimulator(store ConfigStore, limits GameLimits, publish PresencePublishe
 		Online:    0,
 		ByGame:    map[string]int{"crash": 0, "roulette": 0, "pvp": 0},
 		UpdatedAt: time.Now().UTC(),
+	}
+	for _, opt := range opts {
+		opt(s)
 	}
 	return s
 }
@@ -508,9 +511,9 @@ type HumanOpenRoom struct {
 }
 
 type PlannedHumanJoin struct {
-	RoomID        uuid.UUID
-	Bot           Persona
-	StakeNanoton  int64
+	RoomID       uuid.UUID
+	Bot          Persona
+	StakeNanoton int64
 }
 
 // PlanBotJoins schedules / releases bot opponents for open human rooms.
@@ -567,7 +570,7 @@ func (s *Simulator) PlanBotJoins(rooms []HumanOpenRoom) []PlannedHumanJoin {
 		}
 		stake = humanizeStakeNanoton(stake, room.BetAmountNanoton*9/10, room.BetAmountNanoton*11/10, s.rng, s.cfg.Chaos)
 		if stake < room.BetAmountNanoton*9/10 {
-			stake = room.BetAmountNanoton*9/10
+			stake = room.BetAmountNanoton * 9 / 10
 		}
 		out = append(out, PlannedHumanJoin{
 			RoomID:       room.ID,

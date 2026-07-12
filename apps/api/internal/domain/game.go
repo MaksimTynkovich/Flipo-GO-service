@@ -27,10 +27,27 @@ type GameRound struct {
 	ServerSeed     string         `gorm:"size:128" json:"server_seed,omitempty"`
 	ClientSeed     string         `gorm:"size:128" json:"client_seed"`
 	Nonce          int64          `gorm:"default:0" json:"nonce"`
+	AdminInfluenced bool          `gorm:"not null;default:false" json:"admin_influenced"`
 	CreatedAt      time.Time      `json:"created_at"`
 
 	Bets []GameBet `gorm:"foreignKey:RoundID" json:"-"`
 }
+
+// GameOutcomeOverride — admin-scheduled future game outcome. The engine searches
+// for a server seed that naturally produces the target outcome, preserving
+// provably-fair verifiability (VerifyRound still returns true).
+type GameOutcomeOverride struct {
+	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	GameType        GameType       `gorm:"type:varchar(16);not null;index" json:"game_type"`
+	Target          datatypes.JSON `gorm:"type:jsonb" json:"target"`
+	RoundsRemaining int            `gorm:"not null" json:"rounds_remaining"`
+	CreatedBy       uuid.UUID      `gorm:"type:uuid" json:"created_by"`
+	Note            string         `gorm:"size:256" json:"note"`
+	ExpiresAt       *time.Time     `json:"expires_at,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+}
+
+func (GameOutcomeOverride) TableName() string { return "game_outcome_overrides" }
 
 type BetStatus string
 

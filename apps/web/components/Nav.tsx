@@ -31,7 +31,7 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/95 backdrop-blur-md">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface">
       <div className="app-container flex h-16 items-stretch justify-around">
         {links.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname);

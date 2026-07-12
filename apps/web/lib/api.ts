@@ -4,6 +4,13 @@ import { getAnalyticsSessionId, getCurrentPath, trackErrorSurface, trackEvent } 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 const NGROK_API = API_URL.includes("ngrok-free.app") || API_URL.includes("ngrok.io");
+
+export function resolveAsset(url?: string | null): string | undefined {
+  if (!url) return url ?? undefined;
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  if (url.startsWith("//")) return url;
+  return API_URL.replace(/\/$/, "") + (url.startsWith("/") ? url : "/" + url);
+}
 export const DEBUG_AUTH = process.env.NEXT_PUBLIC_DEBUG_AUTH === "true";
 export const AUTH_SESSION_REFRESHED = "flipo:auth-session-refreshed";
 
@@ -531,9 +538,42 @@ export type StakingStats = {
   active_daily_yield_nanoton: number;
   active_monthly_yield_nanoton: number;
   unlockable_monthly_nanoton: number;
-  boost_wager_nanoton: number;
-  boost_threshold_nanoton: number;
+  boost_referral_count: number;
+  boost_referral_target: number;
+  boost_until?: string | null;
   monthly_rate_percent: number;
+  tvl_nanoton?: number;
+  tvl_cap_nanoton?: number;
+  tvl_remaining_nanoton?: number;
+  personal_limit_nanoton?: number;
+  personal_used_nanoton?: number;
+  referral_perk_active?: boolean;
+  referral_perk_pending?: boolean;
+  referral_limit_bonus_nanoton?: number;
+  referral_boost_percent?: number;
+};
+
+export type StakingQuestProgress = {
+  code: string;
+  title: string;
+  description: string;
+  reward_limit_nanoton: number;
+  completed: boolean;
+  progress_current: number;
+  progress_target: number;
+  progress_ratio: number;
+};
+
+export type StakingQuestsResponse = {
+  quests: StakingQuestProgress[];
+  personal_limit_nanoton: number;
+  personal_used_nanoton: number;
+  personal_remaining_nanoton: number;
+  base_limit_nanoton: number;
+  max_limit_nanoton: number;
+  tvl_nanoton: number;
+  tvl_cap_nanoton: number;
+  tvl_remaining_nanoton: number;
 };
 
 export type ProfileGiftsResponse = {
@@ -547,6 +587,10 @@ export type ProfileGiftsResponse = {
 
 export async function getProfileGifts() {
   return api<ProfileGiftsResponse>("/api/v1/staking/gifts");
+}
+
+export async function getStakingQuests() {
+  return api<StakingQuestsResponse>("/api/v1/staking/quests");
 }
 
 export async function getStakingPositions() {
@@ -707,21 +751,55 @@ export async function buyMarketListing(id: string) {
 
 export type ReferralStats = {
   referral_count: number;
+  active_referral_count: number;
+  qualified_referral_count: number;
   total_earned_nanoton: number;
+  staking_earned_nanoton: number;
+  ggr_earned_nanoton: number;
+  milestone_earned_nanoton: number;
   share_percent: number;
+  ggr_share_percent: number;
   share_percent_weekly: number;
   example_weekly_per_referral_ton: string;
+  milestone_amount_nanoton: number;
+  invitee_boost_percent: number;
+  invitee_limit_bonus_ton: string;
 };
 
 export async function getReferralStats() {
   return api<ReferralStats>("/api/v1/referrals/stats");
 }
 
+export type ReferralInviteeStatus = {
+  has_referrer: boolean;
+  perks_active: boolean;
+  perks_pending: boolean;
+  staking_boost_percent: number;
+  stake_limit_bonus_nanoton: number;
+  expires_at?: string;
+};
+
+export async function getReferralInviteeStatus() {
+  return api<ReferralInviteeStatus>("/api/v1/referrals/invitee");
+}
+
+export async function reportReferralShare(action: "copy" | "share") {
+  return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
 export type AdminYieldSettings = {
   id: number;
   referral_share_percent: number;
+  referral_ggr_share_percent: number;
+  referral_milestone_nanoton: number;
+  referral_milestone_monthly_cap: number;
+  referral_monthly_payout_cap_nanoton: number;
   staking_base_monthly_percent: number;
   staking_boost_monthly_percent: number;
+  staking_tvl_cap_nanoton?: number;
 };
 
 export type WalletDepositIntent = {
@@ -1359,4 +1437,65 @@ export type TreasurySweep = {
 
 export async function getAdminTreasurySweeps() {
   return api<TreasurySweep[]>("/api/v1/admin/treasury/sweeps");
+}
+
+// --- Admin game outcome control ---
+
+export type AdminOutcomeOverride = {
+  id: string;
+  game_type: string;
+  target: any;
+  rounds_remaining: number;
+  created_by: string;
+  note: string;
+  expires_at?: string;
+  created_at: string;
+};
+
+export type AdminOutcomeRouletteTarget = {
+  color: string;
+  number?: number;
+  mode: "force" | "bias";
+  weight: number;
+};
+
+export type AdminOutcomeCrashTarget = {
+  min_point: number;
+  max_point: number;
+  exact_point?: number;
+  mode: "force" | "bias";
+  weight: number;
+};
+
+export type AdminOutcomePvPTarget = {
+  winner_id: string;
+  mode: "force" | "bias";
+  weight: number;
+};
+
+export async function listOutcomeOverrides() {
+  return api<AdminOutcomeOverride[]>("/api/v1/admin/outcome/overrides");
+}
+
+export async function createOutcomeOverride(
+  gameType: string,
+  target: AdminOutcomeRouletteTarget | AdminOutcomeCrashTarget | AdminOutcomePvPTarget,
+  roundsRemaining: number,
+  durationMinutes: number,
+  note: string,
+) {
+  return api<AdminOutcomeOverride>("/api/v1/admin/outcome/overrides", {
+    method: "POST",
+    body: JSON.stringify({
+      game_type: gameType,
+      target,
+      rounds_remaining: roundsRemaining,
+      duration_minutes: durationMinutes,
+      note,
+    }),
+  });
+}
+
+export async function deleteOutcomeOverride(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/outcome/overrides/${id}`, { method: "DELETE" });
 }

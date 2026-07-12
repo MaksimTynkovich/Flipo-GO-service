@@ -12,6 +12,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/admin"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
+	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
 	"github.com/gin-gonic/gin"
@@ -22,17 +23,19 @@ type AdminHandler struct {
 	admin             *admin.Service
 	analytics         *analyticsuc.Service
 	fairness          *fairness.Service
+	outcome           *outcome.Service
 	treasury          *treasury.Service
 	telegram          *telegramadmin.Service
 	hotAddr           string
 	onSocialSimUpdate func(domain.SocialSimSettings)
 }
 
-func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
+func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, outcomeSvc *outcome.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
 	return &AdminHandler{
 		admin:     adminSvc,
 		analytics: analyticsSvc,
 		fairness:  fairnessSvc,
+		outcome:   outcomeSvc,
 		treasury:  treasurySvc,
 		telegram:  telegramSvc,
 		hotAddr:   hotAddr,
@@ -301,6 +304,60 @@ func (h *AdminHandler) SeedHistory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, history)
+}
+
+func (h *AdminHandler) ListOutcomeOverrides(c *gin.Context) {
+	overrides, err := h.outcome.ListOverrides(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, overrides)
+}
+
+func (h *AdminHandler) CreateOutcomeOverride(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var req struct {
+		GameType        string  `json:"game_type"`
+		Target          any     `json:"target"`
+		RoundsRemaining int     `json:"rounds_remaining"`
+		DurationMinutes int     `json:"duration_minutes"`
+		Note            string  `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	gameType := domain.GameType(req.GameType)
+	switch gameType {
+	case domain.GameRoulette, domain.GameCrash, domain.GamePvP:
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неизвестный тип игры"})
+		return
+	}
+	if req.RoundsRemaining <= 0 {
+		req.RoundsRemaining = 1
+	}
+	ttl := time.Duration(req.DurationMinutes) * time.Minute
+	override, err := h.outcome.SetOverride(c.Request.Context(), gameType, req.Target, req.RoundsRemaining, adminID, req.Note, ttl)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, override)
+}
+
+func (h *AdminHandler) DeleteOutcomeOverride(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
+		return
+	}
+	if err := h.outcome.DeleteOverride(c.Request.Context(), id); err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (h *AdminHandler) TreasuryStatus(c *gin.Context) {
