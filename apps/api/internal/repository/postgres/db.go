@@ -3,7 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"log/slog"
+	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"gorm.io/driver/postgres"
@@ -13,7 +16,15 @@ import (
 
 func NewDB(dsn string) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger: logger.New(
+			log.New(io.Discard, "", log.LstdFlags),
+			logger.Config{
+				SlowThreshold:             200 * time.Millisecond,
+				LogLevel:                  logger.Warn,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  false,
+			},
+		),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open postgres: %w", err)
@@ -39,6 +50,9 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := migrateStakingCapsQuests(db); err != nil {
+		return err
+	}
+	if err := migrateReferralV2(db); err != nil {
 		return err
 	}
 	if err := db.AutoMigrate(
@@ -71,6 +85,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.TelegramBroadcast{},
 		&domain.TreasurySweep{},
 		&domain.SocialSimSettings{},
+		&domain.ReferralPerk{},
+		&domain.ReferralMilestone{},
 	); err != nil {
 		return err
 	}

@@ -30,10 +30,14 @@ const EMPTY_PROMO: AdminPromoCode = {
 
 const DEFAULT_YIELD_SETTINGS: AdminYieldSettings = {
   id: 1,
-  referral_share_percent: 3,
+  referral_share_percent: 5,
+  referral_ggr_share_percent: 5,
+  referral_milestone_nanoton: 50_000_000,
+  referral_milestone_monthly_cap: 20,
+  referral_monthly_payout_cap_nanoton: 0,
   staking_base_monthly_percent: 3,
   staking_boost_monthly_percent: 4,
-  staking_tvl_cap_nanoton: 200_000_000_000,
+  staking_tvl_cap_nanoton: 1_500_000_000_000,
 };
 
 export default function MarketingSection() {
@@ -122,7 +126,7 @@ export default function MarketingSection() {
           <Stat label="Рефералов" value={String(referral.referral_count)} hint="Сколько пользователей закрепились за текущим реферером." />
           <Stat label="Заработано" value={`${formatTON(referral.total_earned_nanoton)} TON`} hint="Сколько TON всего начислено рефереру за счёт бонусов от приглашённых." />
           <Stat label="Share %" value={`${referral.share_percent.toFixed(2)}%`} hint="Доля от дохода приглашённого пользователя, которая начисляется рефереру." />
-          <Stat label="Weekly share" value={`${referral.share_percent_weekly.toFixed(2)}%`} hint="Эффективная недельная доля при текущей схеме начисления бонуса." />
+          <Stat label="GGR share" value={`${referral.ggr_share_percent.toFixed(2)}%`} hint="Доля от игрового GGR квалифицированных рефералов." />
         </section>
       ) : referralLoading ? (
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -153,7 +157,7 @@ export default function MarketingSection() {
           <>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <label className="text-xs text-muted">
-                Реферальный процент
+                Реф. % стейкинга
                 <input
                   className="input-field mt-1"
                   type="number"
@@ -164,6 +168,70 @@ export default function MarketingSection() {
                     setYieldSettings({
                       ...settingsForm,
                       referral_share_percent: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Реф. % GGR
+                <input
+                  className="input-field mt-1"
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={settingsForm.referral_ggr_share_percent}
+                  onChange={(e) =>
+                    setYieldSettings({
+                      ...settingsForm,
+                      referral_ggr_share_percent: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Milestone (TON)
+                <input
+                  className="input-field mt-1"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={settingsForm.referral_milestone_nanoton / 1_000_000_000}
+                  onChange={(e) =>
+                    setYieldSettings({
+                      ...settingsForm,
+                      referral_milestone_nanoton: Math.round(Number(e.target.value) * 1_000_000_000),
+                    })
+                  }
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Milestone cap / мес
+                <input
+                  className="input-field mt-1"
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={settingsForm.referral_milestone_monthly_cap}
+                  onChange={(e) =>
+                    setYieldSettings({
+                      ...settingsForm,
+                      referral_milestone_monthly_cap: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Monthly payout cap (TON)
+                <input
+                  className="input-field mt-1"
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={settingsForm.referral_monthly_payout_cap_nanoton / 1_000_000_000}
+                  onChange={(e) =>
+                    setYieldSettings({
+                      ...settingsForm,
+                      referral_monthly_payout_cap_nanoton: Math.round(Number(e.target.value) * 1_000_000_000),
                     })
                   }
                 />
@@ -207,7 +275,7 @@ export default function MarketingSection() {
                   type="number"
                   min={0}
                   step="1"
-                  value={(settingsForm.staking_tvl_cap_nanoton ?? 200_000_000_000) / 1_000_000_000}
+                  value={(settingsForm.staking_tvl_cap_nanoton ?? 1_500_000_000_000) / 1_000_000_000}
                   onChange={(e) =>
                     setYieldSettings({
                       ...settingsForm,

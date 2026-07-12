@@ -10,9 +10,9 @@ func migrateStakingCapsQuests(db *gorm.DB) error {
 	if tableExists(db, "platform_yield_settings") {
 		if !columnExists(db, "platform_yield_settings", "staking_tvl_cap_nanoton") {
 			if err := db.Exec(`
-				ALTER TABLE platform_yield_settings
-				ADD COLUMN staking_tvl_cap_nanoton BIGINT NOT NULL DEFAULT 200000000000
-			`).Error; err != nil {
+			ALTER TABLE platform_yield_settings
+			ADD COLUMN staking_tvl_cap_nanoton BIGINT NOT NULL DEFAULT 1500000000000
+		`).Error; err != nil {
 				return fmt.Errorf("add staking_tvl_cap_nanoton: %w", err)
 			}
 		}
@@ -27,6 +27,30 @@ func migrateStakingCapsQuests(db *gorm.DB) error {
 			ALTER TABLE platform_yield_settings
 			ALTER COLUMN staking_boost_monthly_percent SET DEFAULT 4
 		`).Error
+		// Bump the TVL cap default from 200 TON to 5000 TON only for rows still on the old default,
+		// so any operator-tuned value is preserved.
+		if err := db.Exec(`
+			UPDATE platform_yield_settings
+			SET staking_tvl_cap_nanoton = 1500000000000
+			WHERE staking_tvl_cap_nanoton = 200000000000
+		`).Error; err != nil {
+			return fmt.Errorf("update staking_tvl_cap_nanoton: %w", err)
+		}
+		// Referral quests no longer require the referred user to place a bet.
+		if err := db.Exec(`
+			UPDATE staking_quests
+			SET description = '1 приглашённый реферал'
+			WHERE code = 'referral_active_1'
+		`).Error; err != nil {
+			return fmt.Errorf("update referral_active_1 description: %w", err)
+		}
+		if err := db.Exec(`
+			UPDATE staking_quests
+			SET description = '3 приглашённых реферала'
+			WHERE code = 'referral_active_3'
+		`).Error; err != nil {
+			return fmt.Errorf("update referral_active_3 description: %w", err)
+		}
 	}
 
 	if err := db.Exec(`
@@ -86,10 +110,10 @@ func seedStakingQuests100To200(db *gorm.DB) error {
 			('crash_wager_25', 'Crash ×25', 'Поставь суммарно 25 TON в crash', 10000000000, 35, TRUE),
 			('pvp_one_match', '1 комната', 'Сыграй в 1 комнате', 5000000000, 40, TRUE),
 			('pvp_five_matches', '5 комнат', 'Сыграй в 5 комнатах', 10000000000, 45, TRUE),
-			('deposit_5', 'Пополнение 5', 'Пополни баланс на ≥ 5 TON', 10000000000, 50, TRUE),
-			('deposit_30', 'Пополнение 30', 'Пополни баланс на ≥ 30 TON', 15000000000, 55, TRUE),
-			('referral_active_1', '1 реферал', '1 реферал, который сделал ставку', 10000000000, 60, TRUE),
-			('referral_active_3', '3 реферала', '3 реферала, которые сделали ставку', 10000000000, 65, TRUE),
+			('deposit_5', 'Пополнение 5', 'Пополни баланс на 5 TON', 10000000000, 50, TRUE),
+			('deposit_30', 'Пополнение 30', 'Пополни баланс на 30 TON', 15000000000, 55, TRUE),
+			('referral_active_1', '1 реферал', '1 приглашённый реферал', 10000000000, 60, TRUE),
+			('referral_active_3', '3 реферала', '3 приглашённых реферала', 10000000000, 65, TRUE),
 			('full_epoch_stake', 'Неделя в стейке', 'Додержи стейк до конца недели', 5000000000, 70, TRUE)
 		ON CONFLICT (code) DO UPDATE SET
 			title = EXCLUDED.title,

@@ -130,12 +130,31 @@ func (r *StakingRepo) SumCompletedQuestRewards(ctx context.Context, userID uuid.
 }
 
 func (r *StakingRepo) HasAnyGameBet(ctx context.Context, userID uuid.UUID) (bool, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
-		Where("user_id = ?", userID).
-		Limit(1).
-		Count(&count).Error
-	return count > 0, err
+	return r.HasQualifyingGameBet(ctx, userID, 0)
+}
+
+func (r *StakingRepo) HasQualifyingGameBet(ctx context.Context, userID uuid.UUID, minNanoton int64) (bool, error) {
+	var betCount int64
+	q := r.db.WithContext(ctx).Model(&domain.GameBet{}).Where("user_id = ?", userID)
+	if minNanoton > 0 {
+		q = q.Where("amount_nanoton >= ?", minNanoton)
+	}
+	if err := q.Limit(1).Count(&betCount).Error; err != nil {
+		return false, err
+	}
+	if betCount > 0 {
+		return true, nil
+	}
+
+	var pvpCount int64
+	pvpQ := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).Where("user_id = ?", userID)
+	if minNanoton > 0 {
+		pvpQ = pvpQ.Where("stake_nanoton >= ?", minNanoton)
+	}
+	if err := pvpQ.Limit(1).Count(&pvpCount).Error; err != nil {
+		return false, err
+	}
+	return pvpCount > 0, nil
 }
 
 func (r *StakingRepo) SumWagerByGame(ctx context.Context, userID uuid.UUID, gameType domain.GameType) (int64, error) {
@@ -186,6 +205,16 @@ func (r *StakingRepo) CountActiveReferrals(ctx context.Context, referrerID uuid.
 		  AND EXISTS (
 		    SELECT 1 FROM game_bets b WHERE b.user_id = u.id LIMIT 1
 		  )
+	`, referrerID).Scan(&count).Error
+	return count, err
+}
+
+func (r *StakingRepo) CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(DISTINCT u.id)
+		FROM users u
+		WHERE u.referrer_id = ?
 	`, referrerID).Scan(&count).Error
 	return count, err
 }
@@ -353,6 +382,23 @@ func (r *GameRepo) SumUserBetsSince(ctx context.Context, userID uuid.UUID, since
 	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
 		Where("user_id = ? AND created_at >= ?", userID, since).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *GameRepo) SumUserSettledBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ? AND settled_at >= ? AND status IN ?",
+			userID, since, []domain.BetStatus{domain.BetWon, domain.BetLost, domain.BetCashedOut, domain.BetRefunded}).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *GameRepo) SumUserRefundsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ? AND settled_at >= ? AND status = ?", userID, since, domain.BetRefunded).
+		Select("COALESCE(SUM(payout_nanoton), 0)").Scan(&total).Error
 	return total, err
 }
 

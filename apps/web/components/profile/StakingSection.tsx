@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import {
   pluralizeGifts,
+  stakingNoTransferHint,
 } from "@/lib/staking-ui";
 import { trackFlowViewed } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
@@ -31,11 +32,11 @@ const emptyStats: StakingStats = {
   active_monthly_yield_nanoton: 0,
   unlockable_monthly_nanoton: 0,
   boost_referral_count: 0,
-  boost_referral_target: 20,
+  boost_referral_target: 10,
   monthly_rate_percent: 3,
   tvl_nanoton: 0,
-  tvl_cap_nanoton: 200_000_000_000,
-  tvl_remaining_nanoton: 200_000_000_000,
+  tvl_cap_nanoton: 1_500_000_000_000,
+  tvl_remaining_nanoton: 1_500_000_000_000,
   personal_limit_nanoton: 100_000_000_000,
   personal_used_nanoton: 0,
 };
@@ -153,6 +154,13 @@ export function StakingSection() {
         <StakingOverview isBoost={isBoost} stats={stats} epochEndsAt={epochEndsAt} />
       )}
 
+      <section className="flex items-center gap-2 rounded-xl bg-surface-raised px-3 py-2.5">
+        <Gift className="h-4 w-4 shrink-0 text-muted" />
+        <p className="text-[11px] leading-snug text-muted">
+          {stakingNoTransferHint()}
+        </p>
+      </section>
+
       {loading ? (
         <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -266,7 +274,7 @@ export function StakingSection() {
                   </div>
 
                   <p className="w-fit max-w-full text-[11px] leading-snug text-muted/70">
-                    Подарки стейкаются прямо из вашего профиля, передавать боту не требуется
+                    {stakingNoTransferHint()}
                   </p>
 
                   <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">

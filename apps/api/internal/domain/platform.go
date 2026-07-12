@@ -93,14 +93,18 @@ func (TelegramBotSettings) TableName() string { return "telegram_bot_settings" }
 
 // PlatformYieldSettings - singleton row (id=1) for staking, referral and gift price adjustments.
 type PlatformYieldSettings struct {
-	ID                          int       `gorm:"primaryKey" json:"id"`
-	ReferralSharePercent        float64   `gorm:"type:decimal(6,2);not null;default:3" json:"referral_share_percent"`
-	StakingBaseMonthlyPercent   float64   `gorm:"type:decimal(6,2);not null;default:3" json:"staking_base_monthly_percent"`
-	StakingBoostMonthlyPercent  float64   `gorm:"type:decimal(6,2);not null;default:4" json:"staking_boost_monthly_percent"`
-	StakingTVLCapNanoton        int64     `gorm:"not null;default:200000000000" json:"staking_tvl_cap_nanoton"`
-	GiftBuyAdjustPercent        float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_buy_adjust_percent"`
-	GiftValuationAdjustPercent  float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_valuation_adjust_percent"`
-	UpdatedAt                   time.Time `json:"updated_at"`
+	ID                              int       `gorm:"primaryKey" json:"id"`
+	ReferralSharePercent            float64   `gorm:"type:decimal(6,2);not null;default:5" json:"referral_share_percent"`
+	ReferralGGRSharePercent         float64   `gorm:"type:decimal(6,2);not null;default:5" json:"referral_ggr_share_percent"`
+	ReferralMilestoneNanoton        int64     `gorm:"not null;default:50000000" json:"referral_milestone_nanoton"`
+	ReferralMilestoneMonthlyCap     int       `gorm:"not null;default:20" json:"referral_milestone_monthly_cap"`
+	ReferralMonthlyPayoutCapNanoton int64     `gorm:"not null;default:0" json:"referral_monthly_payout_cap_nanoton"`
+	StakingBaseMonthlyPercent       float64   `gorm:"type:decimal(6,2);not null;default:3" json:"staking_base_monthly_percent"`
+	StakingBoostMonthlyPercent      float64   `gorm:"type:decimal(6,2);not null;default:4" json:"staking_boost_monthly_percent"`
+	StakingTVLCapNanoton            int64     `gorm:"not null;default:1500000000000" json:"staking_tvl_cap_nanoton"`
+	GiftBuyAdjustPercent            float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_buy_adjust_percent"`
+	GiftValuationAdjustPercent      float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_valuation_adjust_percent"`
+	UpdatedAt                       time.Time `json:"updated_at"`
 }
 
 func (PlatformYieldSettings) TableName() string { return "platform_yield_settings" }
@@ -161,6 +165,7 @@ type PromoRedemption struct {
 	BonusNanoton         int64      `gorm:"not null" json:"bonus_nanoton"`
 	WagerRequiredNanoton int64      `gorm:"not null" json:"wager_required_nanoton"`
 	WagerProgressNanoton int64      `gorm:"not null;default:0" json:"wager_progress_nanoton"`
+	MaxCashoutNanoton    int64      `gorm:"not null;default:0" json:"max_cashout_nanoton"`
 	Status               string     `gorm:"size:32;not null;default:'active';index" json:"status"`
 	CreatedAt            time.Time  `json:"created_at"`
 	CompletedAt          *time.Time `json:"completed_at,omitempty"`

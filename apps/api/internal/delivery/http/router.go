@@ -9,6 +9,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"path/filepath"
 )
 
 type Deps struct {
@@ -28,6 +29,7 @@ type Deps struct {
 	PresenceHandler  *handlers.PresenceHandler
 	AdminTelegramIDs []int64
 	Hub              *websocket.Hub
+	BotsDataDir      string
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -36,6 +38,13 @@ func NewRouter(deps Deps) *gin.Engine {
 	r.Use(middleware.CORS())
 	r.Use(middleware.RequestMeta())
 	r.Use(middleware.AccessLog())
+
+	// Curated bot roster assets (profiles/pictures) for the live-online overlay.
+	if deps.BotsDataDir != "" {
+		if abs, err := filepath.Abs(deps.BotsDataDir); err == nil {
+			r.Static("/static/bots", abs)
+		}
+	}
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -89,6 +98,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/staking/unstake/:id", deps.StakingHandler.Unstake)
 
 			authed.GET("/referrals/stats", deps.ReferralHandler.Stats)
+			authed.GET("/referrals/invitee", deps.ReferralHandler.InviteeStatus)
 
 			authed.POST("/promos/activate", deps.PromoHandler.Activate)
 			authed.GET("/promos/status", deps.PromoHandler.Status)

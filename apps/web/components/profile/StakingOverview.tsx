@@ -161,7 +161,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-muted">Пул</span>
                 <span className="tabular-nums text-foreground">
-                  {formatTON(tvlUsed)} / {formatTON(tvlCap)}
+                  {Math.min(100, Math.round((tvlUsed / tvlCap) * 100))}% заполнено
                 </span>
               </div>
               <ProgressBar value={tvlUsed / tvlCap} tone={poolFull ? "danger" : "accent"} />
@@ -183,6 +183,25 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
             </div>
           ) : null}
         </section>
+      ) : null}
+
+      {stats.referral_perk_pending ? (
+        <section className="panel border border-accent/20 bg-accent/5 p-3.5">
+          <p className="text-sm font-medium">Бонус по реферальной ссылке</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+            Застейкайте первый подарок — включится +{stats.referral_boost_percent ?? 0.5}% к доходу
+            и +{Math.round((stats.referral_limit_bonus_nanoton ?? 20_000_000_000) / 1_000_000_000)} TON
+            к лимиту на 30 дней.
+          </p>
+        </section>
+      ) : null}
+
+      {stats.referral_perk_active ? (
+        <p className="inline-flex items-center gap-1.5 px-0.5 text-xs text-success">
+          <Sparkles className="h-3.5 w-3.5" />
+          Реферальный бонус: +{stats.referral_boost_percent ?? 0.5}% к доходу, +
+          {Math.round((stats.referral_limit_bonus_nanoton ?? 0) / 1_000_000_000)} TON к лимиту
+        </p>
       ) : null}
 
       {!isBoost && stats.boost_referral_target > 0 ? (

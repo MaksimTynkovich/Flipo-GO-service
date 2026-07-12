@@ -181,6 +181,7 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, er
 	}
 	if progress >= redemption.WagerRequiredNanoton && redemption.Status == "active" {
 		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "completed")
+		s.applyPromoCashoutCap(ctx, userID, redemption)
 		_ = s.users.ReleasePromoBalance(ctx, userID)
 		balance.NotifyUser(ctx, s.users, s.notifier, userID, 0, domain.LedgerPromoBonus)
 		redemption.Status = "completed"
@@ -202,4 +203,12 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, er
 		WagerProgressNanoton: redemption.WagerProgressNanoton,
 		RemainingNanoton:     remaining,
 	}, nil
+}
+
+func (s *Service) HasActivePromoRedemption(ctx context.Context, userID uuid.UUID) (bool, error) {
+	redemption, err := s.platform.GetActiveRedemption(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return redemption != nil, nil
 }

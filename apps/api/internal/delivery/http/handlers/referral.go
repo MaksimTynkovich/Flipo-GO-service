@@ -25,3 +25,13 @@ func (h *ReferralHandler) Stats(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, stats)
 }
+
+func (h *ReferralHandler) InviteeStatus(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	status, err := h.referrals.GetInviteeStatus(c.Request.Context(), userID)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}

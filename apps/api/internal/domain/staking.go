@@ -40,7 +40,7 @@ const (
 )
 
 const (
-	DefaultStakingTVLCapNanoton     int64 = 200_000_000_000 // 200 TON
+	DefaultStakingTVLCapNanoton     int64 = 1_500_000_000_000 // 1500 TON
 	DefaultStakingPersonalLimitNano int64 = 100_000_000_000 // 100 TON
 )
 

@@ -16,8 +16,8 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
-	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
@@ -102,6 +102,10 @@ func main() {
 	}
 
 	referralSvc := referral.NewService(userRepo, platformRepo)
+	referralRepo := postgres.NewReferralRepo(db)
+	referralSvc.SetReferralRepository(referralRepo)
+	referralSvc.SetGameRepository(gameRepo)
+	referralSvc.SetStakingRepository(stakeRepo)
 	analyticsSvc := analyticsuc.NewService(analyticsRepo)
 	tonClient := ton.NewClient(
 		cfg.TonAPIBaseURL,
@@ -137,6 +141,8 @@ func main() {
 	balanceSvc := balance.NewService(userRepo)
 	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
+	referralSvc.SetPromoActivator(promoSvc)
+	walletSvc.SetPromoGate(promoSvc)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
 	if mtprotoCfg.Enabled() {
@@ -153,6 +159,8 @@ func main() {
 
 	hub := websocket.NewHub()
 	balanceSvc.SetNotifier(hub)
+	referralSvc.SetBalanceService(balanceSvc)
+	referralSvc.SetBalanceNotifier(hub)
 	marketSvc.SetBalanceNotifier(hub)
 	walletSvc.SetBalanceNotifier(hub)
 	promoSvc.SetBalanceNotifier(hub)
@@ -162,6 +170,7 @@ func main() {
 	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), int64(cfg.BoostReferralThreshold))
 	stakeSvc.SetAnalytics(analyticsSvc)
 	stakeSvc.SetBalanceNotifier(hub)
+	stakeSvc.SetReferralRewards(referralSvc)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error
@@ -184,6 +193,12 @@ func main() {
 	crashSvc.SetTickNotifier(hub)
 	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, betFundingSvc, invRepo, cfg.PlatformFeeBps)
 	pvpSvc.SetTickNotifier(hub)
+	betHook := func(ctx context.Context, userID uuid.UUID, amount int64) {
+		referralSvc.OnQualifyingBet(ctx, userID, amount)
+	}
+	rouletteSvc.SetQualifyingBetHook(betHook)
+	crashSvc.SetQualifyingBetHook(betHook)
+	pvpSvc.SetQualifyingBetHook(betHook)
 
 	socialSim := socialsim.NewSimulator(platformRepo, platformRepo, func(ctx context.Context, snap domain.PresenceSnapshot) {
 		data := socialsim.MarshalPresence(snap)
@@ -192,7 +207,7 @@ func main() {
 		for _, game := range []string{"crash", "roulette", "pvp"} {
 			hub.Broadcast(game, msg)
 		}
-	})
+	}, socialsim.WithBotData(cfg.BotsDataDir, cfg.BotsAssetsBaseURL))
 	socialSim.SetCrashRepublish(func(ctx context.Context, roundID uuid.UUID) {
 		_ = crashSvc.PublishBets(ctx, roundID)
 	})
@@ -277,6 +292,7 @@ func main() {
 		PresenceHandler:  handlers.NewPresenceHandler(socialSim),
 		AdminTelegramIDs: cfg.AdminTelegramIDs,
 		Hub:              hub,
+		BotsDataDir:      cfg.BotsDataDir,
 	})
 
 	srv := &http.Server{

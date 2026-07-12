@@ -33,6 +33,11 @@ type Service struct {
 	ghosts    GhostClaimer
 	bots      BotMatchmaker
 	roomMu    sync.Map
+	betHook   func(context.Context, uuid.UUID, int64)
+}
+
+func (s *Service) SetQualifyingBetHook(hook func(context.Context, uuid.UUID, int64)) {
+	s.betHook = hook
 }
 
 // GhostClaimer materializes joinable social-sim PvP rooms into real DB rooms.
@@ -231,6 +236,9 @@ func (s *Service) JoinRoom(ctx context.Context, userID, roomID uuid.UUID, stake 
 	if err := s.persistPlayerGifts(ctx, roomID, userID, resolved); err != nil {
 		s.funding.Rollback(ctx, userID, holdID, resolved, "pvp_hold")
 		return nil, err
+	}
+	if s.betHook != nil {
+		s.betHook(ctx, userID, resolved.AmountNanoton)
 	}
 
 	count++

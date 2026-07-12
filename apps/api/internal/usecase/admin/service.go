@@ -191,14 +191,21 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 	}
 	if existing == nil {
 		existing = &domain.PlatformYieldSettings{
-			ID:                         1,
-			ReferralSharePercent:       3,
-			StakingBaseMonthlyPercent:  3,
-			StakingBoostMonthlyPercent: 4,
-			StakingTVLCapNanoton:       domain.DefaultStakingTVLCapNanoton,
+			ID:                          1,
+			ReferralSharePercent:        5,
+			ReferralGGRSharePercent:       domain.DefaultReferralGGRSharePercent,
+			ReferralMilestoneNanoton:      domain.DefaultReferralMilestoneNanoton,
+			ReferralMilestoneMonthlyCap:   domain.DefaultReferralMilestoneMonthlyCap,
+			StakingBaseMonthlyPercent:     3,
+			StakingBoostMonthlyPercent:    4,
+			StakingTVLCapNanoton:          domain.DefaultStakingTVLCapNanoton,
 		}
 	}
 	existing.ReferralSharePercent = settings.ReferralSharePercent
+	existing.ReferralGGRSharePercent = settings.ReferralGGRSharePercent
+	existing.ReferralMilestoneNanoton = settings.ReferralMilestoneNanoton
+	existing.ReferralMilestoneMonthlyCap = settings.ReferralMilestoneMonthlyCap
+	existing.ReferralMonthlyPayoutCapNanoton = settings.ReferralMonthlyPayoutCapNanoton
 	existing.StakingBaseMonthlyPercent = settings.StakingBaseMonthlyPercent
 	existing.StakingBoostMonthlyPercent = settings.StakingBoostMonthlyPercent
 	if settings.StakingTVLCapNanoton > 0 {
@@ -208,10 +215,14 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 		return err
 	}
 	return s.audit(ctx, adminID, "yield_settings_updated", "platform_yield_settings", "1", map[string]any{
-		"referral_share_percent":        existing.ReferralSharePercent,
-		"staking_base_monthly_percent":  existing.StakingBaseMonthlyPercent,
-		"staking_boost_monthly_percent": existing.StakingBoostMonthlyPercent,
-		"staking_tvl_cap_nanoton":       existing.StakingTVLCapNanoton,
+		"referral_share_percent":             existing.ReferralSharePercent,
+		"referral_ggr_share_percent":         existing.ReferralGGRSharePercent,
+		"referral_milestone_nanoton":         existing.ReferralMilestoneNanoton,
+		"referral_milestone_monthly_cap":     existing.ReferralMilestoneMonthlyCap,
+		"referral_monthly_payout_cap_nanoton": existing.ReferralMonthlyPayoutCapNanoton,
+		"staking_base_monthly_percent":       existing.StakingBaseMonthlyPercent,
+		"staking_boost_monthly_percent":      existing.StakingBoostMonthlyPercent,
+		"staking_tvl_cap_nanoton":            existing.StakingTVLCapNanoton,
 	})
 }
 

@@ -219,6 +219,41 @@ func (r *UserRepo) SumReferralEarnings(ctx context.Context, userID uuid.UUID) (i
 	return total, err
 }
 
+func (r *UserRepo) SumReferralEarningsByRefType(ctx context.Context, userID uuid.UUID, refType string) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("user_id = ? AND type = ? AND reference_type = ?", userID, domain.LedgerReferralBonus, refType).
+		Select("COALESCE(SUM(amount_nanoton), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *UserRepo) SumReferralEarningsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("user_id = ? AND type = ? AND created_at >= ?", userID, domain.LedgerReferralBonus, since).
+		Select("COALESCE(SUM(amount_nanoton), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *UserRepo) ListReferrals(ctx context.Context, referrerID uuid.UUID) ([]domain.User, error) {
+	var users []domain.User
+	err := r.db.WithContext(ctx).
+		Where("referrer_id = ?", referrerID).
+		Order("created_at DESC").
+		Find(&users).Error
+	return users, err
+}
+
+func (r *UserRepo) ListReferredUsers(ctx context.Context) ([]domain.User, error) {
+	var users []domain.User
+	err := r.db.WithContext(ctx).
+		Where("referrer_id IS NOT NULL").
+		Find(&users).Error
+	return users, err
+}
+
 func (r *UserRepo) ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error) {
 	if limit <= 0 {
 		limit = 100

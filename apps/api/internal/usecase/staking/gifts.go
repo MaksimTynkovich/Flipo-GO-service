@@ -52,6 +52,10 @@ type StakingStats struct {
 	TVLRemainingNanoton      int64   `json:"tvl_remaining_nanoton"`
 	PersonalLimitNanoton     int64   `json:"personal_limit_nanoton"`
 	PersonalUsedNanoton      int64   `json:"personal_used_nanoton"`
+	ReferralPerkActive       bool    `json:"referral_perk_active"`
+	ReferralPerkPending      bool    `json:"referral_perk_pending"`
+	ReferralLimitBonusNanoton int64  `json:"referral_limit_bonus_nanoton"`
+	ReferralBoostPercent     float64 `json:"referral_boost_percent"`
 }
 
 type ProfileGiftsResponse struct {
@@ -106,6 +110,13 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		user.StakingTier = tier
 	}
 	rate := monthlyRate(user.StakingTier, basePercent, boostPercent)
+	referralBoost := 0.0
+	referralLimitBonus := int64(0)
+	if s.referralRewards != nil {
+		referralBoost = s.referralRewards.StakingBoostMonthlyPercent(ctx, userID)
+		referralLimitBonus = s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
+		rate += referralBoost / 100
+	}
 	tvl, tvlCap, tvlRemaining, _ := s.TVLSnapshot(ctx)
 	personalLimit, _ := s.PersonalStakeLimit(ctx, userID)
 	personalUsed, _ := s.staking.SumActivePrincipalByUser(ctx, userID)
@@ -131,8 +142,12 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			TVLNanoton:            tvl,
 			TVLCapNanoton:         tvlCap,
 			TVLRemainingNanoton:   tvlRemaining,
-			PersonalLimitNanoton:  personalLimit,
-			PersonalUsedNanoton:   personalUsed,
+			PersonalLimitNanoton:      personalLimit,
+			PersonalUsedNanoton:       personalUsed,
+			ReferralPerkActive:        referralLimitBonus > 0,
+			ReferralPerkPending:       user.ReferrerID != nil && referralLimitBonus == 0,
+			ReferralLimitBonusNanoton: referralLimitBonus,
+			ReferralBoostPercent:      referralBoost,
 		},
 	}
 

@@ -170,6 +170,10 @@ func (s *Service) createStake(
 		return nil, err
 	}
 
+	if s.referralRewards != nil {
+		_ = s.referralRewards.OnFirstStake(ctx, userID)
+	}
+
 	return pos, nil
 }
 
@@ -212,7 +216,11 @@ func (s *Service) PersonalStakeLimit(ctx context.Context, userID uuid.UUID) (int
 	if err != nil {
 		return 0, err
 	}
-	return domain.DefaultStakingPersonalLimitNano + rewards, nil
+	limit := domain.DefaultStakingPersonalLimitNano + rewards
+	if s.referralRewards != nil {
+		limit += s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
+	}
+	return limit, nil
 }
 
 func (s *Service) TVLSnapshot(ctx context.Context) (tvl, cap, remaining int64, err error) {

@@ -22,6 +22,10 @@ type UserRepository interface {
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	CountReferralsSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
+	SumReferralEarningsByRefType(ctx context.Context, userID uuid.UUID, refType string) (int64, error)
+	SumReferralEarningsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	ListReferrals(ctx context.Context, referrerID uuid.UUID) ([]User, error)
+	ListReferredUsers(ctx context.Context) ([]User, error)
 	ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 }
@@ -93,7 +97,19 @@ type StakingRepository interface {
 	CountPvPMatches(ctx context.Context, userID uuid.UUID) (int64, error)
 	SumDeposits(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountActiveReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	HasCompletedEpochStake(ctx context.Context, userID uuid.UUID) (bool, error)
+	HasQualifyingGameBet(ctx context.Context, userID uuid.UUID, minNanoton int64) (bool, error)
+}
+
+type ReferralRepository interface {
+	GetActivePerk(ctx context.Context, userID uuid.UUID, now time.Time) (*ReferralPerk, error)
+	ActivatePerk(ctx context.Context, perk *ReferralPerk) error
+	HasMilestone(ctx context.Context, referrerID, referralID uuid.UUID) (bool, error)
+	CountMilestonesSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
+	CreateMilestone(ctx context.Context, milestone *ReferralMilestone) error
+	SumUserPvPNetLossSince(ctx context.Context, userID uuid.UUID, since time.Time, excludeReferrerInRoom bool) (int64, error)
+	CountQualifiedReferrals(ctx context.Context, referrerID uuid.UUID, minAge time.Duration, minDeposit, minStake int64) (int64, error)
 }
 
 type GameRepository interface {
@@ -114,6 +130,8 @@ type GameRepository interface {
 	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
 	SumUserWinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumUserBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	SumUserSettledBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	SumUserRefundsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumRoundBets(ctx context.Context, roundID uuid.UUID) (int64, error)
 	GameStats(ctx context.Context) ([]AdminGameStat, error)
 }

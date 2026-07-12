@@ -19,7 +19,7 @@ import (
 const (
 	DefaultBaseMonthlyPercent     = 3.0
 	DefaultBoostMonthlyPercent    = 4.0
-	DefaultBoostReferralThreshold = 20
+	DefaultBoostReferralThreshold = 10
 	DaysPerMonth                  = 30
 )
 
@@ -34,6 +34,19 @@ type Service struct {
 	balanceNotifier    balance.BalanceNotifier
 	referralThreshold  int64
 	analytics          *analyticsuc.Service
+	referralRewards    ReferralRewardsProvider
+}
+
+// ReferralPerkProvider exposes invitee perks and first-stake activation.
+type ReferralPerkProvider interface {
+	OnFirstStake(ctx context.Context, userID uuid.UUID) error
+	StakingBoostMonthlyPercent(ctx context.Context, userID uuid.UUID) float64
+	StakeLimitBonusNanoton(ctx context.Context, userID uuid.UUID) int64
+}
+
+type ReferralRewardsProvider interface {
+	ReferralPerkProvider
+	AccrueDailyGGRShare(ctx context.Context, dayStart time.Time) error
 }
 
 func NewService(
@@ -86,6 +99,10 @@ func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
 
 func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 	s.balanceNotifier = notifier
+}
+
+func (s *Service) SetReferralRewards(provider ReferralRewardsProvider) {
+	s.referralRewards = provider
 }
 
 func monthlyRateFraction(tier domain.StakingTier, basePercent, boostPercent float64) float64 {
@@ -250,6 +267,9 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 		}
 
 		rate := monthlyRateFraction(user.StakingTier, basePercent, boostPercent)
+		if s.referralRewards != nil {
+			rate += s.referralRewards.StakingBoostMonthlyPercent(ctx, pos.UserID) / 100
+		}
 
 		dailyYield := int64(float64(pos.PrincipalNanoton) * rate / DaysPerMonth)
 		if dailyYield <= 0 {
@@ -322,6 +342,12 @@ func (s *Service) AccrueDailyYield(ctx context.Context) error {
 					"amount_nanoton": bonus,
 				},
 			})
+		}
+	}
+
+	if s.referralRewards != nil {
+		if err := s.referralRewards.AccrueDailyGGRShare(ctx, todayStart); err != nil {
+			slog.Warn("referral ggr accrual failed", "error", err)
 		}
 	}
 

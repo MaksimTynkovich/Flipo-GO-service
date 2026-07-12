@@ -121,6 +121,9 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 
 	if isNew && s.referrals != nil && code != "" {
 		_ = s.referrals.TryAssignReferrer(ctx, user.ID, code)
+		if refreshed, err := s.users.FindByID(ctx, user.ID); err == nil && refreshed != nil {
+			user = refreshed
+		}
 		s.analytics.Track(ctx, analyticsuc.EventInput{
 			UserID:        &user.ID,
 			ReferrerID:    user.ReferrerID,

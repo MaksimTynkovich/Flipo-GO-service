@@ -1,7 +1,12 @@
 package socialsim
 
 import (
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
+	"path"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -15,6 +20,90 @@ type Persona struct {
 	Username   string
 	PhotoURL   string
 }
+
+// BotMember is one entry of the curated bot roster (data/bots/members.json).
+// Real Telegram profiles are used to make the live-online overlay look authentic.
+type BotMember struct {
+	ID        int64   `json:"id"`
+	FirstName *string `json:"first_name"`
+	LastName  *string `json:"last_name"`
+	Username  *string `json:"username"`
+	Picture   *string `json:"picture"` // relative path under the bots data dir
+}
+
+// personaFromBot derives a stable Persona from a curated bot member.
+// The UUID is deterministic per Telegram ID so it stays constant across restarts.
+func personaFromBot(m BotMember, baseURL string) Persona {
+	ns := uuid.MustParse(personaNamespace)
+	id := uuid.NewSHA1(ns, []byte(fmt.Sprintf("bot:%d", m.ID)))
+
+	firstName := ""
+	if m.FirstName != nil {
+		firstName = strings.TrimSpace(*m.FirstName)
+	}
+	if firstName == "" && m.Username != nil {
+		firstName = *m.Username
+	}
+	if firstName == "" {
+		firstName = "Player"
+	}
+	username := ""
+	if m.Username != nil {
+		username = strings.TrimSpace(*m.Username)
+	}
+
+	photo := ""
+	if m.Picture != nil && strings.TrimSpace(*m.Picture) != "" {
+		// Join base URL (e.g. "/static/bots" or "https://api/static/bots")
+		// with the relative picture path (e.g. "pictures/123.jpg").
+		photo = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(*m.Picture, "/")
+	}
+
+	return Persona{
+		ID:         id,
+		TelegramID: m.ID,
+		FirstName:  firstName,
+		Username:   username,
+		PhotoURL:   photo,
+	}
+}
+
+// LoadBotPersonas reads the curated roster and maps it to personas.
+// Returns an error (without falling back) so callers can decide on fallback.
+func LoadBotPersonas(dataDir, baseURL string) ([]Persona, error) {
+	raw, err := os.ReadFile(path.Join(dataDir, "members.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read members.json: %w", err)
+	}
+	var members []BotMember
+	if err := json.Unmarshal(raw, &members); err != nil {
+		return nil, fmt.Errorf("parse members.json: %w", err)
+	}
+	if len(members) == 0 {
+		return nil, fmt.Errorf("members.json is empty")
+	}
+	out := make([]Persona, 0, len(members))
+	for _, m := range members {
+		out = append(out, personaFromBot(m, baseURL))
+	}
+	return out, nil
+}
+
+// WithBotData wires the curated bot roster into the simulator. On any failure
+// it logs and keeps the synthetic fallback personas so the overlay still works.
+func WithBotData(dataDir, baseURL string) SimulatorOption {
+	return func(s *Simulator) {
+		personas, err := LoadBotPersonas(dataDir, baseURL)
+		if err != nil {
+			slog.Warn("socialsim bot roster load failed, using synthetic personas", "error", err)
+			return
+		}
+		s.personas = personas
+	}
+}
+
+// SimulatorOption mutates a Simulator during construction.
+type SimulatorOption func(*Simulator)
 
 var firstNames = []string{
 	"Alex", "Mia", "Leo", "Nina", "Max", "Lara", "Ivan", "Kate", "Omar", "Sofia",

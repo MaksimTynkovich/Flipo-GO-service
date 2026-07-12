@@ -11,7 +11,7 @@ export function Header() {
   const { user, loading } = useAuth();
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-surface/95 backdrop-blur-md pt-[env(safe-area-inset-top)]">
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-surface pt-[env(safe-area-inset-top)]">
       <div className="app-container flex h-14 items-center justify-between gap-3">
         <Link href="/profile" className="flex min-w-0 items-center gap-2.5">
           <UserAvatar user={user} size={34} />

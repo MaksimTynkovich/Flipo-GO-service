@@ -83,12 +83,17 @@ export function formatStakingTierSummary(tier?: StakingTier | null): string {
 }
 
 /** Пояснение, как получить повышенную ставку. */
-export function stakingBoostHint(target = 20): string {
+export function stakingBoostHint(target = 10): string {
   return `Пригласи ${target} друзей за месяц — ${formatStakingRate("boost")} до конца месяца`;
 }
 
 export function stakingBoostReferralTarget(): number {
-  return 20;
+  return 10;
+}
+
+/** Пояснение, что подарки для стейка не нужно передавать боту. */
+export function stakingNoTransferHint(): string {
+  return "Подарки остаются у вас в профиле — передавать боту для стейкинга не нужно";
 }
 
 export function pluralizePeople(count: number): string {

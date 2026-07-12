@@ -28,6 +28,10 @@ type WithdrawalRiskEvaluator interface {
 	EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netNanoton int64) (score int, flags []string, reviewReason *string, needsReview bool, err error)
 }
 
+type WithdrawalPromoGate interface {
+	HasActivePromoRedemption(ctx context.Context, userID uuid.UUID) (bool, error)
+}
+
 type Service struct {
 	users     domain.UserRepository
 	transfers domain.TonTransferRepository
@@ -36,6 +40,7 @@ type Service struct {
 	risk      WithdrawalRiskEvaluator
 	analytics *analyticsuc.Service
 	notifier  balance.BalanceNotifier
+	promoGate WithdrawalPromoGate
 }
 
 func NewService(users domain.UserRepository, transfers domain.TonTransferRepository, chain *ton.Client, cfg Config) *Service {
@@ -57,6 +62,10 @@ func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
 
 func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 	s.notifier = notifier
+}
+
+func (s *Service) SetPromoGate(gate WithdrawalPromoGate) {
+	s.promoGate = gate
 }
 
 type DepositIntentView struct {
@@ -213,6 +222,11 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, receiveNanoton int64, idempotencyKey string) (*TransferView, int64, error) {
 	if receiveNanoton < s.cfg.MinWithdrawNanoton {
 		return nil, 0, domain.ErrInvalidAmount
+	}
+	if s.promoGate != nil {
+		if active, err := s.promoGate.HasActivePromoRedemption(ctx, userID); err == nil && active {
+			return nil, 0, domain.ErrPromoWagerPending
+		}
 	}
 	if !s.chain.CanSend() {
 		return nil, 0, domain.ErrChainUnavailable

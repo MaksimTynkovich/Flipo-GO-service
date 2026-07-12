@@ -166,7 +166,7 @@ func (s *Service) questProgress(ctx context.Context, userID uuid.UUID, code stri
 	switch code {
 	case QuestFirstGameBet:
 		target = 1
-		ok, err := s.staking.HasAnyGameBet(ctx, userID)
+		ok, err := s.staking.HasQualifyingGameBet(ctx, userID, domain.DefaultReferralMilestoneMinBetNano)
 		if err == nil && ok {
 			current = 1
 		}
@@ -218,7 +218,7 @@ func (s *Service) questProgress(ctx context.Context, userID uuid.UUID, code stri
 		}
 	case QuestReferralActive1:
 		target = 1
-		if v, err := s.staking.CountActiveReferrals(ctx, userID); err == nil {
+		if v, err := s.staking.CountReferrals(ctx, userID); err == nil {
 			current = v
 			if current > target {
 				current = target
@@ -226,7 +226,7 @@ func (s *Service) questProgress(ctx context.Context, userID uuid.UUID, code stri
 		}
 	case QuestReferralActive3:
 		target = 3
-		if v, err := s.staking.CountActiveReferrals(ctx, userID); err == nil {
+		if v, err := s.staking.CountReferrals(ctx, userID); err == nil {
 			current = v
 			if current > target {
 				current = target
