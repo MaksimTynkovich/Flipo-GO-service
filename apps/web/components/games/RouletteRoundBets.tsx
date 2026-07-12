@@ -139,19 +139,6 @@ function BetRow({
           {name}
           {mine ? <span className="ml-1.5 text-[10px] font-medium text-accent">вы</span> : null}
         </p>
-        {isWon || isLost ? (
-          <p className="text-[11px] tabular-nums text-muted">
-            {bet.gifts.length > 1 ? (
-              <GiftStakeIcons gifts={bet.gifts} size="xs" amountNanoton={bet.amount_nanoton} />
-            ) : (
-              <BetStakeLabel
-                amountNanoton={bet.amount_nanoton}
-                fundingType={bet.funding_type === "mixed" ? "gift" : bet.funding_type}
-                gift={bet.gift}
-              />
-            )}
-          </p>
-        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -207,16 +194,8 @@ export function RouletteRoundBets({ data, currentUserId, resultColor = null }: P
       outcome: betOutcome(row.color, resultColor),
     }));
 
-    // Winners first, then pending, then losses — mirrors crash “settled feel”.
-    if (resultColor) {
-      withOutcome.sort((a, b) => {
-        const rank = (o: Outcome) => (o === "won" ? 0 : o === "pending" ? 1 : 2);
-        const d = rank(a.outcome) - rank(b.outcome);
-        if (d !== 0) return d;
-        return b.row.amount_nanoton - a.row.amount_nanoton;
-      });
-    }
-
+    // Keep players in their original positions after the result — no
+    // winner/loser reordering or separation.
     if (!currentUserId) return withOutcome;
     const mine = withOutcome.filter((item) => item.row.user_id === currentUserId);
     const others = withOutcome.filter((item) => item.row.user_id !== currentUserId);
