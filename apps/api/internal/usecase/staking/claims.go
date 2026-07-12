@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/google/uuid"
 )
 
@@ -131,6 +132,11 @@ func (s *Service) createStake(
 	}
 
 	principal := s.itemDisplayPrice(ctx, *item)
+	if err := s.checkStakeCaps(ctx, userID, principal); err != nil {
+		_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvStaked, item.Status)
+		return nil, err
+	}
+
 	now := time.Now().UTC()
 	pos := &domain.StakingPosition{
 		ID:               uuid.New(),
@@ -165,5 +171,82 @@ func (s *Service) createStake(
 		return nil, err
 	}
 
+	if s.referralRewards != nil {
+		_ = s.referralRewards.OnFirstStake(ctx, userID)
+	}
+
+	if s.admin != nil {
+		s.admin.NotifyStake(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, item.Name, principal)
+	}
+
 	return pos, nil
+}
+
+func (s *Service) checkStakeCaps(ctx context.Context, userID uuid.UUID, principal int64) error {
+	if principal <= 0 {
+		return domain.ErrInvalidAmount
+	}
+
+	tvlCap := domain.DefaultStakingTVLCapNanoton
+	if s.platform != nil {
+		if settings, err := s.platform.GetYieldSettings(ctx); err == nil && settings != nil && settings.StakingTVLCapNanoton > 0 {
+			tvlCap = settings.StakingTVLCapNanoton
+		}
+	}
+
+	globalTVL, err := s.staking.SumActivePrincipal(ctx)
+	if err != nil {
+		return err
+	}
+	if globalTVL+principal > tvlCap {
+		return errors.New("пул стейкинга заполнен")
+	}
+
+	personalLimit, err := s.PersonalStakeLimit(ctx, userID)
+	if err != nil {
+		return err
+	}
+	userTVL, err := s.staking.SumActivePrincipalByUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if userTVL+principal > personalLimit {
+		return errors.New("личный лимит стейкинга исчерпан — выполните задания")
+	}
+	return nil
+}
+
+func (s *Service) PersonalStakeLimit(ctx context.Context, userID uuid.UUID) (int64, error) {
+	rewards, err := s.staking.SumCompletedQuestRewards(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	limit := domain.DefaultStakingPersonalLimitNano + rewards
+	if s.referralRewards != nil {
+		limit += s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
+	}
+	return limit, nil
+}
+
+func (s *Service) TVLSnapshot(ctx context.Context) (tvl, cap, remaining int64, err error) {
+	cap = domain.DefaultStakingTVLCapNanoton
+	if s.platform != nil {
+		if settings, settingsErr := s.platform.GetYieldSettings(ctx); settingsErr == nil && settings != nil && settings.StakingTVLCapNanoton > 0 {
+			cap = settings.StakingTVLCapNanoton
+		}
+	}
+	tvl, err = s.staking.SumActivePrincipal(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	remaining = cap - tvl
+	if remaining < 0 {
+		remaining = 0
+	}
+	return tvl, cap, remaining, nil
 }

@@ -16,8 +16,8 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
-	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
@@ -31,6 +31,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
+	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/promo"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
@@ -96,12 +97,18 @@ func main() {
 	platformRepo := postgres.NewPlatformRepo(db)
 	adminRepo := postgres.NewAdminRepo(db)
 	analyticsRepo := postgres.NewAnalyticsRepo(db)
+	outcomeRepo := postgres.NewOutcomeOverrideRepo(db)
+	outcomeSvc := outcome.NewService(outcomeRepo)
 
 	if err := platformRepo.EnsureDefaults(ctx); err != nil {
 		slog.Warn("platform defaults seed failed", "error", err)
 	}
 
 	referralSvc := referral.NewService(userRepo, platformRepo)
+	referralRepo := postgres.NewReferralRepo(db)
+	referralSvc.SetReferralRepository(referralRepo)
+	referralSvc.SetGameRepository(gameRepo)
+	referralSvc.SetStakingRepository(stakeRepo)
 	analyticsSvc := analyticsuc.NewService(analyticsRepo)
 	tonClient := ton.NewClient(
 		cfg.TonAPIBaseURL,
@@ -127,16 +134,22 @@ func main() {
 	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
+	adminNotifier := telegram.NewAdminNotifier(botAPI, cfg.AdminTelegramIDs)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),
 		auth.WithAnalytics(analyticsSvc),
+		auth.WithAdminEvents(adminNotifier),
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
 	balanceSvc := balance.NewService(userRepo)
 	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
+	promoSvc.SetAdminNotifier(adminNotifier)
+	referralSvc.SetPromoActivator(promoSvc)
+	walletSvc.SetPromoGate(promoSvc)
+	walletSvc.SetAdminNotifier(adminNotifier)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
 	if mtprotoCfg.Enabled() {
@@ -153,15 +166,20 @@ func main() {
 
 	hub := websocket.NewHub()
 	balanceSvc.SetNotifier(hub)
+	referralSvc.SetBalanceService(balanceSvc)
+	referralSvc.SetBalanceNotifier(hub)
 	marketSvc.SetBalanceNotifier(hub)
 	walletSvc.SetBalanceNotifier(hub)
 	promoSvc.SetBalanceNotifier(hub)
 	adminSvc.SetBalanceNotifier(hub)
-	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator)
+	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator, adminNotifier)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), cfg.BoostWagerThreshold)
+	invSvc.SetAdminNotifier(adminNotifier)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), int64(cfg.BoostReferralThreshold))
 	stakeSvc.SetAnalytics(analyticsSvc)
 	stakeSvc.SetBalanceNotifier(hub)
+	stakeSvc.SetReferralRewards(referralSvc)
+	stakeSvc.SetAdminNotifier(adminNotifier)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error
@@ -183,7 +201,14 @@ func main() {
 	crashSvc := crash.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
 	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, betFundingSvc, invRepo, cfg.PlatformFeeBps)
+	pvpSvc.SetOutcome(outcomeSvc)
 	pvpSvc.SetTickNotifier(hub)
+	betHook := func(ctx context.Context, userID uuid.UUID, amount int64) {
+		referralSvc.OnQualifyingBet(ctx, userID, amount)
+	}
+	rouletteSvc.SetQualifyingBetHook(betHook)
+	crashSvc.SetQualifyingBetHook(betHook)
+	pvpSvc.SetQualifyingBetHook(betHook)
 
 	socialSim := socialsim.NewSimulator(platformRepo, platformRepo, func(ctx context.Context, snap domain.PresenceSnapshot) {
 		data := socialsim.MarshalPresence(snap)
@@ -192,7 +217,7 @@ func main() {
 		for _, game := range []string{"crash", "roulette", "pvp"} {
 			hub.Broadcast(game, msg)
 		}
-	})
+	}, socialsim.WithBotData(cfg.BotsDataDir, cfg.BotsAssetsBaseURL))
 	socialSim.SetCrashRepublish(func(ctx context.Context, roundID uuid.UUID) {
 		_ = crashSvc.PublishBets(ctx, roundID)
 	})
@@ -212,8 +237,8 @@ func main() {
 		bridge.Start(ctx)
 	}
 
-	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds, cfg.RouletteResultDisplaySeconds).Run(ctx)
-	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, cfg.CrashBettingSeconds, cfg.CrashGrowthPerMs).Run(ctx)
+	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds, cfg.RouletteResultDisplaySeconds, outcomeSvc).Run(ctx)
+	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, cfg.CrashBettingSeconds, cfg.CrashGrowthPerMs, outcomeSvc).Run(ctx)
 	go pvpworker.NewWorker(pvpSvc, 500*time.Millisecond).Run(ctx)
 
 	stakeWorker := stakingworker.NewWorker(stakeSvc)
@@ -231,7 +256,13 @@ func main() {
 	treasuryWorker.Start(ctx)
 	defer treasuryWorker.Stop()
 
-	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName)
+	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName, cfg.ChannelURL, cfg.SupportURL, cfg.WelcomeText)
+	botUpdates.SetAdminNotifier(adminNotifier)
+	botUpdates.SetUserLookup(telegram.UserRepoLookup{
+		Find: func(ctx context.Context, telegramID int64) (any, error) {
+			return userRepo.FindByTelegramID(ctx, telegramID)
+		},
+	})
 	botUpdates.SetWebAppURLResolver(func(ctx context.Context) string {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {
@@ -254,7 +285,7 @@ func main() {
 		}
 	}
 
-	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
+	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
 		socialSim.ApplySettings(settings)
@@ -268,7 +299,7 @@ func main() {
 		StakingHandler:   handlers.NewStakingHandler(stakeSvc, analyticsSvc),
 		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc, analyticsSvc, betFundingSvc),
 		MarketHandler:    handlers.NewMarketHandler(marketSvc, analyticsSvc),
-		ReferralHandler:  handlers.NewReferralHandler(referralSvc),
+		ReferralHandler:  handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:     handlers.NewPromoHandler(promoSvc, analyticsSvc),
 		WalletHandler:    handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		TelegramHandler:  handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
@@ -277,6 +308,7 @@ func main() {
 		PresenceHandler:  handlers.NewPresenceHandler(socialSim),
 		AdminTelegramIDs: cfg.AdminTelegramIDs,
 		Hub:              hub,
+		BotsDataDir:      cfg.BotsDataDir,
 	})
 
 	srv := &http.Server{

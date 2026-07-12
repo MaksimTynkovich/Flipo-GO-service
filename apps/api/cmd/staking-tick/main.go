@@ -56,7 +56,7 @@ func main() {
 		telegram.NewProfileGiftScanner(mtprotoCfg, cfg.DebugAuthEnabled && !mtprotoCfg.Enabled()),
 		valuator,
 		telegram.NewBotNotifier(cfg.BotToken),
-		cfg.BoostWagerThreshold,
+		int64(cfg.BoostReferralThreshold),
 	)
 	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))
 

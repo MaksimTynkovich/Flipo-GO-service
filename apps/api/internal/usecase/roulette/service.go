@@ -81,6 +81,11 @@ type Service struct {
 	bettingS  int
 	spinS     int
 	overlay   BetOverlay
+	betHook   func(context.Context, uuid.UUID, int64)
+}
+
+func (s *Service) SetQualifyingBetHook(hook func(context.Context, uuid.UUID, int64)) {
+	s.betHook = hook
 }
 
 func NewService(
@@ -147,6 +152,9 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, 
 	if err := s.games.CreateBet(ctx, bet); err != nil {
 		s.funding.Rollback(ctx, userID, betID, resolved, "game_bet")
 		return nil, err
+	}
+	if s.betHook != nil {
+		s.betHook(ctx, userID, resolved.AmountNanoton)
 	}
 	_ = s.PublishBets(ctx, state.RoundID)
 	return bet, nil

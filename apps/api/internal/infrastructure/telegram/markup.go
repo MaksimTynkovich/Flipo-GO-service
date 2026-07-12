@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const defaultWebAppButtonText = "🚀 Открыть Flipo"
+const defaultWebAppButtonText = "🚀 Открыть приложение"
 
 type OpenAppButtonOptions struct {
 	WebAppURL       string

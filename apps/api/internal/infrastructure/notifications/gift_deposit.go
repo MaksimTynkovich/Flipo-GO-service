@@ -15,10 +15,11 @@ type GiftDepositNotifier struct {
 	bot      *telegram.BotNotifier
 	hub      *websocket.Hub
 	valuator *gifts.Valuator
+	admin    *telegram.AdminNotifier
 }
 
-func NewGiftDepositNotifier(bot *telegram.BotNotifier, hub *websocket.Hub, valuator *gifts.Valuator) *GiftDepositNotifier {
-	return &GiftDepositNotifier{bot: bot, hub: hub, valuator: valuator}
+func NewGiftDepositNotifier(bot *telegram.BotNotifier, hub *websocket.Hub, valuator *gifts.Valuator, admin *telegram.AdminNotifier) *GiftDepositNotifier {
+	return &GiftDepositNotifier{bot: bot, hub: hub, valuator: valuator, admin: admin}
 }
 
 func (n *GiftDepositNotifier) GiftDeposited(ctx context.Context, user *domain.User, item *domain.InventoryItem) error {
@@ -32,6 +33,19 @@ func (n *GiftDepositNotifier) GiftDeposited(ctx context.Context, user *domain.Us
 		if err := n.bot.SendGiftDeposited(ctx, user.TelegramID, item.Name); err != nil {
 			slog.Warn("telegram gift deposit notify failed", "error", err, "user_id", user.ID)
 		}
+	}
+
+	if n.admin != nil {
+		floor := item.FloorPriceNanoton
+		if itemView.ValuationNanoton > 0 {
+			floor = itemView.ValuationNanoton
+		}
+		n.admin.NotifyGiftInventory(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, item.Name, floor)
 	}
 
 	if n.hub != nil {

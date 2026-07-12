@@ -17,9 +17,15 @@ type UserRepository interface {
 	ReleasePromoBalance(ctx context.Context, userID uuid.UUID) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
+	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
 	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	CountReferralsSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
+	SumReferralEarningsByRefType(ctx context.Context, userID uuid.UUID, refType string) (int64, error)
+	SumReferralEarningsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	ListReferrals(ctx context.Context, referrerID uuid.UUID) ([]User, error)
+	ListReferredUsers(ctx context.Context) ([]User, error)
 	ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 }
@@ -68,6 +74,8 @@ type StakingRepository interface {
 	GetSnapshot(ctx context.Context, userID uuid.UUID) (*UserStakingSnapshot, error)
 	UpsertSnapshot(ctx context.Context, snap *UserStakingSnapshot) error
 	SumRouletteWagerLast7Days(ctx context.Context, userID uuid.UUID) (int64, error)
+	SumActivePrincipal(ctx context.Context) (int64, error)
+	SumActivePrincipalByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 
 	GetActiveEpoch(ctx context.Context, now time.Time) (*StakingEpoch, error)
 	GetEpochDueForSettlement(ctx context.Context, now time.Time) (*StakingEpoch, error)
@@ -78,6 +86,30 @@ type StakingRepository interface {
 	DeleteGiftClaim(ctx context.Context, giftSlug string) error
 	DeleteGiftClaimsByEpoch(ctx context.Context, epochID uuid.UUID) error
 	FindActivePositionBySlug(ctx context.Context, giftSlug string) (*StakingPosition, error)
+
+	ListActiveQuests(ctx context.Context) ([]StakingQuest, error)
+	ListQuestCompletions(ctx context.Context, userID uuid.UUID) ([]StakingQuestCompletion, error)
+	CompleteQuest(ctx context.Context, userID uuid.UUID, questCode string) error
+	SumCompletedQuestRewards(ctx context.Context, userID uuid.UUID) (int64, error)
+	HasAnyGameBet(ctx context.Context, userID uuid.UUID) (bool, error)
+	SumWagerByGame(ctx context.Context, userID uuid.UUID, gameType GameType) (int64, error)
+	HasPvPMatch(ctx context.Context, userID uuid.UUID) (bool, error)
+	CountPvPMatches(ctx context.Context, userID uuid.UUID) (int64, error)
+	SumDeposits(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountActiveReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
+	HasCompletedEpochStake(ctx context.Context, userID uuid.UUID) (bool, error)
+	HasQualifyingGameBet(ctx context.Context, userID uuid.UUID, minNanoton int64) (bool, error)
+}
+
+type ReferralRepository interface {
+	GetActivePerk(ctx context.Context, userID uuid.UUID, now time.Time) (*ReferralPerk, error)
+	ActivatePerk(ctx context.Context, perk *ReferralPerk) error
+	HasMilestone(ctx context.Context, referrerID, referralID uuid.UUID) (bool, error)
+	CountMilestonesSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
+	CreateMilestone(ctx context.Context, milestone *ReferralMilestone) error
+	SumUserPvPNetLossSince(ctx context.Context, userID uuid.UUID, since time.Time, excludeReferrerInRoom bool) (int64, error)
+	CountQualifiedReferrals(ctx context.Context, referrerID uuid.UUID, minAge time.Duration, minDeposit, minStake int64) (int64, error)
 }
 
 type GameRepository interface {
@@ -98,6 +130,8 @@ type GameRepository interface {
 	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
 	SumUserWinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumUserBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	SumUserSettledBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	SumUserRefundsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumRoundBets(ctx context.Context, roundID uuid.UUID) (int64, error)
 	GameStats(ctx context.Context) ([]AdminGameStat, error)
 }
@@ -208,4 +242,14 @@ type TonTransferRepository interface {
 	ListAll(ctx context.Context, limit int) ([]TonTransfer, error)
 	ApproveWithdrawal(ctx context.Context, transferID, adminID uuid.UUID) error
 	RejectWithdrawalAtomic(ctx context.Context, transferID, adminID uuid.UUID, reason string) (int64, error)
+}
+
+// OutcomeOverrideRepository — admin-scheduled game outcome overrides.
+type OutcomeOverrideRepository interface {
+	CreateOutcomeOverride(ctx context.Context, override *GameOutcomeOverride) error
+	ListOutcomeOverrides(ctx context.Context) ([]GameOutcomeOverride, error)
+	DeleteOutcomeOverride(ctx context.Context, id uuid.UUID) error
+	// TakePending atomically fetches and decrements the next active override for a
+	// game type. Returns (nil, false) when none remain or all are expired.
+	TakePending(ctx context.Context, gameType GameType) (*GameOutcomeOverride, bool, error)
 }

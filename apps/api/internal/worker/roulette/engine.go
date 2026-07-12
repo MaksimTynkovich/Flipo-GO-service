@@ -10,19 +10,21 @@ import (
 	rouletteuc "github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
+	outcomeuc "github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 )
 
 type Engine struct {
 	svc              *rouletteuc.Service
 	games            domain.GameRepository
+	outcome          *outcomeuc.Service
 	bettingS         int
 	spinS            int
 	resultPauseS     int
 	resultDisplayS   int
 }
 
-func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS, resultPauseS, resultDisplayS int) *Engine {
-	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS, resultPauseS: resultPauseS, resultDisplayS: resultDisplayS}
+func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS, resultPauseS, resultDisplayS int, outcomeSvc *outcomeuc.Service) *Engine {
+	return &Engine{svc: svc, games: games, bettingS: bettingS, spinS: spinS, resultPauseS: resultPauseS, resultDisplayS: resultDisplayS, outcome: outcomeSvc}
 }
 
 func (e *Engine) Run(ctx context.Context) {
@@ -39,22 +41,46 @@ func (e *Engine) Run(ctx context.Context) {
 }
 
 func (e *Engine) runRound(ctx context.Context) {
-	seedBytes := make([]byte, 32)
-	_, _ = rand.Read(seedBytes)
-	serverSeed := hex.EncodeToString(seedBytes)
-	serverSeedHash := provablyfair.HashSHA256(serverSeed)
-
 	roundNum, err := e.games.GetNextRoundNumber(ctx, domain.GameRoulette)
 	if err != nil {
 		time.Sleep(time.Second)
 		return
 	}
 
+	serverSeed := ""
+	adminInfluenced := false
+	if e.outcome != nil {
+		if override, ok, oerr := e.outcome.TakePending(ctx, domain.GameRoulette); oerr == nil && ok {
+			if t, terr := e.outcome.DecodeRouletteTarget(override); terr == nil {
+				mode, weight := e.outcome.RouletteMode(t)
+				if outcomeuc.ShouldApply(mode, weight) {
+					if found, foundOk := provablyfair.FindRouletteSeed(t.Color, t.Number, roundNum, 100000); foundOk {
+						serverSeed = found
+						adminInfluenced = true
+					}
+				}
+			}
+		}
+	}
+	if serverSeed == "" {
+		seedBytes := make([]byte, 32)
+		_, _ = rand.Read(seedBytes)
+		serverSeed = hex.EncodeToString(seedBytes)
+	}
+	serverSeedHash := provablyfair.HashSHA256(serverSeed)
+
 	round, err := e.svc.CreateRound(ctx, serverSeed, serverSeedHash, roundNum)
 	if err != nil {
 		slog.Error("create roulette round", "error", err)
 		time.Sleep(time.Second)
 		return
+	}
+
+	if adminInfluenced {
+		round.AdminInfluenced = true
+		if uerr := e.games.UpdateRound(ctx, round); uerr != nil {
+			slog.Warn("mark roulette round admin-influenced", "error", uerr)
+		}
 	}
 
 	time.Sleep(time.Duration(e.bettingS) * time.Second)

@@ -43,9 +43,19 @@ type StakingStats struct {
 	ActiveDailyNanoton       int64   `json:"active_daily_yield_nanoton"`
 	ActiveMonthlyNanoton     int64   `json:"active_monthly_yield_nanoton"`
 	UnlockableMonthlyNanoton int64   `json:"unlockable_monthly_nanoton"`
-	BoostWagerNanoton        int64   `json:"boost_wager_nanoton"`
-	BoostThresholdNanoton    int64   `json:"boost_threshold_nanoton"`
+	BoostReferralCount       int64   `json:"boost_referral_count"`
+	BoostReferralTarget      int64   `json:"boost_referral_target"`
+	BoostUntil               *string `json:"boost_until,omitempty"`
 	MonthlyRatePercent       float64 `json:"monthly_rate_percent"`
+	TVLNanoton               int64   `json:"tvl_nanoton"`
+	TVLCapNanoton            int64   `json:"tvl_cap_nanoton"`
+	TVLRemainingNanoton      int64   `json:"tvl_remaining_nanoton"`
+	PersonalLimitNanoton     int64   `json:"personal_limit_nanoton"`
+	PersonalUsedNanoton      int64   `json:"personal_used_nanoton"`
+	ReferralPerkActive       bool    `json:"referral_perk_active"`
+	ReferralPerkPending      bool    `json:"referral_perk_pending"`
+	ReferralLimitBonusNanoton int64  `json:"referral_limit_bonus_nanoton"`
+	ReferralBoostPercent     float64 `json:"referral_boost_percent"`
 }
 
 type ProfileGiftsResponse struct {
@@ -96,14 +106,57 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	}
 
 	basePercent, boostPercent := s.monthlyRatePercents(ctx)
+	if tier, err := s.SyncBoostTier(ctx, userID); err == nil {
+		user.StakingTier = tier
+	}
 	rate := monthlyRate(user.StakingTier, basePercent, boostPercent)
+	referralBoost := 0.0
+	referralLimitBonus := int64(0)
+	if s.referralRewards != nil {
+		referralBoost = s.referralRewards.StakingBoostMonthlyPercent(ctx, userID)
+		referralLimitBonus = s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
+		rate += referralBoost / 100
+	}
+	perkActive := referralLimitBonus > 0
+	perkPending := user.ReferrerID != nil && !perkActive
+	displayBoost := referralBoost
+	displayLimitBonus := referralLimitBonus
+	if perkPending {
+		// Show promised invitee perk values before first stake activates them.
+		displayBoost = domain.DefaultReferralPerkBoostPercent
+		displayLimitBonus = domain.DefaultReferralPerkLimitBonusNano
+	}
+	tvl, tvlCap, tvlRemaining, _ := s.TVLSnapshot(ctx)
+	personalLimit, _ := s.PersonalStakeLimit(ctx, userID)
+	personalUsed, _ := s.staking.SumActivePrincipalByUser(ctx, userID)
+
+	var boostUntil *string
+	mskNow := time.Now().In(MoscowLocation())
+	monthStart := time.Date(mskNow.Year(), mskNow.Month(), 1, 0, 0, 0, 0, MoscowLocation())
+	referralCount, _ := s.users.CountReferralsSince(ctx, userID, monthStart)
+	if user.StakingTier == domain.TierBoost {
+		until := endOfMonthMSK(mskNow).Format(time.RFC3339)
+		boostUntil = &until
+	}
+
 	resp := &ProfileGiftsResponse{
 		Gifts:              make([]ProfileGift, 0),
 		Epoch:              epochView(epoch),
 		MonthlyRatePercent: rate * 100,
 		Stats: StakingStats{
-			BoostThresholdNanoton: s.threshold,
-			MonthlyRatePercent:    rate * 100,
+			BoostReferralCount:        referralCount,
+			BoostReferralTarget:       s.referralThreshold,
+			BoostUntil:                boostUntil,
+			MonthlyRatePercent:        rate * 100,
+			TVLNanoton:                tvl,
+			TVLCapNanoton:             tvlCap,
+			TVLRemainingNanoton:       tvlRemaining,
+			PersonalLimitNanoton:      personalLimit,
+			PersonalUsedNanoton:       personalUsed,
+			ReferralPerkActive:        perkActive,
+			ReferralPerkPending:       perkPending,
+			ReferralLimitBonusNanoton: displayLimitBonus,
+			ReferralBoostPercent:      displayBoost,
 		},
 	}
 
@@ -112,10 +165,6 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 	for _, p := range positions {
 		posByItem[p.InventoryItemID] = p
 		resp.Stats.EarnedNanoton += p.AccruedYieldNanoton
-	}
-
-	if wager, err := s.staking.SumRouletteWagerLast7Days(ctx, userID); err == nil {
-		resp.Stats.BoostWagerNanoton = wager
 	}
 
 	seenSlugs := make(map[string]bool)

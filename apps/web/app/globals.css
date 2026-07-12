@@ -3762,6 +3762,10 @@ body::-webkit-scrollbar,
   position: relative;
   overflow: hidden;
   isolation: isolate;
+  min-height: 2.625rem;
+  transition:
+    background 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .crash-player-row--won {

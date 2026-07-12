@@ -7,9 +7,14 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 )
+
+type AdminPromoNotifier interface {
+	NotifyPromoActivated(ctx context.Context, actor telegram.AdminActor, code string, bonusNanoton int64)
+}
 
 type ChannelNotSubscribedError struct {
 	Channel string
@@ -31,6 +36,7 @@ type Service struct {
 	notifier        balance.BalanceNotifier
 	requiredChannel string
 	channelChecker  ChannelChecker
+	admin           AdminPromoNotifier
 }
 
 func NewService(platform domain.PlatformRepository, games domain.GameRepository, users domain.UserRepository, balance *balance.Service) *Service {
@@ -44,6 +50,10 @@ func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
 	s.requiredChannel = strings.TrimSpace(channel)
 	s.channelChecker = checker
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminPromoNotifier) {
+	s.admin = notifier
 }
 
 func (s *Service) RequiredChannel() string {
@@ -135,6 +145,17 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 	}
 	_ = s.platform.IncrementPromoUsed(ctx, promo.Code)
 
+	if s.admin != nil {
+		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+			s.admin.NotifyPromoActivated(ctx, telegram.AdminActor{
+				TelegramID: user.TelegramID,
+				Username:   user.Username,
+				FirstName:  user.FirstName,
+				LastName:   user.LastName,
+			}, promo.Code, promo.BonusNanoton)
+		}
+	}
+
 	status, err := s.Status(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -181,6 +202,7 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, er
 	}
 	if progress >= redemption.WagerRequiredNanoton && redemption.Status == "active" {
 		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "completed")
+		s.applyPromoCashoutCap(ctx, userID, redemption)
 		_ = s.users.ReleasePromoBalance(ctx, userID)
 		balance.NotifyUser(ctx, s.users, s.notifier, userID, 0, domain.LedgerPromoBonus)
 		redemption.Status = "completed"
@@ -202,4 +224,12 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, er
 		WagerProgressNanoton: redemption.WagerProgressNanoton,
 		RemainingNanoton:     remaining,
 	}, nil
+}
+
+func (s *Service) HasActivePromoRedemption(ctx context.Context, userID uuid.UUID) (bool, error) {
+	redemption, err := s.platform.GetActiveRedemption(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return redemption != nil, nil
 }

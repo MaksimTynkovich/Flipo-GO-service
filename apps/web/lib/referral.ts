@@ -1,5 +1,5 @@
 /** L1 share of referral monthly staking yield (matches backend). */
-export const REFERRAL_L1_MONTHLY_SHARE = 0.03;
+export const REFERRAL_L1_MONTHLY_SHARE = 0.05;
 
 const DAYS_PER_MONTH = 30;
 const DAYS_PER_WEEK = 7;
@@ -23,9 +23,13 @@ export function referralWeeklyFromPrincipal(
 /** Monthly share as percent string for UI. */
 export const REFERRAL_MONTHLY_SHARE_PERCENT = REFERRAL_L1_MONTHLY_SHARE * 100;
 
-/** Effective weekly share of referral yield (3% × 7/30). */
+/** Effective weekly share of referral yield (5% × 7/30). */
 export const REFERRAL_WEEKLY_SHARE_PERCENT =
   REFERRAL_L1_MONTHLY_SHARE * (DAYS_PER_WEEK / DAYS_PER_MONTH) * 100;
+
+export const REFERRAL_GGR_SHARE_PERCENT = 5;
+export const REFERRAL_INVITEE_BOOST_PERCENT = 0.5;
+export const REFERRAL_INVITEE_LIMIT_BONUS_TON = 20;
 
 const PENDING_REFERRAL_KEY = "flipo_pending_referral";
 

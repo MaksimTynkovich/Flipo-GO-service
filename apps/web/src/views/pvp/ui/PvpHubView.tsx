@@ -321,10 +321,6 @@ export function PvpHubView() {
               <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
                 <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
-                <p className="mb-4 text-center text-xs text-muted">
-                  Нужна ставка ≈ {(joinRoom.bet_amount_nanoton / 1_000_000_000).toFixed(2)} TON
-                  (±10%)
-                </p>
 
                 <BetFundingPanel
                   mode={joinFundingMode}

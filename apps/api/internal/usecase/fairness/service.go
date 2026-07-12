@@ -76,6 +76,7 @@ func (s *Service) RoundProof(ctx context.Context, roundID uuid.UUID) (*domain.Ro
 		ServerSeed:     round.ServerSeed,
 		ClientSeed:     round.ClientSeed,
 		Nonce:          round.Nonce,
+		AdminInfluenced: round.AdminInfluenced,
 	}
 
 	var payload map[string]any
