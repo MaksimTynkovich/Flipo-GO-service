@@ -102,7 +102,7 @@ func Load() *Config {
 		TelegramSessionPath:          getEnv("TELEGRAM_SESSION_PATH", "data/telegram/session.json"),
 		AdminTelegramIDs:             parseAdminTelegramIDs(getEnv("ADMIN_TELEGRAM_IDS", "")),
 		PromoRequiredChannel:         firstNonEmpty(getEnv("PROMO_REQUIRED_CHANNEL", ""), getEnv("NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL", "")),
-		BotsDataDir:                  getEnv("BOTS_DATA_DIR", "data/bots"),
+		BotsDataDir:                  getEnv("BOTS_DATA_DIR", "assets/bots"),
 		BotsAssetsBaseURL:            getEnv("BOTS_ASSETS_BASE_URL", "/static/bots"),
 	}
 }

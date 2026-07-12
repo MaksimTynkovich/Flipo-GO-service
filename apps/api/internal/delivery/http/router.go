@@ -39,7 +39,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	r.Use(middleware.RequestMeta())
 	r.Use(middleware.AccessLog())
 
-	// Curated bot roster assets (profiles/pictures) for the live-online overlay.
+	// Curated bot roster (assets/bots) for the live-online overlay avatars.
 	if deps.BotsDataDir != "" {
 		if abs, err := filepath.Abs(deps.BotsDataDir); err == nil {
 			r.Static("/static/bots", abs)

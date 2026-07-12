@@ -21,18 +21,28 @@ type Persona struct {
 	PhotoURL   string
 }
 
-// BotMember is one entry of the curated bot roster (data/bots/members.json).
-// Real Telegram profiles are used to make the live-online overlay look authentic.
+// BotMember is one entry of the curated bot roster (assets/bots/members.json).
+// Display names/photos come from real-looking profiles; telegram IDs are remapped
+// to a reserved negative range so they never collide with real users in Postgres.
 type BotMember struct {
 	ID        int64   `json:"id"`
 	FirstName *string `json:"first_name"`
 	LastName  *string `json:"last_name"`
 	Username  *string `json:"username"`
-	Picture   *string `json:"picture"` // relative path under the bots data dir
+	Picture   *string `json:"picture"` // relative path under the bots assets dir
+}
+
+// socialBotTelegramID maps a source profile id into the reserved negative range
+// used by synthetic personas (-1000 and below). Source ids stay in picture paths only.
+func socialBotTelegramID(sourceID int64) int64 {
+	if sourceID < 0 {
+		return sourceID
+	}
+	return -sourceID
 }
 
 // personaFromBot derives a stable Persona from a curated bot member.
-// The UUID is deterministic per Telegram ID so it stays constant across restarts.
+// The UUID is deterministic per source profile id so it stays constant across restarts.
 func personaFromBot(m BotMember, baseURL string) Persona {
 	ns := uuid.MustParse(personaNamespace)
 	id := uuid.NewSHA1(ns, []byte(fmt.Sprintf("bot:%d", m.ID)))
@@ -61,7 +71,7 @@ func personaFromBot(m BotMember, baseURL string) Persona {
 
 	return Persona{
 		ID:         id,
-		TelegramID: m.ID,
+		TelegramID: socialBotTelegramID(m.ID),
 		FirstName:  firstName,
 		Username:   username,
 		PhotoURL:   photo,

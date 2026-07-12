@@ -8,5 +8,7 @@ RUN CGO_ENABLED=0 go build -o /api ./cmd/server
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /api /api
+COPY --from=builder /app/assets/bots /assets/bots
+ENV BOTS_DATA_DIR=/assets/bots
 EXPOSE 8080
 CMD ["/api"]
