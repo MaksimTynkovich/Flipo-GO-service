@@ -32,6 +32,7 @@ export function GET(request: Request) {
       url: origin,
       name: "Flipo",
       iconUrl: `${origin}/tonconnect-icon.png`,
+      iconUrlSmall: `${origin}/tonconnect-icon.svg`,
       termsOfUseUrl: `${origin}/terms`,
       privacyPolicyUrl: `${origin}/privacy`,
     },
