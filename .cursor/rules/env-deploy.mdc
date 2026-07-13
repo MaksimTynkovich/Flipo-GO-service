@@ -1,0 +1,38 @@
+---
+description: Env, dev tunnel, production deploy
+globs: deploy/**,docs/**,Makefile,.env.example,scripts/**
+alwaysApply: false
+---
+
+# Env & deploy
+
+## Локальная разработка
+
+1. `cp .env.example .env` — заполнить `BOT_TOKEN`, при необходимости Telegram MTProto
+2. `make up` → `make dev` (или `make dev-tunnel` для webhook/Mini App с ngrok)
+3. Web: `WEB_PORT`, API: `API_PORT`; Postgres/Redis из `deploy/docker-compose.yml`
+
+## Критичные флаги
+
+| Переменная | Dev | Prod |
+|------------|-----|------|
+| `ENV` | development | production |
+| `DEBUG_AUTH_ENABLED` | опционально | **false** |
+| `NEXT_PUBLIC_DEBUG_AUTH` | опционально | **false** |
+| `TON_CHAIN_DEV_MODE` | false | **false** |
+| `JWT_SECRET` | любой | длинный random |
+| `ADMIN_TELEGRAM_IDS` | опционально | обязателен |
+
+Полный чеклист: `docs/DEPLOY.md`.
+
+## Production
+
+- Host: `flipo.rest`, путь `/opt/flipo`, Docker Compose + Caddy
+- CI: push `master` → `.github/workflows/deploy.yml` → prebuilt `deploy/prebuilt/api`
+- Не rsync'ить `.env`, `data/`, `apps/api/assets/bots/` с сервера
+
+## Пути данных на диске
+
+- `data/telegram/session.json` — MTProto session
+- `data/gifts/` — кэш изображений подарков (`GIFTS_CACHE_DIR`)
+- `apps/api/assets/bots/` — аватары social-sim ботов

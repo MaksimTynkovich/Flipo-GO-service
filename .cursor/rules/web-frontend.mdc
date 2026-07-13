@@ -1,0 +1,44 @@
+---
+description: Next.js Mini App — структура UI и API
+globs: apps/web/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Web frontend conventions
+
+## Структура `apps/web/`
+
+| Путь | Роль |
+|------|------|
+| `app/` | App Router pages (тонкие, делегируют во views) |
+| `src/views/<feature>/` | экраны (InventoryView, PvpHubView, …) |
+| `src/widgets/` | app shell, telegram gate |
+| `components/` | feature-компоненты (games, market, admin, profile) |
+| `lib/` | API client, game helpers, gifts, wallet |
+| `src/shared/` | hooks (TWA, haptics), config (navigation, brand) |
+
+## API
+
+- Единый клиент: `lib/api.ts` (типы, fetch, JWT в localStorage)
+- В браузере предпочитать same-origin `/api/v1/...` — rewrites в `next.config.js` проксируют на `API_UPSTREAM`
+- `NEXT_PUBLIC_*` подхватываются из корневого `.env` при сборке
+- WS: `lib/ws.ts`, путь `/ws/...`
+
+## Telegram Mini App
+
+- `src/shared/lib/twa.ts`, hooks `useTelegram*`
+- `components/providers/AuthProvider.tsx` — сессия
+- `NEXT_PUBLIC_DEBUG_AUTH=true` только локально
+
+## UI
+
+- Tailwind + `cn()` из `lib/utils`
+- Кнопки: `components/ui/button.tsx`, busy state: `BtnBusy`
+- Подарки: `lib/gifts.ts` — `giftImageUrl`, valuation nanoton helpers
+- Admin: `app/admin/`, секции в `components/admin/sections/`
+
+## Не делать
+
+- Дублировать fetch вне `lib/api.ts`
+- Хардкодить `localhost:8080` — использовать env или относительные пути
+- Менять `next.config.js` rewrites без проверки Docker/prod same-origin

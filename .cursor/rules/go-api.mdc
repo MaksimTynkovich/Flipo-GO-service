@@ -1,0 +1,37 @@
+---
+description: Go API — слои, паттерны, где добавлять код
+globs: apps/api/**/*.go
+alwaysApply: false
+---
+
+# Go API conventions
+
+## Слои (сверху вниз)
+
+1. `cmd/*` — entrypoints: `server`, `worker`, `tgauth`, `tgscan`, `process-deposits`, `staking-tick`
+2. `internal/delivery/http/handlers` — HTTP; `websocket` — WS hub
+3. `internal/usecase/<feature>` — бизнес-логика
+4. `internal/domain` — сущности, интерфейсы репозиториев (`repository.go`), `errors.go`
+5. `internal/repository/postgres` — GORM-реализации
+6. `internal/infrastructure` — telegram, ton, gifts, config, provablyfair
+7. `internal/worker/<game>` — фоновые движки игр
+
+Новая фича: domain types → repository interface → postgres impl → usecase service → handler → wire в `main.go` + route в `router.go`.
+
+## Паттерны
+
+- Контекст `context.Context` первым аргументом в usecase/repo
+- Ошибки домена — sentinel vars в `domain/errors.go`; handlers мапят в HTTP
+- Миграции: `apps/api/migrations/NNNNN_name.up.sql` + `.down.sql`
+- Тесты: `*_test.go` рядом с кодом; `make test` / `make lint` (go vet)
+- Логи: `log/slog` после `log.Init` в main
+
+## Workers
+
+`cmd/worker` запускает crash/roulette/pvp/staking/treasury/wallet/giftdeposit. Игровая логика раундов — в `internal/worker/*`, usecase — для ставок/баланса.
+
+## Не делать
+
+- SQL/GORM в handlers
+- Новые env без `config.go` + `.env.example`
+- Debug auth / chain-dev в production (`validateProductionConfig` в main)

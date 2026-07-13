@@ -13,6 +13,8 @@ import (
 const (
 	PriceSourceTelegram        = "telegram"
 	PriceSourceTraits          = "traits"
+	PriceSourcePortalsModel    = "portals_model"
+	PriceSourcePortals         = "portals"
 	PriceSourceCollectionFloor = "collection_floor"
 	PriceSourceDBFloor         = "db_floor"
 	PriceSourceNone            = "none"
@@ -159,11 +161,8 @@ func (v *Valuator) rawQuote(ctx context.Context, gift telegram.ScannedGift, pref
 	}
 
 	if v.market != nil {
-		if ton, err := v.market.TraitQuoteTON(ctx, gift.CollectionSlug, gift.Attributes); err == nil && ton > 0 {
-			return tonToNanoton(ton), PriceSourceTraits
-		}
-		if ton, err := v.market.CollectionFloorTON(ctx, gift.CollectionSlug); err == nil && ton > 0 {
-			return tonToNanoton(ton), PriceSourceCollectionFloor
+		if ton, source, err := v.market.QuoteTON(ctx, gift.CollectionSlug, gift.Attributes); err == nil && ton > 0 {
+			return tonToNanoton(ton), source
 		}
 	}
 

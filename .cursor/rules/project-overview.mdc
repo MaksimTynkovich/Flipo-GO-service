@@ -1,0 +1,49 @@
+---
+description: Flipo monorepo map — start here before exploring
+alwaysApply: true
+---
+
+# Flipo — карта проекта
+
+Telegram Mini App: игры (roulette, crash, pvp), инвентарь/маркет Telegram-подарков, staking, TON-кошелёк.
+
+## Структура
+
+| Путь | Назначение |
+|------|------------|
+| `apps/api/` | Go API + workers + миграции |
+| `apps/web/` | Next.js 14 Mini App (App Router) |
+| `deploy/` | Docker, Caddy, CI prebuilt binary |
+| `scripts/` | dev-tunnel, ngrok sync |
+| `.env` / `.env.example` | единый конфиг (корень репо) |
+| `docs/DEPLOY.md` | прод-деплой и чеклист |
+
+## Точки входа (читать вместо широкого поиска)
+
+- API wiring: `apps/api/cmd/server/main.go`
+- HTTP routes: `apps/api/internal/delivery/http/router.go`
+- Web API client + типы: `apps/web/lib/api.ts`
+- Next rewrites: `apps/web/next.config.js`
+
+## Команды
+
+```bash
+make dev          # postgres+redis, api+web
+make test         # go test ./...
+make migrate      # SQL migrations
+make dev-tunnel   # публичный URL для Telegram webhook
+```
+
+## Доменные термины
+
+- **nanoton** — 1 TON = 1e9 nanoton (все суммы в API int64)
+- **gift** — Telegram collectible; slug, floor/buyback/valuation
+- **inventory item** — подарок на платформе (deposit → bet/stake/market)
+- **provably fair** — proof endpoints для игровых раундов
+
+## Экономия токенов
+
+- Не делать `glob **/*` по всему репо — идти по слоям из этой карты
+- Бизнес-логика в `usecase/`, не в handlers
+- Не читать `package-lock.json`, `go.sum`, `apps/api/assets/bots/` без явной задачи
+- Прод-секреты только в `.env` на сервере; не коммитить
