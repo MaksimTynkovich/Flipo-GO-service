@@ -49,7 +49,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	}
 
 	if deps.GiftImageHandler != nil {
-		r.GET("/static/gifts/:file", deps.GiftImageHandler.Serve)
+		r.GET("/static/gifts/*file", deps.GiftImageHandler.Serve)
 	}
 
 	r.GET("/health", func(c *gin.Context) {

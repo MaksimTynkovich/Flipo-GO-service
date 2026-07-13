@@ -6,14 +6,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 )
 
 const FragmentBase = "https://nft.fragment.com/gift/"
-
-var fileNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*-[0-9]+\.medium\.jpg$`)
 
 type Proxy struct {
 	CacheDir   string
@@ -49,8 +46,18 @@ func SlugFromImageURL(imageURL string) string {
 	return strings.TrimSuffix(rest, ".medium.jpg")
 }
 
+func validGiftImageFile(file string) bool {
+	if file == "" || len(file) > 256 {
+		return false
+	}
+	if strings.Contains(file, "/") || strings.Contains(file, "\\") || strings.Contains(file, "..") {
+		return false
+	}
+	return strings.HasSuffix(file, ".medium.jpg")
+}
+
 func (p *Proxy) Serve(file string, w http.ResponseWriter) error {
-	if !fileNameRe.MatchString(file) {
+	if !validGiftImageFile(file) {
 		http.Error(w, "invalid gift image", http.StatusBadRequest)
 		return fmt.Errorf("invalid gift image file: %s", file)
 	}

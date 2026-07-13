@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"strings"
+
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/giftimage"
 	"github.com/gin-gonic/gin"
 )
@@ -14,5 +16,6 @@ func NewGiftImageHandler(proxy *giftimage.Proxy) *GiftImageHandler {
 }
 
 func (h *GiftImageHandler) Serve(c *gin.Context) {
-	_ = h.proxy.Serve(c.Param("file"), c.Writer)
+	file := strings.TrimPrefix(c.Param("file"), "/")
+	_ = h.proxy.Serve(file, c.Writer)
 }
