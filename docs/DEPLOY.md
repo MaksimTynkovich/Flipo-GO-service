@@ -25,6 +25,37 @@ Platform defaults that **remain** (product, not demo): game configs, staking que
   systemctl reload caddy
   ```
 
+### CI/CD (GitHub Actions)
+
+Push to `master` runs [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml):
+
+1. Build API binary (`linux/amd64`) in CI
+2. `rsync` code to the server (keeps `.env`, `data/`, `apps/api/assets/bots/`)
+3. Upload `deploy/prebuilt/api`
+4. Run `deploy/deploy.sh` on the host
+
+**GitHub Secrets** (repository → Settings → Secrets):
+
+| Secret | Example |
+|--------|---------|
+| `DEPLOY_HOST` | `5.252.155.209` |
+| `DEPLOY_USER` | `root` |
+| `DEPLOY_SSH_KEY` | private key (`~/.ssh/flipo_deploy`) |
+| `DEPLOY_PATH` | `/opt/flipo` |
+
+**Server:** deploy public key in `~/.ssh/authorized_keys` for `DEPLOY_USER`.
+
+Manual deploy (same as CI):
+
+```bash
+# from repo root, after building deploy/prebuilt/api for linux/amd64
+rsync -az --delete -e "ssh -i ~/.ssh/flipo_deploy" \
+  --exclude '.git/' --exclude '.env' --exclude 'data/' --exclude 'deploy/prebuilt/' \
+  --exclude 'apps/api/assets/bots/' ./ root@5.252.155.209:/opt/flipo/
+scp -i ~/.ssh/flipo_deploy deploy/prebuilt/api root@5.252.155.209:/opt/flipo/deploy/prebuilt/api
+ssh -i ~/.ssh/flipo_deploy root@5.252.155.209 /opt/flipo/deploy/deploy.sh
+```
+
 ---
 
 # Pre-flight checklist

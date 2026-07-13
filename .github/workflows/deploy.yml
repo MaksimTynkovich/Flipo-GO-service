@@ -1,0 +1,89 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Build API binary (linux/amd64)
+        run: |
+          mkdir -p deploy/prebuilt
+          cd apps/api
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -trimpath -ldflags="-s -w" \
+            -o ../../deploy/prebuilt/api ./cmd/server
+
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync application files
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude '.env.bak' \
+            --exclude 'node_modules/' \
+            --exclude '.next/' \
+            --exclude 'logs/' \
+            --exclude 'data/' \
+            --exclude 'deploy/prebuilt/' \
+            --exclude 'apps/api/assets/bots/' \
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+
+      - name: Upload API binary
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p ${DEPLOY_PATH}/deploy/prebuilt"
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            deploy/prebuilt/api \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/deploy/prebuilt/api"
+
+      - name: Run deploy script
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod +x ${DEPLOY_PATH}/deploy/deploy.sh && ${DEPLOY_PATH}/deploy/deploy.sh"
+
+      - name: Public health check
+        run: |
+          for _ in $(seq 1 20); do
+            if curl -fsS "https://flipo.rest/health" >/dev/null 2>&1; then
+              curl -fsS "https://flipo.rest/health"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "https://flipo.rest/health not ready" >&2
+          exit 1

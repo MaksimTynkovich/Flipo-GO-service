@@ -15,7 +15,9 @@ import {
   type AdminGiftPriceSettings,
   type MarketListing,
 } from "@/lib/api";
-import { giftImageUrlFromURL } from "@/lib/gifts"; = "all" | "bot" | "user";
+import { giftImageUrlFromURL } from "@/lib/gifts";
+
+type SourceFilter = "all" | "bot" | "user";
 type MarketTab = "listings" | "gift-prices";
 
 const DEFAULT_GIFT_SETTINGS: AdminGiftPriceSettings = {
