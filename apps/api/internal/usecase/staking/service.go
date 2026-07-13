@@ -126,10 +126,13 @@ func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.
 	if err != nil {
 		return nil, err
 	}
-	if item.UserID != userID || item.Status != domain.InvAvailable {
+	if item.UserID != userID {
 		return nil, domain.ErrInvalidAmount
 	}
 	if isProfileItem(*item) {
+		return s.stakeExistingItem(ctx, userID, item)
+	}
+	if item.Status != domain.InvAvailable {
 		return nil, domain.ErrInvalidAmount
 	}
 	return s.createStake(ctx, userID, item, domain.StakingSourceInventory)

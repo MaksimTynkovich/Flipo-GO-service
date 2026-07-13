@@ -15,7 +15,7 @@ const sans = Manrope({
 
 export const metadata: Metadata = {
   title: "Flipo",
-  description: "Flipi, Games, staking and more on TON",
+  description: "Flipo — games, staking & gifts on TON.",
 };
 
 export const viewport: Viewport = {

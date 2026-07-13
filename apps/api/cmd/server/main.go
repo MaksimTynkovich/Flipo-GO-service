@@ -16,6 +16,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/giftimage"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
@@ -319,6 +320,7 @@ func main() {
 		AdminTelegramIDs: cfg.AdminTelegramIDs,
 		Hub:              hub,
 		BotsDataDir:      cfg.BotsDataDir,
+		GiftImageHandler: handlers.NewGiftImageHandler(giftimage.NewProxy(cfg.GiftsCacheDir)),
 		CORSOrigins:      cfg.CORSOrigins,
 	})
 

@@ -30,6 +30,7 @@ type Deps struct {
 	AdminTelegramIDs []int64
 	Hub              *websocket.Hub
 	BotsDataDir      string
+	GiftImageHandler *handlers.GiftImageHandler
 	CORSOrigins      []string
 }
 
@@ -45,6 +46,10 @@ func NewRouter(deps Deps) *gin.Engine {
 		if abs, err := filepath.Abs(deps.BotsDataDir); err == nil {
 			r.Static("/static/bots", abs)
 		}
+	}
+
+	if deps.GiftImageHandler != nil {
+		r.GET("/static/gifts/:file", deps.GiftImageHandler.Serve)
 	}
 
 	r.GET("/health", func(c *gin.Context) {

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/giftimage"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
 )
@@ -380,7 +381,7 @@ func parseGiftSlug(slug string) (collection, tokenID string) {
 }
 
 func fragmentGiftImageURL(slug string) string {
-	return "https://nft.fragment.com/gift/" + slug + ".medium.jpg"
+	return giftimage.ProxyPath(slug)
 }
 
 func giftPriceNanoton(g *tg.StarGiftUnique) int64 {

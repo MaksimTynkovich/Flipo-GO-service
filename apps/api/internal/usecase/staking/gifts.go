@@ -204,11 +204,13 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 
 		item, err := s.inventory.FindByTelegramGiftID(ctx, userID, g.Slug)
 		if err == nil {
-			id := item.ID.String()
-			pg.ItemID = &id
 			if pos, ok := posByItem[item.ID]; ok {
 				pg.IsStaked = true
 				pg.EarnedNanoton = pos.AccruedYieldNanoton
+			}
+			if inventoryItemDirectlyStakeable(item) {
+				id := item.ID.String()
+				pg.ItemID = &id
 			}
 		}
 
@@ -323,11 +325,26 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 	}
 
 	if item, err := s.inventory.FindByTelegramGiftID(ctx, userID, slug); err == nil {
-		return s.stakeExistingItem(ctx, userID, item)
+		if inventoryItemDirectlyStakeable(item) {
+			return s.stakeExistingItem(ctx, userID, item)
+		}
+		if blocked, blockErr := inventoryItemBlocksProfileStake(item); blocked {
+			return nil, blockErr
+		}
+		// withdrawn: gift may still be on Telegram profile — scan and stake as profile below
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 
+	return s.stakeProfileGiftFromScan(ctx, userID, user, slug)
+}
+
+func (s *Service) stakeProfileGiftFromScan(
+	ctx context.Context,
+	userID uuid.UUID,
+	user *domain.User,
+	slug string,
+) (*domain.StakingPosition, error) {
 	scanned, err := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
 		TelegramUserID: user.TelegramID,
 		Username:       user.Username,
@@ -345,7 +362,7 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 		}
 	}
 	if gift == nil {
-		return nil, domain.ErrInvalidAmount
+		return nil, errors.New("подарок не найден в профиле Telegram")
 	}
 
 	now := time.Now().UTC()
@@ -368,12 +385,50 @@ func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string
 	}
 	if err := s.inventory.Create(ctx, item); err != nil {
 		if item, findErr := s.inventory.FindByTelegramGiftID(ctx, userID, slug); findErr == nil {
-			return s.stakeExistingItem(ctx, userID, item)
+			if inventoryItemDirectlyStakeable(item) {
+				return s.stakeExistingItem(ctx, userID, item)
+			}
 		}
 		return nil, err
 	}
 
 	return s.createStake(ctx, userID, item, domain.StakingSourceProfile)
+}
+
+func inventoryItemDirectlyStakeable(item *domain.InventoryItem) bool {
+	switch item.Status {
+	case domain.InvAvailable:
+		return true
+	case domain.InvDissolved:
+		return isProfileItem(*item)
+	default:
+		return false
+	}
+}
+
+func inventoryItemBlocksProfileStake(item *domain.InventoryItem) (bool, error) {
+	switch item.Status {
+	case domain.InvLocked:
+		return true, errors.New("подарок выставлен на маркет")
+	case domain.InvInBet:
+		return true, errors.New("подарок участвует в игре")
+	case domain.InvStaked:
+		return true, errors.New("подарок уже в стейке")
+	case domain.InvLiquidated:
+		if isProfileItem(*item) {
+			return true, errors.New("подарок недоступен для стейкинга")
+		}
+		return true, errors.New("подарок продан и больше недоступен")
+	case domain.InvDissolved:
+		if !isProfileItem(*item) {
+			return true, errors.New("подарок недоступен для стейкинга")
+		}
+		return false, nil
+	case domain.InvWithdrawn:
+		return false, nil
+	default:
+		return true, errors.New("подарок недоступен для стейкинга")
+	}
 }
 
 func (s *Service) stakeExistingItem(ctx context.Context, userID uuid.UUID, item *domain.InventoryItem) (*domain.StakingPosition, error) {

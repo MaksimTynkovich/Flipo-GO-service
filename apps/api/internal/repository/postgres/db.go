@@ -34,27 +34,7 @@ func NewDB(dsn string) (*gorm.DB, error) {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	if err := migrateStakingEpochs(db); err != nil {
-		return err
-	}
-	if err := migratePvPPlayerStake(db); err != nil {
-		return err
-	}
-	if err := migratePvPCombinedStakes(db); err != nil {
-		return err
-	}
-	if err := migrateGiftAdminPrices(db); err != nil {
-		return err
-	}
-	if err := migrateGiftAdjustPercents(db); err != nil {
-		return err
-	}
-	if err := migrateStakingCapsQuests(db); err != nil {
-		return err
-	}
-	if err := migrateReferralV2(db); err != nil {
-		return err
-	}
+	// Create/update schema first so fresh databases have tables before legacy ALTERs.
 	if err := db.AutoMigrate(
 		&domain.User{},
 		&domain.InventoryItem{},
@@ -89,6 +69,27 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.ReferralMilestone{},
 		&domain.GameOutcomeOverride{},
 	); err != nil {
+		return err
+	}
+	if err := migrateStakingEpochs(db); err != nil {
+		return err
+	}
+	if err := migratePvPPlayerStake(db); err != nil {
+		return err
+	}
+	if err := migratePvPCombinedStakes(db); err != nil {
+		return err
+	}
+	if err := migrateGiftAdminPrices(db); err != nil {
+		return err
+	}
+	if err := migrateGiftAdjustPercents(db); err != nil {
+		return err
+	}
+	if err := migrateStakingCapsQuests(db); err != nil {
+		return err
+	}
+	if err := migrateReferralV2(db); err != nil {
 		return err
 	}
 	return migrateInventoryGiftHistory(db)

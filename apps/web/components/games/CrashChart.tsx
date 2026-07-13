@@ -16,6 +16,7 @@ import {
   statusSubtext,
 } from "@/lib/crash";
 import { cn } from "@/lib/utils";
+import { giftImageUrlFromURL } from "@/lib/gifts";
 
 export type CrashStageFx =
   | { kind: "win"; amountTon: string }
@@ -1205,7 +1206,7 @@ export function CrashChart({
                         className="flex h-4 w-4 shrink-0 overflow-hidden rounded bg-white/10"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={gift.image_url} alt="" className="h-full w-full object-cover" />
+                        <img src={giftImageUrlFromURL(gift.image_url)} alt="" className="h-full w-full object-cover" />
                       </span>
                     ))}
                     <TonAmount amount={stakeHud.stakeTon} iconSize="xs" />

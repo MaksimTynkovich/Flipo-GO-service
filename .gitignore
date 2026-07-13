@@ -10,5 +10,8 @@ apps/web/.env.local
 ngrok.log
 logs/
 apps/api/data/telegram/
+data/gifts/
 .DS_Store
 apps/api/assets/bots/
+# Prebuilt Linux binaries for small VPS deploys
+deploy/prebuilt/

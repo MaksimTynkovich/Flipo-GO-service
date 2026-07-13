@@ -12,7 +12,22 @@ Platform defaults that **remain** (product, not demo): game configs, staking que
 
 ---
 
-## Pre-flight checklist
+### Live deploy (flipo.rest)
+
+- Host: `5.252.155.209` (`/opt/flipo`)
+- Stack: Docker Compose + Caddy (TLS) behind Cloudflare
+- Cloudflare SSL: prefer **Full (strict)**; origin Caddy has `auto_https disable_redirects` so Flexible also works
+- Small VPS (4 GB RAM): API image uses prebuilt linux/amd64 binary (`deploy/docker/api.Dockerfile` + `deploy/prebuilt/api`). Full Go build: `api.Dockerfile.build`
+- Rebuild/restart on server:
+  ```bash
+  cd /opt/flipo/deploy
+  docker compose --env-file ../.env up -d --build
+  systemctl reload caddy
+  ```
+
+---
+
+# Pre-flight checklist
 
 ### Secrets & flags (blockers)
 

@@ -15,8 +15,7 @@ import {
   type AdminGiftPriceSettings,
   type MarketListing,
 } from "@/lib/api";
-
-type SourceFilter = "all" | "bot" | "user";
+import { giftImageUrlFromURL } from "@/lib/gifts"; = "all" | "bot" | "user";
 type MarketTab = "listings" | "gift-prices";
 
 const DEFAULT_GIFT_SETTINGS: AdminGiftPriceSettings = {
@@ -352,7 +351,7 @@ export default function MarketAdminSection() {
                     {listing.item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={listing.item.image_url}
+                        src={giftImageUrlFromURL(listing.item.image_url)}
                         alt={listing.item.name}
                         className="h-14 w-14 shrink-0 rounded-lg object-cover"
                       />

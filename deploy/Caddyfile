@@ -1,0 +1,59 @@
+{
+	# Cloudflare may hit origin over HTTP (Flexible) or HTTPS (Full).
+	# Disable origin HTTP→HTTPS redirects to avoid CF redirect loops.
+	auto_https disable_redirects
+}
+
+flipo.rest {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /ws* {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /ready {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /static/bots* {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /static/gifts* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}
+
+http://flipo.rest {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /ws* {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /ready {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /static/bots* {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /static/gifts* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

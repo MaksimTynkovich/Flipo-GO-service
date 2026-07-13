@@ -41,8 +41,10 @@ services:
       DEBUG_AUTH_ENABLED: "false"
       TON_CHAIN_DEV_MODE: "false"
       BOTS_DATA_DIR: /assets/bots
+      GIFTS_CACHE_DIR: /data/gifts
+      TELEGRAM_SESSION_PATH: /data/telegram/session.json
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,7 +52,8 @@ services:
         condition: service_healthy
     volumes:
       - ../logs:/var/log/flipo
-      - telegram_session:/app/data/telegram
+      - ../data/telegram:/data/telegram
+      - ../data/gifts:/data/gifts
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
       interval: 10s
@@ -73,17 +76,17 @@ services:
     environment:
       API_UPSTREAM: http://api:8080
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  telegram_session:

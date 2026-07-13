@@ -32,6 +32,9 @@ func migrateStakingEpochs(db *gorm.DB) error {
 	}
 
 	if !columnExists(db, "staking_positions", "epoch_id") {
+		if !tableExists(db, "staking_positions") {
+			return fmt.Errorf("staking_positions missing before epoch migration")
+		}
 		if err := db.Exec(`ALTER TABLE staking_positions ADD COLUMN epoch_id UUID`).Error; err != nil {
 			return fmt.Errorf("add epoch_id: %w", err)
 		}

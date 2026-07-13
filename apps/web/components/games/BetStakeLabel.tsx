@@ -3,6 +3,7 @@
 import { Gift } from "lucide-react";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { formatTON, BetGiftView } from "@/lib/api";
+import { giftImageUrlFromURL } from "@/lib/gifts";
 
 type Props = {
   amountNanoton: number;
@@ -34,7 +35,7 @@ export function BetStakeLabel({
           className={`flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden rounded bg-surface`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={gift.image_url} alt="" className="h-full w-full object-cover" />
+          <img src={giftImageUrlFromURL(gift.image_url)} alt="" className="h-full w-full object-cover" />
         </span>
         <TonAmount amount={formatTON(amountNanoton)} iconSize={iconSize} />
       </span>
@@ -72,7 +73,7 @@ export function GiftStakeIcons({
           className={`flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden rounded bg-surface`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={gift.image_url} alt="" className="h-full w-full object-cover" />
+          <img src={giftImageUrlFromURL(gift.image_url)} alt="" className="h-full w-full object-cover" />
         </span>
       ))}
       {amountNanoton != null && amountNanoton > 0 && (
