@@ -173,7 +173,9 @@ export function StakingSection() {
       {loading ? (
         <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
           {Array.from({ length: 6 }).map((_, i) => (
-            <GiftTileSkeleton key={i} />
+            <div key={i} className="h-full min-w-0">
+              <GiftTileSkeleton />
+            </div>
           ))}
         </div>
       ) : gifts.length === 0 ? (
@@ -232,11 +234,11 @@ export function StakingSection() {
                   ) : null}
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
+                <div className="grid grid-cols-3 items-stretch gap-x-2.5 gap-y-3.5">
                   {stakedGifts.map((gift, index) => (
                     <div
                       key={gift.slug}
-                      className="stagger-item"
+                      className="stagger-item h-full min-w-0"
                       style={{ animationDelay: `${index * 40}ms` }}
                     >
                       <GiftTile gift={gift} onInspect={setInspected} />
@@ -286,11 +288,11 @@ export function StakingSection() {
                     {stakingNoTransferHint()}
                   </p>
 
-                  <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
+                  <div className="grid grid-cols-3 items-stretch gap-x-2.5 gap-y-3.5">
                     {unstakedGifts.map((gift, index) => (
                       <div
                         key={gift.slug}
-                        className="stagger-item"
+                        className="stagger-item h-full min-w-0"
                         style={{ animationDelay: `${index * 40}ms` }}
                       >
                         <GiftTile

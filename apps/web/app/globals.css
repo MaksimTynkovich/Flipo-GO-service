@@ -4322,6 +4322,8 @@ body::-webkit-scrollbar,
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  width: 100%;
+  height: 100%;
   padding: 0.4rem;
   margin: 0;
   border: 0;
@@ -4362,14 +4364,20 @@ body::-webkit-scrollbar,
 }
 
 .gift-card__meta {
+  display: flex;
   min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-start;
   padding: 0 0.15rem 0.15rem;
 }
 
 .gift-card__title {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: calc(0.7rem * 1.25 * 2);
   font-size: 0.7rem;
   font-weight: 550;
   line-height: 1.25;
@@ -4380,7 +4388,8 @@ body::-webkit-scrollbar,
   display: inline-flex;
   align-items: center;
   gap: 0.22rem;
-  margin-top: 0.18rem;
+  margin-top: auto;
+  padding-top: 0.18rem;
   font-size: 0.75rem;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
