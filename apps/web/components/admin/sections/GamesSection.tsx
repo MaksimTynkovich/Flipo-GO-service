@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminFloatField, AdminIntField, AdminPercentField, AdminTonField } from "@/components/admin/AdminInputs";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/PageShell";
@@ -107,72 +108,42 @@ export default function GamesSection() {
           <div key={cfg.game_type} className="space-y-2 rounded-xl border border-border p-3 text-sm">
             <p className="font-semibold uppercase">{cfg.game_type}</p>
             <div className="grid grid-cols-2 gap-2">
-              <label className="text-xs text-muted">
-                Min bet (nanoton)
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  value={cfg.min_bet_nanoton}
-                  onChange={(e) =>
-                    setConfigs((prev) =>
-                      prev.map((c) =>
-                        c.game_type === cfg.game_type
-                          ? { ...c, min_bet_nanoton: Number(e.target.value) }
-                          : c,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                Max bet (nanoton)
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  value={cfg.max_bet_nanoton}
-                  onChange={(e) =>
-                    setConfigs((prev) =>
-                      prev.map((c) =>
-                        c.game_type === cfg.game_type
-                          ? { ...c, max_bet_nanoton: Number(e.target.value) }
-                          : c,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                House edge (bps)
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  value={cfg.house_edge_bps}
-                  onChange={(e) =>
-                    setConfigs((prev) =>
-                      prev.map((c) =>
-                        c.game_type === cfg.game_type
-                          ? { ...c, house_edge_bps: Number(e.target.value) }
-                          : c,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                RTP (bps)
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  value={cfg.rtp_bps}
-                  onChange={(e) =>
-                    setConfigs((prev) =>
-                      prev.map((c) =>
-                        c.game_type === cfg.game_type ? { ...c, rtp_bps: Number(e.target.value) } : c,
-                      ),
-                    )
-                  }
-                />
-              </label>
+              <AdminTonField
+                label="Мин. ставка (TON)"
+                valueNanoton={cfg.min_bet_nanoton}
+                onChangeNanoton={(v) =>
+                  setConfigs((prev) =>
+                    prev.map((c) => (c.game_type === cfg.game_type ? { ...c, min_bet_nanoton: v } : c)),
+                  )
+                }
+              />
+              <AdminTonField
+                label="Макс. ставка (TON)"
+                valueNanoton={cfg.max_bet_nanoton}
+                onChangeNanoton={(v) =>
+                  setConfigs((prev) =>
+                    prev.map((c) => (c.game_type === cfg.game_type ? { ...c, max_bet_nanoton: v } : c)),
+                  )
+                }
+              />
+              <AdminPercentField
+                label="House edge (%)"
+                valueBps={cfg.house_edge_bps}
+                onChangeBps={(v) =>
+                  setConfigs((prev) =>
+                    prev.map((c) => (c.game_type === cfg.game_type ? { ...c, house_edge_bps: v } : c)),
+                  )
+                }
+              />
+              <AdminPercentField
+                label="RTP (%)"
+                valueBps={cfg.rtp_bps}
+                onChangeBps={(v) =>
+                  setConfigs((prev) =>
+                    prev.map((c) => (c.game_type === cfg.game_type ? { ...c, rtp_bps: v } : c)),
+                  )
+                }
+              />
             </div>
             <AdminToolbar>
               <AdminButton
@@ -275,97 +246,97 @@ export default function GamesSection() {
           </div>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Field
+            <AdminIntField
               label="Online min"
               hint="Нижняя граница «живого» онлайна до учёта времени суток. Реальный ползунок плавно тянется к цели между min и max."
               value={sim.online_base_min}
               onChange={(v) => setSim({ ...sim, online_base_min: v })}
             />
-            <Field
+            <AdminIntField
               label="Online max"
               hint="Верхняя граница онлайна. Вечером (высокий TOD) число ближе к max, ночью — ближе к min×TOD."
               value={sim.online_base_max}
               onChange={(v) => setSim({ ...sim, online_base_max: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Jitter (0–1)"
               hint="Случайный шум вокруг целевого онлайна. 0 — почти ровная линия, 0.1–0.2 — лёгкая «живость», выше 0.3 — заметные колебания."
               value={sim.online_jitter}
               onChange={(v) => setSim({ ...sim, online_jitter: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Chaos (0–1)"
               hint="Разброс пауз и «тишины» между событиями. Выше — реже, но пачками; ниже — ровнее поток ставок и комнат."
               value={sim.chaos}
               onChange={(v) => setSim({ ...sim, chaos: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Bet intensity"
               hint="Сколько примерно фейк-ставок за одно betting-окно Crash/Roulette (ещё умножается на TOD). 6–12 — умеренно, 20+ — очень шумно."
               value={sim.bet_intensity}
               onChange={(v) => setSim({ ...sim, bet_intensity: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Bet burst chance"
               hint="Вероятность «пачки» ставок сразу (2–3 штуки), особенно в начале окна и за 2–3 с до конца. 0.3–0.4 выглядит естественно."
               value={sim.bet_burst_chance}
               onChange={(v) => setSim({ ...sim, bet_burst_chance: v })}
             />
-            <Field
+            <AdminIntField
               label="Idle gap min (ms)"
               hint="Минимальная пауза между фейк-ставками. Меньше — плотнее лента. Обычно 300–600 мс."
               value={sim.idle_gap_ms_min}
               onChange={(v) => setSim({ ...sim, idle_gap_ms_min: v })}
             />
-            <Field
+            <AdminIntField
               label="Idle gap max (ms)"
               hint="Максимальная пауза между ставками. Вместе с chaos даёт «дыхание» ленты. 1500–2500 мс — спокойный ритм."
               value={sim.idle_gap_ms_max}
               onChange={(v) => setSim({ ...sim, idle_gap_ms_max: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Stake p50 frac"
               hint="Медиана суммы ставки как доля от диапазона min–max bet игры. 0.1–0.2 = чаще мелкие ставки. Не абсолютные TON."
               value={sim.stake_p50}
               onChange={(v) => setSim({ ...sim, stake_p50: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Stake p90 frac"
               hint="90-й перцентиль доли ставки. Редкие крупные ставки тянутся сюда и выше. Держите выше p50 (например 0.5–0.6)."
               value={sim.stake_p90}
               onChange={(v) => setSim({ ...sim, stake_p90: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Crash auto-cashout share"
               hint="Доля ботов с авто-кэшаутом. Остальные «вручную» выходят реже во время полёта. ~0.5–0.6 выглядит живо."
               value={sim.crash_auto_cashout_share}
               onChange={(v) => setSim({ ...sim, crash_auto_cashout_share: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Crash cashout min×"
               hint="Минимальный множитель авто/ручного кэшаута ботов. Обычно от 1.15–1.3."
               value={sim.crash_cashout_min}
               onChange={(v) => setSim({ ...sim, crash_cashout_min: v })}
             />
-            <FloatField
+            <AdminFloatField
               label="Crash cashout max×"
               hint="Максимальный множитель кэшаута ботов. Слишком высокий — много «пролётов» до краша; 3–5× обычно достаточно."
               value={sim.crash_cashout_max}
               onChange={(v) => setSim({ ...sim, crash_cashout_max: v })}
             />
-            <Field
+            <AdminIntField
               label="PvP max ghost rooms"
               hint="Сколько фейк-комнат максимум видно в лобби одновременно. 3–5 достаточно; больше забивает реальные комнаты."
               value={sim.pvp_max_ghost_rooms}
               onChange={(v) => setSim({ ...sim, pvp_max_ghost_rooms: v })}
             />
-            <Field
+            <AdminIntField
               label="PvP TTL min (sec)"
               hint="Минимальное время жизни открытой ghost-комнаты, если второй «игрок» не зашёл. Короче — быстрее ротация карточек."
               value={sim.pvp_room_ttl_sec_min}
               onChange={(v) => setSim({ ...sim, pvp_room_ttl_sec_min: v })}
             />
-            <Field
+            <AdminIntField
               label="PvP TTL max (sec)"
               hint="Максимальное время жизни открытой ghost-комнаты. Вместе с min задаёт разброс появления/исчезновения."
               value={sim.pvp_room_ttl_sec_max}
@@ -390,20 +361,20 @@ export default function GamesSection() {
         <section className="panel space-y-3">
           <p className="text-base font-semibold">Anti-whale лимиты</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Field
-              label="Max daily win (nanoton)"
-              value={risk.max_daily_win_nanoton}
-              onChange={(v) => setRisk({ ...risk, max_daily_win_nanoton: v })}
+            <AdminTonField
+              label="Макс. выигрыш в день (TON)"
+              valueNanoton={risk.max_daily_win_nanoton}
+              onChangeNanoton={(v) => setRisk({ ...risk, max_daily_win_nanoton: v })}
             />
-            <Field
-              label="Max round exposure (nanoton)"
-              value={risk.max_round_exposure_nanoton}
-              onChange={(v) => setRisk({ ...risk, max_round_exposure_nanoton: v })}
+            <AdminTonField
+              label="Макс. экспозиция раунда (TON)"
+              valueNanoton={risk.max_round_exposure_nanoton}
+              onChangeNanoton={(v) => setRisk({ ...risk, max_round_exposure_nanoton: v })}
             />
-            <Field
-              label="Whale bet threshold"
-              value={risk.whale_bet_threshold_nanoton}
-              onChange={(v) => setRisk({ ...risk, whale_bet_threshold_nanoton: v })}
+            <AdminTonField
+              label="Порог кита (TON)"
+              valueNanoton={risk.whale_bet_threshold_nanoton}
+              onChangeNanoton={(v) => setRisk({ ...risk, whale_bet_threshold_nanoton: v })}
             />
           </div>
           <AdminToolbar>
@@ -419,60 +390,5 @@ export default function GamesSection() {
         </section>
       ) : null}
     </PageShell>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  hint,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  hint?: string;
-}) {
-  return (
-    <label className="text-xs text-muted">
-      <span className="inline-flex items-center gap-1.5">
-        {label}
-        {hint ? <AdminInfoHint label={label} hint={hint} /> : null}
-      </span>
-      <input
-        className="input-field mt-1"
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </label>
-  );
-}
-
-function FloatField({
-  label,
-  value,
-  onChange,
-  hint,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  hint?: string;
-}) {
-  return (
-    <label className="text-xs text-muted">
-      <span className="inline-flex items-center gap-1.5">
-        {label}
-        {hint ? <AdminInfoHint label={label} hint={hint} /> : null}
-      </span>
-      <input
-        className="input-field mt-1"
-        type="number"
-        step="0.01"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </label>
   );
 }

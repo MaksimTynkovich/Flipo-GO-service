@@ -148,7 +148,7 @@ export function MarketToolbar({
               role="dialog"
               aria-modal="true"
               aria-label="Фильтры маркета"
-              className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(84dvh,100%)] flex-col"
+              className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[84dvh] flex-col"
             >
               <div className="shrink-0 px-4 pt-2">
                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />

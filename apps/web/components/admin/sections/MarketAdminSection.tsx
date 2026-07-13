@@ -17,6 +17,7 @@ import {
   type MarketListing,
 } from "@/lib/api";
 import { giftImageUrlFromURL } from "@/lib/gifts";
+import { nanotonToTonInput, tonInputToNanoton } from "@/lib/admin-units";
 
 type SourceFilter = "all" | "bot" | "user";
 type MarketTab = "listings" | "gift-prices";
@@ -25,16 +26,6 @@ const DEFAULT_GIFT_SETTINGS: AdminGiftPriceSettings = {
   buy_adjust_percent: 0,
   valuation_adjust_percent: 0,
 };
-
-function tonToNanoton(ton: string): number {
-  const parsed = Number.parseFloat(ton.replace(",", "."));
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.round(parsed * 1_000_000_000);
-}
-
-function nanotonToTonInput(nanoton: number): string {
-  return (nanoton / 1_000_000_000).toFixed(2);
-}
 
 function parsePercent(raw: string): number | null {
   const trimmed = raw.trim().replace(",", ".");
@@ -138,7 +129,7 @@ export default function MarketAdminSection() {
   });
 
   async function handleSaveListing(listing: MarketListing) {
-    const priceNanoton = tonToNanoton(draftPrices[listing.id] ?? "");
+    const priceNanoton = tonInputToNanoton(draftPrices[listing.id] ?? "");
     if (priceNanoton <= 0) {
       showToast({ variant: "error", title: "Введите корректную цену" });
       return;

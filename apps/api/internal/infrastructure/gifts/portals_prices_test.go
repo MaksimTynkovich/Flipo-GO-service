@@ -30,36 +30,22 @@ func TestPortalsCollectionKey(t *testing.T) {
 	}
 }
 
-func TestPortalsModelFloorTON(t *testing.T) {
+func TestQuoteTONUsesTraitCombo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/collections":
 			_, _ = w.Write([]byte(`{"collections":[{"id":"coll-1","short_name":"surgeboard","floor_price":"5.95"}]}`))
 		case r.URL.Path == "/nfts/search":
-			_, _ = w.Write([]byte(`{"results":[{"price":"5.95"}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	p := NewPortalsPrices(srv.URL)
-	ton, err := p.ModelFloorTON(context.Background(), "surgeBoard", "Blåhaj")
-	if err != nil {
-		t.Fatalf("ModelFloorTON: %v", err)
-	}
-	if ton != 5.95 {
-		t.Fatalf("ModelFloorTON = %v, want 5.95", ton)
-	}
-}
-
-func TestQuoteTONPrefersPortalsModelFloor(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/collections":
-			_, _ = w.Write([]byte(`{"collections":[{"id":"coll-1","short_name":"surgeboard","floor_price":"5.95"}]}`))
-		case r.URL.Path == "/nfts/search":
-			_, _ = w.Write([]byte(`{"results":[{"price":"5.95"}]}`))
+			q := r.URL.Query()
+			if q.Get("filter_by_backdrops") == "Black" && q.Get("filter_by_models") == "Hoverboard" {
+				_, _ = w.Write([]byte(`{"results":[{"price":"42.5","status":"listed"}]}`))
+				return
+			}
+			if q.Get("filter_by_models") == "Blåhaj" {
+				_, _ = w.Write([]byte(`{"results":[{"price":"5.95","status":"listed"}]}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"results":[]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -70,18 +56,32 @@ func TestQuoteTONPrefersPortalsModelFloor(t *testing.T) {
 	m.portals = NewPortalsPrices(srv.URL)
 
 	ton, source, err := m.QuoteTON(context.Background(), "surgeBoard", telegram.GiftAttributes{
+		Model:    "Hoverboard",
+		Backdrop: "Black",
+	})
+	if err != nil {
+		t.Fatalf("QuoteTON black: %v", err)
+	}
+	if source != PriceSourcePortalsTraits {
+		t.Fatalf("source = %q, want %q", source, PriceSourcePortalsTraits)
+	}
+	if ton != 42.5 {
+		t.Fatalf("QuoteTON black = %v, want 42.5", ton)
+	}
+
+	ton, source, err = m.QuoteTON(context.Background(), "surgeBoard", telegram.GiftAttributes{
 		Model:    "Blåhaj",
 		Backdrop: "Mexican Pink",
 		Symbol:   "Alarm",
 	})
 	if err != nil {
-		t.Fatalf("QuoteTON: %v", err)
+		t.Fatalf("QuoteTON blahaj: %v", err)
 	}
-	if source != PriceSourcePortalsModel {
-		t.Fatalf("source = %q, want %q", source, PriceSourcePortalsModel)
+	if source != PriceSourcePortalsTraits {
+		t.Fatalf("source = %q, want %q", source, PriceSourcePortalsTraits)
 	}
 	if ton != 5.95 {
-		t.Fatalf("QuoteTON = %v, want 5.95", ton)
+		t.Fatalf("QuoteTON blahaj = %v, want 5.95", ton)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestValuatorSurgeBoard1081(t *testing.T) {
 		case r.URL.Path == "/collections":
 			_, _ = w.Write([]byte(`{"collections":[{"id":"coll-1","short_name":"surgeboard","floor_price":"5.95"}]}`))
 		case r.URL.Path == "/nfts/search":
-			_, _ = w.Write([]byte(`{"results":[{"price":"5.95"}]}`))
+			_, _ = w.Write([]byte(`{"results":[{"price":"5.95","status":"listed"}]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -113,8 +113,8 @@ func TestValuatorSurgeBoard1081(t *testing.T) {
 	}
 
 	enriched := v.Enrich(context.Background(), []telegram.ScannedGift{gift})[0]
-	if enriched.PriceSource != PriceSourcePortalsModel {
-		t.Fatalf("source = %q, want %q", enriched.PriceSource, PriceSourcePortalsModel)
+	if enriched.PriceSource != PriceSourcePortalsTraits {
+		t.Fatalf("source = %q, want %q", enriched.PriceSource, PriceSourcePortalsTraits)
 	}
 	if enriched.PriceNanoton != 5_950_000_000 {
 		t.Fatalf("price = %d, want 5950000000", enriched.PriceNanoton)

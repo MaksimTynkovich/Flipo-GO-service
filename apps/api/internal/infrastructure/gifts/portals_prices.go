@@ -11,18 +11,20 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 )
 
 const defaultPortalsBase = "https://portal-market.com/api"
 
 type PortalsPrices struct {
-	baseURL    string
-	httpClient *http.Client
-	mu         sync.RWMutex
-	collections map[string]portalsCollection
+	baseURL       string
+	httpClient    *http.Client
+	mu            sync.RWMutex
+	collections   map[string]portalsCollection
 	collectionsAt time.Time
-	modelFloors map[string]cachedPortalsPrice
-	cacheTTL   time.Duration
+	comboFloors   map[string]cachedPortalsPrice
+	cacheTTL      time.Duration
 }
 
 type portalsCollection struct {
@@ -46,7 +48,8 @@ type portalsCollectionsResponse struct {
 
 type portalsSearchResponse struct {
 	Results []struct {
-		Price string `json:"price"`
+		Price  *string `json:"price"`
+		Status string  `json:"status"`
 	} `json:"results"`
 }
 
@@ -60,7 +63,7 @@ func NewPortalsPrices(baseURL string) *PortalsPrices {
 			Timeout: 10 * time.Second,
 		},
 		collections: make(map[string]portalsCollection),
-		modelFloors: make(map[string]cachedPortalsPrice),
+		comboFloors: make(map[string]cachedPortalsPrice),
 		cacheTTL:    5 * time.Minute,
 	}
 }
@@ -80,20 +83,44 @@ func (p *PortalsPrices) CollectionFloorTON(ctx context.Context, collectionSlug s
 	return coll.FloorTON, nil
 }
 
-func (p *PortalsPrices) ModelFloorTON(ctx context.Context, collectionSlug, model string) (float64, error) {
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return 0, fmt.Errorf("model is required")
+// QuoteTON returns the cheapest listed Portals price for progressively looser trait filters.
+func (p *PortalsPrices) QuoteTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, string, error) {
+	attempts := []struct {
+		model, backdrop, symbol string
+		source                  string
+	}{
+		{attrs.Model, attrs.Backdrop, attrs.Symbol, PriceSourcePortalsTraits},
+		{attrs.Model, attrs.Backdrop, "", PriceSourcePortalsTraits},
+		{attrs.Model, "", "", PriceSourcePortalsModel},
+		{"", attrs.Backdrop, "", PriceSourcePortalsBackdrop},
 	}
 
+	for _, attempt := range attempts {
+		if attempt.model == "" && attempt.backdrop == "" {
+			continue
+		}
+		price, err := p.listedTraitFloorTON(ctx, collectionSlug, attempt.model, attempt.backdrop, attempt.symbol)
+		if err == nil && price > 0 {
+			return price, attempt.source, nil
+		}
+	}
+
+	if ton, err := p.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
+		return ton, PriceSourcePortals, nil
+	}
+
+	return 0, PriceSourceNone, fmt.Errorf("no portals quote for %s", collectionSlug)
+}
+
+func (p *PortalsPrices) listedTraitFloorTON(ctx context.Context, collectionSlug, model, backdrop, symbol string) (float64, error) {
 	coll, err := p.resolveCollection(ctx, collectionSlug)
 	if err != nil {
 		return 0, err
 	}
 
-	cacheKey := coll.ID + "\x00" + model
+	cacheKey := coll.ID + "\x00" + model + "\x00" + backdrop + "\x00" + symbol
 	p.mu.RLock()
-	if cached, ok := p.modelFloors[cacheKey]; ok && time.Since(cached.at) < p.cacheTTL {
+	if cached, ok := p.comboFloors[cacheKey]; ok && time.Since(cached.at) < p.cacheTTL {
 		price := cached.price
 		p.mu.RUnlock()
 		return price, nil
@@ -102,31 +129,46 @@ func (p *PortalsPrices) ModelFloorTON(ctx context.Context, collectionSlug, model
 
 	query := url.Values{}
 	query.Set("collection_id", coll.ID)
-	query.Set("filter_by_models", model)
-	query.Set("limit", "1")
+	query.Set("limit", "10")
 	query.Set("sort", "price_asc")
+	query.Set("status", "listed")
+	if model != "" {
+		query.Set("filter_by_models", model)
+	}
+	if backdrop != "" {
+		query.Set("filter_by_backdrops", backdrop)
+	}
+	if symbol != "" {
+		query.Set("filter_by_symbols", symbol)
+	}
 
 	var payload portalsSearchResponse
 	if err := p.fetchJSON(ctx, p.baseURL+"/nfts/search?"+query.Encode(), &payload); err != nil {
 		return 0, err
 	}
-	if len(payload.Results) == 0 {
-		return 0, fmt.Errorf("portals model floor not found for %s/%s", collectionSlug, model)
-	}
 
-	price, err := parsePortalsTON(payload.Results[0].Price)
-	if err != nil {
-		return 0, err
+	var best float64
+	for _, item := range payload.Results {
+		if item.Price == nil {
+			continue
+		}
+		price, err := parsePortalsTON(*item.Price)
+		if err != nil || price <= 0 {
+			continue
+		}
+		if best == 0 || price < best {
+			best = price
+		}
 	}
-	if price <= 0 {
-		return 0, fmt.Errorf("portals model floor is zero for %s/%s", collectionSlug, model)
+	if best <= 0 {
+		return 0, fmt.Errorf("portals listed floor not found for %s", collectionSlug)
 	}
 
 	p.mu.Lock()
-	p.modelFloors[cacheKey] = cachedPortalsPrice{price: price, at: time.Now()}
+	p.comboFloors[cacheKey] = cachedPortalsPrice{price: best, at: time.Now()}
 	p.mu.Unlock()
 
-	return price, nil
+	return best, nil
 }
 
 func (p *PortalsPrices) resolveCollection(ctx context.Context, collectionSlug string) (*portalsCollection, error) {

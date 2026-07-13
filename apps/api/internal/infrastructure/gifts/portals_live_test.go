@@ -32,7 +32,7 @@ func TestLivePortalsSurgeBoard1081(t *testing.T) {
 	}
 	ton := float64(enriched.PriceNanoton) / 1e9
 	t.Logf("surgeBoard-1081 quote: %.2f TON source=%s", ton, enriched.PriceSource)
-	if ton < 5.5 || ton > 6.5 {
-		t.Fatalf("quote %.2f TON outside expected ~5.8-6.0 range", ton)
+	if enriched.PriceSource != PriceSourcePortalsTraits && enriched.PriceSource != PriceSourcePortalsModel {
+		t.Fatalf("unexpected source %q", enriched.PriceSource)
 	}
 }

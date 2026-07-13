@@ -13,7 +13,9 @@ import (
 const (
 	PriceSourceTelegram        = "telegram"
 	PriceSourceTraits          = "traits"
+	PriceSourcePortalsTraits   = "portals_traits"
 	PriceSourcePortalsModel    = "portals_model"
+	PriceSourcePortalsBackdrop = "portals_backdrop"
 	PriceSourcePortals         = "portals"
 	PriceSourceCollectionFloor = "collection_floor"
 	PriceSourceDBFloor         = "db_floor"

@@ -69,41 +69,22 @@ func NewMarketPrices(baseURL string) *MarketPrices {
 }
 
 // QuoteTON returns the best available market quote for a gift.
-// Priority: Portals model floor → Portals collection floor → catalog model → catalog collection floor.
+// Priority: Portals trait combos (model+backdrop) → catalog traits with premium backdrops → collection floor.
 func (m *MarketPrices) QuoteTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, string, error) {
 	if m.portals != nil {
-		if attrs.Model != "" {
-			if ton, err := m.portals.ModelFloorTON(ctx, collectionSlug, attrs.Model); err == nil && ton > 0 {
-				return ton, PriceSourcePortalsModel, nil
-			}
-		}
-		if ton, err := m.portals.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
-			return ton, PriceSourcePortals, nil
+		if ton, source, err := m.portals.QuoteTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
+			return ton, source, nil
 		}
 	}
 
-	if attrs.Model != "" {
-		if ton, err := m.catalogModelTON(ctx, collectionSlug, attrs.Model); err == nil && ton > 0 {
-			return ton, PriceSourceTraits, nil
-		}
+	if ton, err := m.catalogTraitTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
+		return ton, PriceSourceTraits, nil
 	}
 	if ton, err := m.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
 		return ton, PriceSourceCollectionFloor, nil
 	}
 
 	return 0, PriceSourceNone, fmt.Errorf("no market quote for %s", collectionSlug)
-}
-
-func (m *MarketPrices) catalogModelTON(ctx context.Context, collectionSlug, model string) (float64, error) {
-	key := collectionAssetKey(collectionSlug)
-	traits, err := m.loadTraits(ctx, key)
-	if err != nil {
-		return 0, err
-	}
-	if price, ok := traits.Models[model]; ok && price > 0 {
-		return price, nil
-	}
-	return 0, fmt.Errorf("catalog model price not found for %s/%s", collectionSlug, model)
 }
 
 func (m *MarketPrices) CollectionFloorTON(ctx context.Context, collectionSlug string) (float64, error) {
@@ -121,10 +102,7 @@ func (m *MarketPrices) CollectionFloorTON(ctx context.Context, collectionSlug st
 }
 
 func (m *MarketPrices) TraitQuoteTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, error) {
-	if attrs.Model != "" {
-		return m.catalogModelTON(ctx, collectionSlug, attrs.Model)
-	}
-	return 0, fmt.Errorf("no model price for %s", collectionSlug)
+	return m.catalogTraitTON(ctx, collectionSlug, attrs)
 }
 
 func (m *MarketPrices) loadCatalog(ctx context.Context) (*giftCatalog, error) {

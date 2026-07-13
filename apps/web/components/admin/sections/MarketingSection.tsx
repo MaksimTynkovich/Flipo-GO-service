@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminFloatField, AdminIntField, AdminTonField } from "@/components/admin/AdminInputs";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
@@ -156,134 +157,93 @@ export default function MarketingSection() {
         ) : (
           <>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="text-xs text-muted">
-                Реф. % стейкинга
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="0.1"
-                  value={settingsForm.referral_share_percent}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      referral_share_percent: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                Реф. % GGR
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="0.1"
-                  value={settingsForm.referral_ggr_share_percent}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      referral_ggr_share_percent: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                Milestone (TON)
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={settingsForm.referral_milestone_nanoton / 1_000_000_000}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      referral_milestone_nanoton: Math.round(Number(e.target.value) * 1_000_000_000),
-                    })
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                Milestone cap / мес
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={settingsForm.referral_milestone_monthly_cap}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      referral_milestone_monthly_cap: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                Monthly payout cap (TON)
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={settingsForm.referral_monthly_payout_cap_nanoton / 1_000_000_000}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      referral_monthly_payout_cap_nanoton: Math.round(Number(e.target.value) * 1_000_000_000),
-                    })
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                Staking base % / месяц
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="0.1"
-                  value={settingsForm.staking_base_monthly_percent}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      staking_base_monthly_percent: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                Staking boost % / месяц
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="0.1"
-                  value={settingsForm.staking_boost_monthly_percent}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      staking_boost_monthly_percent: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              <label className="text-xs text-muted">
-                TVL cap (TON)
-                <input
-                  className="input-field mt-1"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={(settingsForm.staking_tvl_cap_nanoton ?? 1_500_000_000_000) / 1_000_000_000}
-                  onChange={(e) =>
-                    setYieldSettings({
-                      ...settingsForm,
-                      staking_tvl_cap_nanoton: Math.round(Number(e.target.value) * 1_000_000_000),
-                    })
-                  }
-                />
-              </label>
+              <AdminFloatField
+                label="Реф. % стейкинга"
+                min={0}
+                value={settingsForm.referral_share_percent}
+                onChange={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    referral_share_percent: v,
+                  })
+                }
+              />
+              <AdminFloatField
+                label="Реф. % GGR"
+                min={0}
+                value={settingsForm.referral_ggr_share_percent}
+                onChange={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    referral_ggr_share_percent: v,
+                  })
+                }
+              />
+              <AdminTonField
+                label="Milestone (TON)"
+                valueNanoton={settingsForm.referral_milestone_nanoton}
+                onChangeNanoton={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    referral_milestone_nanoton: v,
+                  })
+                }
+              />
+              <AdminIntField
+                label="Milestone cap / мес"
+                min={0}
+                value={settingsForm.referral_milestone_monthly_cap}
+                onChange={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    referral_milestone_monthly_cap: v,
+                  })
+                }
+              />
+              <AdminTonField
+                label="Monthly payout cap (TON)"
+                valueNanoton={settingsForm.referral_monthly_payout_cap_nanoton}
+                onChangeNanoton={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    referral_monthly_payout_cap_nanoton: v,
+                  })
+                }
+              />
+              <AdminFloatField
+                label="Staking base % / месяц"
+                min={0}
+                value={settingsForm.staking_base_monthly_percent}
+                onChange={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    staking_base_monthly_percent: v,
+                  })
+                }
+              />
+              <AdminFloatField
+                label="Staking boost % / месяц"
+                min={0}
+                value={settingsForm.staking_boost_monthly_percent}
+                onChange={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    staking_boost_monthly_percent: v,
+                  })
+                }
+              />
+              <AdminTonField
+                label="TVL cap (TON)"
+                decimals={0}
+                step={1}
+                valueNanoton={settingsForm.staking_tvl_cap_nanoton ?? 1_500_000_000_000}
+                onChangeNanoton={(v) =>
+                  setYieldSettings({
+                    ...settingsForm,
+                    staking_tvl_cap_nanoton: v,
+                  })
+                }
+              />
             </div>
             <AdminToolbar>
               <AdminButton
@@ -340,32 +300,31 @@ export default function MarketingSection() {
         )}
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input
-            className="input-field"
-            placeholder="CODE"
-            value={draft.code}
-            onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
+          <label className="text-xs text-muted">
+            Промокод
+            <input
+              className="input-field mt-1"
+              placeholder="SUMMER25"
+              value={draft.code}
+              onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
+            />
+          </label>
+          <AdminTonField
+            label="Бонус (TON)"
+            valueNanoton={draft.bonus_nanoton}
+            onChangeNanoton={(v) => setDraft({ ...draft, bonus_nanoton: v })}
           />
-          <input
-            className="input-field"
-            type="number"
-            placeholder="Bonus nanoton"
-            value={draft.bonus_nanoton}
-            onChange={(e) => setDraft({ ...draft, bonus_nanoton: Number(e.target.value) })}
-          />
-          <input
-            className="input-field"
-            type="number"
-            placeholder="Wager multiplier"
+          <AdminFloatField
+            label="Wager multiplier"
+            min={1}
             value={draft.wager_multiplier}
-            onChange={(e) => setDraft({ ...draft, wager_multiplier: Number(e.target.value) })}
+            onChange={(v) => setDraft({ ...draft, wager_multiplier: v })}
           />
-          <input
-            className="input-field"
-            type="number"
-            placeholder="Max uses"
+          <AdminIntField
+            label="Max uses"
+            min={0}
             value={draft.max_uses}
-            onChange={(e) => setDraft({ ...draft, max_uses: Number(e.target.value) })}
+            onChange={(v) => setDraft({ ...draft, max_uses: v })}
           />
         </div>
         <AdminToolbar>

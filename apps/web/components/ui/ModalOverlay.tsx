@@ -17,7 +17,23 @@ type Props = {
 function readKeyboardInset(): number {
   const vv = window.visualViewport;
   if (!vv) return 0;
-  return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+
+  // Telegram Desktop / Web: visualViewport is often shorter than innerHeight because
+  // of client chrome — not the soft keyboard. Lifting the sheet there looks broken.
+  if (document.documentElement.classList.contains("tg-desktop")) {
+    return 0;
+  }
+
+  const appHeightRaw = getComputedStyle(document.documentElement)
+    .getPropertyValue("--app-height")
+    .trim();
+  const appHeight = Number.parseFloat(appHeightRaw);
+  const stableHeight =
+    Number.isFinite(appHeight) && appHeight > 0 ? appHeight : window.innerHeight;
+
+  const inset = Math.max(0, stableHeight - vv.height - vv.offsetTop);
+  // Mobile keyboards are large; ignore minor visualViewport jitter.
+  return inset >= 120 ? inset : 0;
 }
 
 export function ModalOverlay({ onClose, children, className, analyticsModalId }: Props) {
@@ -101,7 +117,6 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
       style={{
         top: "calc(-1 * env(safe-area-inset-top, 0px))",
         bottom: keyboardInset,
-        height: "auto",
         transition: keyboardInset > 0 ? "bottom var(--duration-base) var(--ease-out)" : undefined,
       }}
     >
