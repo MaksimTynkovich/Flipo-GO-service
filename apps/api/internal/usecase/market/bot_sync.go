@@ -194,7 +194,11 @@ func (s *BotSyncService) Reprice(ctx context.Context) (*BotRepriceResult, error)
 
 func (s *BotSyncService) syncOne(ctx context.Context, gift telegram.IncomingGift) (string, error) {
 	if existing, err := s.inventory.FindActiveByGiftSlug(ctx, gift.Slug); err == nil {
-		_ = existing
+		if relisted, err := s.tryRelistBotOwned(ctx, existing, gift); err != nil {
+			return "", err
+		} else if relisted {
+			return "listed", nil
+		}
 		return "owned", nil
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", err
@@ -220,7 +224,11 @@ func (s *BotSyncService) syncOne(ctx context.Context, gift telegram.IncomingGift
 
 	txRef := botMarketTxRef(gift)
 	if existing, err := s.inventory.FindByTelegramTxRef(ctx, txRef); err == nil {
-		_ = existing
+		if relisted, err := s.tryRelistBotOwned(ctx, existing, gift); err != nil {
+			return "", err
+		} else if relisted {
+			return "listed", nil
+		}
 		return "owned", nil
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", err
@@ -248,6 +256,33 @@ func (s *BotSyncService) syncOne(ctx context.Context, gift telegram.IncomingGift
 		"price_source", source,
 	)
 	return "listed", nil
+}
+
+func (s *BotSyncService) tryRelistBotOwned(
+	ctx context.Context,
+	item *domain.InventoryItem,
+	gift telegram.IncomingGift,
+) (bool, error) {
+	price := gift.PriceNanoton
+	source := gift.PriceSource
+	if s.valuator != nil {
+		price, source = s.valuator.QuoteValuation(ctx, gift.ScannedGift)
+	}
+	if price <= 0 {
+		return false, nil
+	}
+
+	relisted, err := s.market.RelistBotGiftIfNeeded(ctx, item, price)
+	if err != nil || !relisted {
+		return relisted, err
+	}
+	slog.Info("bot gift relisted on market",
+		"slug", gift.Slug,
+		"item_id", item.ID,
+		"price_nanoton", price,
+		"price_source", source,
+	)
+	return true, nil
 }
 
 func botMarketTxRef(gift telegram.IncomingGift) string {

@@ -271,6 +271,45 @@ func (s *Service) RepriceListing(ctx context.Context, listingID, itemID uuid.UUI
 	return s.inventory.UpdateFloorPriceNanoton(ctx, itemID, priceNanoton)
 }
 
+// RelistBotGiftIfNeeded creates a market listing when the bot owns a locked inventory item
+// without an active listing (e.g. gift returned after a lost bet).
+func (s *Service) RelistBotGiftIfNeeded(ctx context.Context, item *domain.InventoryItem, priceNanoton int64) (bool, error) {
+	if item == nil || priceNanoton <= 0 {
+		return false, nil
+	}
+	botUser, err := s.market.EnsureBotUser(ctx)
+	if err != nil {
+		return false, err
+	}
+	if item.UserID != botUser.ID || item.Status != domain.InvLocked {
+		return false, nil
+	}
+	if _, err := s.market.FindActiveByItemID(ctx, item.ID); err == nil {
+		return false, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, err
+	}
+
+	now := time.Now().UTC()
+	listing := &domain.MarketListing{
+		ID:              uuid.New(),
+		SellerID:        botUser.ID,
+		InventoryItemID: item.ID,
+		PriceNanoton:    priceNanoton,
+		Status:          domain.ListingActive,
+		Source:          domain.ListingSourceBot,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := s.market.CreateListing(ctx, listing); err != nil {
+		return false, err
+	}
+	if err := s.inventory.UpdateFloorPriceNanoton(ctx, item.ID, priceNanoton); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func toListingView(l domain.MarketListing) ListingView {
 	meta := parseGiftMeta(l.Item.Metadata)
 	sellerName := l.Seller.Username
