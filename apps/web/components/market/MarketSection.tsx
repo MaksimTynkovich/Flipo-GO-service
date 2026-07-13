@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarketGiftCard, MarketGiftCardSkeleton } from "@/components/market/MarketGiftCard";
 import { MarketGiftDetailSheet } from "@/components/market/MarketGiftDetailSheet";
 import { MarketToolbar, type MarketSort } from "@/components/market/MarketToolbar";
@@ -58,9 +58,10 @@ function filterAndSortListings(
 }
 
 export function MarketSection({ onPurchased }: Props) {
-  const { user, setUser } = useAuth();
+  const { user, setUser, ready } = useAuth();
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MarketListing | null>(null);
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,18 +69,30 @@ export function MarketSection({ onPurchased }: Props) {
   const [sort, setSort] = useState<MarketSort>("newest");
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
-    try {
-      setListings(await getMarketListings());
-    } finally {
-      setLoading(false);
+    setLoadError(null);
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, 400));
+        }
+        setListings(await getMarketListings());
+        setLoading(false);
+        return;
+      } catch (e) {
+        lastError = e;
+      }
     }
-  }
+    setLoadError(formatUserError(lastError, "Не удалось загрузить маркет"));
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    if (!ready) return;
+    void load();
+  }, [ready, load]);
 
   const collections = useMemo(() => {
     const counts = new Map<string, number>();
@@ -163,7 +176,22 @@ export function MarketSection({ onPurchased }: Props) {
             ))}
       </div>
 
-      {!loading && listings.length === 0 && (
+      {!loading && loadError && (
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <SearchX className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
+          <p className="text-sm font-medium">Не удалось загрузить</p>
+          <p className="max-w-[15rem] text-xs leading-relaxed text-muted">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="text-xs font-semibold text-accent"
+          >
+            Повторить
+          </button>
+        </div>
+      )}
+
+      {!loading && !loadError && listings.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-12 text-center">
           <Gift className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
           <p className="text-sm font-medium">Маркет пуст</p>

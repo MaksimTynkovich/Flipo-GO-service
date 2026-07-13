@@ -9,12 +9,12 @@ const TELEGRAM_INIT_WAIT_MS = 300;
 
 export function useTelegramAccess() {
   const pathname = usePathname();
+  const isAdminRoute = pathname.startsWith("/admin");
   const [checking, setChecking] = useState(true);
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    const isAdmin = pathname.startsWith("/admin");
-    if (DEBUG_AUTH || isAdmin) {
+    if (DEBUG_AUTH || isAdminRoute) {
       setAllowed(true);
       setChecking(false);
       return;
@@ -32,7 +32,7 @@ export function useTelegramAccess() {
     }, TELEGRAM_INIT_WAIT_MS);
 
     return () => window.clearTimeout(timer);
-  }, [pathname]);
+  }, [isAdminRoute]);
 
   return { checking, allowed };
 }

@@ -28,6 +28,7 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isAdminRoute = pathname.startsWith("/admin");
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -47,9 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         initTelegramWebApp();
 
-        const isAdmin = pathname.startsWith("/admin");
         const inTelegram = hasTelegramInitData();
-        const allowBrowserSession = DEBUG_AUTH || isAdmin;
+        const allowBrowserSession = DEBUG_AUTH || isAdminRoute;
 
         const token = localStorage.getItem("flipo_token");
         if (token && (inTelegram || allowBrowserSession)) {
@@ -139,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     init();
-  }, [pathname]);
+  }, [isAdminRoute]);
 
   if (loading) {
     return <AppSplashScreen />;
