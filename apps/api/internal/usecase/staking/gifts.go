@@ -301,6 +301,9 @@ func (s *Service) enrichScannedGifts(ctx context.Context, scanned []telegram.Sca
 }
 
 func (s *Service) giftDisplayPrice(ctx context.Context, gift telegram.ScannedGift) int64 {
+	if gift.PriceNanoton > 0 && s.valuator == nil {
+		return gift.PriceNanoton
+	}
 	if s.valuator != nil {
 		if price, _ := s.valuator.QuoteValuation(ctx, gift); price > 0 {
 			return price

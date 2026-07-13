@@ -68,7 +68,27 @@ type cachedMarketQuote struct {
 	at     time.Time
 }
 
-const marketQuoteCacheTTL = 30 * time.Second
+const marketQuoteCacheTTL = 5 * time.Minute
+const marketQuoteStaleTTL = 12 * time.Hour
+
+func quoteSourceTier(source string) int {
+	switch source {
+	case PriceSourcePortalsTraits, PriceSourceMRKTTraits:
+		return 3
+	case PriceSourceTraits:
+		return 2
+	case PriceSourcePortalsModel, PriceSourceMRKTModel, PriceSourcePortalsBackdrop, PriceSourceMRKTBackdrop:
+		return 1
+	case PriceSourcePortals, PriceSourceMRKT, PriceSourceCollectionFloor:
+		return 0
+	default:
+		return -1
+	}
+}
+
+func shouldAcceptQuote(cachedSource, newSource string) bool {
+	return quoteSourceTier(newSource) >= quoteSourceTier(cachedSource)
+}
 
 func NewValuator(market *MarketPrices, floors FloorPriceLookup, adjust GiftAdjustProvider) *Valuator {
 	return &Valuator{market: market, floors: floors, adjust: adjust, quoteCache: make(map[string]cachedMarketQuote)}
@@ -157,7 +177,7 @@ func ItemMetadata(attrs telegram.GiftAttributes) []byte {
 }
 
 func (v *Valuator) quote(ctx context.Context, gift telegram.ScannedGift, kind QuoteKind) (int64, string) {
-	raw, source := v.rawQuote(ctx, gift, kind == QuoteRaw)
+	raw, source := v.rawQuote(ctx, gift)
 	if raw <= 0 || kind == QuoteRaw {
 		return raw, source
 	}
@@ -173,27 +193,35 @@ func (v *Valuator) quote(ctx context.Context, gift telegram.ScannedGift, kind Qu
 	}
 }
 
-func (v *Valuator) rawQuote(ctx context.Context, gift telegram.ScannedGift, preferStored bool) (int64, string) {
-	if preferStored && gift.PriceNanoton > 0 {
-		return gift.PriceNanoton, PriceSourceTelegram
-	}
-
-	if price, source, ok := v.cachedMarketQuote(ctx, gift); ok {
-		return price, source
+func (v *Valuator) rawQuote(ctx context.Context, gift telegram.ScannedGift) (int64, string) {
+	cached, hasCached := v.lookupQuoteCache(gift)
+	if hasCached && time.Since(cached.at) < marketQuoteCacheTTL {
+		return cached.price, cached.source
 	}
 
 	if v.market != nil {
 		if ton, source, err := v.market.QuoteTON(ctx, gift.CollectionSlug, gift.Attributes); err == nil && ton > 0 {
-			price := tonToNanoton(ton)
-			v.storeMarketQuote(gift, price, source)
-			return price, source
+			newPrice := tonToNanoton(ton)
+			if hasCached && time.Since(cached.at) < marketQuoteStaleTTL && !shouldAcceptQuote(cached.source, source) {
+				return cached.price, cached.source
+			}
+			v.storeMarketQuote(gift, newPrice, source)
+			return newPrice, source
 		}
+	}
+
+	if hasCached && time.Since(cached.at) < marketQuoteStaleTTL {
+		return cached.price, cached.source
 	}
 
 	if v.floors != nil {
 		if price, err := v.floors.GetFloorPrice(ctx, gift.CollectionSlug); err == nil && price > 0 {
 			return price, PriceSourceDBFloor
 		}
+	}
+
+	if gift.PriceNanoton > 0 && gift.PriceSource != "" && gift.PriceSource != PriceSourceTelegram {
+		return gift.PriceNanoton, gift.PriceSource
 	}
 
 	if gift.PriceNanoton > 0 {
@@ -203,6 +231,14 @@ func (v *Valuator) rawQuote(ctx context.Context, gift telegram.ScannedGift, pref
 	return 0, PriceSourceNone
 }
 
+func (v *Valuator) lookupQuoteCache(gift telegram.ScannedGift) (cachedMarketQuote, bool) {
+	key := v.quoteCacheKey(gift)
+	v.quoteMu.Lock()
+	defer v.quoteMu.Unlock()
+	cached, ok := v.quoteCache[key]
+	return cached, ok
+}
+
 func (v *Valuator) quoteCacheKey(gift telegram.ScannedGift) string {
 	return strings.Join([]string{
 		gift.CollectionSlug,
@@ -210,17 +246,6 @@ func (v *Valuator) quoteCacheKey(gift telegram.ScannedGift) string {
 		gift.Attributes.Backdrop,
 		gift.Attributes.Symbol,
 	}, "\x00")
-}
-
-func (v *Valuator) cachedMarketQuote(ctx context.Context, gift telegram.ScannedGift) (int64, string, bool) {
-	_ = ctx
-	key := v.quoteCacheKey(gift)
-	v.quoteMu.Lock()
-	defer v.quoteMu.Unlock()
-	if cached, ok := v.quoteCache[key]; ok && time.Since(cached.at) < marketQuoteCacheTTL {
-		return cached.price, cached.source, true
-	}
-	return 0, "", false
 }
 
 func (v *Valuator) storeMarketQuote(gift telegram.ScannedGift, price int64, source string) {
