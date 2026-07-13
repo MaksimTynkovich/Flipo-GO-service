@@ -83,33 +83,52 @@ func (p *PortalsPrices) CollectionFloorTON(ctx context.Context, collectionSlug s
 	return coll.FloorTON, nil
 }
 
-// QuoteTON returns the cheapest listed Portals price for progressively looser trait filters.
-func (p *PortalsPrices) QuoteTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, string, error) {
+// QuoteTraitComboTON returns the cheapest listed Portals price for model+backdrop filters.
+func (p *PortalsPrices) QuoteTraitComboTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, string, error) {
+	if attrs.Model == "" || attrs.Backdrop == "" {
+		return 0, PriceSourceNone, fmt.Errorf("portals trait combo requires model and backdrop")
+	}
+
 	attempts := []struct {
 		model, backdrop, symbol string
-		source                  string
 	}{
-		{attrs.Model, attrs.Backdrop, attrs.Symbol, PriceSourcePortalsTraits},
-		{attrs.Model, attrs.Backdrop, "", PriceSourcePortalsTraits},
-		{attrs.Model, "", "", PriceSourcePortalsModel},
-		{"", attrs.Backdrop, "", PriceSourcePortalsBackdrop},
+		{attrs.Model, attrs.Backdrop, attrs.Symbol},
+		{attrs.Model, attrs.Backdrop, ""},
 	}
 
 	for _, attempt := range attempts {
-		if attempt.model == "" && attempt.backdrop == "" {
-			continue
-		}
 		price, err := p.listedTraitFloorTON(ctx, collectionSlug, attempt.model, attempt.backdrop, attempt.symbol)
 		if err == nil && price > 0 {
-			return price, attempt.source, nil
+			return price, PriceSourcePortalsTraits, nil
 		}
 	}
 
-	if ton, err := p.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
-		return ton, PriceSourcePortals, nil
+	return 0, PriceSourceNone, fmt.Errorf("no portals trait combo for %s", collectionSlug)
+}
+
+// QuoteLooseTraitTON returns the best listed Portals price for model-only and backdrop-only filters.
+func (p *PortalsPrices) QuoteLooseTraitTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, string, error) {
+	var best float64
+	var source string
+
+	if attrs.Model != "" {
+		if price, err := p.listedTraitFloorTON(ctx, collectionSlug, attrs.Model, "", ""); err == nil && price > 0 {
+			best = price
+			source = PriceSourcePortalsModel
+		}
+	}
+	if attrs.Backdrop != "" {
+		if price, err := p.listedTraitFloorTON(ctx, collectionSlug, "", attrs.Backdrop, ""); err == nil && price > 0 && price > best {
+			best = price
+			source = PriceSourcePortalsBackdrop
+		}
 	}
 
-	return 0, PriceSourceNone, fmt.Errorf("no portals quote for %s", collectionSlug)
+	if best > 0 {
+		return best, source, nil
+	}
+
+	return 0, PriceSourceNone, fmt.Errorf("no portals loose trait quote for %s", collectionSlug)
 }
 
 func (p *PortalsPrices) listedTraitFloorTON(ctx context.Context, collectionSlug, model, backdrop, symbol string) (float64, error) {

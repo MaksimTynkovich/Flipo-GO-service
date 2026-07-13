@@ -120,3 +120,51 @@ func TestValuatorSurgeBoard1081(t *testing.T) {
 		t.Fatalf("price = %d, want 5950000000", enriched.PriceNanoton)
 	}
 }
+
+func TestQuoteTONPrefersCatalogTraitsOverPortalsFloor(t *testing.T) {
+	portals := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/collections":
+			_, _ = w.Write([]byte(`{"collections":[{"id":"coll-th","short_name":"trappedheart","floor_price":"10.49"}]}`))
+		case r.URL.Path == "/nfts/search":
+			_, _ = w.Write([]byte(`{"results":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer portals.Close()
+
+	assets := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Gifts_Details.json":
+			_, _ = w.Write([]byte(`{"upgraded":[{"short_name":"trapped_heart","full_name":"Trapped Heart","floor_price_ton":10.48}]}`))
+		case "/models/trapped_heart/prices.json":
+			_, _ = w.Write([]byte(`{
+				"models":{"Faded Relic":12.0},
+				"backdrops":{"Onyx Black":20.8},
+				"symbols":{"Scarecrow":14.5}
+			}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer assets.Close()
+
+	m := NewMarketPrices(assets.URL)
+	m.portals = NewPortalsPrices(portals.URL)
+
+	ton, source, err := m.QuoteTON(context.Background(), "TrappedHeart", telegram.GiftAttributes{
+		Model:    "Faded Relic",
+		Backdrop: "Onyx Black",
+		Symbol:   "Scarecrow",
+	})
+	if err != nil {
+		t.Fatalf("QuoteTON: %v", err)
+	}
+	if source != PriceSourceTraits {
+		t.Fatalf("source = %q, want %q", source, PriceSourceTraits)
+	}
+	if ton != 20.8 {
+		t.Fatalf("QuoteTON = %.2f, want 20.80", ton)
+	}
+}

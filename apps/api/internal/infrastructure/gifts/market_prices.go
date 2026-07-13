@@ -69,10 +69,10 @@ func NewMarketPrices(baseURL string) *MarketPrices {
 }
 
 // QuoteTON returns the best available market quote for a gift.
-// Priority: Portals trait combos (model+backdrop) → catalog traits with premium backdrops → collection floor.
+// Priority: Portals trait combos → catalog traits with premium backdrops → Portals loose traits → collection floors.
 func (m *MarketPrices) QuoteTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, string, error) {
 	if m.portals != nil {
-		if ton, source, err := m.portals.QuoteTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
+		if ton, source, err := m.portals.QuoteTraitComboTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
 			return ton, source, nil
 		}
 	}
@@ -80,6 +80,16 @@ func (m *MarketPrices) QuoteTON(ctx context.Context, collectionSlug string, attr
 	if ton, err := m.catalogTraitTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
 		return ton, PriceSourceTraits, nil
 	}
+
+	if m.portals != nil {
+		if ton, source, err := m.portals.QuoteLooseTraitTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
+			return ton, source, nil
+		}
+		if ton, err := m.portals.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
+			return ton, PriceSourcePortals, nil
+		}
+	}
+
 	if ton, err := m.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
 		return ton, PriceSourceCollectionFloor, nil
 	}
