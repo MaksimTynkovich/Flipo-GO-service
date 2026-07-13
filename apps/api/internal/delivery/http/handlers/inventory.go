@@ -99,7 +99,7 @@ func (h *InventoryHandler) Stake(c *gin.Context) {
 	}
 	pos, err := h.staking.Stake(c.Request.Context(), userID, itemID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeStakingError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, pos)

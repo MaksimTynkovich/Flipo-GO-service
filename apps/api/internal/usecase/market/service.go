@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -41,12 +42,17 @@ type Service struct {
 	market    domain.MarketRepository
 	inventory domain.InventoryRepository
 	users     domain.UserRepository
+	valuator  *gifts.Valuator
 	feeBps    int
 	notifier  balance.BalanceNotifier
 }
 
 func NewService(market domain.MarketRepository, inventory domain.InventoryRepository, users domain.UserRepository, feeBps int) *Service {
 	return &Service{market: market, inventory: inventory, users: users, feeBps: feeBps}
+}
+
+func (s *Service) SetValuator(valuator *gifts.Valuator) {
+	s.valuator = valuator
 }
 
 func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
@@ -60,6 +66,7 @@ func (s *Service) List(ctx context.Context, limit, offset int) ([]ListingView, e
 	}
 	out := make([]ListingView, 0, len(listings))
 	for _, l := range listings {
+		l = s.refreshBotListing(ctx, l)
 		out = append(out, toListingView(l))
 	}
 	return out, nil
@@ -70,7 +77,8 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*ListingView, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := toListingView(*listing)
+	refreshed := s.refreshBotListing(ctx, *listing)
+	v := toListingView(refreshed)
 	return &v, nil
 }
 
@@ -149,6 +157,7 @@ func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (*
 	if err != nil {
 		return nil, err
 	}
+	listing = ptrListing(s.refreshBotListing(ctx, *listing))
 	if listing.Status != domain.ListingActive {
 		return nil, domain.ErrNotFound
 	}
@@ -308,6 +317,27 @@ func (s *Service) RelistBotGiftIfNeeded(ctx context.Context, item *domain.Invent
 		return false, err
 	}
 	return true, nil
+}
+
+func (s *Service) refreshBotListing(ctx context.Context, listing domain.MarketListing) domain.MarketListing {
+	if s.valuator == nil || listing.Source != domain.ListingSourceBot {
+		return listing
+	}
+	gift := gifts.ScannedGiftFromItem(listing.Item)
+	price, _ := s.valuator.QuoteValuation(ctx, gift)
+	if price <= 0 || price == listing.PriceNanoton {
+		return listing
+	}
+	if err := s.RepriceListing(ctx, listing.ID, listing.InventoryItemID, price); err != nil {
+		return listing
+	}
+	listing.PriceNanoton = price
+	listing.Item.FloorPriceNanoton = price
+	return listing
+}
+
+func ptrListing(l domain.MarketListing) *domain.MarketListing {
+	return &l
 }
 
 func toListingView(l domain.MarketListing) ListingView {

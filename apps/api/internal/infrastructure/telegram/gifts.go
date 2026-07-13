@@ -104,13 +104,22 @@ func indexOf(s, sub string) int {
 	return -1
 }
 
+type GiftValuator interface {
+	QuoteValuation(ctx context.Context, gift ScannedGift) (int64, string)
+}
+
 type DepositService struct {
 	verifier  GiftDepositVerifier
 	inventory domain.InventoryRepository
+	valuator  GiftValuator
 }
 
 func NewDepositService(verifier GiftDepositVerifier, inventory domain.InventoryRepository) *DepositService {
 	return &DepositService{verifier: verifier, inventory: inventory}
+}
+
+func (s *DepositService) SetValuator(valuator GiftValuator) {
+	s.valuator = valuator
 }
 
 func (s *DepositService) ProcessDeposit(ctx context.Context, user *domain.User, txRef string) (*domain.InventoryItem, error) {
@@ -122,6 +131,18 @@ func (s *DepositService) ProcessDeposit(ctx context.Context, user *domain.User, 
 	floorPrice, err := s.inventory.GetFloorPrice(ctx, transfer.CollectionSlug)
 	if err != nil || floorPrice <= 0 {
 		floorPrice = 100_000_000 // 0.1 TON default
+	}
+	if s.valuator != nil {
+		if price, _ := s.valuator.QuoteValuation(ctx, ScannedGift{
+			Slug:           transfer.GiftID,
+			Name:           transfer.Name,
+			CollectionSlug: transfer.CollectionSlug,
+			TokenID:        transfer.TokenID,
+			ImageURL:       transfer.ImageURL,
+			Attributes:     giftAttributesFromMetadata(transfer.Metadata),
+		}); price > 0 {
+			floorPrice = price
+		}
 	}
 
 	item := &domain.InventoryItem{
@@ -146,4 +167,23 @@ func (s *DepositService) ProcessDeposit(ctx context.Context, user *domain.User, 
 		return nil, err
 	}
 	return item, nil
+}
+
+func giftAttributesFromMetadata(raw json.RawMessage) GiftAttributes {
+	if len(raw) == 0 {
+		return GiftAttributes{}
+	}
+	var meta struct {
+		Model    string `json:"model"`
+		Symbol   string `json:"symbol"`
+		Backdrop string `json:"backdrop"`
+	}
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return GiftAttributes{}
+	}
+	return GiftAttributes{
+		Model:    meta.Model,
+		Backdrop: meta.Backdrop,
+		Symbol:   meta.Symbol,
+	}
 }

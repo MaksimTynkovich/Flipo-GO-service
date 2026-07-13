@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
@@ -28,6 +29,7 @@ type Service struct {
 	balance   *balance.Service
 	funding   *betfunding.Service
 	inventory domain.InventoryRepository
+	valuator  *gifts.Valuator
 	feeBps    int
 	notifier  TickNotifier
 	overlay   RoomOverlay
@@ -96,6 +98,10 @@ func NewService(
 	feeBps int,
 ) *Service {
 	return &Service{pvp: pvp, games: games, users: users, balance: balance, funding: funding, inventory: inventory, feeBps: feeBps}
+}
+
+func (s *Service) SetValuator(valuator *gifts.Valuator) {
+	s.valuator = valuator
 }
 
 func (s *Service) SetTickNotifier(notifier TickNotifier) {
@@ -894,7 +900,7 @@ func (s *Service) roomView(ctx context.Context, room *domain.PvPRoom) (*RoomView
 			view.Gift = &first
 		} else if player.InventoryItemID != nil && s.inventory != nil {
 			if item, err := s.inventory.FindByID(ctx, *player.InventoryItemID); err == nil {
-				value := item.FloorPriceNanoton
+				value := s.inventoryGiftValue(ctx, *item)
 				if value <= 0 {
 					value = stake
 				}
@@ -986,13 +992,22 @@ func (s *Service) roomGiftViewsByUser(ctx context.Context, roomID uuid.UUID) (ma
 				view.ImageURL = item.ImageURL
 				view.CollectionSlug = item.CollectionSlug
 				if view.ValueNanoton <= 0 {
-					view.ValueNanoton = item.FloorPriceNanoton
+					view.ValueNanoton = s.inventoryGiftValue(ctx, *item)
 				}
 			}
 		}
 		out[row.UserID] = append(out[row.UserID], view)
 	}
 	return out, nil
+}
+
+func (s *Service) inventoryGiftValue(ctx context.Context, item domain.InventoryItem) int64 {
+	if s.valuator != nil {
+		if price, _ := s.valuator.QuoteInventoryValuation(ctx, item); price > 0 {
+			return price
+		}
+	}
+	return item.FloorPriceNanoton
 }
 
 func (s *Service) broadcast(ctx context.Context) {

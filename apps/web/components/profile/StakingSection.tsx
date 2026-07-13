@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { GiftTile, GiftTileSkeleton } from "@/components/profile/GiftTile";
 import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
 import { StakingOverview } from "@/components/profile/StakingOverview";
@@ -21,6 +22,7 @@ import {
   stakingNoTransferHint,
 } from "@/lib/staking-ui";
 import { trackFlowViewed } from "@/lib/analytics";
+import { formatUserError } from "@/lib/user-errors";
 import { cn } from "@/lib/utils";
 import { Gift } from "lucide-react";
 
@@ -45,6 +47,7 @@ type Tab = "staked" | "add";
 
 export function StakingSection() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [gifts, setGifts] = useState<ProfileGift[]>([]);
   const [stats, setStats] = useState<StakingStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -124,6 +127,12 @@ export function StakingSection() {
       }
       await load();
       setTab("staked");
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: formatUserError(e, "Не удалось застейкать подарок"),
+      });
+      await load();
     } finally {
       setStaking(false);
     }

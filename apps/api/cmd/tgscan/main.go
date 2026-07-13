@@ -77,7 +77,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	valuator := flipogifts.NewValuator(flipogifts.NewMarketPrices(""), nil, nil)
+	valuator := flipogifts.NewValuator(flipogifts.NewMarketPrices("", config.Load().MRKTAPIToken, flipotg.MTProtoConfigFromEnv(
+		flipotg.ParseTelegramAppID(os.Getenv("TELEGRAM_API_ID")),
+		os.Getenv("TELEGRAM_API_HASH"),
+		func() string {
+			if p := os.Getenv("TELEGRAM_SESSION_PATH"); p != "" {
+				return p
+			}
+			return "data/telegram/session.json"
+		}(),
+	)), nil, nil)
 	result.Gifts = valuator.Enrich(ctx, result.Gifts)
 	bySlug := make(map[string]flipotg.ScannedGift, len(result.Gifts))
 	for _, gift := range result.Gifts {

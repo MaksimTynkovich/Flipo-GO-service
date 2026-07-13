@@ -101,7 +101,7 @@ func (s *Service) SetAdminNotifier(notifier *telegram.AdminNotifier) {
 	s.admin = notifier
 }
 
-func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*domain.InventoryItem, error) {
+func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*ItemView, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -111,11 +111,10 @@ func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (
 		return nil, err
 	}
 	if s.admin != nil && item != nil {
-		floor := item.FloorPriceNanoton
-		if s.valuator != nil {
-			if price, _ := s.valuator.QuoteInventoryValuation(ctx, *item); price > 0 {
-				floor = price
-			}
+		view := s.toItemView(ctx, *item)
+		floor := view.ValuationNanoton
+		if floor <= 0 {
+			floor = item.FloorPriceNanoton
 		}
 		s.admin.NotifyGiftInventory(ctx, telegram.AdminActor{
 			TelegramID: user.TelegramID,
@@ -124,7 +123,8 @@ func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (
 			LastName:   user.LastName,
 		}, item.Name, floor)
 	}
-	return item, nil
+	view := s.toItemView(ctx, *item)
+	return &view, nil
 }
 
 func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int64, error) {

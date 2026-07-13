@@ -32,4 +32,7 @@ var (
 	ErrChannelNotSubscribed  = errors.New("нужна подписка на канал")
 	ErrGiftNotAvailable      = errors.New("подарок недоступен для ставки")
 	ErrGiftValueMismatch     = errors.New("стоимость подарка не подходит для ставки")
+	ErrStakingPoolFull       = errors.New("пул стейкинга заполнен")
+	ErrStakingPersonalLimit  = errors.New("личный лимит стейкинга исчерпан — выполните задания чтобы увеличить лимит")
+	ErrGiftAlreadyStakedEpoch = errors.New("подарок уже застейкан на этой неделе")
 )

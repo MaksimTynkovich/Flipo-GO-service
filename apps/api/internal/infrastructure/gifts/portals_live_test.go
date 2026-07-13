@@ -14,7 +14,7 @@ func TestLivePortalsSurgeBoard1081(t *testing.T) {
 		t.Skip("skipping live portals quote in short mode")
 	}
 
-	m := NewMarketPrices("")
+	m := NewMarketPrices("", "", telegram.MTProtoConfig{})
 	v := NewValuator(m, nil, nil)
 	gift := telegram.ScannedGift{
 		Slug:           "surgeBoard-1081",

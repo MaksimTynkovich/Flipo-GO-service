@@ -90,6 +90,9 @@ func isExpectedClientError(err error, status int) bool {
 		domain.ErrPromoAlreadyRedeemed,
 		domain.ErrPromoFundsRestricted,
 		domain.ErrPromoInUse,
+		domain.ErrStakingPoolFull,
+		domain.ErrStakingPersonalLimit,
+		domain.ErrGiftAlreadyStakedEpoch,
 	}
 	for _, target := range expected {
 		if errors.Is(err, target) {

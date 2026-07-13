@@ -33,7 +33,7 @@ func main() {
 	invRepo := postgres.NewInventoryRepo(db)
 	userRepo := postgres.NewUserRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
-	valuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo, platformRepo)
+	valuator := gifts.NewDefaultValuator(cfg.MRKTAPIToken, telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath), invRepo, platformRepo)
 	processor := inventoryuc.NewAutoDepositService(userRepo, invRepo, valuator, nil)
 
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)

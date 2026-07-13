@@ -52,7 +52,7 @@ func TestQuoteTONUsesTraitCombo(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := NewMarketPrices("http://invalid.example")
+	m := NewMarketPrices("http://invalid.example", "", telegram.MTProtoConfig{})
 	m.portals = NewPortalsPrices(srv.URL)
 
 	ton, source, err := m.QuoteTON(context.Background(), "surgeBoard", telegram.GiftAttributes{
@@ -98,7 +98,7 @@ func TestValuatorSurgeBoard1081(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := NewMarketPrices("http://invalid.example")
+	m := NewMarketPrices("http://invalid.example", "", telegram.MTProtoConfig{})
 	m.portals = NewPortalsPrices(srv.URL)
 	v := NewValuator(m, nil, nil)
 
@@ -150,7 +150,7 @@ func TestQuoteTONPrefersCatalogTraitsOverPortalsFloor(t *testing.T) {
 	}))
 	defer assets.Close()
 
-	m := NewMarketPrices(assets.URL)
+	m := NewMarketPrices(assets.URL, "", telegram.MTProtoConfig{})
 	m.portals = NewPortalsPrices(portals.URL)
 
 	ton, source, err := m.QuoteTON(context.Background(), "TrappedHeart", telegram.GiftAttributes{

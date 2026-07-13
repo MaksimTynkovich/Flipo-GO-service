@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 	"github.com/gin-gonic/gin"
@@ -60,7 +62,7 @@ func (h *StakingHandler) Stake(c *gin.Context) {
 
 	if err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "staking", "staking_started", "error", "stake_failed", err.Error(), map[string]any{"slug": req.Slug, "item_id": req.ItemID})
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeStakingError(c, err)
 		return
 	}
 	trackUserEvent(h.analytics, c.Request.Context(), userID, "staking", "staking_started", "success", "", "", map[string]any{"slug": req.Slug, "item_id": req.ItemID})
@@ -91,6 +93,27 @@ func (h *StakingHandler) ListPositions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, positions)
+}
+
+func writeStakingError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, domain.ErrStakingPoolFull):
+		respondBadRequest(c, err, "Пул стейкинга заполнен. Попробуйте позже.", "staking_pool_full")
+	case errors.Is(err, domain.ErrStakingPersonalLimit):
+		respondBadRequest(c, err, "Личный лимит исчерпан — выполните задания, чтобы увеличить его.", "staking_personal_limit")
+	case errors.Is(err, domain.ErrGiftAlreadyStakedEpoch):
+		respondBadRequest(c, err, "Подарок уже в стейке на этой неделе.", "gift_already_staked")
+	case errors.Is(err, domain.ErrInvalidAmount):
+		respondBadRequest(c, err, "Подарок недоступен для стейкинга.", "invalid_stake")
+	case errors.Is(err, domain.ErrNotFound):
+		respondBadRequest(c, err, "Подарок не найден.", "not_found")
+	default:
+		msg := err.Error()
+		if msg == "" {
+			msg = "Не удалось застейкать подарок. Попробуйте ещё раз."
+		}
+		respondBadRequest(c, err, msg, "stake_failed")
+	}
 }
 
 func (h *StakingHandler) ListQuests(c *gin.Context) {

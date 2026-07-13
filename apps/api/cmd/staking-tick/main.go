@@ -47,7 +47,7 @@ func main() {
 	userRepo := postgres.NewUserRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
 	analyticsRepo := postgres.NewAnalyticsRepo(db)
-	valuator := gifts.NewValuator(gifts.NewMarketPrices(""), invRepo, platformRepo)
+	valuator := gifts.NewDefaultValuator(cfg.MRKTAPIToken, telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath), invRepo, platformRepo)
 	stakeSvc := staking.NewService(
 		stakeRepo,
 		invRepo,

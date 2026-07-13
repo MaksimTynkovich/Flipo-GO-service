@@ -24,10 +24,12 @@ type quoteOutput struct {
 	PriceSource    string                  `json:"price_source"`
 	BuybackNanoton int64                   `json:"buyback_nanoton"`
 	BuybackTON     float64                 `json:"buyback_ton"`
+	Analysis       gifts.QuoteAnalysis     `json:"analysis"`
 }
 
 func main() {
 	config.LoadDotEnv()
+	cfg := config.Load()
 
 	var (
 		model    = flag.String("model", "", "override model trait")
@@ -75,25 +77,29 @@ func main() {
 		Attributes:     attrs,
 	}
 
-	valuator := gifts.NewValuator(gifts.NewMarketPrices(""), nil, nil)
-	enriched := valuator.Enrich(ctx, []telegram.ScannedGift{gift})[0]
-	buyback, _ := valuator.QuoteBuyback(ctx, gift)
-	valuation, _ := valuator.QuoteValuation(ctx, gift)
+	market := gifts.NewMarketPrices("", cfg.MRKTAPIToken, telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath))
+	analysis := market.AnalyzeQuote(ctx, collection, attrs)
+	valuator := gifts.NewValuator(market, nil, nil)
+
+	valuation, valSource := valuator.QuoteValuation(ctx, gift)
+	buyback, buySource := valuator.QuoteBuyback(ctx, gift)
 
 	out := quoteOutput{
 		Slug:           slug,
 		CollectionSlug: collection,
 		TokenID:        tokenID,
 		Attributes:     attrs,
-		PriceNanoton:   enriched.PriceNanoton,
-		PriceTON:       float64(enriched.PriceNanoton) / 1e9,
-		PriceSource:    enriched.PriceSource,
+		PriceNanoton:   valuation,
+		PriceTON:       float64(valuation) / 1e9,
+		PriceSource:    valSource,
 		BuybackNanoton: buyback,
 		BuybackTON:     float64(buyback) / 1e9,
+		Analysis:       analysis,
 	}
-	if valuation > 0 {
-		out.PriceNanoton = valuation
-		out.PriceTON = float64(valuation) / 1e9
+	if out.PriceNanoton <= 0 && analysis.Best.TON > 0 {
+		out.PriceNanoton = int64(analysis.Best.TON * 1_000_000_000)
+		out.PriceTON = analysis.Best.TON
+		out.PriceSource = analysis.Best.Source
 	}
 
 	if *asJSON {
@@ -116,7 +122,30 @@ func main() {
 	fmt.Printf("symbol:          %s\n", emptyDash(out.Attributes.Symbol))
 	fmt.Printf("price:           %.4f TON (%d nanoton)\n", out.PriceTON, out.PriceNanoton)
 	fmt.Printf("source:          %s\n", out.PriceSource)
-	fmt.Printf("buyback:         %.4f TON (%d nanoton)\n", out.BuybackTON, out.BuybackNanoton)
+	fmt.Printf("buyback:         %.4f TON (%d nanoton) [%s]\n", out.BuybackTON, out.BuybackNanoton, buySource)
+	printAnalysis(analysis)
+}
+
+func printAnalysis(analysis gifts.QuoteAnalysis) {
+	fmt.Println("analysis:")
+	for _, item := range analysis.TraitCombo {
+		fmt.Printf("  combo:    %.4f TON (%s)\n", item.TON, item.Source)
+	}
+	if analysis.Catalog != nil {
+		fmt.Printf("  catalog:  %.4f TON (%s)\n", analysis.Catalog.TON, analysis.Catalog.Source)
+	}
+	for _, item := range analysis.LooseTraits {
+		fmt.Printf("  loose:    %.4f TON (%s)\n", item.TON, item.Source)
+	}
+	for _, item := range analysis.Collection {
+		fmt.Printf("  floor:    %.4f TON (%s)\n", item.TON, item.Source)
+	}
+	if analysis.Best.TON > 0 {
+		fmt.Printf("  best:     %.4f TON (%s)\n", analysis.Best.TON, analysis.Best.Source)
+	}
+	for _, warning := range analysis.Warnings {
+		fmt.Printf("  warn:     %s\n", warning)
+	}
 }
 
 func emptyDash(value string) string {

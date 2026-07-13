@@ -2,7 +2,6 @@ package staking
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -104,7 +103,7 @@ func (s *Service) createStake(
 	}
 	for _, p := range positions {
 		if p.GiftSlug == item.TelegramGiftID {
-			return nil, errors.New("подарок уже застейкан на этой неделе")
+			return nil, domain.ErrGiftAlreadyStakedEpoch
 		}
 	}
 
@@ -204,7 +203,7 @@ func (s *Service) checkStakeCaps(ctx context.Context, userID uuid.UUID, principa
 		return err
 	}
 	if globalTVL+principal > tvlCap {
-		return errors.New("пул стейкинга заполнен")
+		return domain.ErrStakingPoolFull
 	}
 
 	personalLimit, err := s.PersonalStakeLimit(ctx, userID)
@@ -216,7 +215,7 @@ func (s *Service) checkStakeCaps(ctx context.Context, userID uuid.UUID, principa
 		return err
 	}
 	if userTVL+principal > personalLimit {
-		return errors.New("личный лимит стейкинга исчерпан — выполните задания")
+		return domain.ErrStakingPersonalLimit
 	}
 	return nil
 }

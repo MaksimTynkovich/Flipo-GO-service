@@ -19,6 +19,7 @@ type MarketPrices struct {
 	baseURL    string
 	httpClient *http.Client
 	portals    *PortalsPrices
+	mrkt       *MRKTPrices
 	mu         sync.RWMutex
 	catalog    *giftCatalog
 	catalogAt  time.Time
@@ -52,7 +53,21 @@ type giftsDetailsFile struct {
 	} `json:"upgraded"`
 }
 
-func NewMarketPrices(baseURL string) *MarketPrices {
+type QuoteCandidate struct {
+	TON    float64 `json:"ton"`
+	Source string  `json:"source"`
+}
+
+type QuoteAnalysis struct {
+	Best         QuoteCandidate   `json:"best"`
+	TraitCombo   []QuoteCandidate `json:"trait_combo,omitempty"`
+	Catalog      *QuoteCandidate  `json:"catalog,omitempty"`
+	LooseTraits  []QuoteCandidate `json:"loose_traits,omitempty"`
+	Collection   []QuoteCandidate `json:"collection_floor,omitempty"`
+	Warnings     []string         `json:"warnings,omitempty"`
+}
+
+func NewMarketPrices(baseURL, mrktToken string, mtproto telegram.MTProtoConfig) *MarketPrices {
 	if baseURL == "" {
 		baseURL = defaultAssetsBase
 	}
@@ -62,39 +77,115 @@ func NewMarketPrices(baseURL string) *MarketPrices {
 			Timeout: 15 * time.Second,
 		},
 		portals:  NewPortalsPrices(""),
+		mrkt:     NewMRKTPrices("", mrktToken, mtproto),
 		traits:   make(map[string]*traitPrices),
 		traitsAt: make(map[string]time.Time),
 		cacheTTL: 10 * time.Minute,
 	}
 }
 
-// QuoteTON returns the best available market quote for a gift.
-// Priority: Portals trait combos → catalog traits with premium backdrops → Portals loose traits → collection floors.
+// QuoteTON returns the best cross-market quote for a gift.
+// Priority: trait combos (min Portals/MRKT) → catalog traits → loose traits (only if combo impossible) → collection floors.
 func (m *MarketPrices) QuoteTON(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) (float64, string, error) {
-	if m.portals != nil {
-		if ton, source, err := m.portals.QuoteTraitComboTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
-			return ton, source, nil
+	analysis := m.AnalyzeQuote(ctx, collectionSlug, attrs)
+	if analysis.Best.TON <= 0 {
+		return 0, PriceSourceNone, fmt.Errorf("no market quote for %s", collectionSlug)
+	}
+	return analysis.Best.TON, analysis.Best.Source, nil
+}
+
+func (m *MarketPrices) AnalyzeQuote(ctx context.Context, collectionSlug string, attrs telegram.GiftAttributes) QuoteAnalysis {
+	collectionName := m.collectionDisplayName(ctx, collectionSlug)
+	analysis := QuoteAnalysis{}
+
+	if attrs.Model != "" && attrs.Backdrop != "" {
+		if m.portals != nil {
+			if ton, source, err := m.portals.QuoteTraitComboTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
+				analysis.TraitCombo = append(analysis.TraitCombo, QuoteCandidate{TON: ton, Source: source})
+			}
+		}
+		if m.mrkt != nil && m.mrkt.configured() {
+			if ton, source, err := m.mrkt.QuoteTraitComboTON(ctx, collectionName, attrs); err == nil && ton > 0 {
+				analysis.TraitCombo = append(analysis.TraitCombo, QuoteCandidate{TON: ton, Source: source})
+			} else if err != nil {
+				analysis.Warnings = append(analysis.Warnings, "mrkt combo: "+err.Error())
+			}
+		} else if m.mrkt != nil {
+			analysis.Warnings = append(analysis.Warnings, "mrkt: token missing and MTProto not configured")
+		}
+		if ton, source, ok := pickMinQuote(toMarketQuotes(analysis.TraitCombo)...); ok {
+			analysis.Best = QuoteCandidate{TON: ton, Source: source}
+			return analysis
 		}
 	}
 
 	if ton, err := m.catalogTraitTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
-		return ton, PriceSourceTraits, nil
+		candidate := QuoteCandidate{TON: ton, Source: PriceSourceTraits}
+		analysis.Catalog = &candidate
+		analysis.Best = candidate
+		return analysis
 	}
 
 	if m.portals != nil {
 		if ton, source, err := m.portals.QuoteLooseTraitTON(ctx, collectionSlug, attrs); err == nil && ton > 0 {
-			return ton, source, nil
+			analysis.LooseTraits = append(analysis.LooseTraits, QuoteCandidate{TON: ton, Source: source})
 		}
+	}
+	if m.mrkt != nil && m.mrkt.configured() {
+		if ton, source, err := m.mrkt.QuoteLooseTraitTON(ctx, collectionName, attrs); err == nil && ton > 0 {
+			analysis.LooseTraits = append(analysis.LooseTraits, QuoteCandidate{TON: ton, Source: source})
+		} else if err != nil && len(analysis.Warnings) == 0 {
+			if msg := m.mrkt.LastError(); msg != "" {
+				analysis.Warnings = append(analysis.Warnings, "mrkt: "+msg)
+			}
+		}
+	}
+	if ton, source, ok := pickMinQuote(toMarketQuotes(analysis.LooseTraits)...); ok {
+		analysis.Best = QuoteCandidate{TON: ton, Source: source}
+		return analysis
+	}
+
+	if m.portals != nil {
 		if ton, err := m.portals.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
-			return ton, PriceSourcePortals, nil
+			analysis.Collection = append(analysis.Collection, QuoteCandidate{TON: ton, Source: PriceSourcePortals})
 		}
 	}
-
-	if ton, err := m.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
-		return ton, PriceSourceCollectionFloor, nil
+	if m.mrkt != nil && m.mrkt.configured() {
+		if ton, err := m.mrkt.CollectionFloorTON(ctx, collectionName); err == nil && ton > 0 {
+			analysis.Collection = append(analysis.Collection, QuoteCandidate{TON: ton, Source: PriceSourceMRKT})
+		}
 	}
+	if m.mrkt != nil {
+		if msg := m.mrkt.LastError(); msg != "" {
+			analysis.Warnings = appendUniqueWarning(analysis.Warnings, "mrkt: "+msg)
+		}
+	}
+	if ton, err := m.CollectionFloorTON(ctx, collectionSlug); err == nil && ton > 0 {
+		analysis.Collection = append(analysis.Collection, QuoteCandidate{TON: ton, Source: PriceSourceCollectionFloor})
+	}
+	if ton, source, ok := pickMinQuote(toMarketQuotes(analysis.Collection)...); ok {
+		analysis.Best = QuoteCandidate{TON: ton, Source: source}
+	}
+	return analysis
+}
 
-	return 0, PriceSourceNone, fmt.Errorf("no market quote for %s", collectionSlug)
+func toMarketQuotes(candidates []QuoteCandidate) []marketQuote {
+	out := make([]marketQuote, 0, len(candidates))
+	for _, c := range candidates {
+		out = append(out, marketQuote{ton: c.TON, source: c.Source})
+	}
+	return out
+}
+
+func (m *MarketPrices) collectionDisplayName(ctx context.Context, collectionSlug string) string {
+	catalog, err := m.loadCatalog(ctx)
+	if err == nil {
+		key := collectionAssetKey(collectionSlug)
+		if quote, ok := catalog.byShortName[key]; ok && quote.FullName != "" {
+			return quote.FullName
+		}
+	}
+	return collectionDisplayName(collectionSlug)
 }
 
 func (m *MarketPrices) CollectionFloorTON(ctx context.Context, collectionSlug string) (float64, error) {
