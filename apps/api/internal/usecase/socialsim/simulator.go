@@ -379,7 +379,7 @@ func (s *Simulator) OnCrashState(state CrashStateHook) {
 		s.crashRound = state.RoundID
 		s.crashBets = nil
 		s.crashPlaced = 0
-		s.crashTarget = s.computeBetTargetLocked()
+		s.crashTarget = s.computeBetTargetLocked(domain.GameCrash)
 		s.crashNextBet = time.Now().Add(s.idleGapLocked())
 	}
 	s.crashPhase = state.Phase
@@ -410,7 +410,7 @@ func (s *Simulator) OnRouletteState(state RouletteStateHook) {
 		s.rouletteRound = state.RoundID
 		s.rouletteBets = nil
 		s.roulettePlaced = 0
-		s.rouletteTarget = s.computeBetTargetLocked()
+		s.rouletteTarget = s.computeBetTargetLocked(domain.GameRoulette)
 		s.rouletteNextBet = time.Now().Add(s.idleGapLocked())
 	}
 	s.roulettePhase = state.Phase
@@ -631,14 +631,23 @@ func (s *Simulator) safeRepublish(ctx context.Context, fn RepublishFn, roundID u
 	return nil
 }
 
-func (s *Simulator) computeBetTargetLocked() int {
+func (s *Simulator) computeBetTargetLocked(gameType domain.GameType) int {
 	base := s.cfg.BetIntensity
 	tod := TODMultiplier(s.cfg, time.Now().Hour())
-	// Per-round spread: each round draws a fresh target around the base so
-	// consecutive rounds vary (e.g. 4, then 2, then 6 players). BetSpread
-	// is the relative half-width of that swing.
+	// Per-round + per-mode spread. Each mode gets its own stable offset bucket
+	// so simultaneous modes (Crash vs Roulette) diverge instead of mirroring
+	// the same count. BetSpread is the relative half-width of the swing.
 	spread := clamp(s.cfg.BetSpread, 0, 1)
-	swing := (s.rng.Float64()*2 - 1) * spread
+	modeOffset := 0.0
+	switch gameType {
+	case domain.GameCrash:
+		modeOffset = -0.5 * spread
+	case domain.GameRoulette:
+		modeOffset = 0.5 * spread
+	default:
+		modeOffset = 0
+	}
+	swing := (s.rng.Float64()*2-1)*spread + modeOffset
 	n := int(math.Round(base * tod * (1 + swing)))
 	if n < 0 {
 		n = 0

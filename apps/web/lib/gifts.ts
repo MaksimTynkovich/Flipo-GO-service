@@ -1,11 +1,26 @@
 const FRAGMENT_GIFT_PREFIX = "https://nft.fragment.com/gift/";
+const PROXY_GIFT_PREFIX = "/static/gifts/";
+
+function giftSlugFromSources(slug: string, imageUrl?: string): string {
+  if (imageUrl?.startsWith(FRAGMENT_GIFT_PREFIX)) {
+    return imageUrl.slice(FRAGMENT_GIFT_PREFIX.length).replace(/\.medium\.jpg$/i, "");
+  }
+  if (imageUrl?.startsWith(PROXY_GIFT_PREFIX)) {
+    return imageUrl.slice(PROXY_GIFT_PREFIX.length).replace(/\.medium\.jpg$/i, "");
+  }
+  return slug;
+}
 
 export function giftImageUrl(slug: string, imageUrl?: string): string {
-  if (imageUrl && !imageUrl.includes("nft.fragment.com")) return imageUrl;
-  const giftSlug = imageUrl?.startsWith(FRAGMENT_GIFT_PREFIX)
-    ? imageUrl.slice(FRAGMENT_GIFT_PREFIX.length).replace(/\.medium\.jpg$/, "")
-    : slug;
-  return `/static/gifts/${giftSlug}.medium.jpg`;
+  if (
+    imageUrl &&
+    !imageUrl.includes("nft.fragment.com") &&
+    !imageUrl.startsWith(PROXY_GIFT_PREFIX)
+  ) {
+    return imageUrl;
+  }
+  const giftSlug = giftSlugFromSources(slug, imageUrl);
+  return `${PROXY_GIFT_PREFIX}${giftSlug.toLowerCase()}.medium.jpg`;
 }
 
 export function giftImageUrlFromURL(imageUrl?: string): string {
