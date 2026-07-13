@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDownWideNarrow,
   ArrowUpDown,
@@ -49,13 +49,25 @@ export function MarketToolbar({
 }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draftCollections, setDraftCollections] = useState<string[]>([]);
+  const [collectionSearch, setCollectionSearch] = useState("");
 
   const SortIcon = SORT_META[sort].Icon;
   const filtersActive = selectedCollections.length > 0;
   const showCollectionFilters = collections.length > 1;
 
+  const filteredCollections = useMemo(() => {
+    const q = collectionSearch.trim().toLowerCase();
+    if (!q) return collections;
+    return collections.filter(
+      (slug) =>
+        slug.toLowerCase().includes(q) ||
+        formatCollectionSlug(slug).toLowerCase().includes(q),
+    );
+  }, [collectionSearch, collections]);
+
   function openFilters() {
     setDraftCollections(selectedCollections);
+    setCollectionSearch("");
     setFiltersOpen(true);
   }
 
@@ -174,9 +186,36 @@ export function MarketToolbar({
                 </div>
               </div>
 
+              <div className="shrink-0 px-4 pb-3">
+                <div className="input-inset gap-2.5 py-2.5">
+                  <Search className="h-4 w-4 shrink-0 text-muted" strokeWidth={1.8} />
+                  <input
+                    type="search"
+                    value={collectionSearch}
+                    onChange={(e) => setCollectionSearch(e.target.value)}
+                    placeholder="Поиск коллекции"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
+                    enterKeyHint="search"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  {collectionSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => setCollectionSearch("")}
+                      aria-label="Очистить поиск"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-opacity active:opacity-70"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-1">
                 <ul className="market-filter-list">
-                  {collections.map((slug) => {
+                  {filteredCollections.map((slug) => {
                     const checked = draftCollections.includes(slug);
                     return (
                       <li key={slug}>
@@ -205,6 +244,9 @@ export function MarketToolbar({
                       </li>
                     );
                   })}
+                  {filteredCollections.length === 0 ? (
+                    <li className="py-8 text-center text-sm text-muted">Ничего не найдено</li>
+                  ) : null}
                 </ul>
               </div>
 
