@@ -399,6 +399,25 @@ func (r *InventoryRepo) TransferFromBet(ctx context.Context, itemID, newUserID u
 	return nil
 }
 
+func (r *InventoryRepo) UpdateFloorPriceNanoton(ctx context.Context, id uuid.UUID, priceNanoton int64) error {
+	if priceNanoton <= 0 {
+		return domain.ErrInvalidAmount
+	}
+	res := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"floor_price_nanoton": priceNanoton,
+			"updated_at":          time.Now().UTC(),
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 func (r *InventoryRepo) UpdateStatus(ctx context.Context, id uuid.UUID, from, to domain.InventoryStatus) error {
 	res := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
 		Where("id = ? AND status = ?", id, from).

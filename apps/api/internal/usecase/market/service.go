@@ -257,6 +257,20 @@ type BotGiftInput struct {
 	TxRef          string
 }
 
+func (s *Service) ListActiveBotListings(ctx context.Context) ([]domain.MarketListing, error) {
+	return s.market.ListActiveBySource(ctx, domain.ListingSourceBot)
+}
+
+func (s *Service) RepriceListing(ctx context.Context, listingID, itemID uuid.UUID, priceNanoton int64) error {
+	if priceNanoton <= 0 {
+		return domain.ErrInvalidAmount
+	}
+	if err := s.market.UpdateListingPrice(ctx, listingID, priceNanoton); err != nil {
+		return err
+	}
+	return s.inventory.UpdateFloorPriceNanoton(ctx, itemID, priceNanoton)
+}
+
 func toListingView(l domain.MarketListing) ListingView {
 	meta := parseGiftMeta(l.Item.Metadata)
 	sellerName := l.Seller.Username

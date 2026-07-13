@@ -279,6 +279,19 @@ func (h *AdminHandler) SyncBotMarketGifts(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *AdminHandler) RepriceBotMarketGifts(c *gin.Context) {
+	if h.botSync == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "bot sync not configured"})
+		return
+	}
+	result, err := h.botSync.Reprice(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *AdminHandler) GetGiftPriceSettings(c *gin.Context) {
 	settings, err := h.admin.GetGiftPriceSettings(c.Request.Context())
 	if err != nil {

@@ -39,6 +39,7 @@ type InventoryRepository interface {
 	FindByTelegramTxRef(ctx context.Context, txRef string) (*InventoryItem, error)
 	Create(ctx context.Context, item *InventoryItem) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, from, to InventoryStatus) error
+	UpdateFloorPriceNanoton(ctx context.Context, id uuid.UUID, priceNanoton int64) error
 	LockForBet(ctx context.Context, userID, itemID uuid.UUID) error
 	ReleaseFromBet(ctx context.Context, itemID uuid.UUID) error
 	TransferFromBet(ctx context.Context, itemID, newUserID uuid.UUID) error
@@ -49,6 +50,7 @@ type InventoryRepository interface {
 
 type MarketRepository interface {
 	ListActive(ctx context.Context, limit, offset int) ([]MarketListing, error)
+	ListActiveBySource(ctx context.Context, source ListingSource) ([]MarketListing, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*MarketListing, error)
 	ListBySeller(ctx context.Context, sellerID uuid.UUID) ([]MarketListing, error)
 	FindActiveByItemID(ctx context.Context, itemID uuid.UUID) (*MarketListing, error)

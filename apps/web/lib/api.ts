@@ -1253,6 +1253,22 @@ export async function syncAdminBotMarketGifts() {
   });
 }
 
+export type AdminBotGiftRepriceResult = {
+  bot_gifts_scanned: number;
+  listings_checked: number;
+  updated: number;
+  unchanged: number;
+  skipped_unpriced: number;
+  updated_slugs?: string[];
+  errors?: string[];
+};
+
+export async function repriceAdminBotMarketGifts() {
+  return api<AdminBotGiftRepriceResult>("/api/v1/admin/market/reprice-bot-gifts", {
+    method: "POST",
+  });
+}
+
 export type AdminGiftPriceSettings = {
   buy_adjust_percent: number;
   valuation_adjust_percent: number;

@@ -47,6 +47,16 @@ type BotSyncResult struct {
 	Errors                 []string `json:"errors,omitempty"`
 }
 
+type BotRepriceResult struct {
+	BotGiftsScanned int      `json:"bot_gifts_scanned"`
+	ListingsChecked int      `json:"listings_checked"`
+	Updated         int      `json:"updated"`
+	Unchanged       int      `json:"unchanged"`
+	SkippedUnpriced int      `json:"skipped_unpriced"`
+	UpdatedSlugs    []string `json:"updated_slugs,omitempty"`
+	Errors          []string `json:"errors,omitempty"`
+}
+
 func (s *BotSyncService) Enabled() bool {
 	return s != nil && s.cfg.Enabled()
 }
@@ -100,6 +110,83 @@ func (s *BotSyncService) SyncGifts(ctx context.Context, owned []telegram.Incomin
 			"skipped_owned", result.SkippedOwned,
 			"skipped_pending", result.SkippedPendingDeposit,
 			"skipped_unpriced", result.SkippedUnpriced,
+		)
+	}
+	return result, nil
+}
+
+// Reprice refreshes bot market listing prices using the current valuation algorithm.
+// When MTProto is configured, traits from the bot account scan take priority over DB metadata.
+func (s *BotSyncService) Reprice(ctx context.Context) (*BotRepriceResult, error) {
+	result := &BotRepriceResult{}
+	if s.market == nil || s.valuator == nil {
+		return result, fmt.Errorf("market or valuator not configured")
+	}
+
+	scanned := make(map[string]telegram.ScannedGift)
+	if s.Enabled() {
+		owned, err := telegram.ScanOwnedGiftsOnce(ctx, s.cfg)
+		if err != nil {
+			return nil, err
+		}
+		result.BotGiftsScanned = len(owned)
+		for _, gift := range owned {
+			if gift.Slug != "" {
+				scanned[gift.Slug] = gift.ScannedGift
+			}
+		}
+	}
+
+	listings, err := s.market.ListActiveBotListings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result.ListingsChecked = len(listings)
+
+	for _, listing := range listings {
+		slug := listing.Item.TelegramGiftID
+		gift := gifts.ScannedGiftFromItem(listing.Item)
+		if fresh, ok := scanned[slug]; ok {
+			gift = fresh
+		}
+
+		price, source := s.valuator.QuoteValuation(ctx, gift)
+		if price <= 0 {
+			result.SkippedUnpriced++
+			if slug != "" {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: unable to quote", slug))
+			}
+			continue
+		}
+		if price == listing.PriceNanoton {
+			result.Unchanged++
+			continue
+		}
+
+		if err := s.market.RepriceListing(ctx, listing.ID, listing.InventoryItemID, price); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", slug, err))
+			slog.Warn("bot gift reprice failed", "slug", slug, "error", err)
+			continue
+		}
+
+		result.Updated++
+		if slug != "" {
+			result.UpdatedSlugs = append(result.UpdatedSlugs, slug)
+		}
+		slog.Info("bot gift repriced",
+			"slug", slug,
+			"old_nanoton", listing.PriceNanoton,
+			"new_nanoton", price,
+			"price_source", source,
+		)
+	}
+
+	if result.Updated > 0 {
+		slog.Info("bot market reprice completed",
+			"updated", result.Updated,
+			"unchanged", result.Unchanged,
+			"skipped_unpriced", result.SkippedUnpriced,
+			"listings_checked", result.ListingsChecked,
 		)
 	}
 	return result, nil

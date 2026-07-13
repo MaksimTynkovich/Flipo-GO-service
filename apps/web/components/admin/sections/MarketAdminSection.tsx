@@ -10,6 +10,7 @@ import {
   getAdminGiftPriceSettings,
   getMarketListings,
   syncAdminBotMarketGifts,
+  repriceAdminBotMarketGifts,
   updateAdminGiftPriceSettings,
   updateAdminMarketListingPrice,
   type AdminGiftPriceSettings,
@@ -80,6 +81,7 @@ export default function MarketAdminSection() {
   const [giftLoading, setGiftLoading] = useState(true);
   const [savingGift, setSavingGift] = useState(false);
   const [syncingBot, setSyncingBot] = useState(false);
+  const [repricingBot, setRepricingBot] = useState(false);
 
   async function loadListings() {
     setLoading(true);
@@ -230,6 +232,42 @@ export default function MarketAdminSection() {
     }
   }
 
+  async function handleRepriceBotGifts() {
+    setRepricingBot(true);
+    try {
+      const result = await repriceAdminBotMarketGifts();
+      await loadListings();
+      const parts = [
+        `лотов: ${result.listings_checked}`,
+        `обновлено: ${result.updated}`,
+        `без изменений: ${result.unchanged}`,
+        `без цены: ${result.skipped_unpriced}`,
+      ];
+      if (result.bot_gifts_scanned > 0) {
+        parts.unshift(`скан бота: ${result.bot_gifts_scanned}`);
+      }
+      showToast({
+        variant: result.updated > 0 ? "success" : "info",
+        title: "Цены обновлены по алгоритму",
+        subtitle: parts.join(" · "),
+      });
+      if (result.errors?.length) {
+        showToast({
+          variant: "error",
+          title: `Ошибки: ${result.errors.length}`,
+          subtitle: result.errors.slice(0, 3).join("; "),
+        });
+      }
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: err instanceof Error ? err.message : "Не удалось обновить цены",
+      });
+    } finally {
+      setRepricingBot(false);
+    }
+  }
+
   const settings = giftSettings ?? DEFAULT_GIFT_SETTINGS;
 
   return (
@@ -250,6 +288,13 @@ export default function MarketAdminSection() {
           onClick={() => handleSyncBotGifts().catch(() => {})}
         >
           {syncingBot ? "Синхронизация…" : "Выгрузить подарки бота"}
+        </AdminButton>
+        <AdminButton
+          variant="secondary"
+          disabled={repricingBot}
+          onClick={() => handleRepriceBotGifts().catch(() => {})}
+        >
+          {repricingBot ? "Пересчёт…" : "Обновить цены по алгоритму"}
         </AdminButton>
         <AdminButton
           variant="secondary"

@@ -34,6 +34,16 @@ func (r *MarketRepo) ListActive(ctx context.Context, limit, offset int) ([]domai
 	return listings, err
 }
 
+func (r *MarketRepo) ListActiveBySource(ctx context.Context, source domain.ListingSource) ([]domain.MarketListing, error) {
+	var listings []domain.MarketListing
+	err := r.db.WithContext(ctx).
+		Preload("Item").
+		Where("status = ? AND source = ?", domain.ListingActive, source).
+		Order("created_at DESC").
+		Find(&listings).Error
+	return listings, err
+}
+
 func (r *MarketRepo) FindByID(ctx context.Context, id uuid.UUID) (*domain.MarketListing, error) {
 	var listing domain.MarketListing
 	err := r.db.WithContext(ctx).
