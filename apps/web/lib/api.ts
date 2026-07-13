@@ -1000,6 +1000,7 @@ export type AdminSocialSimSettings = {
   online_jitter: number;
   tod_multipliers: number[];
   bet_intensity: number;
+  bet_spread: number;
   bet_burst_chance: number;
   idle_gap_ms_min: number;
   idle_gap_ms_max: number;

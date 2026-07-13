@@ -180,6 +180,7 @@ func (s *Service) UpdateSocialSimSettings(ctx context.Context, adminID uuid.UUID
 		"online_base_min": settings.OnlineBaseMin,
 		"online_base_max": settings.OnlineBaseMax,
 		"bet_intensity":   settings.BetIntensity,
+		"bet_spread":      settings.BetSpread,
 		"chaos":           settings.Chaos,
 	})
 }

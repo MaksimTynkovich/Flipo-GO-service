@@ -29,6 +29,7 @@ func DefaultSettings() domain.SocialSimSettings {
 		OnlineJitter:          0.12,
 		TODMultipliers:        datatypes.JSON(tod),
 		BetIntensity:          8,
+		BetSpread:             0.25,
 		BetBurstChance:        0.35,
 		IdleGapMsMin:          400,
 		IdleGapMsMax:          2200,
@@ -58,6 +59,7 @@ func Normalize(cfg *domain.SocialSimSettings) {
 	}
 	cfg.OnlineJitter = clamp(cfg.OnlineJitter, 0, 1)
 	cfg.BetIntensity = clamp(cfg.BetIntensity, 0, 80)
+	cfg.BetSpread = clamp(cfg.BetSpread, 0, 1)
 	cfg.BetBurstChance = clamp(cfg.BetBurstChance, 0, 1)
 	if cfg.IdleGapMsMin < 50 {
 		cfg.IdleGapMsMin = 50

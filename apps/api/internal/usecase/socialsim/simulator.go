@@ -634,7 +634,12 @@ func (s *Simulator) safeRepublish(ctx context.Context, fn RepublishFn, roundID u
 func (s *Simulator) computeBetTargetLocked() int {
 	base := s.cfg.BetIntensity
 	tod := TODMultiplier(s.cfg, time.Now().Hour())
-	n := int(math.Round(base * tod * (0.7 + s.rng.Float64()*0.6)))
+	// Per-round spread: each round draws a fresh target around the base so
+	// consecutive rounds vary (e.g. 4, then 2, then 6 players). BetSpread
+	// is the relative half-width of that swing.
+	spread := clamp(s.cfg.BetSpread, 0, 1)
+	swing := (s.rng.Float64()*2 - 1) * spread
+	n := int(math.Round(base * tod * (1 + swing)))
 	if n < 0 {
 		n = 0
 	}

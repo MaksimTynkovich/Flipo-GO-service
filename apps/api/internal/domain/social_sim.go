@@ -20,6 +20,7 @@ type SocialSimSettings struct {
 	OnlineJitter            float64        `gorm:"type:double precision;not null;default:0.12" json:"online_jitter"`
 	TODMultipliers          datatypes.JSON `gorm:"type:jsonb;not null" json:"tod_multipliers"`
 	BetIntensity            float64        `gorm:"type:double precision;not null;default:8" json:"bet_intensity"`
+	BetSpread               float64        `gorm:"type:double precision;not null;default:0.25" json:"bet_spread"`
 	BetBurstChance          float64        `gorm:"type:double precision;not null;default:0.35" json:"bet_burst_chance"`
 	IdleGapMsMin            int            `gorm:"not null;default:400" json:"idle_gap_ms_min"`
 	IdleGapMsMax            int            `gorm:"not null;default:2200" json:"idle_gap_ms_max"`

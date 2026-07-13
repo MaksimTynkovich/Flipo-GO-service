@@ -277,6 +277,12 @@ export default function GamesSection() {
               onChange={(v) => setSim({ ...sim, bet_intensity: v })}
             />
             <AdminFloatField
+              label="Bet spread (0–1)"
+              hint="Разброс числа игроков ПО РАУНДАМ. Каждый раунд берёт цель около Bet intensity ± spread. 0 — стабильно (всегда ~intensity), 0.5 — сильно скачет (например 4, 2, 6, 9), 1.0 — максимальный разлёт."
+              value={sim.bet_spread}
+              onChange={(v) => setSim({ ...sim, bet_spread: v })}
+            />
+            <AdminFloatField
               label="Bet burst chance"
               hint="Вероятность «пачки» ставок сразу (2–3 штуки), особенно в начале окна и за 2–3 с до конца. 0.3–0.4 выглядит естественно."
               value={sim.bet_burst_chance}
