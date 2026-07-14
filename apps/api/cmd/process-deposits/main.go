@@ -33,10 +33,19 @@ func main() {
 	invRepo := postgres.NewInventoryRepo(db)
 	userRepo := postgres.NewUserRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
-	valuator := gifts.NewDefaultValuator(cfg.MRKTAPIToken, telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath), invRepo, platformRepo)
+	giftTraitRepo := postgres.NewGiftTraitPriceRepo(db)
+	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	valuator := gifts.NewDefaultValuator(
+		cfg.MRKTAPIToken,
+		cfg.GiftAssetAPIKey,
+		cfg.GiftAssetBaseURL,
+		mtprotoCfg,
+		invRepo,
+		platformRepo,
+		giftTraitRepo,
+	)
 	processor := inventoryuc.NewAutoDepositService(userRepo, invRepo, valuator, nil)
 
-	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
 	incoming, err := telegram.ScanIncomingGiftsOnce(ctx, mtprotoCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %v\n", err)

@@ -14,6 +14,8 @@ import (
 const (
 	PriceSourceTelegram        = "telegram"
 	PriceSourceTraits          = "traits"
+	PriceSourceGiftAsset       = "giftasset"
+	PriceSourceAdmin           = "admin"
 	PriceSourcePortalsTraits   = "portals_traits"
 	PriceSourcePortalsModel    = "portals_model"
 	PriceSourcePortalsBackdrop = "portals_backdrop"
@@ -47,10 +49,18 @@ type GiftAdjustProvider interface {
 	GiftAdjustPercents(ctx context.Context) (buyAdjustPercent, valuationAdjustPercent float64, err error)
 }
 
+// TraitPriceStore persists resolved gift valuations.
+type TraitPriceStore interface {
+	Get(ctx context.Context, collectionSlug, model, backdrop string) (*domain.GiftTraitPrice, error)
+	Upsert(ctx context.Context, price *domain.GiftTraitPrice) error
+}
+
 type Valuator struct {
-	market *MarketPrices
-	floors FloorPriceLookup
-	adjust GiftAdjustProvider
+	market    *MarketPrices
+	giftasset *GiftAssetClient
+	floors    FloorPriceLookup
+	adjust    GiftAdjustProvider
+	store     TraitPriceStore
 
 	adjustMu   sync.Mutex
 	adjustBuy  float64
@@ -70,12 +80,15 @@ type cachedMarketQuote struct {
 
 const marketQuoteCacheTTL = 5 * time.Minute
 const marketQuoteStaleTTL = 12 * time.Hour
+const traitPriceFreshTTL = 24 * time.Hour
 
 func quoteSourceTier(source string) int {
 	switch source {
+	case PriceSourceAdmin:
+		return 4
 	case PriceSourcePortalsTraits, PriceSourceMRKTTraits:
 		return 3
-	case PriceSourceTraits:
+	case PriceSourceTraits, PriceSourceGiftAsset:
 		return 2
 	case PriceSourcePortalsModel, PriceSourceMRKTModel, PriceSourcePortalsBackdrop, PriceSourceMRKTBackdrop:
 		return 1
@@ -91,7 +104,24 @@ func shouldAcceptQuote(cachedSource, newSource string) bool {
 }
 
 func NewValuator(market *MarketPrices, floors FloorPriceLookup, adjust GiftAdjustProvider) *Valuator {
-	return &Valuator{market: market, floors: floors, adjust: adjust, quoteCache: make(map[string]cachedMarketQuote)}
+	return NewValuatorFull(market, nil, floors, adjust, nil)
+}
+
+func NewValuatorFull(
+	market *MarketPrices,
+	giftasset *GiftAssetClient,
+	floors FloorPriceLookup,
+	adjust GiftAdjustProvider,
+	store TraitPriceStore,
+) *Valuator {
+	return &Valuator{
+		market:     market,
+		giftasset:  giftasset,
+		floors:     floors,
+		adjust:     adjust,
+		store:      store,
+		quoteCache: make(map[string]cachedMarketQuote),
+	}
 }
 
 // Enrich stores the raw floor quote (minimum trait / collection price, no adjust).
@@ -199,17 +229,33 @@ func (v *Valuator) rawQuote(ctx context.Context, gift telegram.ScannedGift) (int
 		return cached.price, cached.source
 	}
 
-	if v.market != nil {
-		if ton, source, err := v.market.QuoteTON(ctx, gift.CollectionSlug, gift.Attributes); err == nil && ton > 0 {
-			newPrice := tonToNanoton(ton)
-			if hasCached && time.Since(cached.at) < marketQuoteStaleTTL && !shouldAcceptQuote(cached.source, source) {
-				return cached.price, cached.source
+	collection, model, backdrop := StorageKey(gift.CollectionSlug, gift.Attributes.Model, gift.Attributes.Backdrop)
+
+	var staleDB *domain.GiftTraitPrice
+	if v.store != nil && collection != "" && model != "" {
+		if row, err := v.store.Get(ctx, collection, model, backdrop); err == nil && row != nil && row.PriceNanoton > 0 {
+			// Admin overrides are sticky until changed again in admin UI.
+			if row.Source == PriceSourceAdmin || time.Since(row.FetchedAt) < traitPriceFreshTTL {
+				v.storeMarketQuote(gift, row.PriceNanoton, row.Source)
+				return row.PriceNanoton, row.Source
 			}
-			v.storeMarketQuote(gift, newPrice, source)
-			return newPrice, source
+			staleDB = row
 		}
 	}
 
+	if price, source, ok := v.fetchAndPersist(ctx, gift, collection, model, backdrop); ok {
+		if hasCached && time.Since(cached.at) < marketQuoteStaleTTL && !shouldAcceptQuote(cached.source, source) {
+			return cached.price, cached.source
+		}
+		if staleDB != nil && !shouldAcceptQuote(staleDB.Source, source) {
+			return staleDB.PriceNanoton, staleDB.Source
+		}
+		return price, source
+	}
+
+	if staleDB != nil {
+		return staleDB.PriceNanoton, staleDB.Source
+	}
 	if hasCached && time.Since(cached.at) < marketQuoteStaleTTL {
 		return cached.price, cached.source
 	}
@@ -223,12 +269,78 @@ func (v *Valuator) rawQuote(ctx context.Context, gift telegram.ScannedGift) (int
 	if gift.PriceNanoton > 0 && gift.PriceSource != "" && gift.PriceSource != PriceSourceTelegram {
 		return gift.PriceNanoton, gift.PriceSource
 	}
-
 	if gift.PriceNanoton > 0 {
 		return gift.PriceNanoton, PriceSourceTelegram
 	}
-
 	return 0, PriceSourceNone
+}
+
+func (v *Valuator) fetchAndPersist(ctx context.Context, gift telegram.ScannedGift, collection, model, backdrop string) (int64, string, bool) {
+	price, source := v.resolveExternal(ctx, gift, collection, model, backdrop)
+	return v.persistResolved(ctx, gift, collection, model, backdrop, price, source)
+}
+
+// fetchAndPersistFromMarkets is used by the daily cron: Portals/MRKT only, never GiftAsset.
+func (v *Valuator) fetchAndPersistFromMarkets(ctx context.Context, gift telegram.ScannedGift, collection, model, backdrop string) (int64, string, bool) {
+	price, source := v.marketQuoteNanoton(ctx, gift)
+	return v.persistResolved(ctx, gift, collection, model, backdrop, price, source)
+}
+
+func (v *Valuator) persistResolved(ctx context.Context, gift telegram.ScannedGift, collection, model, backdrop string, price int64, source string) (int64, string, bool) {
+	if v.store != nil && collection != "" && model != "" {
+		if existing, err := v.store.Get(ctx, collection, model, backdrop); err == nil && existing != nil && existing.Source == PriceSourceAdmin && existing.PriceNanoton > 0 {
+			v.storeMarketQuote(gift, existing.PriceNanoton, existing.Source)
+			return existing.PriceNanoton, existing.Source, true
+		}
+	}
+	if price <= 0 {
+		return 0, PriceSourceNone, false
+	}
+	v.storeMarketQuote(gift, price, source)
+	if v.store != nil && collection != "" && model != "" {
+		_ = v.store.Upsert(ctx, &domain.GiftTraitPrice{
+			CollectionSlug: collection,
+			Model:          model,
+			Backdrop:       backdrop,
+			PriceNanoton:   price,
+			Source:         source,
+			FetchedAt:      time.Now().UTC(),
+		})
+	}
+	return price, source, true
+}
+
+func (v *Valuator) resolveExternal(ctx context.Context, gift telegram.ScannedGift, collection, model, backdrop string) (int64, string) {
+	black := backdrop != ""
+
+	// Black / Onyx Black: Portals + MRKT only (never GiftAsset).
+	if black {
+		return v.marketQuoteNanoton(ctx, gift)
+	}
+
+	// Non-black: GiftAsset model floor first.
+	if v.giftasset != nil && v.giftasset.Enabled() && model != "" {
+		name := collectionDisplayName(collection)
+		if v.market != nil {
+			name = v.market.collectionDisplayName(ctx, collection)
+		}
+		if ton, err := v.giftasset.ModelFloorTON(ctx, name, model); err == nil && ton > 0 {
+			return tonToNanoton(ton), PriceSourceGiftAsset
+		}
+	}
+
+	return v.marketQuoteNanoton(ctx, gift)
+}
+
+func (v *Valuator) marketQuoteNanoton(ctx context.Context, gift telegram.ScannedGift) (int64, string) {
+	if v.market == nil {
+		return 0, PriceSourceNone
+	}
+	ton, source, err := v.market.QuoteTON(ctx, gift.CollectionSlug, gift.Attributes)
+	if err != nil || ton <= 0 {
+		return 0, PriceSourceNone
+	}
+	return tonToNanoton(ton), source
 }
 
 func (v *Valuator) lookupQuoteCache(gift telegram.ScannedGift) (cachedMarketQuote, bool) {
@@ -240,11 +352,11 @@ func (v *Valuator) lookupQuoteCache(gift telegram.ScannedGift) (cachedMarketQuot
 }
 
 func (v *Valuator) quoteCacheKey(gift telegram.ScannedGift) string {
+	_, _, backdrop := StorageKey(gift.CollectionSlug, gift.Attributes.Model, gift.Attributes.Backdrop)
 	return strings.Join([]string{
 		gift.CollectionSlug,
 		gift.Attributes.Model,
-		gift.Attributes.Backdrop,
-		gift.Attributes.Symbol,
+		backdrop,
 	}, "\x00")
 }
 

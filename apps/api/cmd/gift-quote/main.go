@@ -12,6 +12,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
+	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
 )
 
 type quoteOutput struct {
@@ -24,7 +25,8 @@ type quoteOutput struct {
 	PriceSource    string                  `json:"price_source"`
 	BuybackNanoton int64                   `json:"buyback_nanoton"`
 	BuybackTON     float64                 `json:"buyback_ton"`
-	Analysis       gifts.QuoteAnalysis     `json:"analysis"`
+	StorageKey     string                  `json:"storage_key"`
+	Analysis       gifts.QuoteAnalysis     `json:"analysis,omitempty"`
 }
 
 func main() {
@@ -36,7 +38,8 @@ func main() {
 		backdrop = flag.String("backdrop", "", "override backdrop trait")
 		symbol   = flag.String("symbol", "", "override symbol trait")
 		asJSON   = flag.Bool("json", false, "print JSON")
-		timeout  = flag.Duration("timeout", 30*time.Second, "lookup timeout")
+		analyze  = flag.Bool("analyze", false, "also print live Portals/MRKT analysis")
+		timeout  = flag.Duration("timeout", 45*time.Second, "lookup timeout")
 	)
 	flag.Parse()
 
@@ -45,9 +48,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Usage:")
 		fmt.Fprintln(os.Stderr, "  make gift-quote SLUG=surgeBoard-1081")
 		fmt.Fprintln(os.Stderr, "  go run ./cmd/gift-quote surgeBoard-1081")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Optional trait overrides:")
-		fmt.Fprintln(os.Stderr, "  go run ./cmd/gift-quote -model Blåhaj -backdrop \"Mexican Pink\" surgeBoard-1081")
 		os.Exit(2)
 	}
 
@@ -77,12 +77,37 @@ func main() {
 		Attributes:     attrs,
 	}
 
-	market := gifts.NewMarketPrices("", cfg.MRKTAPIToken, telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath))
-	analysis := market.AnalyzeQuote(ctx, collection, attrs)
-	valuator := gifts.NewValuator(market, nil, nil)
+	var store gifts.TraitPriceStore
+	db, dbErr := postgres.NewDB(cfg.DatabaseURL)
+	if dbErr != nil {
+		fmt.Fprintf(os.Stderr, "warn: db unavailable (%v); quotes will not be persisted\n", dbErr)
+	} else {
+		if err := postgres.AutoMigrate(db); err != nil {
+			fmt.Fprintf(os.Stderr, "warn: migrate: %v\n", err)
+		}
+		store = postgres.NewGiftTraitPriceRepo(db)
+	}
+
+	mtproto := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	market := gifts.NewMarketPrices("", cfg.MRKTAPIToken, mtproto)
+	valuator := gifts.NewValuatorFull(
+		market,
+		gifts.NewGiftAssetClient(cfg.GiftAssetBaseURL, cfg.GiftAssetAPIKey),
+		nil,
+		nil,
+		store,
+	)
 
 	valuation, valSource := valuator.QuoteValuation(ctx, gift)
 	buyback, buySource := valuator.QuoteBuyback(ctx, gift)
+
+	_, _, storedBackdrop := gifts.StorageKey(collection, attrs.Model, attrs.Backdrop)
+	storageKey := collection + "/" + attrs.Model
+	if storedBackdrop != "" {
+		storageKey += "/" + storedBackdrop
+	} else {
+		storageKey += " (model)"
+	}
 
 	out := quoteOutput{
 		Slug:           slug,
@@ -94,12 +119,10 @@ func main() {
 		PriceSource:    valSource,
 		BuybackNanoton: buyback,
 		BuybackTON:     float64(buyback) / 1e9,
-		Analysis:       analysis,
+		StorageKey:     storageKey,
 	}
-	if out.PriceNanoton <= 0 && analysis.Best.TON > 0 {
-		out.PriceNanoton = int64(analysis.Best.TON * 1_000_000_000)
-		out.PriceTON = analysis.Best.TON
-		out.PriceSource = analysis.Best.Source
+	if *analyze {
+		out.Analysis = market.AnalyzeQuote(ctx, collection, attrs)
 	}
 
 	if *asJSON {
@@ -120,10 +143,13 @@ func main() {
 	fmt.Printf("model:           %s\n", emptyDash(out.Attributes.Model))
 	fmt.Printf("backdrop:        %s\n", emptyDash(out.Attributes.Backdrop))
 	fmt.Printf("symbol:          %s\n", emptyDash(out.Attributes.Symbol))
+	fmt.Printf("storage:         %s\n", out.StorageKey)
 	fmt.Printf("price:           %.4f TON (%d nanoton)\n", out.PriceTON, out.PriceNanoton)
 	fmt.Printf("source:          %s\n", out.PriceSource)
 	fmt.Printf("buyback:         %.4f TON (%d nanoton) [%s]\n", out.BuybackTON, out.BuybackNanoton, buySource)
-	printAnalysis(analysis)
+	if *analyze {
+		printAnalysis(out.Analysis)
+	}
 }
 
 func printAnalysis(analysis gifts.QuoteAnalysis) {

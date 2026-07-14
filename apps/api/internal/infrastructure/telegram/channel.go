@@ -15,8 +15,8 @@ func normalizeChannelChatID(channel string) string {
 	if channel == "" {
 		return ""
 	}
-	if strings.HasPrefix(channel, "https://t.me/") {
-		channel = strings.TrimPrefix(channel, "https://t.me/")
+	if strings.HasPrefix(channel, "https://telegram.me/") {
+		channel = strings.TrimPrefix(channel, "https://telegram.me/")
 		channel = strings.Trim(strings.TrimSuffix(channel, "/"), "/")
 	}
 	if strings.HasPrefix(channel, "@") {

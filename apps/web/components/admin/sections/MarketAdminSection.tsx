@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { AdminButton, AdminChip, AdminToolbar } from "@/components/admin/admin-ui";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -8,24 +8,38 @@ import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/ad
 import {
   formatTON,
   getAdminGiftPriceSettings,
+  getAdminGiftTraitPrices,
   getMarketListings,
   syncAdminBotMarketGifts,
   repriceAdminBotMarketGifts,
   updateAdminGiftPriceSettings,
+  updateAdminGiftTraitPrice,
   updateAdminMarketListingPrice,
   type AdminGiftPriceSettings,
+  type AdminGiftTraitPrice,
+  type AdminGiftTraitPriceList,
   type MarketListing,
 } from "@/lib/api";
 import { giftImageUrlFromURL } from "@/lib/gifts";
 import { nanotonToTonInput, tonInputToNanoton } from "@/lib/admin-units";
 
 type SourceFilter = "all" | "bot" | "user";
-type MarketTab = "listings" | "gift-prices";
+type MarketTab = "listings" | "gift-prices" | "catalog";
 
 const DEFAULT_GIFT_SETTINGS: AdminGiftPriceSettings = {
   buy_adjust_percent: 0,
   valuation_adjust_percent: 0,
 };
+
+const PAGE_SIZE = 50;
+
+function rowKey(row: AdminGiftTraitPrice): string {
+  return `${row.collection_slug}\0${row.model}\0${row.backdrop}`;
+}
+
+function backdropLabel(backdrop: string): string {
+  return backdrop ? backdrop : "модель (без чёрного фона)";
+}
 
 function parsePercent(raw: string): number | null {
   const trimmed = raw.trim().replace(",", ".");
@@ -59,7 +73,7 @@ function filterPercentInput(raw: string): string {
 
 export default function MarketAdminSection() {
   const { showToast } = useToast();
-  const [tab, setTab] = useState<MarketTab>("gift-prices");
+  const [tab, setTab] = useState<MarketTab>("catalog");
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [draftPrices, setDraftPrices] = useState<Record<string, string>>({});
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
@@ -73,6 +87,21 @@ export default function MarketAdminSection() {
   const [savingGift, setSavingGift] = useState(false);
   const [syncingBot, setSyncingBot] = useState(false);
   const [repricingBot, setRepricingBot] = useState(false);
+
+  const [catalog, setCatalog] = useState<AdminGiftTraitPrice[]>([]);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [catalogFilters, setCatalogFilters] = useState<AdminGiftTraitPriceList["filters"]>({
+    collections: [],
+    models: [],
+    backdrops: [],
+  });
+  const [filterCollection, setFilterCollection] = useState("");
+  const [filterModel, setFilterModel] = useState("");
+  const [filterBackdrop, setFilterBackdrop] = useState("");
+  const [catalogOffset, setCatalogOffset] = useState(0);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogDrafts, setCatalogDrafts] = useState<Record<string, string>>({});
+  const [savingCatalogKey, setSavingCatalogKey] = useState<string | null>(null);
 
   async function loadListings() {
     setLoading(true);
@@ -101,6 +130,36 @@ export default function MarketAdminSection() {
     }
   }
 
+  const loadCatalog = useCallback(
+    async (opts?: { offset?: number; collection?: string; model?: string; backdrop?: string }) => {
+      const offset = opts?.offset ?? catalogOffset;
+      const collection = opts?.collection ?? filterCollection;
+      const model = opts?.model ?? filterModel;
+      const backdrop = opts?.backdrop ?? filterBackdrop;
+      setCatalogLoading(true);
+      try {
+        const modelOnly = backdrop === "__empty__";
+        const data = await getAdminGiftTraitPrices({
+          collection: collection || undefined,
+          model: model || undefined,
+          backdrop: modelOnly ? undefined : backdrop || undefined,
+          model_only: modelOnly,
+          limit: PAGE_SIZE,
+          offset,
+        });
+        setCatalog(data.items);
+        setCatalogTotal(data.total);
+        setCatalogFilters(data.filters);
+        setCatalogDrafts(
+          Object.fromEntries(data.items.map((row) => [rowKey(row), nanotonToTonInput(row.price_nanoton)])),
+        );
+      } finally {
+        setCatalogLoading(false);
+      }
+    },
+    [catalogOffset, filterCollection, filterModel, filterBackdrop],
+  );
+
   useEffect(() => {
     runAfterFirstPaint(() => {
       const cachedListings = readCached<MarketListing[]>("admin:market:listings");
@@ -120,6 +179,7 @@ export default function MarketAdminSection() {
       }
       loadListings().catch(() => {});
       loadGiftSettings().catch(() => {});
+      loadCatalog({ offset: 0 }).catch(() => {});
     });
   }, []);
 
@@ -127,6 +187,9 @@ export default function MarketAdminSection() {
     if (sourceFilter === "all") return true;
     return listing.source === sourceFilter;
   });
+
+  const pageCount = useMemo(() => Math.max(1, Math.ceil(catalogTotal / PAGE_SIZE)), [catalogTotal]);
+  const pageIndex = Math.floor(catalogOffset / PAGE_SIZE) + 1;
 
   async function handleSaveListing(listing: MarketListing) {
     const priceNanoton = tonInputToNanoton(draftPrices[listing.id] ?? "");
@@ -186,6 +249,48 @@ export default function MarketAdminSection() {
       });
     } finally {
       setSavingGift(false);
+    }
+  }
+
+  async function handleSaveCatalogRow(row: AdminGiftTraitPrice) {
+    const key = rowKey(row);
+    const priceNanoton = tonInputToNanoton(catalogDrafts[key] ?? "");
+    if (priceNanoton <= 0) {
+      showToast({ variant: "error", title: "Введите корректную цену" });
+      return;
+    }
+    if (priceNanoton === row.price_nanoton && row.source === "admin") {
+      showToast({ variant: "info", title: "Цена не изменилась" });
+      return;
+    }
+
+    setSavingCatalogKey(key);
+    try {
+      await updateAdminGiftTraitPrice({
+        collection_slug: row.collection_slug,
+        model: row.model,
+        backdrop: row.backdrop,
+        price_nanoton: priceNanoton,
+      });
+      setCatalog((prev) =>
+        prev.map((item) =>
+          rowKey(item) === key
+            ? { ...item, price_nanoton: priceNanoton, source: "admin", fetched_at: new Date().toISOString() }
+            : item,
+        ),
+      );
+      showToast({
+        variant: "success",
+        title: `Сохранено: ${formatTON(priceNanoton)} TON`,
+        subtitle: "Ручная цена, daily sync не перезапишет",
+      });
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: err instanceof Error ? err.message : "Не удалось сохранить цену",
+      });
+    } finally {
+      setSavingCatalogKey(null);
     }
   }
 
@@ -264,11 +369,14 @@ export default function MarketAdminSection() {
   return (
     <PageShell
       title="Маркет"
-      description="Корректировка оценки подарков, выгрузка ничьих гифтов бота и цены лотов."
+      description="Каталог цен моделей, корректировка оценки, выгрузка гифтов бота и цены лотов."
     >
       <AdminToolbar>
+        <AdminChip active={tab === "catalog"} onClick={() => setTab("catalog")}>
+          Каталог цен
+        </AdminChip>
         <AdminChip active={tab === "gift-prices"} onClick={() => setTab("gift-prices")}>
-          Оценка подарков
+          % к алгоритму
         </AdminChip>
         <AdminChip active={tab === "listings"} onClick={() => setTab("listings")}>
           Лоты
@@ -291,19 +399,188 @@ export default function MarketAdminSection() {
           variant="secondary"
           onClick={() => {
             if (tab === "listings") loadListings().catch(() => {});
-            else loadGiftSettings().catch(() => {});
+            else if (tab === "gift-prices") loadGiftSettings().catch(() => {});
+            else loadCatalog().catch(() => {});
           }}
         >
           Обновить
         </AdminButton>
       </AdminToolbar>
 
-      {tab === "gift-prices" ? (
+      {tab === "catalog" ? (
+        <section className="panel space-y-4">
+          <div className="space-y-1">
+            <p className="text-base font-semibold">Цены моделей ({catalogTotal})</p>
+            <p className="text-xs text-muted">
+              Пустой фон = цена модели для всех не-чёрных фонов. Black / Onyx Black хранятся отдельно.
+              Ручная правка (`admin`) используется в оценке и не затирается daily sync.
+            </p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="text-xs text-muted">
+              Коллекция
+              <select
+                className="input-field mt-1"
+                value={filterCollection}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setFilterCollection(next);
+                  setFilterModel("");
+                  setFilterBackdrop("");
+                  setCatalogOffset(0);
+                  loadCatalog({ offset: 0, collection: next, model: "", backdrop: "" }).catch(() => {});
+                }}
+              >
+                <option value="">Все</option>
+                {catalogFilters.collections.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-muted">
+              Модель
+              <select
+                className="input-field mt-1"
+                value={filterModel}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setFilterModel(next);
+                  setFilterBackdrop("");
+                  setCatalogOffset(0);
+                  loadCatalog({ offset: 0, model: next, backdrop: "" }).catch(() => {});
+                }}
+              >
+                <option value="">Все</option>
+                {catalogFilters.models.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-muted">
+              Фон
+              <select
+                className="input-field mt-1"
+                value={filterBackdrop}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setFilterBackdrop(next);
+                  setCatalogOffset(0);
+                  loadCatalog({ offset: 0, backdrop: next }).catch(() => {});
+                }}
+              >
+                <option value="">Все</option>
+                <option value="__empty__">Только модели (без black)</option>
+                {catalogFilters.backdrops
+                  .filter((b) => b !== "")
+                  .map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </div>
+
+          {catalogLoading && catalog.length === 0 ? (
+            Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="h-16 animate-pulse rounded-xl bg-surface-raised/50" />
+            ))
+          ) : catalog.length === 0 ? (
+            <p className="text-sm text-muted">
+              В базе пока нет цен. Они появятся после оценки подарка или{" "}
+              <code className="text-xs">make gift-prices-refresh</code>.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {catalog.map((row) => {
+                const key = rowKey(row);
+                return (
+                  <div
+                    key={key}
+                    className="flex flex-col gap-3 rounded-xl border border-border p-3 sm:flex-row sm:items-center"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {row.collection_slug} · {row.model}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {backdropLabel(row.backdrop)} · источник: {row.source}
+                        {row.source === "admin" ? " (ручная)" : ""}
+                      </p>
+                      <p className="text-xs text-muted">Сейчас: {formatTON(row.price_nanoton)} TON</p>
+                    </div>
+                    <div className="flex items-end gap-2 sm:w-56">
+                      <label className="flex-1 text-xs text-muted">
+                        Цена (TON)
+                        <input
+                          className="input-field mt-1"
+                          type="text"
+                          inputMode="decimal"
+                          value={catalogDrafts[key] ?? ""}
+                          onChange={(e) =>
+                            setCatalogDrafts((prev) => ({
+                              ...prev,
+                              [key]: e.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <AdminButton
+                        disabled={savingCatalogKey === key}
+                        onClick={() => handleSaveCatalogRow(row).catch(() => {})}
+                      >
+                        {savingCatalogKey === key ? "..." : "Сохранить"}
+                      </AdminButton>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {catalogTotal > PAGE_SIZE ? (
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <p className="text-xs text-muted">
+                Стр. {pageIndex} / {pageCount}
+              </p>
+              <div className="flex gap-2">
+                <AdminButton
+                  variant="secondary"
+                  disabled={catalogOffset <= 0 || catalogLoading}
+                  onClick={() => {
+                    const next = Math.max(0, catalogOffset - PAGE_SIZE);
+                    setCatalogOffset(next);
+                    loadCatalog({ offset: next }).catch(() => {});
+                  }}
+                >
+                  Назад
+                </AdminButton>
+                <AdminButton
+                  variant="secondary"
+                  disabled={catalogOffset + PAGE_SIZE >= catalogTotal || catalogLoading}
+                  onClick={() => {
+                    const next = catalogOffset + PAGE_SIZE;
+                    setCatalogOffset(next);
+                    loadCatalog({ offset: next }).catch(() => {});
+                  }}
+                >
+                  Далее
+                </AdminButton>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : tab === "gift-prices" ? (
         <section className="panel space-y-4">
           <div className="space-y-1">
             <p className="text-base font-semibold">Корректировка от алгоритма</p>
             <p className="text-xs text-muted">
-              Процент от рыночной оценки (traits / floor). Отрицательное значение — скидка,
+              Процент от рыночной оценки (каталог / GiftAsset / markets). Отрицательное значение — скидка,
               положительное — наценка. Например, −12 = скупка по 88% от алгоритма.
             </p>
           </div>

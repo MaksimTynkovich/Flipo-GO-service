@@ -1275,6 +1275,27 @@ export type AdminGiftPriceSettings = {
   valuation_adjust_percent: number;
 };
 
+export type AdminGiftTraitPrice = {
+  collection_slug: string;
+  model: string;
+  backdrop: string;
+  price_nanoton: number;
+  source: string;
+  fetched_at: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type AdminGiftTraitPriceList = {
+  items: AdminGiftTraitPrice[];
+  total: number;
+  filters: {
+    collections: string[];
+    models: string[];
+    backdrops: string[];
+  };
+};
+
 export async function getAdminGiftPriceSettings() {
   return api<AdminGiftPriceSettings>("/api/v1/admin/gift-price-settings");
 }
@@ -1283,6 +1304,37 @@ export async function updateAdminGiftPriceSettings(settings: AdminGiftPriceSetti
   return api<{ ok: boolean }>("/api/v1/admin/gift-price-settings", {
     method: "PATCH",
     body: JSON.stringify(settings),
+  });
+}
+
+export async function getAdminGiftTraitPrices(params?: {
+  collection?: string;
+  model?: string;
+  backdrop?: string;
+  model_only?: boolean;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.collection) q.set("collection", params.collection);
+  if (params?.model) q.set("model", params.model);
+  if (params?.backdrop) q.set("backdrop", params.backdrop);
+  if (params?.model_only) q.set("model_only", "1");
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return api<AdminGiftTraitPriceList>(`/api/v1/admin/gift-trait-prices${qs ? `?${qs}` : ""}`);
+}
+
+export async function updateAdminGiftTraitPrice(input: {
+  collection_slug: string;
+  model: string;
+  backdrop?: string;
+  price_nanoton: number;
+}) {
+  return api<{ ok: boolean }>("/api/v1/admin/gift-trait-prices", {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 

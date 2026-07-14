@@ -33,7 +33,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "users", href: "/admin/users", label: "Пользователи", hint: "Поиск и поведение по сессиям" },
   { id: "games", href: "/admin/games", label: "Игры", hint: "RTP, лимиты и seed" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы", hint: "Назначить исход раундов" },
-  { id: "market", href: "/admin/market", label: "Маркет", hint: "Оценка подарков и лоты" },
+  { id: "market", href: "/admin/market", label: "Маркет", hint: "Каталог цен, оценка и лоты" },
   { id: "finance", href: "/admin/finance", label: "Финансы", hint: "Кошельки и журнал" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг", hint: "Промо и рефералы" },
   { id: "telegram", href: "/admin/telegram", label: "Telegram", hint: "Бот и рассылки" },

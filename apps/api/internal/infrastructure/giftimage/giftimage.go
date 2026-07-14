@@ -144,7 +144,7 @@ func (p *Proxy) fetchUpstream(file string) ([]byte, error) {
 }
 
 func (p *Proxy) fetchFromTMeNFTPage(slug string) ([]byte, error) {
-	pageURL := "https://t.me/nft/" + slug
+	pageURL := "https://telegram.me/nft/" + slug
 	body, err := p.fetchBytes(pageURL, fragmentUserUA, "text/html,*/*")
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (p *Proxy) fetchFromTMeNFTPage(slug string) ([]byte, error) {
 
 	imageURL := string(match[1])
 	return p.fetchBytes(imageURL, fragmentUserUA, "image/jpeg,image/*,*/*", map[string]string{
-		"Referer": "https://t.me/",
+		"Referer": "https://telegram.me/",
 	})
 }
 

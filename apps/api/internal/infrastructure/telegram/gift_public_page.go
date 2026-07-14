@@ -17,14 +17,14 @@ func ParseGiftSlug(slug string) (collection, tokenID string) {
 	return parseGiftSlug(slug)
 }
 
-// FetchNFTPageTraits loads model/backdrop/symbol from the public t.me/nft page.
+// FetchNFTPageTraits loads model/backdrop/symbol from the public telegram.me/nft page.
 func FetchNFTPageTraits(ctx context.Context, slug string) (GiftAttributes, error) {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return GiftAttributes{}, fmt.Errorf("gift slug is required")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://t.me/nft/"+slug, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://telegram.me/nft/"+slug, nil)
 	if err != nil {
 		return GiftAttributes{}, err
 	}
@@ -38,7 +38,7 @@ func FetchNFTPageTraits(ctx context.Context, slug string) (GiftAttributes, error
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return GiftAttributes{}, fmt.Errorf("t.me/nft/%s: status %d", slug, resp.StatusCode)
+		return GiftAttributes{}, fmt.Errorf("telegram.me/nft/%s: status %d", slug, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
@@ -48,7 +48,7 @@ func FetchNFTPageTraits(ctx context.Context, slug string) (GiftAttributes, error
 
 	match := nftPageDescriptionPattern.FindSubmatch(body)
 	if len(match) < 2 {
-		return GiftAttributes{}, fmt.Errorf("traits not found on t.me/nft/%s", slug)
+		return GiftAttributes{}, fmt.Errorf("traits not found on telegram.me/nft/%s", slug)
 	}
 
 	return parseNFTPageDescription(string(match[1]))

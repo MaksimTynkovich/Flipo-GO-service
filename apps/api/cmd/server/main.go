@@ -140,7 +140,8 @@ func main() {
 	walletSvc.SetRiskEvaluator(risk.WalletEvaluator{Service: riskSvc})
 	walletSvc.SetAnalytics(analyticsSvc)
 	fairnessSvc := fairness.NewService(platformRepo, gameRepo)
-	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo)
+	giftTraitRepo := postgres.NewGiftTraitPriceRepo(db)
+	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo, giftTraitRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
 	adminNotifier := telegram.NewAdminNotifier(botAPI, cfg.AdminTelegramIDs)
@@ -167,7 +168,15 @@ func main() {
 		slog.Warn("telegram mtproto gift scanner disabled; set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH and run make tg-auth")
 	}
 	giftScanner := telegram.NewProfileGiftScanner(mtprotoCfg, cfg.DebugAuthEnabled && !mtprotoCfg.Enabled())
-	giftValuator := gifts.NewDefaultValuator(cfg.MRKTAPIToken, mtprotoCfg, invRepo, platformRepo)
+	giftValuator := gifts.NewDefaultValuator(
+		cfg.MRKTAPIToken,
+		cfg.GiftAssetAPIKey,
+		cfg.GiftAssetBaseURL,
+		mtprotoCfg,
+		invRepo,
+		platformRepo,
+		giftTraitRepo,
+	)
 	depositSvc := telegram.NewDepositService(giftVerifier, invRepo)
 	depositSvc.SetValuator(giftValuator)
 	giftTransfer := telegram.NewGiftTransferService(mtprotoCfg)

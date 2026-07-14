@@ -39,6 +39,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.User{},
 		&domain.InventoryItem{},
 		&domain.NFTFloorPrice{},
+		&domain.GiftTraitPrice{},
 		&domain.StakingEpoch{},
 		&domain.StakingPosition{},
 		&domain.StakingGiftClaim{},

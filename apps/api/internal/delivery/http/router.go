@@ -162,6 +162,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.POST("/market/reprice-bot-gifts", deps.AdminHandler.RepriceBotMarketGifts)
 			admin.GET("/gift-price-settings", deps.AdminHandler.GetGiftPriceSettings)
 			admin.PATCH("/gift-price-settings", deps.AdminHandler.UpdateGiftPriceSettings)
+			admin.GET("/gift-trait-prices", deps.AdminHandler.ListGiftTraitPrices)
+			admin.PATCH("/gift-trait-prices", deps.AdminHandler.UpdateGiftTraitPrice)
 			admin.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)
 			admin.GET("/marketing/settings", deps.AdminHandler.GetYieldSettings)
 			admin.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)

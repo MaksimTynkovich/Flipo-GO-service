@@ -17,7 +17,7 @@ export function depositBotName(): string {
 }
 
 export function depositBotTelegramUrl(): string {
-  return `https://t.me/${DEPOSIT_BOT_USERNAME}`;
+  return `https://telegram.me/${DEPOSIT_BOT_USERNAME}`;
 }
 
 export function depositBotMention(): string {
@@ -26,7 +26,7 @@ export function depositBotMention(): string {
 
 /** Direct link to open the mini app inside Telegram. */
 export function miniAppTelegramUrl(startApp?: string): string {
-  const base = `https://t.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}`;
+  const base = `https://telegram.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}`;
   if (!startApp?.trim()) {
     return base;
   }
@@ -44,5 +44,5 @@ export function referralTelegramUrl(referrerTelegramId: number | string): string
       ? numericId.toString(36).toLowerCase()
       : String(referrerTelegramId).trim().toLowerCase();
   const payload = `ref_${referralCode}`;
-  return `https://t.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}?startapp=${payload}`;
+  return `https://telegram.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}?startapp=${payload}`;
 }

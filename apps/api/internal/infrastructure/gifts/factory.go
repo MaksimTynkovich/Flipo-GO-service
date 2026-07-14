@@ -4,7 +4,21 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 )
 
-// NewDefaultValuator builds the cross-market valuator (Portals + MRKT) used across the API.
-func NewDefaultValuator(mrktToken string, mtproto telegram.MTProtoConfig, floors FloorPriceLookup, adjust GiftAdjustProvider) *Valuator {
-	return NewValuator(NewMarketPrices("", mrktToken, mtproto), floors, adjust)
+// NewDefaultValuator builds the valuator: DB → GiftAsset (non-black) / Portals+MRKT (black).
+func NewDefaultValuator(
+	mrktToken string,
+	giftAssetAPIKey string,
+	giftAssetBaseURL string,
+	mtproto telegram.MTProtoConfig,
+	floors FloorPriceLookup,
+	adjust GiftAdjustProvider,
+	store TraitPriceStore,
+) *Valuator {
+	return NewValuatorFull(
+		NewMarketPrices("", mrktToken, mtproto),
+		NewGiftAssetClient(giftAssetBaseURL, giftAssetAPIKey),
+		floors,
+		adjust,
+		store,
+	)
 }

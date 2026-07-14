@@ -110,7 +110,7 @@ export function openTelegramLink(url: string): boolean {
 
 /** Open Telegram share sheet with link preview on top and text below. */
 export function openTelegramShare(opts: { url: string; text?: string }): boolean {
-  let shareUrl = `https://t.me/share/url?url=${encodeURIComponent(opts.url)}`;
+  let shareUrl = `https://telegram.me/share/url?url=${encodeURIComponent(opts.url)}`;
   if (opts.text?.trim()) {
     shareUrl += `&text=${encodeURIComponent(opts.text.trim())}`;
   }

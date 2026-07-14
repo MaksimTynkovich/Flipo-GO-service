@@ -246,6 +246,37 @@ type TonTransferRepository interface {
 	RejectWithdrawalAtomic(ctx context.Context, transferID, adminID uuid.UUID, reason string) (int64, error)
 }
 
+// GiftTraitPriceKey identifies a cached trait valuation row.
+type GiftTraitPriceKey struct {
+	CollectionSlug string
+	Model          string
+	Backdrop       string
+}
+
+// GiftTraitPriceRepository persists gift valuations by collection+model (+ black backdrop).
+type GiftTraitPriceRepository interface {
+	Get(ctx context.Context, collectionSlug, model, backdrop string) (*GiftTraitPrice, error)
+	Upsert(ctx context.Context, price *GiftTraitPrice) error
+	ListAll(ctx context.Context) ([]GiftTraitPrice, error)
+	ListKeysFromInventory(ctx context.Context) ([]GiftTraitPriceKey, error)
+	ListFiltered(ctx context.Context, filter GiftTraitPriceFilter) ([]GiftTraitPrice, int64, error)
+	ListFilterOptions(ctx context.Context, collectionSlug, model string) (GiftTraitPriceFilterOptions, error)
+}
+
+type GiftTraitPriceFilter struct {
+	CollectionSlug string
+	Model          string
+	Backdrop       string
+	Limit          int
+	Offset         int
+}
+
+type GiftTraitPriceFilterOptions struct {
+	Collections []string `json:"collections"`
+	Models      []string `json:"models"`
+	Backdrops   []string `json:"backdrops"`
+}
+
 // OutcomeOverrideRepository — admin-scheduled game outcome overrides.
 type OutcomeOverrideRepository interface {
 	CreateOutcomeOverride(ctx context.Context, override *GameOutcomeOverride) error

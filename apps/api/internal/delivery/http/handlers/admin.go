@@ -318,6 +318,54 @@ func (h *AdminHandler) UpdateGiftPriceSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *AdminHandler) ListGiftTraitPrices(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	backdrop := c.Query("backdrop")
+	if c.Query("model_only") == "1" || c.Query("model_only") == "true" {
+		backdrop = "__empty__"
+	}
+	result, err := h.admin.ListGiftTraitPrices(c.Request.Context(), domain.GiftTraitPriceFilter{
+		CollectionSlug: strings.TrimSpace(c.Query("collection")),
+		Model:          strings.TrimSpace(c.Query("model")),
+		Backdrop:       strings.TrimSpace(backdrop),
+		Limit:          limit,
+		Offset:         offset,
+	})
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) UpdateGiftTraitPrice(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var body struct {
+		CollectionSlug string `json:"collection_slug" binding:"required"`
+		Model          string `json:"model" binding:"required"`
+		Backdrop       string `json:"backdrop"`
+		PriceNanoton   int64  `json:"price_nanoton" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.UpdateGiftTraitPrice(c.Request.Context(), adminID, body.CollectionSlug, body.Model, body.Backdrop, body.PriceNanoton); err != nil {
+		if errors.Is(err, domain.ErrInvalidAmount) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректная цена или ключ"})
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (h *AdminHandler) RotateSeed(c *gin.Context) {
 	gameType := domain.GameType(c.Param("game"))
 	_, err := h.fairness.RotateSeed(c.Request.Context(), gameType, "")

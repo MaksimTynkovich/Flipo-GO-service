@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
@@ -13,13 +14,14 @@ import (
 )
 
 type Service struct {
-	admin     domain.AdminRepository
-	platform  domain.PlatformRepository
-	games     domain.GameRepository
-	market    domain.MarketRepository
-	users     domain.UserRepository
-	transfers domain.TonTransferRepository
-	notifier  balance.BalanceNotifier
+	admin      domain.AdminRepository
+	platform   domain.PlatformRepository
+	games      domain.GameRepository
+	market     domain.MarketRepository
+	users      domain.UserRepository
+	transfers  domain.TonTransferRepository
+	giftPrices domain.GiftTraitPriceRepository
+	notifier   balance.BalanceNotifier
 }
 
 func NewService(
@@ -29,14 +31,16 @@ func NewService(
 	market domain.MarketRepository,
 	users domain.UserRepository,
 	transfers domain.TonTransferRepository,
+	giftPrices domain.GiftTraitPriceRepository,
 ) *Service {
 	return &Service{
-		admin:     admin,
-		platform:  platform,
-		games:     games,
-		market:    market,
-		users:     users,
-		transfers: transfers,
+		admin:      admin,
+		platform:   platform,
+		games:      games,
+		market:     market,
+		users:      users,
+		transfers:  transfers,
+		giftPrices: giftPrices,
 	}
 }
 
@@ -294,6 +298,86 @@ func (s *Service) UpdateMarketListingPrice(ctx context.Context, adminID, listing
 		"new_price_nanoton": priceNanoton,
 	})
 }
+
+type GiftTraitPriceListResult struct {
+	Items   []domain.GiftTraitPrice             `json:"items"`
+	Total   int64                               `json:"total"`
+	Filters domain.GiftTraitPriceFilterOptions  `json:"filters"`
+}
+
+func (s *Service) ListGiftTraitPrices(ctx context.Context, filter domain.GiftTraitPriceFilter) (*GiftTraitPriceListResult, error) {
+	if s.giftPrices == nil {
+		return &GiftTraitPriceListResult{Items: []domain.GiftTraitPrice{}, Filters: domain.GiftTraitPriceFilterOptions{}}, nil
+	}
+	items, total, err := s.giftPrices.ListFiltered(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	opts, err := s.giftPrices.ListFilterOptions(ctx, filter.CollectionSlug, filter.Model)
+	if err != nil {
+		return nil, err
+	}
+	return &GiftTraitPriceListResult{Items: items, Total: total, Filters: opts}, nil
+}
+
+func (s *Service) UpdateGiftTraitPrice(ctx context.Context, adminID uuid.UUID, collectionSlug, model, backdrop string, priceNanoton int64) error {
+	if s.giftPrices == nil {
+		return domain.ErrNotFound
+	}
+	collectionSlug = strings.TrimSpace(collectionSlug)
+	model = strings.TrimSpace(model)
+	backdrop = strings.TrimSpace(backdrop)
+	if collectionSlug == "" || model == "" || priceNanoton <= 0 {
+		return domain.ErrInvalidAmount
+	}
+	// Normalize non-black backdrops to empty storage key (same as valuator).
+	if !isBlackBackdrop(backdrop) {
+		backdrop = ""
+	}
+
+	var oldPrice int64
+	var oldSource string
+	if existing, err := s.giftPrices.Get(ctx, collectionSlug, model, backdrop); err == nil && existing != nil {
+		oldPrice = existing.PriceNanoton
+		oldSource = existing.Source
+	}
+
+	if err := s.giftPrices.Upsert(ctx, &domain.GiftTraitPrice{
+		CollectionSlug: collectionSlug,
+		Model:          model,
+		Backdrop:       backdrop,
+		PriceNanoton:   priceNanoton,
+		Source:         "admin",
+		FetchedAt:      timeNowUTC(),
+	}); err != nil {
+		return err
+	}
+
+	targetID := collectionSlug + "/" + model
+	if backdrop != "" {
+		targetID += "/" + backdrop
+	}
+	return s.audit(ctx, adminID, "gift_trait_price_updated", "gift_trait_price", targetID, map[string]any{
+		"collection_slug":   collectionSlug,
+		"model":             model,
+		"backdrop":          backdrop,
+		"old_price_nanoton": oldPrice,
+		"old_source":        oldSource,
+		"new_price_nanoton": priceNanoton,
+	})
+}
+
+func isBlackBackdrop(backdrop string) bool {
+	switch strings.ToLower(strings.TrimSpace(backdrop)) {
+	case "black", "onyx black":
+		return true
+	default:
+		return false
+	}
+}
+
+// timeNowUTC isolated for tests if needed.
+var timeNowUTC = func() time.Time { return time.Now().UTC() }
 
 func (s *Service) audit(ctx context.Context, adminID uuid.UUID, action, targetType, targetID string, meta any) error {
 	var raw datatypes.JSON

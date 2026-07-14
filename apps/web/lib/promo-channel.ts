@@ -9,8 +9,8 @@ export function promoChannelMention(channel = PROMO_REQUIRED_CHANNEL): string {
   const value = normalizeChannelRef(channel);
   if (!value) return "";
   if (value.startsWith("@")) return value;
-  if (value.startsWith("https://t.me/")) {
-    const slug = value.replace("https://t.me/", "").replace(/\/$/, "");
+  if (value.startsWith("https://telegram.me/")) {
+    const slug = value.replace("https://telegram.me/", "").replace(/\/$/, "");
     return slug ? `@${slug}` : "";
   }
   if (value.startsWith("-")) return value;
@@ -20,10 +20,10 @@ export function promoChannelMention(channel = PROMO_REQUIRED_CHANNEL): string {
 export function promoChannelUrl(channel = PROMO_REQUIRED_CHANNEL): string {
   const value = normalizeChannelRef(channel);
   if (!value) return "";
-  if (value.startsWith("https://t.me/")) return value.replace(/\/$/, "");
+  if (value.startsWith("https://telegram.me/")) return value.replace(/\/$/, "");
   if (value.startsWith("-")) return "";
   const slug = value.replace(/^@/, "");
-  return slug ? `https://t.me/${slug}` : "";
+  return slug ? `https://telegram.me/${slug}` : "";
 }
 
 export function promoChannelRequired(): boolean {

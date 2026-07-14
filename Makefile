@@ -1,4 +1,4 @@
-.PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate api web test lint gift-quote
+.PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate api web test lint gift-quote gift-prices-refresh
 
 up:
 	docker compose -f deploy/docker-compose.yml up -d postgres redis
@@ -53,10 +53,14 @@ gift-quote:
 	@test -n "$(SLUG)" || (echo "Usage: make gift-quote SLUG=surgeBoard-1081" && exit 2)
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/gift-quote \
 		$(if $(JSON),-json,) \
+		$(if $(ANALYZE),-analyze,) \
 		$(if $(MODEL),-model "$(MODEL)",) \
 		$(if $(BACKDROP),-backdrop "$(BACKDROP)",) \
 		$(if $(SYMBOL),-symbol "$(SYMBOL)",) \
 		"$(SLUG)"
+
+gift-prices-refresh:
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/gift-prices-refresh
 
 process-deposits:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/process-deposits
