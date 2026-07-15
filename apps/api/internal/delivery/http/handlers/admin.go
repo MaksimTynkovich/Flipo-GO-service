@@ -190,6 +190,17 @@ func (h *AdminHandler) UserAudience(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
+func (h *AdminHandler) SharedIPClusters(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))
+	minUsers, _ := strconv.Atoi(c.DefaultQuery("min", "2"))
+	clusters, err := h.admin.SharedIPClusters(c.Request.Context(), days, minUsers)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, clusters)
+}
+
 func (h *AdminHandler) UserBets(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {

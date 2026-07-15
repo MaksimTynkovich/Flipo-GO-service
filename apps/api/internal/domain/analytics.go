@@ -64,35 +64,48 @@ type AnalyticsDailyPoint struct {
 	Count int64  `json:"count"`
 }
 
+// AnalyticsHourPoint — visit count for an hour of day (0–23, usually MSK).
+type AnalyticsHourPoint struct {
+	Hour  int   `json:"hour"`
+	Count int64 `json:"count"`
+}
+
 type AnalyticsOverviewFilter struct {
 	ErrorCode string
 	InputID   string
 }
 
 type AnalyticsOverview struct {
-	DAU              int64                   `json:"dau"`
-	WAU              int64                   `json:"wau"`
-	NewUsers         int64                   `json:"new_users"`
-	TotalEvents24h   int64                   `json:"total_events_24h"`
-	TopSources       []AnalyticsBucket       `json:"top_sources"`
-	TopScreens       []AnalyticsBucket       `json:"top_screens"`
-	TopActions       []AnalyticsBucket       `json:"top_actions"`
-	TopFailures      []AnalyticsBucket       `json:"top_failures"`
-	ModePopularity   []AnalyticsBucket       `json:"mode_popularity"`
-	ScreenExitRates  []AnalyticsScreenMetric `json:"screen_exit_rates"`
-	ErrorsByScreen   []AnalyticsBucket       `json:"errors_by_screen"`
-	AvgTimeOnScreen  []AnalyticsScreenMetric `json:"avg_time_on_screen"`
-	TopHesitations   []AnalyticsBucket       `json:"top_hesitations"`
-	ExitPaths        []AnalyticsBucket       `json:"exit_paths"`
-	EventsByDay      []AnalyticsDailyPoint   `json:"events_by_day"`
-	SessionsEndedAfterError int64             `json:"sessions_ended_after_error"`
-	ErrorsBeforeExit       []AnalyticsBucket `json:"errors_before_exit"`
-	TopInputAbandons       []AnalyticsBucket `json:"top_input_abandons"`
-	FilteredCount          int64             `json:"filtered_count,omitempty"`
-	FilteredEvents         []AnalyticsTimelineEvent `json:"filtered_events,omitempty"`
-	ActiveErrorCode        string            `json:"active_error_code,omitempty"`
-	ActiveInputID          string            `json:"active_input_id,omitempty"`
-	Funnels                []AnalyticsFunnel `json:"funnels"`
+	DAU                     int64                    `json:"dau"`
+	WAU                     int64                    `json:"wau"`
+	NewUsers                int64                    `json:"new_users"`
+	TotalEvents24h          int64                    `json:"total_events_24h"`
+	SessionsTotal           int64                    `json:"sessions_total"`
+	ReturningUsers          int64                    `json:"returning_users"`
+	AvgSessionsPerUser      float64                  `json:"avg_sessions_per_user"`
+	VisitsByHour            []AnalyticsHourPoint     `json:"visits_by_hour"`
+	VisitsByWeekday         []AnalyticsBucket        `json:"visits_by_weekday"`
+	SessionsPerUserDay      []AnalyticsBucket        `json:"sessions_per_user_day"`
+	SessionsByDay           []AnalyticsDailyPoint    `json:"sessions_by_day"`
+	TopSources              []AnalyticsBucket        `json:"top_sources"`
+	TopScreens              []AnalyticsBucket        `json:"top_screens"`
+	TopActions              []AnalyticsBucket        `json:"top_actions"`
+	TopFailures             []AnalyticsBucket        `json:"top_failures"`
+	ModePopularity          []AnalyticsBucket        `json:"mode_popularity"`
+	ScreenExitRates         []AnalyticsScreenMetric  `json:"screen_exit_rates"`
+	ErrorsByScreen          []AnalyticsBucket        `json:"errors_by_screen"`
+	AvgTimeOnScreen         []AnalyticsScreenMetric  `json:"avg_time_on_screen"`
+	TopHesitations          []AnalyticsBucket        `json:"top_hesitations"`
+	ExitPaths               []AnalyticsBucket        `json:"exit_paths"`
+	EventsByDay             []AnalyticsDailyPoint    `json:"events_by_day"`
+	SessionsEndedAfterError int64                    `json:"sessions_ended_after_error"`
+	ErrorsBeforeExit        []AnalyticsBucket        `json:"errors_before_exit"`
+	TopInputAbandons        []AnalyticsBucket        `json:"top_input_abandons"`
+	FilteredCount           int64                    `json:"filtered_count,omitempty"`
+	FilteredEvents          []AnalyticsTimelineEvent `json:"filtered_events,omitempty"`
+	ActiveErrorCode         string                   `json:"active_error_code,omitempty"`
+	ActiveInputID           string                   `json:"active_input_id,omitempty"`
+	Funnels                 []AnalyticsFunnel        `json:"funnels"`
 }
 
 type AnalyticsUserSession struct {
@@ -123,21 +136,27 @@ type AnalyticsTimelineEvent struct {
 }
 
 type AnalyticsUserDrilldown struct {
-	UserID            uuid.UUID                `json:"user_id"`
-	TelegramID        int64                    `json:"telegram_id"`
-	Username          string                   `json:"username"`
-	FirstName         string                   `json:"first_name"`
-	CreatedAt         time.Time                `json:"created_at"`
-	LastSeenAt        *time.Time               `json:"last_seen_at,omitempty"`
-	ReferrerID        *uuid.UUID               `json:"referrer_id,omitempty"`
-	AcquisitionSource string                   `json:"acquisition_source"`
-	AcquisitionLabel  string                   `json:"acquisition_label"`
-	TopActions        []AnalyticsBucket        `json:"top_actions"`
-	FavoriteModes     []AnalyticsBucket        `json:"favorite_modes"`
-	TopFailures       []AnalyticsBucket        `json:"top_failures"`
-	Sessions          []AnalyticsUserSession   `json:"sessions"`
-	ActiveSessionID   string                   `json:"active_session_id,omitempty"`
-	Timeline          []AnalyticsTimelineEvent `json:"timeline"`
+	UserID                  uuid.UUID                `json:"user_id"`
+	TelegramID              int64                    `json:"telegram_id"`
+	Username                string                   `json:"username"`
+	FirstName               string                   `json:"first_name"`
+	CreatedAt               time.Time                `json:"created_at"`
+	LastSeenAt              *time.Time               `json:"last_seen_at,omitempty"`
+	ReferrerID              *uuid.UUID               `json:"referrer_id,omitempty"`
+	AcquisitionSource       string                   `json:"acquisition_source"`
+	AcquisitionLabel        string                   `json:"acquisition_label"`
+	SessionsTotal           int64                    `json:"sessions_total"`
+	SessionsToday           int64                    `json:"sessions_today"`
+	Sessions7d              int64                    `json:"sessions_7d"`
+	ActiveDays7d            int64                    `json:"active_days_7d"`
+	AvgSessionsPerActiveDay float64                  `json:"avg_sessions_per_active_day"`
+	VisitsByHour            []AnalyticsHourPoint     `json:"visits_by_hour"`
+	TopActions              []AnalyticsBucket        `json:"top_actions"`
+	FavoriteModes           []AnalyticsBucket        `json:"favorite_modes"`
+	TopFailures             []AnalyticsBucket        `json:"top_failures"`
+	Sessions                []AnalyticsUserSession   `json:"sessions"`
+	ActiveSessionID         string                   `json:"active_session_id,omitempty"`
+	Timeline                []AnalyticsTimelineEvent `json:"timeline"`
 }
 
 type AnalyticsEventCreate struct {

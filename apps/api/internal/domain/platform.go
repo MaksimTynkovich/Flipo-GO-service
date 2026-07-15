@@ -210,6 +210,31 @@ type AdminUserAudience struct {
 	TopReferrers               []AdminReferrerStat `json:"top_referrers"`
 }
 
+// AdminIPClusterUser — one account inside a shared-IP cluster.
+type AdminIPClusterUser struct {
+	UserID             uuid.UUID  `json:"user_id"`
+	TelegramID         int64      `json:"telegram_id"`
+	Username           string     `json:"username"`
+	FirstName          string     `json:"first_name"`
+	ReferrerID         *uuid.UUID `json:"referrer_id,omitempty"`
+	ReferrerTelegramID int64      `json:"referrer_telegram_id,omitempty"`
+	ReferrerUsername   string     `json:"referrer_username,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	LastLoginAt        *time.Time `json:"last_login_at,omitempty"`
+	LastIPAt           *time.Time `json:"last_ip_at,omitempty"`
+	EventsFromIP       int64      `json:"events_from_ip"`
+}
+
+// AdminIPCluster — multiple accounts observed on one IP (multi-account / ref abuse signal).
+type AdminIPCluster struct {
+	IP             string               `json:"ip"`
+	UserCount      int                  `json:"user_count"`
+	EventCount     int64                `json:"event_count"`
+	LastSeenAt     time.Time            `json:"last_seen_at"`
+	ReferralLinked bool                 `json:"referral_linked"`
+	Users          []AdminIPClusterUser `json:"users"`
+}
+
 // PromoRedemption — player promo activation with wager tracking.
 type PromoRedemption struct {
 	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`

@@ -90,6 +90,10 @@ func (h *AnalyticsHandler) Ingest(c *gin.Context) {
 		respondInternal(c, err)
 		return
 	}
+	if eventUserID != nil {
+		meta := analyticsuc.RequestMetaFromContext(c.Request.Context())
+		_ = h.auth.TouchLastIP(c.Request.Context(), *eventUserID, meta.IPAddress)
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

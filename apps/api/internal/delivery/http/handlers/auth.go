@@ -65,6 +65,9 @@ func (h *AuthHandler) TelegramAuth(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
+	if user != nil {
+		_ = h.auth.TouchLastIP(c.Request.Context(), user.ID, middleware.ExtractClientIP(c))
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
@@ -90,6 +93,9 @@ func (h *AuthHandler) DebugAuth(c *gin.Context) {
 		})
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
+	}
+	if user != nil {
+		_ = h.auth.TouchLastIP(c.Request.Context(), user.ID, middleware.ExtractClientIP(c))
 	}
 
 	c.JSON(http.StatusOK, gin.H{

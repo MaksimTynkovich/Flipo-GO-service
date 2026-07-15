@@ -16,7 +16,7 @@ import {
   AdminToolbar,
 } from "@/components/admin/admin-ui";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
-import { getAdminAnalyticsOverview, type AdminAnalyticsOverview, type AnalyticsTimelineEvent } from "@/lib/api";
+import { getAdminAnalyticsOverview, type AdminAnalyticsOverview, type AnalyticsDailyPoint, type AnalyticsHourPoint, type AnalyticsTimelineEvent } from "@/lib/api";
 
 const PERIOD_OPTIONS = [
   { value: 1, label: "24ч" },
@@ -48,7 +48,7 @@ export default function AnalyticsSection() {
   async function load(nextDays = days, nextErrorCode = errorCode, nextInputId = inputId) {
     setLoading(true);
     try {
-      const cacheKey = `admin:analytics:v2:${nextDays}:${nextErrorCode}:${nextInputId}`;
+      const cacheKey = `admin:analytics:v3:${nextDays}:${nextErrorCode}:${nextInputId}`;
       const data = await loadCached(cacheKey, () =>
         getAdminAnalyticsOverview(nextDays, {
           errorCode: nextErrorCode || undefined,
@@ -64,7 +64,7 @@ export default function AnalyticsSection() {
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cacheKey = `admin:analytics:v2:${days}:${errorCode}:${inputId}`;
+      const cacheKey = `admin:analytics:v3:${days}:${errorCode}:${inputId}`;
       const cached = readCached<AdminAnalyticsOverview>(cacheKey);
       if (cached) setAnalytics(cached);
       load(days, errorCode, inputId).catch(() => {});
@@ -137,7 +137,72 @@ export default function AnalyticsSection() {
               value={String(analytics.sessions_ended_after_error)}
               hint="Сессии, закрытые в течение 30 мин после ошибки"
             />
+            <AdminMetric
+              label="Заходов"
+              value={String(analytics.sessions_total ?? 0)}
+              hint="session_started за период"
+              accent
+            />
+            <AdminMetric
+              label="Вернувшиеся"
+              value={String(analytics.returning_users ?? 0)}
+              hint="Заходили, но зарегистрированы раньше"
+              accent
+            />
+            <AdminMetric
+              label="Заходов / юзер"
+              value={
+                analytics.avg_sessions_per_user
+                  ? analytics.avg_sessions_per_user.toFixed(2)
+                  : "0"
+              }
+              hint="Среднее число открытий Mini App"
+            />
+            <AdminMetric
+              label="Событий"
+              value={String(analytics.total_events_24h)}
+            />
           </section>
+
+          <AdminPanel
+            title="Повторные заходы"
+            description="Когда открывают Mini App (время MSK) и сколько раз за день."
+          >
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted">По часам (MSK)</p>
+                <HourBars points={analytics.visits_by_hour ?? []} />
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted">По дням недели</p>
+                  <AdminRankList
+                    items={analytics.visits_by_weekday ?? []}
+                    emptyText="Нет данных."
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted">Сколько раз за день</p>
+                  <AdminRankList
+                    items={(analytics.sessions_per_user_day ?? []).map((item) => ({
+                      name: `${item.name}× в день`,
+                      count: item.count,
+                    }))}
+                    emptyText="Нет данных."
+                  />
+                  <p className="mt-1 text-[11px] text-muted">
+                    Счётчик — пользователь-дни: сколько раз людям хватило 1 / 2 / 3 / 4+ заходов за сутки.
+                  </p>
+                </div>
+              </div>
+            </div>
+            {(analytics.sessions_by_day?.length ?? 0) > 0 ? (
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-medium text-muted">Заходы по дням</p>
+                <DayBars points={analytics.sessions_by_day ?? []} />
+              </div>
+            ) : null}
+          </AdminPanel>
 
           {(errorCode || inputId) && (
             <AdminPanel
@@ -239,6 +304,51 @@ export default function AnalyticsSection() {
         </>
       ) : null}
     </PageShell>
+  );
+}
+
+function HourBars({ points }: { points: AnalyticsHourPoint[] }) {
+  const max = Math.max(1, ...points.map((p) => p.count));
+  if (!points.length || points.every((p) => p.count === 0)) {
+    return <p className="text-sm text-muted">Нет заходов за период.</p>;
+  }
+  return (
+    <div className="flex h-28 items-end gap-0.5">
+      {points.map((point) => (
+        <div key={point.hour} className="group relative flex min-w-0 flex-1 flex-col items-center justify-end">
+          <div
+            className="w-full rounded-sm bg-accent/70 transition-colors group-hover:bg-accent"
+            style={{ height: `${Math.max(4, (point.count / max) * 100)}%` }}
+            title={`${point.hour}:00 — ${point.count}`}
+          />
+          {point.hour % 3 === 0 ? (
+            <span className="mt-1 text-[9px] tabular-nums text-muted">{point.hour}</span>
+          ) : (
+            <span className="mt-1 text-[9px] text-transparent">0</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DayBars({ points }: { points: AnalyticsDailyPoint[] }) {
+  const max = Math.max(1, ...points.map((p) => p.count));
+  return (
+    <div className="space-y-1">
+      {points.map((point) => (
+        <div key={point.date} className="flex items-center gap-2 text-xs">
+          <span className="w-20 shrink-0 tabular-nums text-muted">{point.date.slice(5)}</span>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-raised">
+            <div
+              className="h-full rounded-full bg-accent/80"
+              style={{ width: `${Math.max(4, (point.count / max) * 100)}%` }}
+            />
+          </div>
+          <span className="w-8 shrink-0 text-right tabular-nums font-medium">{point.count}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

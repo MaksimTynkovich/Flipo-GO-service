@@ -1093,6 +1093,31 @@ export type AdminUser = {
   referrer_username?: string;
   referrer_first_name?: string;
   referrer_code?: string;
+  last_ip?: string;
+  last_ip_at?: string;
+};
+
+export type AdminIPClusterUser = {
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  referrer_id?: string;
+  referrer_telegram_id?: number;
+  referrer_username?: string;
+  created_at: string;
+  last_login_at?: string;
+  last_ip_at?: string;
+  events_from_ip: number;
+};
+
+export type AdminIPCluster = {
+  ip: string;
+  user_count: number;
+  event_count: number;
+  last_seen_at: string;
+  referral_linked: boolean;
+  users: AdminIPClusterUser[];
 };
 
 export type AdminReferrerStat = {
@@ -1159,11 +1184,23 @@ export type AnalyticsDailyPoint = {
   count: number;
 };
 
+export type AnalyticsHourPoint = {
+  hour: number;
+  count: number;
+};
+
 export type AdminAnalyticsOverview = {
   dau: number;
   wau: number;
   new_users: number;
   total_events_24h: number;
+  sessions_total: number;
+  returning_users: number;
+  avg_sessions_per_user: number;
+  visits_by_hour: AnalyticsHourPoint[];
+  visits_by_weekday: AnalyticsBucket[];
+  sessions_per_user_day: AnalyticsBucket[];
+  sessions_by_day: AnalyticsDailyPoint[];
   top_sources: AnalyticsBucket[];
   top_screens: AnalyticsBucket[];
   top_actions: AnalyticsBucket[];
@@ -1222,6 +1259,12 @@ export type AdminUserAnalytics = {
   referrer_id?: string;
   acquisition_source: string;
   acquisition_label: string;
+  sessions_total: number;
+  sessions_today: number;
+  sessions_7d: number;
+  active_days_7d: number;
+  avg_sessions_per_active_day: number;
+  visits_by_hour: AnalyticsHourPoint[];
   top_actions: AnalyticsBucket[];
   favorite_modes: AnalyticsBucket[];
   top_failures: AnalyticsBucket[];
@@ -1424,6 +1467,12 @@ export async function getAdminUsers(query = "") {
 
 export async function getAdminUserAudience() {
   return api<AdminUserAudience>("/api/v1/admin/users/stats");
+}
+
+export async function getAdminSharedIPClusters(days = 30, minUsers = 2) {
+  return api<AdminIPCluster[]>(
+    `/api/v1/admin/users/multiaccounts?days=${days}&min=${minUsers}`,
+  );
 }
 
 export async function getAdminUserBets(userId: string) {

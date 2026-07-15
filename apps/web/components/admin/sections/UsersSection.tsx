@@ -21,15 +21,18 @@ import {
   getAdminUserAnalytics,
   getAdminUserAudience,
   getAdminRiskUsers,
+  getAdminSharedIPClusters,
   getAdminUsers,
+  type AdminIPCluster,
   type AdminUserAnalytics,
   type AdminUserAudience,
   type AdminUserSession,
   type AdminRiskUser,
   type AdminUser,
+  type AnalyticsHourPoint,
 } from "@/lib/api";
 
-type UsersPayload = [AdminUserAudience, AdminUser[], AdminRiskUser[]];
+type UsersPayload = [AdminUserAudience, AdminUser[], AdminRiskUser[], AdminIPCluster[]];
 
 function displayName(user: AdminUser) {
   return user.first_name || user.username || `id ${user.telegram_id}`;
@@ -45,6 +48,7 @@ export default function UsersSection() {
   const [audience, setAudience] = useState<AdminUserAudience | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [riskUsers, setRiskUsers] = useState<AdminRiskUser[]>([]);
+  const [ipClusters, setIpClusters] = useState<AdminIPCluster[]>([]);
   const [selected, setSelected] = useState<AdminUser | null>(null);
   const [analytics, setAnalytics] = useState<AdminUserAnalytics | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -57,20 +61,30 @@ export default function UsersSection() {
     for (const row of riskUsers) map.set(row.user_id, row);
     return map;
   }, [riskUsers]);
+  const referralAbuseCount = useMemo(
+    () => ipClusters.filter((cluster) => cluster.referral_linked).length,
+    [ipClusters],
+  );
 
   async function load(search = query) {
     setLoading(true);
     try {
       const cacheKey = search.trim()
-        ? `admin:users:v5:${search.trim().toLowerCase()}`
-        : "admin:users:v5:default";
-      const [audienceData, userData, riskData] = await loadCached(cacheKey, () =>
-        Promise.all([getAdminUserAudience(), getAdminUsers(search), getAdminRiskUsers()]),
+        ? `admin:users:v6:${search.trim().toLowerCase()}`
+        : "admin:users:v6:default";
+      const [audienceData, userData, riskData, clusterData] = await loadCached(cacheKey, () =>
+        Promise.all([
+          getAdminUserAudience(),
+          getAdminUsers(search),
+          getAdminRiskUsers(),
+          getAdminSharedIPClusters(30, 2),
+        ]),
       );
       setAudience(audienceData);
       setUsers(userData);
       setRiskUsers(riskData);
-      primeCache(cacheKey, [audienceData, userData, riskData] satisfies UsersPayload);
+      setIpClusters(clusterData);
+      primeCache(cacheKey, [audienceData, userData, riskData, clusterData] satisfies UsersPayload);
     } finally {
       setLoading(false);
     }
@@ -78,11 +92,12 @@ export default function UsersSection() {
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cached = readCached<UsersPayload>("admin:users:v5:default");
+      const cached = readCached<UsersPayload>("admin:users:v6:default");
       if (cached) {
         setAudience(cached[0]);
         setUsers(cached[1]);
         setRiskUsers(cached[2]);
+        setIpClusters(cached[3] ?? []);
       }
       load().catch(() => {});
     });
@@ -270,6 +285,82 @@ export default function UsersSection() {
         )}
       </AdminPanel>
 
+      <AdminPanel
+        title="Мультиаккаунты по IP"
+        description="Одинаковый IP у нескольких аккаунтов за 30 дней. «Реф.связка» — реферер и приглашённый на одном IP (вероятный абуз рефки)."
+      >
+        <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted">
+          <span>Кластеров: {ipClusters.length}</span>
+          {referralAbuseCount > 0 ? (
+            <span className="text-danger">с реф.связкой: {referralAbuseCount}</span>
+          ) : null}
+        </div>
+        {ipClusters.length === 0 ? (
+          <p className="text-sm text-muted">
+            Пока нет общих IP. После деплоя IP пишется из auth/analytics (CF-Connecting-IP).
+          </p>
+        ) : (
+          <div className="max-h-[28rem] space-y-2 overflow-auto">
+            {ipClusters.map((cluster) => (
+              <div
+                key={cluster.ip}
+                className={`rounded-xl px-3 py-2.5 ${
+                  cluster.referral_linked
+                    ? "bg-danger/10 ring-1 ring-danger/25"
+                    : "bg-surface-raised/40"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-semibold tabular-nums">{cluster.ip}</p>
+                    <p className="mt-0.5 text-[11px] text-muted">
+                      {cluster.user_count} аккаунтов · {cluster.event_count} событий ·{" "}
+                      {formatWhen(cluster.last_seen_at)}
+                      {cluster.referral_linked ? " · реф.связка" : ""}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {cluster.users.map((u) => {
+                    const name = u.first_name || u.username || `TG ${u.telegram_id}`;
+                    return (
+                      <button
+                        key={u.user_id}
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 rounded-lg bg-background/40 px-2 py-1.5 text-left text-xs hover:bg-background/70"
+                        onClick={() => {
+                          const match = users.find((row) => row.id === u.user_id);
+                          if (match) {
+                            selectUser(match).catch(() => {});
+                          }
+                        }}
+                      >
+                        <span className="min-w-0 truncate">
+                          {name}
+                          {u.username ? (
+                            <span className="text-muted"> @{u.username}</span>
+                          ) : null}
+                          {u.referrer_id ? (
+                            <span className="text-muted">
+                              {" "}
+                              ← реф.{" "}
+                              {u.referrer_username
+                                ? `@${u.referrer_username}`
+                                : u.referrer_telegram_id || "…"}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="shrink-0 tabular-nums text-muted">{u.events_from_ip}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </AdminPanel>
+
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <AdminPanel
           title="Список"
@@ -415,6 +506,15 @@ export default function UsersSection() {
                   </p>
                 </div>
                 <div className="rounded-lg bg-surface-raised/40 px-2.5 py-2">
+                  <p className="text-[11px] text-muted">Последний IP</p>
+                  <p className="mt-0.5 font-mono text-xs font-medium">
+                    {selected.last_ip || "—"}
+                  </p>
+                  {selected.last_ip_at ? (
+                    <p className="mt-0.5 text-[11px] text-muted">{formatWhen(selected.last_ip_at)}</p>
+                  ) : null}
+                </div>
+                <div className="rounded-lg bg-surface-raised/40 px-2.5 py-2">
                   <p className="text-[11px] text-muted">Регистрация</p>
                   <p className="mt-0.5 font-medium">{formatWhen(selected.created_at)}</p>
                 </div>
@@ -452,6 +552,37 @@ export default function UsersSection() {
                       <p className="mt-0.5 font-medium">{formatWhen(analytics.last_seen_at)}</p>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <AdminMetric
+                      label="Заходов сегодня"
+                      value={String(analytics.sessions_today ?? 0)}
+                      accent
+                    />
+                    <AdminMetric
+                      label="За 7 дней"
+                      value={String(analytics.sessions_7d ?? 0)}
+                      hint={
+                        analytics.active_days_7d
+                          ? `${analytics.active_days_7d} дн. · ~${(analytics.avg_sessions_per_active_day || 0).toFixed(1)}/день`
+                          : undefined
+                      }
+                    />
+                    <AdminMetric
+                      label="Всего заходов"
+                      value={String(analytics.sessions_total ?? 0)}
+                    />
+                    <AdminMetric
+                      label="Активных дней"
+                      value={String(analytics.active_days_7d ?? 0)}
+                      hint="За 7 дней"
+                    />
+                  </div>
+                  {(analytics.visits_by_hour?.some((p) => p.count > 0) ?? false) ? (
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-muted">Часы заходов (MSK)</p>
+                      <UserHourBars points={analytics.visits_by_hour ?? []} />
+                    </div>
+                  ) : null}
                   <div>
                     <p className="mb-2 text-xs font-medium text-muted">Частые действия</p>
                     <AdminRankList
@@ -535,6 +666,23 @@ export default function UsersSection() {
         )}
       </div>
     </PageShell>
+  );
+}
+
+function UserHourBars({ points }: { points: AnalyticsHourPoint[] }) {
+  const max = Math.max(1, ...points.map((p) => p.count));
+  return (
+    <div className="flex h-16 items-end gap-0.5">
+      {points.map((point) => (
+        <div key={point.hour} className="flex min-w-0 flex-1 flex-col items-center justify-end">
+          <div
+            className="w-full rounded-sm bg-accent/70"
+            style={{ height: `${Math.max(3, (point.count / max) * 100)}%` }}
+            title={`${point.hour}:00 — ${point.count}`}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -285,6 +285,13 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (*domain.User, 
 	return s.users.FindByID(ctx, userID)
 }
 
+func (s *Service) TouchLastIP(ctx context.Context, userID uuid.UUID, ip string) error {
+	if s == nil || s.users == nil {
+		return nil
+	}
+	return s.users.TouchLastIP(ctx, userID, ip)
+}
+
 func (s *Service) IsAdmin(telegramID int64) bool {
 	if len(s.adminTelegramIDs) == 0 {
 		return false

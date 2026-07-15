@@ -8,29 +8,42 @@ import {
   getAnalyticsSessionId,
   installClientErrorLogging,
   resumeCurrentScreen,
+  rotateAnalyticsSessionIfNeeded,
   trackEvent,
   trackScreenView,
 } from "@/lib/analytics";
+
+function trackSessionStarted(reason: string) {
+  trackEvent({
+    event_name: "session_started",
+    event_category: "acquisition",
+    status: "success",
+    properties: {
+      reason,
+      user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+    },
+  });
+}
 
 export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
     installClientErrorLogging();
+    // Always treat cold mount as a visit; rotate if previous session went idle.
+    rotateAnalyticsSessionIfNeeded(true);
     getAnalyticsSessionId();
-    trackEvent({
-      event_name: "session_started",
-      event_category: "acquisition",
-      status: "success",
-      properties: {
-        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-      },
-    });
+    trackSessionStarted("mount");
+
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         flushCurrentScreenExit("tab_hidden");
         void flushAnalyticsEvents();
         return;
+      }
+      // Returning to the Mini App after idle = repeat visit.
+      if (rotateAnalyticsSessionIfNeeded(false)) {
+        trackSessionStarted("resume");
       }
       resumeCurrentScreen();
     };

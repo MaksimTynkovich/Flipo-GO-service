@@ -30,7 +30,7 @@ export type AdminNavItem = {
 export const ADMIN_NAV: AdminNavItem[] = [
   { id: "dashboard", href: "/admin", label: "Дашборд", hint: "Выручка и очередь выводов" },
   { id: "analytics", href: "/admin/analytics", label: "Аналитика", hint: "Ошибки, отток и воронки" },
-  { id: "users", href: "/admin/users", label: "Пользователи", hint: "Поиск и поведение по сессиям" },
+  { id: "users", href: "/admin/users", label: "Пользователи", hint: "Аудитория, заходы, мультиаккаунты" },
   { id: "games", href: "/admin/games", label: "Игры", hint: "RTP, лимиты и seed" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы", hint: "Назначить исход раундов" },
   { id: "market", href: "/admin/market", label: "Маркет", hint: "Каталог цен, оценка и лоты" },

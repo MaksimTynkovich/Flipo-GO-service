@@ -415,6 +415,182 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 	return out, nil
 }
 
+func (r *AdminRepo) ListSharedIPClusters(ctx context.Context, since time.Time, minUsers int) ([]domain.AdminIPCluster, error) {
+	if minUsers < 2 {
+		minUsers = 2
+	}
+	if since.IsZero() {
+		since = time.Now().UTC().Add(-30 * 24 * time.Hour)
+	}
+
+	type ipRow struct {
+		IP         string    `gorm:"column:ip"`
+		UserCount  int64     `gorm:"column:user_count"`
+		EventCount int64     `gorm:"column:event_count"`
+		LastSeenAt time.Time `gorm:"column:last_seen_at"`
+	}
+	var ips []ipRow
+	err := r.db.WithContext(ctx).Raw(`
+		WITH hits AS (
+			SELECT
+				ae.user_id,
+				ae.ip_address AS ip,
+				ae.occurred_at
+			FROM analytics_events ae
+			WHERE ae.occurred_at >= ?
+				AND ae.user_id IS NOT NULL
+				AND COALESCE(ae.ip_address, '') <> ''
+				AND ae.ip_address NOT IN ('127.0.0.1', '::1', '0.0.0.0')
+			UNION ALL
+			SELECT
+				u.id AS user_id,
+				u.last_ip AS ip,
+				COALESCE(u.last_ip_at, u.last_login_at, u.updated_at) AS occurred_at
+			FROM users u
+			WHERE u.deleted_at IS NULL
+				AND COALESCE(u.last_ip, '') <> ''
+				AND u.last_ip NOT IN ('127.0.0.1', '::1', '0.0.0.0')
+				AND COALESCE(u.last_ip_at, u.last_login_at, u.updated_at) >= ?
+		)
+		SELECT
+			ip,
+			COUNT(DISTINCT user_id) AS user_count,
+			COUNT(*) AS event_count,
+			MAX(occurred_at) AS last_seen_at
+		FROM hits
+		GROUP BY ip
+		HAVING COUNT(DISTINCT user_id) >= ?
+		ORDER BY COUNT(DISTINCT user_id) DESC, MAX(occurred_at) DESC
+		LIMIT 50
+	`, since, since, minUsers).Scan(&ips).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) == 0 {
+		return []domain.AdminIPCluster{}, nil
+	}
+
+	out := make([]domain.AdminIPCluster, 0, len(ips))
+	for _, row := range ips {
+		cluster := domain.AdminIPCluster{
+			IP:         row.IP,
+			UserCount:  int(row.UserCount),
+			EventCount: row.EventCount,
+			LastSeenAt: row.LastSeenAt,
+			Users:      []domain.AdminIPClusterUser{},
+		}
+
+		type userHit struct {
+			UserID     uuid.UUID  `gorm:"column:user_id"`
+			TelegramID int64      `gorm:"column:telegram_id"`
+			Username   string     `gorm:"column:username"`
+			FirstName  string     `gorm:"column:first_name"`
+			ReferrerID *uuid.UUID `gorm:"column:referrer_id"`
+			CreatedAt  time.Time  `gorm:"column:created_at"`
+			LastLoginAt *time.Time `gorm:"column:last_login_at"`
+			LastIPAt   *time.Time `gorm:"column:last_ip_at"`
+			Events     int64      `gorm:"column:events_from_ip"`
+		}
+		var users []userHit
+		_ = r.db.WithContext(ctx).Raw(`
+			WITH hits AS (
+				SELECT ae.user_id, COUNT(*) AS events_from_ip, MAX(ae.occurred_at) AS last_seen
+				FROM analytics_events ae
+				WHERE ae.occurred_at >= ?
+					AND ae.user_id IS NOT NULL
+					AND ae.ip_address = ?
+				GROUP BY ae.user_id
+				UNION ALL
+				SELECT u.id AS user_id, 0 AS events_from_ip, COALESCE(u.last_ip_at, u.last_login_at, u.updated_at) AS last_seen
+				FROM users u
+				WHERE u.deleted_at IS NULL AND u.last_ip = ?
+			),
+			agg AS (
+				SELECT user_id, SUM(events_from_ip) AS events_from_ip, MAX(last_seen) AS last_seen
+				FROM hits
+				GROUP BY user_id
+			)
+			SELECT
+				u.id AS user_id,
+				u.telegram_id,
+				u.username,
+				u.first_name,
+				u.referrer_id,
+				u.created_at,
+				u.last_login_at,
+				u.last_ip_at,
+				a.events_from_ip
+			FROM agg a
+			JOIN users u ON u.id = a.user_id AND u.deleted_at IS NULL
+			ORDER BY a.events_from_ip DESC, u.created_at ASC
+		`, since, row.IP, row.IP).Scan(&users)
+
+		ids := make(map[uuid.UUID]struct{}, len(users))
+		for _, u := range users {
+			ids[u.UserID] = struct{}{}
+			cluster.Users = append(cluster.Users, domain.AdminIPClusterUser{
+				UserID:       u.UserID,
+				TelegramID:   u.TelegramID,
+				Username:     u.Username,
+				FirstName:    u.FirstName,
+				ReferrerID:   u.ReferrerID,
+				CreatedAt:    u.CreatedAt,
+				LastLoginAt:  u.LastLoginAt,
+				LastIPAt:     u.LastIPAt,
+				EventsFromIP: u.Events,
+			})
+		}
+
+		// Resolve referrer labels + detect referrer/referee pairs sharing the IP.
+		refIDs := make([]uuid.UUID, 0)
+		seenRef := map[uuid.UUID]struct{}{}
+		for i := range cluster.Users {
+			u := &cluster.Users[i]
+			if u.ReferrerID == nil {
+				continue
+			}
+			if _, ok := ids[*u.ReferrerID]; ok {
+				cluster.ReferralLinked = true
+			}
+			if _, ok := seenRef[*u.ReferrerID]; !ok {
+				seenRef[*u.ReferrerID] = struct{}{}
+				refIDs = append(refIDs, *u.ReferrerID)
+			}
+		}
+		if len(refIDs) > 0 {
+			var refs []domain.User
+			if err := r.db.WithContext(ctx).Where("id IN ?", refIDs).Find(&refs).Error; err == nil {
+				byID := make(map[uuid.UUID]domain.User, len(refs))
+				for _, ref := range refs {
+					byID[ref.ID] = ref
+				}
+				for i := range cluster.Users {
+					u := &cluster.Users[i]
+					if u.ReferrerID == nil {
+						continue
+					}
+					if ref, ok := byID[*u.ReferrerID]; ok {
+						u.ReferrerTelegramID = ref.TelegramID
+						u.ReferrerUsername = ref.Username
+					}
+				}
+			}
+		}
+
+		out = append(out, cluster)
+	}
+
+	// Surface referral-linked clusters first.
+	for i := 0; i < len(out); i++ {
+		for j := i + 1; j < len(out); j++ {
+			if !out[i].ReferralLinked && out[j].ReferralLinked {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+	return out, nil
+}
+
 func projectedDailyYield(principal int64, tier domain.StakingTier, basePct, boostPct float64) int64 {
 	if principal <= 0 {
 		return 0

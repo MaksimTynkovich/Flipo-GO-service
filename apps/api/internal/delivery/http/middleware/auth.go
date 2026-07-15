@@ -114,7 +114,7 @@ func RequestMeta() gin.HandlerFunc {
 			Path:      strings.TrimSpace(c.GetHeader("X-Client-Path")),
 			Method:    c.Request.Method,
 			UserAgent: c.Request.UserAgent(),
-			IPAddress: c.ClientIP(),
+			IPAddress: ExtractClientIP(c),
 		})
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()

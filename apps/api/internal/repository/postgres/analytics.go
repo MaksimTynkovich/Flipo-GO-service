@@ -65,7 +65,12 @@ func (r *AnalyticsRepo) GetOverview(ctx context.Context, since time.Time, filter
 	if since.IsZero() {
 		since = now.Add(-24 * time.Hour)
 	}
-	overview := &domain.AnalyticsOverview{}
+	overview := &domain.AnalyticsOverview{
+		VisitsByHour:       []domain.AnalyticsHourPoint{},
+		VisitsByWeekday:    []domain.AnalyticsBucket{},
+		SessionsPerUserDay: []domain.AnalyticsBucket{},
+		SessionsByDay:      []domain.AnalyticsDailyPoint{},
+	}
 
 	r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
 		Where("occurred_at >= ? AND user_id IS NOT NULL", since).
@@ -84,6 +89,10 @@ func (r *AnalyticsRepo) GetOverview(ctx context.Context, since time.Time, filter
 	r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
 		Where("occurred_at >= ?", since).
 		Count(&overview.TotalEvents24h)
+
+	if err := r.fillVisitStats(ctx, overview, since); err != nil {
+		return nil, err
+	}
 
 	var err error
 	if overview.TopSources, err = r.topBuckets(ctx, `
@@ -441,6 +450,9 @@ func (r *AnalyticsRepo) GetUserDrilldown(ctx context.Context, userID uuid.UUID, 
 	if drilldown.Sessions, err = r.userSessions(ctx, userID, 15); err != nil {
 		return nil, err
 	}
+	if err := r.fillUserVisitStats(ctx, drilldown); err != nil {
+		return nil, err
+	}
 
 	timelineQuery := r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).Where("user_id = ?", userID)
 	if sessionID != "" {
@@ -466,10 +478,202 @@ func (r *AnalyticsRepo) GetUserDrilldown(ctx context.Context, userID uuid.UUID, 
 	if drilldown.Sessions == nil {
 		drilldown.Sessions = []domain.AnalyticsUserSession{}
 	}
+	if drilldown.VisitsByHour == nil {
+		drilldown.VisitsByHour = []domain.AnalyticsHourPoint{}
+	}
 	if drilldown.Timeline == nil {
 		drilldown.Timeline = []domain.AnalyticsTimelineEvent{}
 	}
 	return drilldown, nil
+}
+
+func (r *AnalyticsRepo) fillVisitStats(ctx context.Context, overview *domain.AnalyticsOverview, since time.Time) error {
+	_ = r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+		Where("occurred_at >= ? AND event_name = ? AND user_id IS NOT NULL", since, "session_started").
+		Count(&overview.SessionsTotal).Error
+
+	var sessionUsers int64
+	_ = r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+		Where("occurred_at >= ? AND event_name = ? AND user_id IS NOT NULL", since, "session_started").
+		Distinct("user_id").
+		Count(&sessionUsers).Error
+
+	_ = r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(DISTINCT e.user_id)
+		FROM analytics_events e
+		JOIN users u ON u.id = e.user_id AND u.deleted_at IS NULL
+		WHERE e.occurred_at >= ?
+			AND e.event_name = 'session_started'
+			AND e.user_id IS NOT NULL
+			AND u.created_at < ?
+	`, since, since).Scan(&overview.ReturningUsers).Error
+
+	if sessionUsers > 0 && overview.SessionsTotal > 0 {
+		overview.AvgSessionsPerUser = float64(overview.SessionsTotal) / float64(sessionUsers)
+	}
+
+	type hourRow struct {
+		Hour  int   `gorm:"column:hour"`
+		Count int64 `gorm:"column:count"`
+	}
+	var hours []hourRow
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT EXTRACT(HOUR FROM (occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow'))::int AS hour,
+		       COUNT(*) AS count
+		FROM analytics_events
+		WHERE occurred_at >= ?
+			AND event_name = 'session_started'
+			AND user_id IS NOT NULL
+		GROUP BY 1
+		ORDER BY 1
+	`, since).Scan(&hours).Error; err != nil {
+		return err
+	}
+	byHour := make(map[int]int64, 24)
+	for _, row := range hours {
+		byHour[row.Hour] = row.Count
+	}
+	overview.VisitsByHour = make([]domain.AnalyticsHourPoint, 24)
+	for h := 0; h < 24; h++ {
+		overview.VisitsByHour[h] = domain.AnalyticsHourPoint{Hour: h, Count: byHour[h]}
+	}
+
+	weekdayNames := []string{"Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"}
+	type weekdayRow struct {
+		Dow   int   `gorm:"column:dow"`
+		Count int64 `gorm:"column:count"`
+	}
+	var weekdays []weekdayRow
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT EXTRACT(DOW FROM (occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow'))::int AS dow,
+		       COUNT(*) AS count
+		FROM analytics_events
+		WHERE occurred_at >= ?
+			AND event_name = 'session_started'
+			AND user_id IS NOT NULL
+		GROUP BY 1
+		ORDER BY 1
+	`, since).Scan(&weekdays).Error; err != nil {
+		return err
+	}
+	byDow := make(map[int]int64, 7)
+	for _, row := range weekdays {
+		byDow[row.Dow] = row.Count
+	}
+	// Order Mon→Sun for UI.
+	order := []int{1, 2, 3, 4, 5, 6, 0}
+	overview.VisitsByWeekday = make([]domain.AnalyticsBucket, 0, 7)
+	for _, dow := range order {
+		overview.VisitsByWeekday = append(overview.VisitsByWeekday, domain.AnalyticsBucket{
+			Name:  weekdayNames[dow],
+			Count: byDow[dow],
+		})
+	}
+
+	if err := r.db.WithContext(ctx).Raw(`
+		WITH daily AS (
+			SELECT
+				user_id,
+				(occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow')::date AS day,
+				COUNT(*) AS sessions
+			FROM analytics_events
+			WHERE occurred_at >= ?
+				AND event_name = 'session_started'
+				AND user_id IS NOT NULL
+			GROUP BY 1, 2
+		)
+		SELECT
+			CASE
+				WHEN sessions >= 4 THEN '4+'
+				ELSE sessions::text
+			END AS name,
+			COUNT(*) AS count
+		FROM daily
+		GROUP BY 1
+		ORDER BY MIN(sessions)
+	`, since).Scan(&overview.SessionsPerUserDay).Error; err != nil {
+		return err
+	}
+	if overview.SessionsPerUserDay == nil {
+		overview.SessionsPerUserDay = []domain.AnalyticsBucket{}
+	}
+
+	type dayRow struct {
+		Date  time.Time `gorm:"column:day"`
+		Count int64     `gorm:"column:count"`
+	}
+	var days []dayRow
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT (occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow')::date AS day,
+		       COUNT(*) AS count
+		FROM analytics_events
+		WHERE occurred_at >= ?
+			AND event_name = 'session_started'
+			AND user_id IS NOT NULL
+		GROUP BY 1
+		ORDER BY 1
+	`, since).Scan(&days).Error; err != nil {
+		return err
+	}
+	overview.SessionsByDay = make([]domain.AnalyticsDailyPoint, 0, len(days))
+	for _, row := range days {
+		overview.SessionsByDay = append(overview.SessionsByDay, domain.AnalyticsDailyPoint{
+			Date:  row.Date.Format("2006-01-02"),
+			Count: row.Count,
+		})
+	}
+	return nil
+}
+
+func (r *AnalyticsRepo) fillUserVisitStats(ctx context.Context, drilldown *domain.AnalyticsUserDrilldown) error {
+	msk := time.FixedZone("MSK", 3*60*60)
+	nowMSK := time.Now().In(msk)
+	todayStart := time.Date(nowMSK.Year(), nowMSK.Month(), nowMSK.Day(), 0, 0, 0, 0, msk).UTC()
+	weekAgo := time.Now().UTC().Add(-7 * 24 * time.Hour)
+
+	_ = r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+		Where("user_id = ? AND event_name = ?", drilldown.UserID, "session_started").
+		Count(&drilldown.SessionsTotal).Error
+	_ = r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+		Where("user_id = ? AND event_name = ? AND occurred_at >= ?", drilldown.UserID, "session_started", todayStart).
+		Count(&drilldown.SessionsToday).Error
+	_ = r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+		Where("user_id = ? AND event_name = ? AND occurred_at >= ?", drilldown.UserID, "session_started", weekAgo).
+		Count(&drilldown.Sessions7d).Error
+
+	_ = r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(DISTINCT (occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow')::date)
+		FROM analytics_events
+		WHERE user_id = ? AND event_name = 'session_started' AND occurred_at >= ?
+	`, drilldown.UserID, weekAgo).Scan(&drilldown.ActiveDays7d).Error
+	if drilldown.ActiveDays7d > 0 {
+		drilldown.AvgSessionsPerActiveDay = float64(drilldown.Sessions7d) / float64(drilldown.ActiveDays7d)
+	}
+
+	type hourRow struct {
+		Hour  int   `gorm:"column:hour"`
+		Count int64 `gorm:"column:count"`
+	}
+	var hours []hourRow
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT EXTRACT(HOUR FROM (occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow'))::int AS hour,
+		       COUNT(*) AS count
+		FROM analytics_events
+		WHERE user_id = ? AND event_name = 'session_started'
+		GROUP BY 1
+		ORDER BY 1
+	`, drilldown.UserID).Scan(&hours).Error; err != nil {
+		return err
+	}
+	byHour := make(map[int]int64, 24)
+	for _, row := range hours {
+		byHour[row.Hour] = row.Count
+	}
+	drilldown.VisitsByHour = make([]domain.AnalyticsHourPoint, 24)
+	for h := 0; h < 24; h++ {
+		drilldown.VisitsByHour[h] = domain.AnalyticsHourPoint{Hour: h, Count: byHour[h]}
+	}
+	return nil
 }
 
 func (r *AnalyticsRepo) userSessions(ctx context.Context, userID uuid.UUID, limit int) ([]domain.AnalyticsUserSession, error) {

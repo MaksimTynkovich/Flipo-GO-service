@@ -3,7 +3,10 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const TOKEN_KEY = "flipo_token";
 const SESSION_KEY = "flipo_analytics_session_id";
+const SESSION_AT_KEY = "flipo_analytics_session_at";
 const ANON_KEY = "flipo_analytics_anonymous_id";
+/** After this idle gap a new Mini App open counts as a new visit/session. */
+const SESSION_IDLE_MS = 30 * 60 * 1000;
 
 export type ErrorSurface = "api" | "ui" | "validation" | "ws" | "risk";
 
@@ -51,7 +54,28 @@ function ensureId(key: string) {
   return next;
 }
 
+function touchSessionActivity() {
+  storageSet(SESSION_AT_KEY, String(Date.now()));
+}
+
+/** Start a fresh analytics session when idle gap is large enough (repeat visit). */
+export function rotateAnalyticsSessionIfNeeded(force = false): boolean {
+  if (typeof window === "undefined") return false;
+  const lastRaw = storageGet(SESSION_AT_KEY);
+  const lastAt = lastRaw ? Number(lastRaw) : 0;
+  const idle = !lastAt || !Number.isFinite(lastAt) || Date.now() - lastAt >= SESSION_IDLE_MS;
+  if (!force && !idle) {
+    touchSessionActivity();
+    return false;
+  }
+  const next = crypto.randomUUID();
+  storageSet(SESSION_KEY, next);
+  touchSessionActivity();
+  return true;
+}
+
 export function getAnalyticsSessionId() {
+  rotateAnalyticsSessionIfNeeded(false);
   return ensureId(SESSION_KEY);
 }
 

@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS idx_users_last_ip;
+ALTER TABLE users DROP COLUMN IF EXISTS last_ip_at;
+ALTER TABLE users DROP COLUMN IF EXISTS last_ip;

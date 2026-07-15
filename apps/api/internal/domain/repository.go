@@ -28,6 +28,7 @@ type UserRepository interface {
 	ListReferredUsers(ctx context.Context) ([]User, error)
 	ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error)
 	CountUsers(ctx context.Context) (int64, error)
+	TouchLastIP(ctx context.Context, userID uuid.UUID, ip string) error
 }
 
 type InventoryRepository interface {
@@ -185,6 +186,7 @@ type AdminRepository interface {
 	CreateAuditLog(ctx context.Context, log *AdminAuditLog) error
 	ListUsers(ctx context.Context, query string, limit int) ([]AdminUserRow, error)
 	UserAudience(ctx context.Context) (*AdminUserAudience, error)
+	ListSharedIPClusters(ctx context.Context, since time.Time, minUsers int) ([]AdminIPCluster, error)
 	CountUserBets(ctx context.Context, userID uuid.UUID, limit int) ([]GameBet, error)
 }
 

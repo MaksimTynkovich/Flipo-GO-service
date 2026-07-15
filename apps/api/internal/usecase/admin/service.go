@@ -94,6 +94,20 @@ func (s *Service) UserAudience(ctx context.Context) (*domain.AdminUserAudience, 
 	return s.admin.UserAudience(ctx)
 }
 
+func (s *Service) SharedIPClusters(ctx context.Context, days, minUsers int) ([]domain.AdminIPCluster, error) {
+	if days <= 0 {
+		days = 30
+	}
+	if days > 90 {
+		days = 90
+	}
+	if minUsers < 2 {
+		minUsers = 2
+	}
+	since := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	return s.admin.ListSharedIPClusters(ctx, since, minUsers)
+}
+
 func (s *Service) stakingMonthlyPercents(ctx context.Context) (base, boost float64) {
 	base, boost = 3.0, 4.0
 	settings, err := s.platform.GetYieldSettings(ctx)
