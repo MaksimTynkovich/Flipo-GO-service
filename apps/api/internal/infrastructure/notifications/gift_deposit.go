@@ -35,7 +35,7 @@ func (n *GiftDepositNotifier) GiftDeposited(ctx context.Context, user *domain.Us
 		}
 	}
 
-	if n.admin != nil {
+	if n.admin != nil && n.admin.Enabled() {
 		floor := item.FloorPriceNanoton
 		if itemView.ValuationNanoton > 0 {
 			floor = itemView.ValuationNanoton

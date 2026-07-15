@@ -181,6 +181,15 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
+func (h *AdminHandler) UserAudience(c *gin.Context) {
+	stats, err := h.admin.UserAudience(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
 func (h *AdminHandler) UserBets(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {

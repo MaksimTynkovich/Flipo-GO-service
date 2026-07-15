@@ -21,13 +21,14 @@ type ItemView struct {
 }
 
 type Service struct {
-	inventory    domain.InventoryRepository
-	users        domain.UserRepository
-	deposit      *telegram.DepositService
-	giftTransfer *telegram.GiftTransferService
-	valuator     *gifts.Valuator
-	market       LiquidationBroker
-	admin        *telegram.AdminNotifier
+	inventory       domain.InventoryRepository
+	users           domain.UserRepository
+	deposit         *telegram.DepositService
+	giftTransfer    *telegram.GiftTransferService
+	valuator        *gifts.Valuator
+	market          LiquidationBroker
+	admin           *telegram.AdminNotifier
+	depositNotifier GiftDepositNotifier
 }
 
 func NewService(
@@ -46,6 +47,14 @@ func NewService(
 		valuator:     valuator,
 		market:       market,
 	}
+}
+
+func (s *Service) SetAdminNotifier(notifier *telegram.AdminNotifier) {
+	s.admin = notifier
+}
+
+func (s *Service) SetGiftDepositNotifier(notifier GiftDepositNotifier) {
+	s.depositNotifier = notifier
 }
 
 func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]domain.InventoryItem, error) {
@@ -97,10 +106,6 @@ func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.In
 	return view
 }
 
-func (s *Service) SetAdminNotifier(notifier *telegram.AdminNotifier) {
-	s.admin = notifier
-}
-
 func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*ItemView, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -110,7 +115,9 @@ func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (
 	if err != nil {
 		return nil, err
 	}
-	if s.admin != nil && item != nil {
+	if item != nil && s.depositNotifier != nil {
+		_ = s.depositNotifier.GiftDeposited(ctx, user, item)
+	} else if item != nil && s.admin != nil {
 		view := s.toItemView(ctx, *item)
 		floor := view.ValuationNanoton
 		if floor <= 0 {

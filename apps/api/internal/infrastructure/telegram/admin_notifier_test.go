@@ -21,6 +21,12 @@ func TestAdminNotifierSkipsAdmins(t *testing.T) {
 	n.NotifyReferralShare(context.Background(), AdminActor{TelegramID: 111}, "copy")
 }
 
+func TestNotifyGiftInventoryAllowsAdminActor(t *testing.T) {
+	n := NewAdminNotifier(NewBotAPI("token"), []int64{111})
+	// Gift deposits notify even when the depositor is an admin (notifyAll path).
+	n.NotifyGiftInventory(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "Vice Cream", 1_000_000_000)
+}
+
 func TestFormatActor(t *testing.T) {
 	got := FormatActor(AdminActor{TelegramID: 42, Username: "bob", FirstName: "Bob", LastName: "Lee"})
 	want := "Bob Lee (@bob, id=42)"

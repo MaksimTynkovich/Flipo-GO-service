@@ -8,6 +8,7 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -359,6 +360,50 @@ func (r *InventoryRepo) FindByTelegramTxRef(ctx context.Context, txRef string) (
 
 func (r *InventoryRepo) Create(ctx context.Context, item *domain.InventoryItem) error {
 	return r.db.WithContext(ctx).Create(item).Error
+}
+
+func (r *InventoryRepo) PromoteProfileToDeposit(
+	ctx context.Context,
+	itemID, userID uuid.UUID,
+	txRef string,
+	floorPriceNanoton int64,
+	metadata []byte,
+	name, imageURL string,
+) error {
+	if txRef == "" || floorPriceNanoton <= 0 {
+		return domain.ErrInvalidAmount
+	}
+	now := time.Now().UTC()
+	updates := map[string]interface{}{
+		"user_id":             userID,
+		"telegram_tx_ref":     txRef,
+		"floor_price_nanoton": floorPriceNanoton,
+		"status":              domain.InvAvailable,
+		"deposited_at":        now,
+		"updated_at":          now,
+	}
+	if len(metadata) > 0 {
+		updates["metadata"] = datatypes.JSON(metadata)
+	}
+	if name != "" {
+		updates["name"] = name
+	}
+	if imageURL != "" {
+		updates["image_url"] = imageURL
+	}
+	res := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("id = ? AND telegram_tx_ref LIKE ? AND status IN ?", itemID, "profile:%", []domain.InventoryStatus{
+			domain.InvAvailable,
+			domain.InvDissolved,
+		}).
+		Updates(updates)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *InventoryRepo) LockForBet(ctx context.Context, userID, itemID uuid.UUID) error {

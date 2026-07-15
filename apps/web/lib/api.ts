@@ -1073,9 +1073,62 @@ export type AdminUser = {
   telegram_id: number;
   username: string;
   first_name: string;
+  last_name?: string;
   betting_balance: number;
+  promo_balance?: number;
+  staking_tier?: string;
+  ton_wallet?: string;
   is_banned: boolean;
   risk_flags: string[];
+  last_login_at?: string;
+  created_at?: string;
+  referrer_id?: string;
+  staking_principal_nanoton: number;
+  active_stakes: number;
+  staking_accrued_yield_nanoton: number;
+  staking_daily_yield_nanoton: number;
+  staking_weekly_yield_nanoton: number;
+  came_via_referral: boolean;
+  referrer_telegram_id?: number;
+  referrer_username?: string;
+  referrer_first_name?: string;
+  referrer_code?: string;
+};
+
+export type AdminReferrerStat = {
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  referral_code: string;
+  referral_count: number;
+  referral_count_today: number;
+  referral_count_7d: number;
+};
+
+export type AdminUserAudience = {
+  total_users: number;
+  banned_users: number;
+  active_users_24h: number;
+  active_users_7d: number;
+  new_users_today: number;
+  new_users_24h: number;
+  new_users_7d: number;
+  referred_users: number;
+  organic_users: number;
+  referred_today: number;
+  referred_7d: number;
+  with_balance: number;
+  with_wallet: number;
+  with_staking: number;
+  boost_tier_users: number;
+  staking_tvl_nanoton: number;
+  balances_nanoton: number;
+  promo_balances_nanoton: number;
+  staking_accrued_yield_nanoton: number;
+  staking_daily_yield_nanoton: number;
+  staking_weekly_yield_nanoton: number;
+  top_referrers: AdminReferrerStat[];
 };
 
 export type AnalyticsBucket = {
@@ -1367,6 +1420,10 @@ export async function getAdminTreasuryStatus() {
 export async function getAdminUsers(query = "") {
   const q = query ? `?q=${encodeURIComponent(query)}` : "";
   return api<AdminUser[]>(`/api/v1/admin/users${q}`);
+}
+
+export async function getAdminUserAudience() {
+  return api<AdminUserAudience>("/api/v1/admin/users/stats");
 }
 
 export async function getAdminUserBets(userId: string) {

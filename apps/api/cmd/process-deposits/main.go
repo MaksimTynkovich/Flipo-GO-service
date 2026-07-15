@@ -10,6 +10,7 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/repository/postgres"
 	inventoryuc "github.com/flipo/flipo/apps/api/internal/usecase/inventory"
@@ -44,7 +45,15 @@ func main() {
 		platformRepo,
 		giftTraitRepo,
 	)
-	processor := inventoryuc.NewAutoDepositService(userRepo, invRepo, valuator, nil)
+	botAPI := telegram.NewBotAPI(cfg.BotToken)
+	adminNotifier := telegram.NewAdminNotifier(botAPI, cfg.AdminTelegramIDs)
+	depositNotifier := notifications.NewGiftDepositNotifier(
+		telegram.NewBotNotifier(cfg.BotToken),
+		nil,
+		valuator,
+		adminNotifier,
+	)
+	processor := inventoryuc.NewAutoDepositService(userRepo, invRepo, valuator, depositNotifier)
 
 	incoming, err := telegram.ScanIncomingGiftsOnce(ctx, mtprotoCfg)
 	if err != nil {

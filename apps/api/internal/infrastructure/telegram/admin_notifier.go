@@ -137,15 +137,23 @@ func (n *AdminNotifier) NotifyGiftInventory(ctx context.Context, actor AdminActo
 	if name == "" {
 		name = "подарок"
 	}
-	text := fmt.Sprintf("📥 Инвентарь\n%s\nПодарок: %s", FormatActor(actor), name)
+	text := fmt.Sprintf("📥 Пополнение подарком\n%s\nПодарок: %s", FormatActor(actor), name)
 	if floorNanoton > 0 {
 		text += fmt.Sprintf("\nОценка: %s TON", formatTON(floorNanoton))
 	}
-	n.notify(ctx, actor, text)
+	// Always alert admins for gift deposits — including when the depositor is an admin.
+	n.notifyAll(ctx, text)
 }
 
 func (n *AdminNotifier) notify(_ context.Context, actor AdminActor, text string) {
 	if !n.Enabled() || actor.TelegramID == 0 || n.IsAdmin(actor.TelegramID) {
+		return
+	}
+	n.notifyAll(context.Background(), text)
+}
+
+func (n *AdminNotifier) notifyAll(_ context.Context, text string) {
+	if !n.Enabled() || strings.TrimSpace(text) == "" {
 		return
 	}
 

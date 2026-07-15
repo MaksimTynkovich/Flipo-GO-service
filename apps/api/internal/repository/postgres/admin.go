@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -178,7 +179,7 @@ func (r *AdminRepo) CreateAuditLog(ctx context.Context, log *domain.AdminAuditLo
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-func (r *AdminRepo) ListUsers(ctx context.Context, query string, limit int) ([]domain.User, error) {
+func (r *AdminRepo) ListUsers(ctx context.Context, query string, limit int) ([]domain.AdminUserRow, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -189,7 +190,240 @@ func (r *AdminRepo) ListUsers(ctx context.Context, query string, limit int) ([]d
 			like, like, like)
 	}
 	var users []domain.User
-	return users, q.Find(&users).Error
+	if err := q.Find(&users).Error; err != nil {
+		return nil, err
+	}
+	rows := make([]domain.AdminUserRow, 0, len(users))
+	if len(users) == 0 {
+		return rows, nil
+	}
+
+	ids := make([]uuid.UUID, 0, len(users))
+	for _, u := range users {
+		ids = append(ids, u.ID)
+	}
+
+	type stakeAgg struct {
+		UserID    uuid.UUID `gorm:"column:user_id"`
+		Principal int64     `gorm:"column:principal"`
+		Count     int64     `gorm:"column:cnt"`
+		Accrued   int64     `gorm:"column:accrued"`
+	}
+	var aggs []stakeAgg
+	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+		Select("user_id, COALESCE(SUM(principal_nanoton), 0) AS principal, COUNT(*) AS cnt, COALESCE(SUM(accrued_yield_nanoton), 0) AS accrued").
+		Where("is_active = ? AND user_id IN ?", true, ids).
+		Group("user_id").
+		Scan(&aggs)
+
+	byUser := make(map[uuid.UUID]stakeAgg, len(aggs))
+	for _, a := range aggs {
+		byUser[a.UserID] = a
+	}
+
+	referrerIDs := make([]uuid.UUID, 0)
+	seenReferrer := make(map[uuid.UUID]struct{})
+	for _, u := range users {
+		if u.ReferrerID == nil {
+			continue
+		}
+		if _, ok := seenReferrer[*u.ReferrerID]; ok {
+			continue
+		}
+		seenReferrer[*u.ReferrerID] = struct{}{}
+		referrerIDs = append(referrerIDs, *u.ReferrerID)
+	}
+	referrers := make(map[uuid.UUID]domain.User, len(referrerIDs))
+	if len(referrerIDs) > 0 {
+		var refs []domain.User
+		if err := r.db.WithContext(ctx).Where("id IN ?", referrerIDs).Find(&refs).Error; err == nil {
+			for _, ref := range refs {
+				referrers[ref.ID] = ref
+			}
+		}
+	}
+
+	for _, u := range users {
+		row := domain.AdminUserRow{User: u}
+		if a, ok := byUser[u.ID]; ok {
+			row.StakingPrincipalNanoton = a.Principal
+			row.ActiveStakes = a.Count
+			row.StakingAccruedYieldNanoton = a.Accrued
+		}
+		if u.ReferrerID != nil {
+			if ref, ok := referrers[*u.ReferrerID]; ok {
+				row.CameViaReferral = true
+				row.ReferrerTelegramID = ref.TelegramID
+				row.ReferrerUsername = ref.Username
+				row.ReferrerFirstName = ref.FirstName
+				row.ReferrerCode = referralCodeFromTelegramID(ref.TelegramID)
+			} else {
+				row.CameViaReferral = true
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+func referralCodeFromTelegramID(telegramID int64) string {
+	if telegramID <= 0 {
+		return ""
+	}
+	return "ref_" + strconv.FormatInt(telegramID, 36)
+}
+
+func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience, error) {
+	out := &domain.AdminUserAudience{
+		TopReferrers: []domain.AdminReferrerStat{},
+	}
+	nowUTC := time.Now().UTC()
+	dayAgo := nowUTC.Add(-24 * time.Hour)
+	weekAgo := nowUTC.Add(-7 * 24 * time.Hour)
+	msk := time.FixedZone("MSK", 3*60*60)
+	nowMSK := time.Now().In(msk)
+	todayStart := time.Date(nowMSK.Year(), nowMSK.Month(), nowMSK.Day(), 0, 0, 0, 0, msk).UTC()
+
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).Where("telegram_id > 0").Count(&out.TotalUsers).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).Where("telegram_id > 0 AND is_banned = ?", true).Count(&out.BannedUsers).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND last_login_at >= ?", dayAgo).
+		Count(&out.ActiveUsers24h).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND last_login_at >= ?", weekAgo).
+		Count(&out.ActiveUsers7d).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND created_at >= ?", todayStart).
+		Count(&out.NewUsersToday).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND created_at >= ?", dayAgo).
+		Count(&out.NewUsers24h).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND created_at >= ?", weekAgo).
+		Count(&out.NewUsers7d).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND referrer_id IS NOT NULL").
+		Count(&out.ReferredUsers).Error
+	out.OrganicUsers = out.TotalUsers - out.ReferredUsers
+	if out.OrganicUsers < 0 {
+		out.OrganicUsers = 0
+	}
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND referrer_id IS NOT NULL AND created_at >= ?", todayStart).
+		Count(&out.ReferredToday).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND referrer_id IS NOT NULL AND created_at >= ?", weekAgo).
+		Count(&out.Referred7d).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND (betting_balance > 0 OR promo_balance > 0)").
+		Count(&out.WithBalance).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND ton_wallet <> ''").
+		Count(&out.WithWallet).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0 AND staking_tier = ?", domain.TierBoost).
+		Count(&out.BoostTierUsers).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0").
+		Select("COALESCE(SUM(betting_balance), 0)").
+		Scan(&out.BalancesNanoton).Error
+	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("telegram_id > 0").
+		Select("COALESCE(SUM(promo_balance), 0)").
+		Scan(&out.PromoBalancesNanoton).Error
+
+	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+		Where("is_active = ?", true).
+		Distinct("user_id").
+		Count(&out.WithStaking).Error
+	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+		Where("is_active = ?", true).
+		Select("COALESCE(SUM(principal_nanoton), 0)").
+		Scan(&out.StakingTVLNanoton).Error
+	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+		Where("is_active = ?", true).
+		Select("COALESCE(SUM(accrued_yield_nanoton), 0)").
+		Scan(&out.StakingAccruedYieldNanoton).Error
+
+	type tierPrincipal struct {
+		Tier      domain.StakingTier `gorm:"column:staking_tier"`
+		Principal int64              `gorm:"column:principal"`
+	}
+	var byTier []tierPrincipal
+	_ = r.db.WithContext(ctx).Table("staking_positions AS sp").
+		Select("u.staking_tier, COALESCE(SUM(sp.principal_nanoton), 0) AS principal").
+		Joins("JOIN users u ON u.id = sp.user_id AND u.deleted_at IS NULL").
+		Where("sp.is_active = ?", true).
+		Group("u.staking_tier").
+		Scan(&byTier)
+
+	basePct, boostPct := 3.0, 4.0
+	var yieldSettings domain.PlatformYieldSettings
+	if err := r.db.WithContext(ctx).First(&yieldSettings, 1).Error; err == nil {
+		if yieldSettings.StakingBaseMonthlyPercent >= 0 {
+			basePct = yieldSettings.StakingBaseMonthlyPercent
+		}
+		if yieldSettings.StakingBoostMonthlyPercent >= 0 {
+			boostPct = yieldSettings.StakingBoostMonthlyPercent
+		}
+	}
+	for _, row := range byTier {
+		out.StakingDailyYieldNanoton += projectedDailyYield(row.Principal, row.Tier, basePct, boostPct)
+	}
+	out.StakingWeeklyYieldNanoton = out.StakingDailyYieldNanoton * 7
+
+	type topRefRow struct {
+		UserID     uuid.UUID `gorm:"column:id"`
+		TelegramID int64     `gorm:"column:telegram_id"`
+		Username   string    `gorm:"column:username"`
+		FirstName  string    `gorm:"column:first_name"`
+		Total      int64     `gorm:"column:total"`
+		Today      int64     `gorm:"column:today"`
+		Week       int64     `gorm:"column:week"`
+	}
+	var top []topRefRow
+	_ = r.db.WithContext(ctx).Raw(`
+		SELECT
+			r.id,
+			r.telegram_id,
+			r.username,
+			r.first_name,
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE u.created_at >= ?) AS today,
+			COUNT(*) FILTER (WHERE u.created_at >= ?) AS week
+		FROM users u
+		JOIN users r ON r.id = u.referrer_id AND r.deleted_at IS NULL
+		WHERE u.deleted_at IS NULL AND u.telegram_id > 0 AND u.referrer_id IS NOT NULL
+		GROUP BY r.id, r.telegram_id, r.username, r.first_name
+		ORDER BY total DESC
+		LIMIT 12
+	`, todayStart, weekAgo).Scan(&top)
+	out.TopReferrers = make([]domain.AdminReferrerStat, 0, len(top))
+	for _, row := range top {
+		out.TopReferrers = append(out.TopReferrers, domain.AdminReferrerStat{
+			UserID:             row.UserID,
+			TelegramID:         row.TelegramID,
+			Username:           row.Username,
+			FirstName:          row.FirstName,
+			ReferralCode:       referralCodeFromTelegramID(row.TelegramID),
+			ReferralCount:      row.Total,
+			ReferralCountToday: row.Today,
+			ReferralCount7d:    row.Week,
+		})
+	}
+
+	return out, nil
+}
+
+func projectedDailyYield(principal int64, tier domain.StakingTier, basePct, boostPct float64) int64 {
+	if principal <= 0 {
+		return 0
+	}
+	rate := basePct / 100
+	if tier == domain.TierBoost {
+		rate = boostPct / 100
+	}
+	return int64(float64(principal) * rate / 30)
 }
 
 func (r *AdminRepo) CountUserBets(ctx context.Context, userID uuid.UUID, limit int) ([]domain.GameBet, error) {

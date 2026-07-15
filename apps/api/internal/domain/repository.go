@@ -38,6 +38,9 @@ type InventoryRepository interface {
 	FindActiveByGiftSlug(ctx context.Context, slug string) (*InventoryItem, error)
 	FindByTelegramTxRef(ctx context.Context, txRef string) (*InventoryItem, error)
 	Create(ctx context.Context, item *InventoryItem) error
+	// PromoteProfileToDeposit converts a profile-virtual row into a real bot deposit
+	// (tx_ref deposit:…, available, owned by depositor). Used when the NFT lands on the bank account.
+	PromoteProfileToDeposit(ctx context.Context, itemID, userID uuid.UUID, txRef string, floorPriceNanoton int64, metadata []byte, name, imageURL string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, from, to InventoryStatus) error
 	UpdateFloorPriceNanoton(ctx context.Context, id uuid.UUID, priceNanoton int64) error
 	LockForBet(ctx context.Context, userID, itemID uuid.UUID) error
@@ -180,7 +183,8 @@ type AdminRepository interface {
 	ListRiskUsers(ctx context.Context, limit int) ([]AdminRiskUser, error)
 	ListAuditLogs(ctx context.Context, limit int) ([]AdminAuditLog, error)
 	CreateAuditLog(ctx context.Context, log *AdminAuditLog) error
-	ListUsers(ctx context.Context, query string, limit int) ([]User, error)
+	ListUsers(ctx context.Context, query string, limit int) ([]AdminUserRow, error)
+	UserAudience(ctx context.Context) (*AdminUserAudience, error)
 	CountUserBets(ctx context.Context, userID uuid.UUID, limit int) ([]GameBet, error)
 }
 

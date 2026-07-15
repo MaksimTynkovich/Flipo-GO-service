@@ -157,6 +157,59 @@ type AdminRiskUser struct {
 	RiskFlags               []string  `json:"risk_flags"`
 }
 
+// AdminUserRow — admin users list row with live staking principal and yield obligations.
+type AdminUserRow struct {
+	User
+	StakingPrincipalNanoton    int64  `json:"staking_principal_nanoton"`
+	ActiveStakes               int64  `json:"active_stakes"`
+	StakingAccruedYieldNanoton int64  `json:"staking_accrued_yield_nanoton"`
+	StakingDailyYieldNanoton   int64  `json:"staking_daily_yield_nanoton"`
+	StakingWeeklyYieldNanoton  int64  `json:"staking_weekly_yield_nanoton"`
+	CameViaReferral            bool   `json:"came_via_referral"`
+	ReferrerTelegramID         int64  `json:"referrer_telegram_id,omitempty"`
+	ReferrerUsername           string `json:"referrer_username,omitempty"`
+	ReferrerFirstName          string `json:"referrer_first_name,omitempty"`
+	ReferrerCode               string `json:"referrer_code,omitempty"`
+}
+
+// AdminReferrerStat — top invite sources for the admin users page.
+type AdminReferrerStat struct {
+	UserID            uuid.UUID `json:"user_id"`
+	TelegramID        int64     `json:"telegram_id"`
+	Username          string    `json:"username"`
+	FirstName         string    `json:"first_name"`
+	ReferralCode      string    `json:"referral_code"`
+	ReferralCount     int64     `json:"referral_count"`
+	ReferralCountToday int64    `json:"referral_count_today"`
+	ReferralCount7d   int64     `json:"referral_count_7d"`
+}
+
+// AdminUserAudience — bot audience breakdown for the admin users page.
+type AdminUserAudience struct {
+	TotalUsers                 int64               `json:"total_users"`
+	BannedUsers                int64               `json:"banned_users"`
+	ActiveUsers24h             int64               `json:"active_users_24h"`
+	ActiveUsers7d              int64               `json:"active_users_7d"`
+	NewUsersToday              int64               `json:"new_users_today"`
+	NewUsers24h                int64               `json:"new_users_24h"`
+	NewUsers7d                 int64               `json:"new_users_7d"`
+	ReferredUsers              int64               `json:"referred_users"`
+	OrganicUsers               int64               `json:"organic_users"`
+	ReferredToday              int64               `json:"referred_today"`
+	Referred7d                 int64               `json:"referred_7d"`
+	WithBalance                int64               `json:"with_balance"`
+	WithWallet                 int64               `json:"with_wallet"`
+	WithStaking                int64               `json:"with_staking"`
+	BoostTierUsers             int64               `json:"boost_tier_users"`
+	StakingTVLNanoton          int64               `json:"staking_tvl_nanoton"`
+	BalancesNanoton            int64               `json:"balances_nanoton"`
+	PromoBalancesNanoton       int64               `json:"promo_balances_nanoton"`
+	StakingAccruedYieldNanoton int64               `json:"staking_accrued_yield_nanoton"`
+	StakingDailyYieldNanoton   int64               `json:"staking_daily_yield_nanoton"`
+	StakingWeeklyYieldNanoton  int64               `json:"staking_weekly_yield_nanoton"`
+	TopReferrers               []AdminReferrerStat `json:"top_referrers"`
+}
+
 // PromoRedemption — player promo activation with wager tracking.
 type PromoRedemption struct {
 	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`

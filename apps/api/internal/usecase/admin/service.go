@@ -76,8 +76,48 @@ func (s *Service) AuditLogs(ctx context.Context) ([]domain.AdminAuditLog, error)
 	return s.admin.ListAuditLogs(ctx, 30)
 }
 
-func (s *Service) ListUsers(ctx context.Context, query string) ([]domain.User, error) {
-	return s.admin.ListUsers(ctx, query, 50)
+func (s *Service) ListUsers(ctx context.Context, query string) ([]domain.AdminUserRow, error) {
+	rows, err := s.admin.ListUsers(ctx, query, 50)
+	if err != nil {
+		return nil, err
+	}
+	basePct, boostPct := s.stakingMonthlyPercents(ctx)
+	for i := range rows {
+		daily := projectedDailyYield(rows[i].StakingPrincipalNanoton, rows[i].StakingTier, basePct, boostPct)
+		rows[i].StakingDailyYieldNanoton = daily
+		rows[i].StakingWeeklyYieldNanoton = daily * 7
+	}
+	return rows, nil
+}
+
+func (s *Service) UserAudience(ctx context.Context) (*domain.AdminUserAudience, error) {
+	return s.admin.UserAudience(ctx)
+}
+
+func (s *Service) stakingMonthlyPercents(ctx context.Context) (base, boost float64) {
+	base, boost = 3.0, 4.0
+	settings, err := s.platform.GetYieldSettings(ctx)
+	if err != nil || settings == nil {
+		return base, boost
+	}
+	if settings.StakingBaseMonthlyPercent >= 0 {
+		base = settings.StakingBaseMonthlyPercent
+	}
+	if settings.StakingBoostMonthlyPercent >= 0 {
+		boost = settings.StakingBoostMonthlyPercent
+	}
+	return base, boost
+}
+
+func projectedDailyYield(principal int64, tier domain.StakingTier, basePct, boostPct float64) int64 {
+	if principal <= 0 {
+		return 0
+	}
+	rate := basePct / 100
+	if tier == domain.TierBoost {
+		rate = boostPct / 100
+	}
+	return int64(float64(principal) * rate / 30)
 }
 
 func (s *Service) UserBets(ctx context.Context, userID uuid.UUID) ([]domain.GameBet, error) {

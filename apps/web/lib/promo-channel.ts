@@ -5,13 +5,31 @@ function normalizeChannelRef(channel: string): string {
   return channel.trim();
 }
 
+/** Prefer t.me — Telegram Mini Apps openTelegramLink rejects telegram.me. */
+function toTmeUrl(pathOrUrl: string): string {
+  const value = pathOrUrl.trim();
+  if (!value) return "";
+  if (value.startsWith("https://t.me/")) return value.replace(/\/$/, "");
+  if (value.startsWith("http://t.me/")) {
+    return `https://t.me/${value.slice("http://t.me/".length)}`.replace(/\/$/, "");
+  }
+  if (value.startsWith("https://telegram.me/")) {
+    return `https://t.me/${value.slice("https://telegram.me/".length)}`.replace(/\/$/, "");
+  }
+  if (value.startsWith("http://telegram.me/")) {
+    return `https://t.me/${value.slice("http://telegram.me/".length)}`.replace(/\/$/, "");
+  }
+  return "";
+}
+
 export function promoChannelMention(channel = PROMO_REQUIRED_CHANNEL): string {
   const value = normalizeChannelRef(channel);
   if (!value) return "";
   if (value.startsWith("@")) return value;
-  if (value.startsWith("https://telegram.me/")) {
-    const slug = value.replace("https://telegram.me/", "").replace(/\/$/, "");
-    return slug ? `@${slug}` : "";
+  const fromUrl = toTmeUrl(value);
+  if (fromUrl) {
+    const slug = fromUrl.replace("https://t.me/", "").replace(/\/$/, "");
+    return slug && !slug.startsWith("+") ? `@${slug}` : "";
   }
   if (value.startsWith("-")) return value;
   return `@${value}`;
@@ -20,10 +38,12 @@ export function promoChannelMention(channel = PROMO_REQUIRED_CHANNEL): string {
 export function promoChannelUrl(channel = PROMO_REQUIRED_CHANNEL): string {
   const value = normalizeChannelRef(channel);
   if (!value) return "";
-  if (value.startsWith("https://telegram.me/")) return value.replace(/\/$/, "");
+  const fromUrl = toTmeUrl(value);
+  if (fromUrl) return fromUrl;
+  // Private channel numeric id — no public t.me slug.
   if (value.startsWith("-")) return "";
   const slug = value.replace(/^@/, "");
-  return slug ? `https://telegram.me/${slug}` : "";
+  return slug ? `https://t.me/${slug}` : "";
 }
 
 export function promoChannelRequired(): boolean {

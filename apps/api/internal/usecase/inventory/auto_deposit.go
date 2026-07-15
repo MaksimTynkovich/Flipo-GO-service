@@ -59,18 +59,6 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 		return false, nil
 	}
 
-	if existing, err := s.inventory.FindActiveByGiftSlug(ctx, gift.Slug); err == nil {
-		slog.Debug("gift deposit skipped: gift already active in inventory",
-			"slug", gift.Slug,
-			"existing_item_id", existing.ID,
-			"existing_user_id", existing.UserID,
-			"existing_status", existing.Status,
-		)
-		return false, nil
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, err
-	}
-
 	txRef := depositTxRef(gift)
 	if existing, err := s.inventory.FindByTelegramTxRef(ctx, txRef); err == nil {
 		slog.Debug("gift deposit skipped: telegram message already credited",
@@ -109,6 +97,24 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 		return false, nil
 	}
 
+	existing, err := s.inventory.FindActiveByGiftSlug(ctx, gift.Slug)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, err
+	}
+	if existing != nil {
+		if domain.IsProfileVirtualItem(*existing) {
+			return s.promoteProfileDeposit(ctx, user, gift, scanned, existing, txRef)
+		}
+		slog.Info("gift deposit skipped: gift already active in inventory",
+			"slug", gift.Slug,
+			"existing_item_id", existing.ID,
+			"existing_user_id", existing.UserID,
+			"existing_status", existing.Status,
+			"existing_tx_ref", existing.TelegramTxRef,
+		)
+		return false, nil
+	}
+
 	now := time.Now().UTC()
 	item := &domain.InventoryItem{
 		ID:                uuid.New(),
@@ -132,11 +138,64 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 		return false, err
 	}
 
+	return s.finishDeposit(ctx, user, item, scanned.PriceNanoton, false)
+}
+
+func (s *AutoDepositService) promoteProfileDeposit(
+	ctx context.Context,
+	user *domain.User,
+	gift telegram.IncomingGift,
+	scanned telegram.ScannedGift,
+	existing *domain.InventoryItem,
+	txRef string,
+) (bool, error) {
+	switch existing.Status {
+	case domain.InvAvailable, domain.InvDissolved:
+		// ok — convert in place
+	default:
+		slog.Warn("gift deposit skipped: profile item not convertible",
+			"slug", gift.Slug,
+			"existing_item_id", existing.ID,
+			"existing_status", existing.Status,
+		)
+		return false, nil
+	}
+
+	meta := gifts.ItemMetadata(gift.Attributes)
+	if err := s.inventory.PromoteProfileToDeposit(
+		ctx,
+		existing.ID,
+		user.ID,
+		txRef,
+		scanned.PriceNanoton,
+		meta,
+		gift.Name,
+		gift.ImageURL,
+	); err != nil {
+		return false, err
+	}
+
+	item, err := s.inventory.FindByID(ctx, existing.ID)
+	if err != nil {
+		return false, err
+	}
+	return s.finishDeposit(ctx, user, item, scanned.PriceNanoton, true)
+}
+
+func (s *AutoDepositService) finishDeposit(
+	ctx context.Context,
+	user *domain.User,
+	item *domain.InventoryItem,
+	priceNanoton int64,
+	promoted bool,
+) (bool, error) {
 	slog.Info("gift deposited to inventory",
-		"slug", gift.Slug,
+		"slug", item.TelegramGiftID,
 		"user_id", user.ID,
 		"telegram_id", user.TelegramID,
-		"price_nanoton", scanned.PriceNanoton,
+		"price_nanoton", priceNanoton,
+		"promoted_from_profile", promoted,
+		"tx_ref", item.TelegramTxRef,
 	)
 	if s.notifier != nil {
 		if err := s.notifier.GiftDeposited(ctx, user, item); err != nil {
