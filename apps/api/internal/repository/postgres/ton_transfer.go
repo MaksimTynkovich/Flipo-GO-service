@@ -272,6 +272,20 @@ func (r *TonTransferRepo) CompleteDepositAtomic(ctx context.Context, transferID 
 	return balanceAfter, err
 }
 
+func (r *TonTransferRepo) ClaimWithdrawalBroadcast(ctx context.Context, transferID uuid.UUID) (bool, error) {
+	now := time.Now().UTC()
+	res := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+		Where("id = ? AND direction = ? AND status = ?", transferID, domain.TonDirectionWithdraw, domain.TonStatusQueued).
+		Updates(map[string]interface{}{
+			"status":     domain.TonStatusBroadcasting,
+			"updated_at": now,
+		})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
+}
+
 func (r *TonTransferRepo) FailWithdrawalAtomic(ctx context.Context, transferID uuid.UUID, errMsg string) (int64, error) {
 	var balanceAfter int64
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -280,14 +294,23 @@ func (r *TonTransferRepo) FailWithdrawalAtomic(ctx context.Context, transferID u
 			First(&transfer, "id = ?", transferID).Error; err != nil {
 			return err
 		}
-		if transfer.Direction != domain.TonDirectionWithdraw || transfer.IsTerminal() {
-			return nil
+		if transfer.Direction != domain.TonDirectionWithdraw {
+			return domain.ErrTransferNotFound
 		}
 
 		var user domain.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			First(&user, "id = ?", transfer.UserID).Error; err != nil {
 			return err
+		}
+
+		// Idempotent: already failed/rejected — balance was refunded earlier.
+		if transfer.Status == domain.TonStatusFailed || transfer.Status == domain.TonStatusRejected {
+			balanceAfter = user.BettingBalance
+			return nil
+		}
+		if transfer.IsTerminal() {
+			return fmt.Errorf("withdrawal not refundable: status=%s", transfer.Status)
 		}
 
 		newBalance := user.BettingBalance + transfer.AmountNanoton
@@ -322,15 +345,26 @@ func (r *TonTransferRepo) FailWithdrawalAtomic(ctx context.Context, transferID u
 
 func (r *TonTransferRepo) CompleteWithdrawal(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) error {
 	now := time.Now().UTC()
-	return r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
-		Where("id = ? AND direction = ?", transferID, domain.TonDirectionWithdraw).
+	res := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+		Where("id = ? AND direction = ? AND status IN ?",
+			transferID,
+			domain.TonDirectionWithdraw,
+			[]domain.TonTransferStatus{domain.TonStatusQueued, domain.TonStatusBroadcasting},
+		).
 		Updates(map[string]interface{}{
 			"status":       domain.TonStatusCompleted,
 			"tx_hash":      txHash,
 			"tx_lt":        txLT,
 			"confirmed_at": now,
 			"updated_at":   now,
-		}).Error
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("withdrawal not completable: %s", transferID)
+	}
+	return nil
 }
 
 func (r *TonTransferRepo) ApproveWithdrawal(ctx context.Context, transferID, adminID uuid.UUID) error {

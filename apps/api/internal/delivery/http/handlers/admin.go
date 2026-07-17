@@ -173,7 +173,7 @@ func (h *AdminHandler) ReviewTransfer(c *gin.Context) {
 }
 
 func (h *AdminHandler) ListUsers(c *gin.Context) {
-	users, err := h.admin.ListUsers(c.Request.Context(), c.Query("q"))
+	users, err := h.admin.ListUsers(c.Request.Context(), c.Query("q"), c.DefaultQuery("sort", "last_login"))
 	if err != nil {
 		respondInternal(c, err)
 		return
@@ -190,29 +190,36 @@ func (h *AdminHandler) UserAudience(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
-func (h *AdminHandler) SharedIPClusters(c *gin.Context) {
-	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))
-	minUsers, _ := strconv.Atoi(c.DefaultQuery("min", "2"))
-	clusters, err := h.admin.SharedIPClusters(c.Request.Context(), days, minUsers)
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, clusters)
-}
-
 func (h *AdminHandler) UserBets(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
 		return
 	}
-	bets, err := h.admin.UserBets(c.Request.Context(), userID)
+	resp, err := h.admin.UserBets(c.Request.Context(), userID, c.DefaultQuery("period", "7d"))
 	if err != nil {
 		respondInternal(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, bets)
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *AdminHandler) UserTransfers(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
+		return
+	}
+	resp, err := h.admin.UserTransfers(c.Request.Context(), userID, c.DefaultQuery("period", "7d"))
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"period":  resp.Period,
+		"summary": resp.Summary,
+		"items":   toAdminTransferViews(resp.Items),
+	})
 }
 
 func (h *AdminHandler) ListGameConfigs(c *gin.Context) {
@@ -642,6 +649,7 @@ type adminTransferView struct {
 	NetNanoton    int64    `json:"net_nanoton"`
 	WalletAddress string   `json:"wallet_address"`
 	TxHash        *string  `json:"tx_hash,omitempty"`
+	ErrorMessage  *string  `json:"error_message,omitempty"`
 	RiskScore     int      `json:"risk_score"`
 	RiskFlags     []string `json:"risk_flags,omitempty"`
 	ReviewReason  *string  `json:"review_reason,omitempty"`
@@ -667,6 +675,7 @@ func toAdminTransferViews(items []domain.TonTransfer) []adminTransferView {
 			NetNanoton:    t.NetAmountNanoton(),
 			WalletAddress: t.WalletAddress,
 			TxHash:        t.TxHash,
+			ErrorMessage:  t.ErrorMessage,
 			RiskScore:     t.RiskScore,
 			RiskFlags:     t.RiskFlagList(),
 			ReviewReason:  t.ReviewReason,

@@ -70,6 +70,8 @@ export function walletStatusLabel(status: string): string {
   switch (status) {
     case "awaiting_payment":
       return "Ожидает оплату";
+    case "pending_review":
+      return "На проверке";
     case "queued":
       return "В очереди";
     case "broadcasting":
@@ -78,6 +80,8 @@ export function walletStatusLabel(status: string): string {
       return "Завершено";
     case "failed":
       return "Ошибка";
+    case "rejected":
+      return "Отклонён";
     case "expired":
       return "Истекло";
     default:

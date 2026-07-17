@@ -91,6 +91,24 @@ func (n *AdminNotifier) NotifyWithdraw(ctx context.Context, actor AdminActor, am
 	))
 }
 
+func (n *AdminNotifier) NotifyWithdrawFailed(ctx context.Context, actor AdminActor, transferID string, amountNanoton int64, errMsg string) {
+	msg := strings.TrimSpace(errMsg)
+	if msg == "" {
+		msg = "unknown error"
+	}
+	if len(msg) > 500 {
+		msg = msg[:500] + "…"
+	}
+	// Operational alert: always notify admins (including when the user is an admin).
+	n.notifyAll(ctx, fmt.Sprintf(
+		"⚠️ Ошибка вывода TON\n%s\nTransfer: %s\nСумма: %s TON\nОшибка: %s\nБаланс пользователя возвращён.",
+		FormatActor(actor),
+		strings.TrimSpace(transferID),
+		formatTON(amountNanoton),
+		msg,
+	))
+}
+
 func (n *AdminNotifier) NotifyReferralShare(ctx context.Context, actor AdminActor, action string) {
 	label := "скопировал"
 	switch strings.ToLower(strings.TrimSpace(action)) {

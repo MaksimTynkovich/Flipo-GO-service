@@ -1088,36 +1088,12 @@ export type AdminUser = {
   staking_accrued_yield_nanoton: number;
   staking_daily_yield_nanoton: number;
   staking_weekly_yield_nanoton: number;
+  bets_count: number;
   came_via_referral: boolean;
   referrer_telegram_id?: number;
   referrer_username?: string;
   referrer_first_name?: string;
   referrer_code?: string;
-  last_ip?: string;
-  last_ip_at?: string;
-};
-
-export type AdminIPClusterUser = {
-  user_id: string;
-  telegram_id: number;
-  username: string;
-  first_name: string;
-  referrer_id?: string;
-  referrer_telegram_id?: number;
-  referrer_username?: string;
-  created_at: string;
-  last_login_at?: string;
-  last_ip_at?: string;
-  events_from_ip: number;
-};
-
-export type AdminIPCluster = {
-  ip: string;
-  user_count: number;
-  event_count: number;
-  last_seen_at: string;
-  referral_linked: boolean;
-  users: AdminIPClusterUser[];
 };
 
 export type AdminReferrerStat = {
@@ -1460,23 +1436,72 @@ export async function getAdminTreasuryStatus() {
   return api<AdminTreasuryStatus>("/api/v1/admin/treasury/status");
 }
 
-export async function getAdminUsers(query = "") {
-  const q = query ? `?q=${encodeURIComponent(query)}` : "";
-  return api<AdminUser[]>(`/api/v1/admin/users${q}`);
+export type AdminUserSort = "last_login" | "balance" | "stake" | "bets" | "created";
+export type AdminUserPeriod = "today" | "7d" | "all";
+
+export type AdminUserBetItem = {
+  id: string;
+  game_type: string;
+  status: string;
+  amount_nanoton: number;
+  payout_nanoton: number;
+  funding_type: string;
+  selection_label: string;
+  cashout_multiplier?: number;
+  created_at: string;
+};
+
+export type AdminUserBetsSummary = {
+  bets: number;
+  won: number;
+  lost: number;
+  volume_nanoton: number;
+  payout_nanoton: number;
+  net_nanoton: number;
+};
+
+export type AdminUserBetsResponse = {
+  period: AdminUserPeriod;
+  summary: AdminUserBetsSummary;
+  items: AdminUserBetItem[];
+};
+
+export type AdminUserTransfersSummary = {
+  deposits: number;
+  withdrawals: number;
+  deposit_volume_nanoton: number;
+  withdrawal_volume_nanoton: number;
+  failed: number;
+};
+
+export type AdminUserTransfersResponse = {
+  period: AdminUserPeriod;
+  summary: AdminUserTransfersSummary;
+  items: WalletTransfer[];
+};
+
+export async function getAdminUsers(query = "", sort: AdminUserSort = "last_login") {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("q", query.trim());
+  if (sort) params.set("sort", sort);
+  const qs = params.toString();
+  return api<AdminUser[]>(`/api/v1/admin/users${qs ? `?${qs}` : ""}`);
 }
 
 export async function getAdminUserAudience() {
   return api<AdminUserAudience>("/api/v1/admin/users/stats");
 }
 
-export async function getAdminSharedIPClusters(days = 30, minUsers = 2) {
-  return api<AdminIPCluster[]>(
-    `/api/v1/admin/users/multiaccounts?days=${days}&min=${minUsers}`,
+export async function getAdminUserBets(userId: string, period: AdminUserPeriod = "7d") {
+  return api<AdminUserBetsResponse>(
+    `/api/v1/admin/users/${userId}/bets?period=${encodeURIComponent(period)}`,
   );
 }
 
-export async function getAdminUserBets(userId: string) {
-  return api<unknown[]>(`/api/v1/admin/users/${userId}/bets`);
+export async function getAdminUserTransfers(userId: string, period: AdminUserPeriod = "7d") {
+  return api<AdminUserTransfersResponse>(
+    `/api/v1/admin/users/${userId}/transfers?period=${encodeURIComponent(period)}`,
+  );
 }
 
 export async function getAdminAnalyticsOverview(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,8 +77,8 @@ func (s *Service) AuditLogs(ctx context.Context) ([]domain.AdminAuditLog, error)
 	return s.admin.ListAuditLogs(ctx, 30)
 }
 
-func (s *Service) ListUsers(ctx context.Context, query string) ([]domain.AdminUserRow, error) {
-	rows, err := s.admin.ListUsers(ctx, query, 50)
+func (s *Service) ListUsers(ctx context.Context, query, sort string) ([]domain.AdminUserRow, error) {
+	rows, err := s.admin.ListUsers(ctx, query, sort, 50)
 	if err != nil {
 		return nil, err
 	}
@@ -92,20 +93,6 @@ func (s *Service) ListUsers(ctx context.Context, query string) ([]domain.AdminUs
 
 func (s *Service) UserAudience(ctx context.Context) (*domain.AdminUserAudience, error) {
 	return s.admin.UserAudience(ctx)
-}
-
-func (s *Service) SharedIPClusters(ctx context.Context, days, minUsers int) ([]domain.AdminIPCluster, error) {
-	if days <= 0 {
-		days = 30
-	}
-	if days > 90 {
-		days = 90
-	}
-	if minUsers < 2 {
-		minUsers = 2
-	}
-	since := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
-	return s.admin.ListSharedIPClusters(ctx, since, minUsers)
 }
 
 func (s *Service) stakingMonthlyPercents(ctx context.Context) (base, boost float64) {
@@ -134,8 +121,99 @@ func projectedDailyYield(principal int64, tier domain.StakingTier, basePct, boos
 	return int64(float64(principal) * rate / 30)
 }
 
-func (s *Service) UserBets(ctx context.Context, userID uuid.UUID) ([]domain.GameBet, error) {
-	return s.admin.CountUserBets(ctx, userID, 30)
+func adminPeriodSince(period string) (normalized string, since *time.Time) {
+	normalized = period
+	switch period {
+	case "today":
+		msk := time.FixedZone("MSK", 3*60*60)
+		nowMSK := time.Now().In(msk)
+		t := time.Date(nowMSK.Year(), nowMSK.Month(), nowMSK.Day(), 0, 0, 0, 0, msk).UTC()
+		return "today", &t
+	case "all":
+		return "all", nil
+	default:
+		t := time.Now().UTC().Add(-7 * 24 * time.Hour)
+		return "7d", &t
+	}
+}
+
+func betSelectionLabel(bet domain.GameBet) string {
+	var sel map[string]any
+	_ = json.Unmarshal(bet.Selection, &sel)
+	switch bet.GameType {
+	case domain.GameRoulette:
+		if color, ok := sel["color"].(string); ok && color != "" {
+			return color
+		}
+		return "roulette"
+	case domain.GameCrash:
+		if bet.CashoutMultiplier != nil {
+			return "cashout ×" + formatMult(*bet.CashoutMultiplier)
+		}
+		if auto, ok := sel["auto_cashout_multiplier"].(float64); ok && auto > 0 {
+			return "auto ×" + formatMult(auto)
+		}
+		return "crash"
+	case domain.GamePvP:
+		return "pvp"
+	default:
+		return string(bet.GameType)
+	}
+}
+
+func formatMult(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+func (s *Service) UserBets(ctx context.Context, userID uuid.UUID, period string) (*domain.AdminUserBetsResponse, error) {
+	normalized, since := adminPeriodSince(period)
+	summary, err := s.admin.UserBetsSummary(ctx, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	bets, err := s.admin.ListUserBets(ctx, userID, since, 50)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.AdminUserBetItem, 0, len(bets))
+	for _, bet := range bets {
+		items = append(items, domain.AdminUserBetItem{
+			ID:             bet.ID,
+			GameType:       bet.GameType,
+			Status:         bet.Status,
+			AmountNanoton:  bet.AmountNanoton,
+			PayoutNanoton:  bet.PayoutNanoton,
+			FundingType:    string(bet.FundingType),
+			SelectionLabel: betSelectionLabel(bet),
+			CashoutMult:    bet.CashoutMultiplier,
+			CreatedAt:      bet.CreatedAt,
+		})
+	}
+	return &domain.AdminUserBetsResponse{
+		Period:  normalized,
+		Summary: summary,
+		Items:   items,
+	}, nil
+}
+
+func (s *Service) UserTransfers(ctx context.Context, userID uuid.UUID, period string) (*domain.AdminUserTransfersResponse, error) {
+	normalized, since := adminPeriodSince(period)
+	summary, err := s.admin.UserTransfersSummary(ctx, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.admin.ListUserTransfers(ctx, userID, since, 50)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []domain.TonTransfer{}
+	}
+	return &domain.AdminUserTransfersResponse{
+		Period:  normalized,
+		Summary: summary,
+		Items:   items,
+	}, nil
 }
 
 func (s *Service) ReviewWithdrawal(ctx context.Context, adminID, transferID uuid.UUID, approve bool, note string) error {

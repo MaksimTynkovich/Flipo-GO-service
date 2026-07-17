@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -276,21 +275,6 @@ func (r *UserRepo) CountUsers(ctx context.Context) (int64, error) {
 		Where("deleted_at IS NULL AND telegram_id > 0").
 		Count(&count).Error
 	return count, err
-}
-
-func (r *UserRepo) TouchLastIP(ctx context.Context, userID uuid.UUID, ip string) error {
-	ip = strings.TrimSpace(ip)
-	if userID == uuid.Nil || ip == "" {
-		return nil
-	}
-	now := time.Now().UTC()
-	return r.db.WithContext(ctx).Model(&domain.User{}).
-		Where("id = ?", userID).
-		Updates(map[string]interface{}{
-			"last_ip":    ip,
-			"last_ip_at": now,
-			"updated_at": now,
-		}).Error
 }
 
 var _ domain.UserRepository = (*UserRepo)(nil)

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PageShell } from "@/components/PageShell";
-import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminFloatField, AdminIntField, AdminTonField } from "@/components/admin/AdminInputs";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -121,7 +120,7 @@ export default function MarketingSection() {
   }
 
   return (
-    <PageShell title="Маркетинг" description="Промокоды с вейджером и реферальная система.">
+    <AdminPage title="Маркетинг" description="Промокоды с вейджером и реферальная система.">
       {referral ? (
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Рефералов" value={String(referral.referral_count)} hint="Сколько пользователей закрепились за текущим реферером." />
@@ -345,7 +344,7 @@ export default function MarketingSection() {
           </AdminButton>
         </AdminToolbar>
       </section>
-    </PageShell>
+    </AdminPage>
   );
 }
 

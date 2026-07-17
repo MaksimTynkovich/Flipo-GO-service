@@ -122,6 +122,9 @@ func (c *Client) VerifyTxHash(ctx context.Context, txHash string) (bool, error) 
 	return false, nil
 }
 
+// Gas reserve kept on the hot wallet so network fees do not cause bounce/fail after debit.
+const withdrawGasReserveNanoton int64 = 50_000_000 // 0.05 TON
+
 func (c *Client) SendTON(ctx context.Context, toAddress string, amountNanoton int64, comment string) (string, int64, error) {
 	if c.devMode {
 		return fmt.Sprintf("dev-withdraw-%d", time.Now().UnixNano()), time.Now().UnixNano(), nil
@@ -131,6 +134,18 @@ func (c *Client) SendTON(ctx context.Context, toAddress string, amountNanoton in
 	}
 	if err := c.ensureWallet(ctx); err != nil {
 		return "", 0, err
+	}
+
+	balance, err := c.GetWalletBalance(ctx)
+	if err != nil {
+		return "", 0, fmt.Errorf("check hot wallet balance: %w", err)
+	}
+	needed := amountNanoton + withdrawGasReserveNanoton
+	if balance < needed {
+		return "", 0, fmt.Errorf(
+			"insufficient hot wallet balance: have %d nanoton, need %d (amount %d + gas reserve %d)",
+			balance, needed, amountNanoton, withdrawGasReserveNanoton,
+		)
 	}
 
 	addr, err := ParseAnyAddress(toAddress)

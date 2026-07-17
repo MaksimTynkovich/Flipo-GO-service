@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ type WithdrawalPromoGate interface {
 type AdminWalletNotifier interface {
 	NotifyDeposit(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
 	NotifyWithdraw(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
+	NotifyWithdrawFailed(ctx context.Context, actor telegram.AdminActor, transferID string, amountNanoton int64, errMsg string)
 }
 
 type Service struct {
@@ -459,21 +461,129 @@ func (s *Service) ProcessPendingWithdrawals(ctx context.Context) error {
 		return err
 	}
 	for i := range items {
-		transfer := items[i]
-		transfer.Status = domain.TonStatusBroadcasting
-		if err := s.transfers.Update(ctx, &items[i]); err != nil {
+		transfer := &items[i]
+
+		claimed, err := s.transfers.ClaimWithdrawalBroadcast(ctx, transfer.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "withdrawal claim failed",
+				"transfer_id", transfer.ID,
+				"user_id", transfer.UserID,
+				"error", err,
+			)
 			continue
 		}
+		if !claimed {
+			continue
+		}
+		transfer.Status = domain.TonStatusBroadcasting
 
 		txHash, lt, err := s.chain.SendTON(ctx, transfer.WalletAddress, transfer.NetAmountNanoton(), "")
 		if err != nil {
-			_, _ = s.transfers.FailWithdrawalAtomic(ctx, transfer.ID, err.Error())
-			balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerRefund)
+			s.failWithdrawal(ctx, transfer, err)
 			continue
 		}
-		_ = s.transfers.CompleteWithdrawal(ctx, transfer.ID, txHash, lt)
+		if err := s.transfers.CompleteWithdrawal(ctx, transfer.ID, txHash, lt); err != nil {
+			slog.ErrorContext(ctx, "withdrawal sent but complete failed",
+				"transfer_id", transfer.ID,
+				"user_id", transfer.UserID,
+				"tx_hash", txHash,
+				"error", err,
+			)
+			if s.admin != nil {
+				s.admin.NotifyWithdrawFailed(ctx, s.actorForUser(ctx, transfer.UserID), transfer.ID.String(), transfer.NetAmountNanoton(),
+					fmt.Sprintf("on-chain sent but DB complete failed: %v (tx=%s)", err, txHash))
+			}
+		}
 	}
 	return nil
+}
+
+func (s *Service) failWithdrawal(ctx context.Context, transfer *domain.TonTransfer, sendErr error) {
+	errMsg := sendErr.Error()
+	slog.ErrorContext(ctx, "withdrawal send failed, refunding user",
+		"transfer_id", transfer.ID,
+		"user_id", transfer.UserID,
+		"amount_nanoton", transfer.AmountNanoton,
+		"net_nanoton", transfer.NetAmountNanoton(),
+		"error", errMsg,
+	)
+
+	balanceAfter, failErr := s.transfers.FailWithdrawalAtomic(ctx, transfer.ID, errMsg)
+	if failErr != nil {
+		slog.ErrorContext(ctx, "withdrawal refund failed",
+			"transfer_id", transfer.ID,
+			"user_id", transfer.UserID,
+			"error", failErr,
+		)
+		if s.admin != nil {
+			s.admin.NotifyWithdrawFailed(ctx, s.actorForUser(ctx, transfer.UserID), transfer.ID.String(), transfer.NetAmountNanoton(),
+				fmt.Sprintf("send failed (%s) AND refund failed: %v", errMsg, failErr))
+		}
+		return
+	}
+
+	slog.InfoContext(ctx, "withdrawal refunded",
+		"transfer_id", transfer.ID,
+		"user_id", transfer.UserID,
+		"balance_after", balanceAfter,
+	)
+	balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerRefund)
+
+	user, _ := s.users.FindByID(ctx, transfer.UserID)
+	actor := telegram.AdminActor{}
+	if user != nil {
+		actor = telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}
+	}
+	if s.admin != nil {
+		s.admin.NotifyWithdrawFailed(ctx, actor, transfer.ID.String(), transfer.NetAmountNanoton(), errMsg)
+	}
+	if s.analytics != nil {
+		var telegramID *int64
+		var referrerID *uuid.UUID
+		stakingTier := ""
+		if user != nil {
+			telegramID = &user.TelegramID
+			referrerID = user.ReferrerID
+			stakingTier = string(user.StakingTier)
+		}
+		userID := transfer.UserID
+		s.analytics.Track(ctx, analyticsuc.EventInput{
+			UserID:        &userID,
+			ReferrerID:    referrerID,
+			TelegramID:    telegramID,
+			Source:        "worker",
+			EventName:     "withdraw_failed",
+			EventCategory: "wallet",
+			Status:        "error",
+			ErrorCode:     "withdraw_send_failed",
+			ErrorMessage:  errMsg,
+			StakingTier:   stakingTier,
+			Properties: map[string]any{
+				"transfer_id":    transfer.ID.String(),
+				"amount_nanoton": transfer.NetAmountNanoton(),
+				"fee_nanoton":    transfer.FeeNanoton,
+				"refunded":       true,
+			},
+		})
+	}
+}
+
+func (s *Service) actorForUser(ctx context.Context, userID uuid.UUID) telegram.AdminActor {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil || user == nil {
+		return telegram.AdminActor{}
+	}
+	return telegram.AdminActor{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		FirstName:  user.FirstName,
+		LastName:   user.LastName,
+	}
 }
 
 func toView(transfer *domain.TonTransfer) *TransferView {

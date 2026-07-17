@@ -1,10 +1,9 @@
 "use client";
 
-import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminFloatField, AdminIntField, AdminPercentField, AdminTonField } from "@/components/admin/AdminInputs";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useEffect, useMemo, useState } from "react";
-import { PageShell } from "@/components/PageShell";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -76,7 +75,7 @@ export default function GamesSection() {
   }, []);
 
   return (
-    <PageShell title="Игры" description="Настройки RTP, лимиты ставок и ротация seed.">
+    <AdminPage title="Игры" description="Настройки RTP, лимиты ставок и ротация seed.">
       <section className="panel space-y-3">
         <p className="text-base font-semibold">Статистика игр</p>
         {stats.length === 0 && loading ? (
@@ -395,6 +394,6 @@ export default function GamesSection() {
           </AdminToolbar>
         </section>
       ) : null}
-    </PageShell>
+    </AdminPage>
   );
 }

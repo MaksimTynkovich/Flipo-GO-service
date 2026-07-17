@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PageShell } from "@/components/PageShell";
-import { AdminChip, AdminEmpty, AdminMetric, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminChip, AdminEmpty, AdminMetric, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
@@ -73,7 +72,7 @@ export default function DashboardSection() {
   );
 
   return (
-    <PageShell
+    <AdminPage
       title="Дашборд"
       description="Ключевые цифры по деньгам и играм. Детали выводов — в разделе «Финансы»."
     >
@@ -200,7 +199,7 @@ export default function DashboardSection() {
           </div>
         )}
       </AdminPanel>
-    </PageShell>
+    </AdminPage>
   );
 
   async function review(id: string, approve: boolean) {

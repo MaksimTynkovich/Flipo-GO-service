@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminButton, AdminField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
-import { PageShell } from "@/components/PageShell";
+import { AdminPage, AdminButton, AdminField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -75,7 +74,7 @@ export default function TelegramSection() {
   const formSettings = settings ?? DEFAULT_SETTINGS;
 
   return (
-    <PageShell title="Telegram-бот" description="WebApp, рассылки и защита от спама.">
+    <AdminPage title="Telegram-бот" description="WebApp, рассылки и защита от спама.">
       <AdminPanel title="Настройки бота" description="Параметры бота и массовых рассылок.">
         {settingsLoading && !settings ? (
           <div className="space-y-3">
@@ -262,6 +261,6 @@ export default function TelegramSection() {
           </div>
         )}
       </AdminPanel>
-    </PageShell>
+    </AdminPage>
   );
 }

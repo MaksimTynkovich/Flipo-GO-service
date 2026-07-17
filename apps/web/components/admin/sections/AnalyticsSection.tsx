@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PageShell } from "@/components/PageShell";
 import {
   formatDurationMs,
   humanizeAnalyticsName,
@@ -9,6 +8,7 @@ import {
   humanizeJourneyPath,
 } from "@/components/admin/analytics-labels";
 import {
+  AdminPage,
   AdminChip,
   AdminMetric,
   AdminPanel,
@@ -72,7 +72,7 @@ export default function AnalyticsSection() {
   }, [days, errorCode, inputId]);
 
   return (
-    <PageShell
+    <AdminPage
       title="Аналитика"
       description="Где пользователи действуют, ошибаются и уходят. Детали по пользователю — в «Пользователи»."
     >
@@ -303,7 +303,7 @@ export default function AnalyticsSection() {
           </div>
         </>
       ) : null}
-    </PageShell>
+    </AdminPage>
   );
 }
 

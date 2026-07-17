@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PageShell } from "@/components/PageShell";
-import { AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
@@ -55,7 +54,7 @@ export default function FinanceSection() {
   );
 
   return (
-    <PageShell title="Финансы" description="Кошельки проекта, журнал операций и ручная проверка выводов.">
+    <AdminPage title="Финансы" description="Кошельки проекта, журнал операций и ручная проверка выводов.">
       {treasury ? (
         <section className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Hot balance" value={`${formatTON(treasury.hot_balance_nanoton ?? 0)} TON`} hint="Сколько TON сейчас лежит в горячем кошельке для быстрых депозитов и выводов." />
@@ -140,7 +139,7 @@ export default function FinanceSection() {
           ))}
         </div>
       </section>
-    </PageShell>
+    </AdminPage>
   );
 }
 

@@ -177,13 +177,18 @@ export function TonWalletPanel() {
 
   useEffect(() => {
     const hasPendingDeposit = deposits.some((item) => item.status === "awaiting_payment");
-    if (!hasPendingDeposit) return;
+    const hasPendingWithdraw = withdrawals.some((item) =>
+      item.status === "queued" ||
+      item.status === "broadcasting" ||
+      item.status === "pending_review",
+    );
+    if (!hasPendingDeposit && !hasPendingWithdraw) return;
 
     const timer = setInterval(() => {
       refreshTransfers().catch(() => {});
     }, 5000);
     return () => clearInterval(timer);
-  }, [deposits]);
+  }, [deposits, withdrawals]);
 
   async function refreshTransfers() {
     try {
@@ -196,10 +201,37 @@ export function TonWalletPanel() {
             (prev) => prev.id === item.id && prev.status !== "completed",
           ),
       );
+      const failedWithdraw = next.find(
+        (item) =>
+          item.direction === "withdraw" &&
+          item.status === "failed" &&
+          transfers.some(
+            (prev) => prev.id === item.id && prev.status !== "failed",
+          ),
+      );
+      const completedWithdraw = next.find(
+        (item) =>
+          item.direction === "withdraw" &&
+          item.status === "completed" &&
+          transfers.some(
+            (prev) => prev.id === item.id && prev.status !== "completed",
+          ),
+      );
       setTransfers(next);
-      if (completedDeposit) {
+      if (completedDeposit || failedWithdraw || completedWithdraw) {
         const me = await getMe();
         setUser(me);
+      }
+      if (failedWithdraw) {
+        setMessage({
+          type: "error",
+          text: "Вывод не выполнен — средства возвращены на баланс. Попробуй позже.",
+        });
+      } else if (completedWithdraw) {
+        setMessage({
+          type: "success",
+          text: `Вывод завершён. На кошелёк ушло ${formatTON(completedWithdraw.net_nanoton)}.`,
+        });
       }
     } catch {
       setTransfers([]);
@@ -301,10 +333,22 @@ export function TonWalletPanel() {
     try {
       const result = await requestWalletWithdraw(receiveNanoton, newIdempotencyKey("withdraw"));
       setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: result.balance }) : prev));
-      setMessage({
-        type: "success",
-        text: `Вывод создан. На кошелёк придёт ${formatTON(receiveNanoton)}.`,
-      });
+      if (result.transfer.status === "pending_review") {
+        setMessage({
+          type: "info",
+          text: `Заявка на вывод создана и отправлена на проверку. На кошелёк придёт ${formatTON(receiveNanoton)} после одобрения.`,
+        });
+      } else if (result.transfer.status === "failed") {
+        setMessage({
+          type: "error",
+          text: "Вывод не выполнен — средства возвращены на баланс.",
+        });
+      } else {
+        setMessage({
+          type: "info",
+          text: `Вывод создан. На кошелёк придёт ${formatTON(receiveNanoton)}. Статус обновится в истории.`,
+        });
+      }
       await refreshTransfers();
     } catch (e) {
       setMessage({ type: "error", text: formatWalletError(e, "withdraw") });

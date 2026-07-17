@@ -28,7 +28,6 @@ type UserRepository interface {
 	ListReferredUsers(ctx context.Context) ([]User, error)
 	ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error)
 	CountUsers(ctx context.Context) (int64, error)
-	TouchLastIP(ctx context.Context, userID uuid.UUID, ip string) error
 }
 
 type InventoryRepository interface {
@@ -184,10 +183,12 @@ type AdminRepository interface {
 	ListRiskUsers(ctx context.Context, limit int) ([]AdminRiskUser, error)
 	ListAuditLogs(ctx context.Context, limit int) ([]AdminAuditLog, error)
 	CreateAuditLog(ctx context.Context, log *AdminAuditLog) error
-	ListUsers(ctx context.Context, query string, limit int) ([]AdminUserRow, error)
+	ListUsers(ctx context.Context, query, sort string, limit int) ([]AdminUserRow, error)
 	UserAudience(ctx context.Context) (*AdminUserAudience, error)
-	ListSharedIPClusters(ctx context.Context, since time.Time, minUsers int) ([]AdminIPCluster, error)
-	CountUserBets(ctx context.Context, userID uuid.UUID, limit int) ([]GameBet, error)
+	ListUserBets(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]GameBet, error)
+	UserBetsSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserBetsSummary, error)
+	ListUserTransfers(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]TonTransfer, error)
+	UserTransfersSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserTransfersSummary, error)
 }
 
 type AnalyticsRepository interface {
@@ -245,6 +246,7 @@ type TonTransferRepository interface {
 		reviewReason *string,
 	) (*TonTransfer, int64, error)
 	CompleteDepositAtomic(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) (int64, error)
+	ClaimWithdrawalBroadcast(ctx context.Context, transferID uuid.UUID) (bool, error)
 	FailWithdrawalAtomic(ctx context.Context, transferID uuid.UUID, errMsg string) (int64, error)
 	CompleteWithdrawal(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) error
 	ListAll(ctx context.Context, limit int) ([]TonTransfer, error)

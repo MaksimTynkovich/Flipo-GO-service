@@ -179,20 +179,148 @@ func (r *AdminRepo) CreateAuditLog(ctx context.Context, log *domain.AdminAuditLo
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-func (r *AdminRepo) ListUsers(ctx context.Context, query string, limit int) ([]domain.AdminUserRow, error) {
+func (r *AdminRepo) ListUsers(ctx context.Context, query, sort string, limit int) ([]domain.AdminUserRow, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	q := r.db.WithContext(ctx).Model(&domain.User{}).Order("created_at DESC").Limit(limit)
+	switch sort {
+	case "balance", "stake", "bets", "created", "last_login":
+	default:
+		sort = "last_login"
+	}
+
+	var users []domain.User
+	var err error
+	switch sort {
+	case "stake":
+		users, err = r.listUsersByStake(ctx, query, limit)
+	case "bets":
+		users, err = r.listUsersByBets(ctx, query, limit)
+	default:
+		users, err = r.listUsersOrdered(ctx, query, sort, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return r.enrichAdminUserRows(ctx, users)
+}
+
+func (r *AdminRepo) listUsersOrdered(ctx context.Context, query, sort string, limit int) ([]domain.User, error) {
+	q := r.db.WithContext(ctx).Model(&domain.User{})
 	if query != "" {
 		like := "%" + query + "%"
 		q = q.Where("username ILIKE ? OR first_name ILIKE ? OR CAST(telegram_id AS TEXT) LIKE ?",
 			like, like, like)
 	}
+	switch sort {
+	case "balance":
+		q = q.Order("betting_balance DESC")
+	case "created":
+		q = q.Order("created_at DESC")
+	default: // last_login
+		q = q.Order("last_login_at DESC NULLS LAST").Order("created_at DESC")
+	}
 	var users []domain.User
-	if err := q.Find(&users).Error; err != nil {
+	err := q.Limit(limit).Find(&users).Error
+	return users, err
+}
+
+func (r *AdminRepo) listUsersByStake(ctx context.Context, query string, limit int) ([]domain.User, error) {
+	var ids []idRow
+	var err error
+	if query != "" {
+		like := "%" + query + "%"
+		err = r.db.WithContext(ctx).Raw(`
+			SELECT sp.user_id, SUM(sp.principal_nanoton) AS principal
+			FROM staking_positions sp
+			JOIN users u ON u.id = sp.user_id
+			WHERE sp.is_active = TRUE
+			  AND (u.username ILIKE ? OR u.first_name ILIKE ? OR CAST(u.telegram_id AS TEXT) LIKE ?)
+			GROUP BY sp.user_id
+			HAVING SUM(sp.principal_nanoton) > 0
+			ORDER BY principal DESC
+			LIMIT ?
+		`, like, like, like, limit).Scan(&ids).Error
+	} else {
+		err = r.db.WithContext(ctx).Raw(`
+			SELECT user_id, SUM(principal_nanoton) AS principal
+			FROM staking_positions
+			WHERE is_active = TRUE
+			GROUP BY user_id
+			HAVING SUM(principal_nanoton) > 0
+			ORDER BY principal DESC
+			LIMIT ?
+		`, limit).Scan(&ids).Error
+	}
+	if err != nil {
 		return nil, err
 	}
+	return r.loadUsersPreservingOrder(ctx, idsToUUIDs(ids))
+}
+
+func (r *AdminRepo) listUsersByBets(ctx context.Context, query string, limit int) ([]domain.User, error) {
+	var ids []idRow
+	var err error
+	if query != "" {
+		like := "%" + query + "%"
+		err = r.db.WithContext(ctx).Raw(`
+			SELECT gb.user_id, COUNT(*) AS cnt
+			FROM game_bets gb
+			JOIN users u ON u.id = gb.user_id
+			WHERE u.username ILIKE ? OR u.first_name ILIKE ? OR CAST(u.telegram_id AS TEXT) LIKE ?
+			GROUP BY gb.user_id
+			ORDER BY cnt DESC
+			LIMIT ?
+		`, like, like, like, limit).Scan(&ids).Error
+	} else {
+		err = r.db.WithContext(ctx).Raw(`
+			SELECT user_id, COUNT(*) AS cnt
+			FROM game_bets
+			GROUP BY user_id
+			ORDER BY cnt DESC
+			LIMIT ?
+		`, limit).Scan(&ids).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	return r.loadUsersPreservingOrder(ctx, idsToUUIDs(ids))
+}
+
+type idRow struct {
+	UserID uuid.UUID `gorm:"column:user_id"`
+}
+
+func idsToUUIDs(rows []idRow) []uuid.UUID {
+	out := make([]uuid.UUID, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.UserID)
+	}
+	return out
+}
+
+func (r *AdminRepo) loadUsersPreservingOrder(ctx context.Context, ids []uuid.UUID) ([]domain.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var users []domain.User
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[uuid.UUID]domain.User, len(users))
+	for _, u := range users {
+		byID[u.ID] = u
+	}
+	ordered := make([]domain.User, 0, len(ids))
+	for _, id := range ids {
+		if u, ok := byID[id]; ok {
+			ordered = append(ordered, u)
+		}
+	}
+	return ordered, nil
+}
+
+func (r *AdminRepo) enrichAdminUserRows(ctx context.Context, users []domain.User) ([]domain.AdminUserRow, error) {
 	rows := make([]domain.AdminUserRow, 0, len(users))
 	if len(users) == 0 {
 		return rows, nil
@@ -215,10 +343,24 @@ func (r *AdminRepo) ListUsers(ctx context.Context, query string, limit int) ([]d
 		Where("is_active = ? AND user_id IN ?", true, ids).
 		Group("user_id").
 		Scan(&aggs)
-
 	byUser := make(map[uuid.UUID]stakeAgg, len(aggs))
 	for _, a := range aggs {
 		byUser[a.UserID] = a
+	}
+
+	type betAgg struct {
+		UserID uuid.UUID `gorm:"column:user_id"`
+		Count  int64     `gorm:"column:cnt"`
+	}
+	var betAggs []betAgg
+	_ = r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Select("user_id, COUNT(*) AS cnt").
+		Where("user_id IN ?", ids).
+		Group("user_id").
+		Scan(&betAggs)
+	betsByUser := make(map[uuid.UUID]int64, len(betAggs))
+	for _, a := range betAggs {
+		betsByUser[a.UserID] = a.Count
 	}
 
 	referrerIDs := make([]uuid.UUID, 0)
@@ -244,7 +386,7 @@ func (r *AdminRepo) ListUsers(ctx context.Context, query string, limit int) ([]d
 	}
 
 	for _, u := range users {
-		row := domain.AdminUserRow{User: u}
+		row := domain.AdminUserRow{User: u, BetsCount: betsByUser[u.ID]}
 		if a, ok := byUser[u.ID]; ok {
 			row.StakingPrincipalNanoton = a.Principal
 			row.ActiveStakes = a.Count
@@ -271,6 +413,99 @@ func referralCodeFromTelegramID(telegramID int64) string {
 		return ""
 	}
 	return "ref_" + strconv.FormatInt(telegramID, 36)
+}
+
+func (r *AdminRepo) ListUserBets(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]domain.GameBet, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if since != nil {
+		q = q.Where("created_at >= ?", *since)
+	}
+	var bets []domain.GameBet
+	err := q.Order("created_at DESC").Limit(limit).Find(&bets).Error
+	return bets, err
+}
+
+func (r *AdminRepo) UserBetsSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (domain.AdminUserBetsSummary, error) {
+	var out domain.AdminUserBetsSummary
+	type agg struct {
+		Bets   int64 `gorm:"column:bets"`
+		Won    int64 `gorm:"column:won"`
+		Lost   int64 `gorm:"column:lost"`
+		Volume int64 `gorm:"column:volume"`
+		Payout int64 `gorm:"column:payout"`
+	}
+	var a agg
+	q := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Select(`
+			COUNT(*) AS bets,
+			COUNT(*) FILTER (WHERE status IN ('won', 'cashed_out')) AS won,
+			COUNT(*) FILTER (WHERE status = 'lost') AS lost,
+			COALESCE(SUM(amount_nanoton), 0) AS volume,
+			COALESCE(SUM(payout_nanoton), 0) AS payout
+		`).
+		Where("user_id = ?", userID)
+	if since != nil {
+		q = q.Where("created_at >= ?", *since)
+	}
+	if err := q.Scan(&a).Error; err != nil {
+		return out, err
+	}
+	out.Bets = a.Bets
+	out.Won = a.Won
+	out.Lost = a.Lost
+	out.VolumeNanoton = a.Volume
+	out.PayoutNanoton = a.Payout
+	out.NetNanoton = a.Payout - a.Volume
+	return out, nil
+}
+
+func (r *AdminRepo) ListUserTransfers(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]domain.TonTransfer, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if since != nil {
+		q = q.Where("created_at >= ?", *since)
+	}
+	var items []domain.TonTransfer
+	err := q.Order("created_at DESC").Limit(limit).Find(&items).Error
+	return items, err
+}
+
+func (r *AdminRepo) UserTransfersSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (domain.AdminUserTransfersSummary, error) {
+	var out domain.AdminUserTransfersSummary
+	type agg struct {
+		Deposits    int64 `gorm:"column:deposits"`
+		Withdrawals int64 `gorm:"column:withdrawals"`
+		DepVol      int64 `gorm:"column:dep_vol"`
+		WdVol       int64 `gorm:"column:wd_vol"`
+		Failed      int64 `gorm:"column:failed"`
+	}
+	var a agg
+	q := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+		Select(`
+			COUNT(*) FILTER (WHERE direction = 'deposit') AS deposits,
+			COUNT(*) FILTER (WHERE direction = 'withdraw') AS withdrawals,
+			COALESCE(SUM(amount_nanoton) FILTER (WHERE direction = 'deposit'), 0) AS dep_vol,
+			COALESCE(SUM(amount_nanoton) FILTER (WHERE direction = 'withdraw'), 0) AS wd_vol,
+			COUNT(*) FILTER (WHERE status IN ('failed', 'rejected', 'expired')) AS failed
+		`).
+		Where("user_id = ?", userID)
+	if since != nil {
+		q = q.Where("created_at >= ?", *since)
+	}
+	if err := q.Scan(&a).Error; err != nil {
+		return out, err
+	}
+	out.Deposits = a.Deposits
+	out.Withdrawals = a.Withdrawals
+	out.DepositVolumeNanoton = a.DepVol
+	out.WithdrawalVolumeNanoton = a.WdVol
+	out.Failed = a.Failed
+	return out, nil
 }
 
 func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience, error) {
@@ -415,182 +650,6 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 	return out, nil
 }
 
-func (r *AdminRepo) ListSharedIPClusters(ctx context.Context, since time.Time, minUsers int) ([]domain.AdminIPCluster, error) {
-	if minUsers < 2 {
-		minUsers = 2
-	}
-	if since.IsZero() {
-		since = time.Now().UTC().Add(-30 * 24 * time.Hour)
-	}
-
-	type ipRow struct {
-		IP         string    `gorm:"column:ip"`
-		UserCount  int64     `gorm:"column:user_count"`
-		EventCount int64     `gorm:"column:event_count"`
-		LastSeenAt time.Time `gorm:"column:last_seen_at"`
-	}
-	var ips []ipRow
-	err := r.db.WithContext(ctx).Raw(`
-		WITH hits AS (
-			SELECT
-				ae.user_id,
-				ae.ip_address AS ip,
-				ae.occurred_at
-			FROM analytics_events ae
-			WHERE ae.occurred_at >= ?
-				AND ae.user_id IS NOT NULL
-				AND COALESCE(ae.ip_address, '') <> ''
-				AND ae.ip_address NOT IN ('127.0.0.1', '::1', '0.0.0.0')
-			UNION ALL
-			SELECT
-				u.id AS user_id,
-				u.last_ip AS ip,
-				COALESCE(u.last_ip_at, u.last_login_at, u.updated_at) AS occurred_at
-			FROM users u
-			WHERE u.deleted_at IS NULL
-				AND COALESCE(u.last_ip, '') <> ''
-				AND u.last_ip NOT IN ('127.0.0.1', '::1', '0.0.0.0')
-				AND COALESCE(u.last_ip_at, u.last_login_at, u.updated_at) >= ?
-		)
-		SELECT
-			ip,
-			COUNT(DISTINCT user_id) AS user_count,
-			COUNT(*) AS event_count,
-			MAX(occurred_at) AS last_seen_at
-		FROM hits
-		GROUP BY ip
-		HAVING COUNT(DISTINCT user_id) >= ?
-		ORDER BY COUNT(DISTINCT user_id) DESC, MAX(occurred_at) DESC
-		LIMIT 50
-	`, since, since, minUsers).Scan(&ips).Error
-	if err != nil {
-		return nil, err
-	}
-	if len(ips) == 0 {
-		return []domain.AdminIPCluster{}, nil
-	}
-
-	out := make([]domain.AdminIPCluster, 0, len(ips))
-	for _, row := range ips {
-		cluster := domain.AdminIPCluster{
-			IP:         row.IP,
-			UserCount:  int(row.UserCount),
-			EventCount: row.EventCount,
-			LastSeenAt: row.LastSeenAt,
-			Users:      []domain.AdminIPClusterUser{},
-		}
-
-		type userHit struct {
-			UserID     uuid.UUID  `gorm:"column:user_id"`
-			TelegramID int64      `gorm:"column:telegram_id"`
-			Username   string     `gorm:"column:username"`
-			FirstName  string     `gorm:"column:first_name"`
-			ReferrerID *uuid.UUID `gorm:"column:referrer_id"`
-			CreatedAt  time.Time  `gorm:"column:created_at"`
-			LastLoginAt *time.Time `gorm:"column:last_login_at"`
-			LastIPAt   *time.Time `gorm:"column:last_ip_at"`
-			Events     int64      `gorm:"column:events_from_ip"`
-		}
-		var users []userHit
-		_ = r.db.WithContext(ctx).Raw(`
-			WITH hits AS (
-				SELECT ae.user_id, COUNT(*) AS events_from_ip, MAX(ae.occurred_at) AS last_seen
-				FROM analytics_events ae
-				WHERE ae.occurred_at >= ?
-					AND ae.user_id IS NOT NULL
-					AND ae.ip_address = ?
-				GROUP BY ae.user_id
-				UNION ALL
-				SELECT u.id AS user_id, 0 AS events_from_ip, COALESCE(u.last_ip_at, u.last_login_at, u.updated_at) AS last_seen
-				FROM users u
-				WHERE u.deleted_at IS NULL AND u.last_ip = ?
-			),
-			agg AS (
-				SELECT user_id, SUM(events_from_ip) AS events_from_ip, MAX(last_seen) AS last_seen
-				FROM hits
-				GROUP BY user_id
-			)
-			SELECT
-				u.id AS user_id,
-				u.telegram_id,
-				u.username,
-				u.first_name,
-				u.referrer_id,
-				u.created_at,
-				u.last_login_at,
-				u.last_ip_at,
-				a.events_from_ip
-			FROM agg a
-			JOIN users u ON u.id = a.user_id AND u.deleted_at IS NULL
-			ORDER BY a.events_from_ip DESC, u.created_at ASC
-		`, since, row.IP, row.IP).Scan(&users)
-
-		ids := make(map[uuid.UUID]struct{}, len(users))
-		for _, u := range users {
-			ids[u.UserID] = struct{}{}
-			cluster.Users = append(cluster.Users, domain.AdminIPClusterUser{
-				UserID:       u.UserID,
-				TelegramID:   u.TelegramID,
-				Username:     u.Username,
-				FirstName:    u.FirstName,
-				ReferrerID:   u.ReferrerID,
-				CreatedAt:    u.CreatedAt,
-				LastLoginAt:  u.LastLoginAt,
-				LastIPAt:     u.LastIPAt,
-				EventsFromIP: u.Events,
-			})
-		}
-
-		// Resolve referrer labels + detect referrer/referee pairs sharing the IP.
-		refIDs := make([]uuid.UUID, 0)
-		seenRef := map[uuid.UUID]struct{}{}
-		for i := range cluster.Users {
-			u := &cluster.Users[i]
-			if u.ReferrerID == nil {
-				continue
-			}
-			if _, ok := ids[*u.ReferrerID]; ok {
-				cluster.ReferralLinked = true
-			}
-			if _, ok := seenRef[*u.ReferrerID]; !ok {
-				seenRef[*u.ReferrerID] = struct{}{}
-				refIDs = append(refIDs, *u.ReferrerID)
-			}
-		}
-		if len(refIDs) > 0 {
-			var refs []domain.User
-			if err := r.db.WithContext(ctx).Where("id IN ?", refIDs).Find(&refs).Error; err == nil {
-				byID := make(map[uuid.UUID]domain.User, len(refs))
-				for _, ref := range refs {
-					byID[ref.ID] = ref
-				}
-				for i := range cluster.Users {
-					u := &cluster.Users[i]
-					if u.ReferrerID == nil {
-						continue
-					}
-					if ref, ok := byID[*u.ReferrerID]; ok {
-						u.ReferrerTelegramID = ref.TelegramID
-						u.ReferrerUsername = ref.Username
-					}
-				}
-			}
-		}
-
-		out = append(out, cluster)
-	}
-
-	// Surface referral-linked clusters first.
-	for i := 0; i < len(out); i++ {
-		for j := i + 1; j < len(out); j++ {
-			if !out[i].ReferralLinked && out[j].ReferralLinked {
-				out[i], out[j] = out[j], out[i]
-			}
-		}
-	}
-	return out, nil
-}
-
 func projectedDailyYield(principal int64, tier domain.StakingTier, basePct, boostPct float64) int64 {
 	if principal <= 0 {
 		return 0
@@ -600,18 +659,6 @@ func projectedDailyYield(principal int64, tier domain.StakingTier, basePct, boos
 		rate = boostPct / 100
 	}
 	return int64(float64(principal) * rate / 30)
-}
-
-func (r *AdminRepo) CountUserBets(ctx context.Context, userID uuid.UUID, limit int) ([]domain.GameBet, error) {
-	if limit <= 0 {
-		limit = 30
-	}
-	var bets []domain.GameBet
-	return bets, r.db.WithContext(ctx).
-		Where("user_id = ?", userID).
-		Order("created_at DESC").
-		Limit(limit).
-		Find(&bets).Error
 }
 
 func (r *AdminRepo) appendRiskFlag(ctx context.Context, userID uuid.UUID, flag string) error {

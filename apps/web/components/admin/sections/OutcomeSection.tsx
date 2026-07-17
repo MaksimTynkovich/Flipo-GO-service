@@ -1,8 +1,7 @@
 "use client";
 
-import { AdminButton, AdminField, AdminPanel } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminField, AdminPanel } from "@/components/admin/admin-ui";
 import { useEffect, useState } from "react";
-import { PageShell } from "@/components/PageShell";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   createOutcomeOverride,
@@ -126,7 +125,7 @@ export default function OutcomeSection() {
   }
 
   return (
-    <PageShell title="Управление исходами">
+    <AdminPage title="Управление исходами">
       <div className="space-y-4">
         <AdminPanel
           title="Назначить исход"
@@ -234,6 +233,6 @@ export default function OutcomeSection() {
           )}
         </AdminPanel>
       </div>
-    </PageShell>
+    </AdminPage>
   );
 }

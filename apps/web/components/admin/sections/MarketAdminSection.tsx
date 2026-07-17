@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PageShell } from "@/components/PageShell";
-import { AdminButton, AdminChip, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminChip, AdminToolbar } from "@/components/admin/admin-ui";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
@@ -367,7 +366,7 @@ export default function MarketAdminSection() {
   const settings = giftSettings ?? DEFAULT_GIFT_SETTINGS;
 
   return (
-    <PageShell
+    <AdminPage
       title="Маркет"
       description="Каталог цен моделей, корректировка оценки, выгрузка гифтов бота и цены лотов."
     >
@@ -716,6 +715,6 @@ export default function MarketAdminSection() {
           </section>
         </>
       )}
-    </PageShell>
+    </AdminPage>
   );
 }

@@ -165,11 +165,58 @@ type AdminUserRow struct {
 	StakingAccruedYieldNanoton int64  `json:"staking_accrued_yield_nanoton"`
 	StakingDailyYieldNanoton   int64  `json:"staking_daily_yield_nanoton"`
 	StakingWeeklyYieldNanoton  int64  `json:"staking_weekly_yield_nanoton"`
+	BetsCount                  int64  `json:"bets_count"`
 	CameViaReferral            bool   `json:"came_via_referral"`
 	ReferrerTelegramID         int64  `json:"referrer_telegram_id,omitempty"`
 	ReferrerUsername           string `json:"referrer_username,omitempty"`
 	ReferrerFirstName          string `json:"referrer_first_name,omitempty"`
 	ReferrerCode               string `json:"referrer_code,omitempty"`
+}
+
+// AdminUserBetItem — readable bet row for the admin user card.
+type AdminUserBetItem struct {
+	ID              uuid.UUID `json:"id"`
+	GameType        GameType  `json:"game_type"`
+	Status          BetStatus `json:"status"`
+	AmountNanoton   int64     `json:"amount_nanoton"`
+	PayoutNanoton   int64     `json:"payout_nanoton"`
+	FundingType     string    `json:"funding_type"`
+	SelectionLabel  string    `json:"selection_label"`
+	CashoutMult     *float64  `json:"cashout_multiplier,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// AdminUserBetsSummary — aggregates for a period (not limited to returned items).
+type AdminUserBetsSummary struct {
+	Bets           int64 `json:"bets"`
+	Won            int64 `json:"won"`
+	Lost           int64 `json:"lost"`
+	VolumeNanoton  int64 `json:"volume_nanoton"`
+	PayoutNanoton  int64 `json:"payout_nanoton"`
+	NetNanoton     int64 `json:"net_nanoton"`
+}
+
+// AdminUserBetsResponse — period-filtered bets for one user.
+type AdminUserBetsResponse struct {
+	Period  string              `json:"period"`
+	Summary AdminUserBetsSummary `json:"summary"`
+	Items   []AdminUserBetItem  `json:"items"`
+}
+
+// AdminUserTransfersSummary — deposit/withdraw aggregates for a period.
+type AdminUserTransfersSummary struct {
+	Deposits               int64 `json:"deposits"`
+	Withdrawals            int64 `json:"withdrawals"`
+	DepositVolumeNanoton   int64 `json:"deposit_volume_nanoton"`
+	WithdrawalVolumeNanoton int64 `json:"withdrawal_volume_nanoton"`
+	Failed                 int64 `json:"failed"`
+}
+
+// AdminUserTransfersResponse — period-filtered wallet transfers for one user.
+type AdminUserTransfersResponse struct {
+	Period  string                    `json:"period"`
+	Summary AdminUserTransfersSummary `json:"summary"`
+	Items   []TonTransfer             `json:"items"`
 }
 
 // AdminReferrerStat — top invite sources for the admin users page.
@@ -208,31 +255,6 @@ type AdminUserAudience struct {
 	StakingDailyYieldNanoton   int64               `json:"staking_daily_yield_nanoton"`
 	StakingWeeklyYieldNanoton  int64               `json:"staking_weekly_yield_nanoton"`
 	TopReferrers               []AdminReferrerStat `json:"top_referrers"`
-}
-
-// AdminIPClusterUser — one account inside a shared-IP cluster.
-type AdminIPClusterUser struct {
-	UserID             uuid.UUID  `json:"user_id"`
-	TelegramID         int64      `json:"telegram_id"`
-	Username           string     `json:"username"`
-	FirstName          string     `json:"first_name"`
-	ReferrerID         *uuid.UUID `json:"referrer_id,omitempty"`
-	ReferrerTelegramID int64      `json:"referrer_telegram_id,omitempty"`
-	ReferrerUsername   string     `json:"referrer_username,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	LastLoginAt        *time.Time `json:"last_login_at,omitempty"`
-	LastIPAt           *time.Time `json:"last_ip_at,omitempty"`
-	EventsFromIP       int64      `json:"events_from_ip"`
-}
-
-// AdminIPCluster — multiple accounts observed on one IP (multi-account / ref abuse signal).
-type AdminIPCluster struct {
-	IP             string               `json:"ip"`
-	UserCount      int                  `json:"user_count"`
-	EventCount     int64                `json:"event_count"`
-	LastSeenAt     time.Time            `json:"last_seen_at"`
-	ReferralLinked bool                 `json:"referral_linked"`
-	Users          []AdminIPClusterUser `json:"users"`
 }
 
 // PromoRedemption — player promo activation with wager tracking.

@@ -14,7 +14,7 @@ function AdminNav({
   onNavigate: (href: string) => void;
 }) {
   return (
-    <nav className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-1">
+    <nav className="-mx-1 flex gap-0.5 overflow-x-auto px-1 pb-0.5 lg:flex-col lg:overflow-visible lg:pb-0">
       {ADMIN_NAV.map((item) => {
         const isActive = activeSection === item.id;
         return (
@@ -23,14 +23,13 @@ function AdminNav({
             type="button"
             onClick={() => onNavigate(item.href)}
             className={cn(
-              "w-full rounded-xl px-3 py-2.5 text-left transition-colors",
+              "shrink-0 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors lg:w-full",
               isActive
-                ? "bg-accent/15 font-medium text-foreground ring-1 ring-inset ring-accent/30"
-                : "bg-surface-raised/50 text-muted hover:text-foreground",
+                ? "bg-surface-raised font-medium text-foreground"
+                : "text-muted hover:text-foreground",
             )}
           >
-            <span className="block text-sm">{item.label}</span>
-            <span className="mt-0.5 hidden text-[11px] leading-snug text-muted lg:block">{item.hint}</span>
+            {item.label}
           </button>
         );
       })}
@@ -61,12 +60,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
-      <aside className="w-full shrink-0 lg:sticky lg:top-[calc(var(--app-header-offset)+0.5rem)] lg:w-56">
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Разделы</p>
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+      <aside className="w-full shrink-0 lg:sticky lg:top-[calc(var(--app-header-offset)+0.5rem)] lg:w-44">
         <AdminNav activeSection={activeSection} onNavigate={navigate} />
       </aside>
-      <div className="min-w-0 flex-1 space-y-4">
+      <div className="min-w-0 flex-1 space-y-3">
         <AdminSectionHost active={activeSection} />
         {children}
       </div>
