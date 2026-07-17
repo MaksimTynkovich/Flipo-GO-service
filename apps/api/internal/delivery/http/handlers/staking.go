@@ -61,7 +61,8 @@ func (h *StakingHandler) Stake(c *gin.Context) {
 	}
 
 	if err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "staking", "staking_started", "error", "stake_failed", err.Error(), map[string]any{"slug": req.Slug, "item_id": req.ItemID})
+		code, msg := stakingErrorDetails(err)
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "staking", "staking_started", "error", code, msg, map[string]any{"slug": req.Slug, "item_id": req.ItemID})
 		writeStakingError(c, err)
 		return
 	}
@@ -96,23 +97,28 @@ func (h *StakingHandler) ListPositions(c *gin.Context) {
 }
 
 func writeStakingError(c *gin.Context, err error) {
+	code, msg := stakingErrorDetails(err)
+	respondBadRequest(c, err, msg, code)
+}
+
+func stakingErrorDetails(err error) (code, msg string) {
 	switch {
 	case errors.Is(err, domain.ErrStakingPoolFull):
-		respondBadRequest(c, err, "Пул стейкинга заполнен. Попробуйте позже.", "staking_pool_full")
+		return "staking_pool_full", "Пул стейкинга заполнен. Попробуйте позже."
 	case errors.Is(err, domain.ErrStakingPersonalLimit):
-		respondBadRequest(c, err, "Личный лимит исчерпан — выполните задания, чтобы увеличить его.", "staking_personal_limit")
+		return "staking_personal_limit", "Личный лимит исчерпан — выполните задания, чтобы увеличить его."
 	case errors.Is(err, domain.ErrGiftAlreadyStakedEpoch):
-		respondBadRequest(c, err, "Подарок уже в стейке на этой неделе.", "gift_already_staked")
+		return "gift_already_staked", "Подарок уже в стейке на этой неделе."
 	case errors.Is(err, domain.ErrInvalidAmount):
-		respondBadRequest(c, err, "Подарок недоступен для стейкинга.", "invalid_stake")
+		return "invalid_stake", "Подарок недоступен для стейкинга."
 	case errors.Is(err, domain.ErrNotFound):
-		respondBadRequest(c, err, "Подарок не найден.", "not_found")
+		return "not_found", "Подарок не найден."
 	default:
 		msg := err.Error()
 		if msg == "" {
 			msg = "Не удалось застейкать подарок. Попробуйте ещё раз."
 		}
-		respondBadRequest(c, err, msg, "stake_failed")
+		return "stake_failed", msg
 	}
 }
 

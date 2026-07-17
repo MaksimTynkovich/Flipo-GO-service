@@ -126,7 +126,7 @@ func (r *AnalyticsRepo) GetOverview(ctx context.Context, since time.Time, filter
 		return nil, err
 	}
 	if overview.TopFailures, err = r.topBuckets(ctx, `
-		SELECT COALESCE(NULLIF(error_code, ''), event_name) AS name, COUNT(*) AS count
+		SELECT COALESCE(NULLIF(TRIM(error_message), ''), NULLIF(error_code, ''), event_name) AS name, COUNT(*) AS count
 		FROM analytics_events
 		WHERE occurred_at >= ? AND status = 'error'
 		GROUP BY 1
@@ -447,7 +447,7 @@ func (r *AnalyticsRepo) GetUserDrilldown(ctx context.Context, userID uuid.UUID, 
 		return nil, err
 	}
 	if drilldown.TopFailures, err = r.topBuckets(ctx, `
-		SELECT COALESCE(NULLIF(error_code, ''), event_name) AS name, COUNT(*) AS count
+		SELECT COALESCE(NULLIF(TRIM(error_message), ''), NULLIF(error_code, ''), event_name) AS name, COUNT(*) AS count
 		FROM analytics_events
 		WHERE user_id = ? AND status = 'error'
 		GROUP BY 1

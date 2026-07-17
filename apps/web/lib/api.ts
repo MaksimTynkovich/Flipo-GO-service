@@ -153,7 +153,9 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
       undefined;
     trackErrorSurface({
       surface: "api",
-      error_code: `${path.replace(/^\/api\/v1\//, "").replace(/\//g, "_")}_failed`,
+      error_code:
+        (typeof err.code === "string" && err.code) ||
+        `${path.replace(/^\/api\/v1\//, "").replace(/\//g, "_")}_failed`,
       error_message: message,
       properties: {
         path,
@@ -616,11 +618,12 @@ export async function stakeGift(opts: { slug?: string; itemId?: string }) {
     });
     return result;
   } catch (error) {
+    const apiErr = error instanceof ApiRequestError ? error : null;
     trackEvent({
       event_name: "staking_started",
       event_category: "staking",
       status: "error",
-      error_code: "stake_failed",
+      error_code: apiErr?.code || "stake_failed",
       error_message: error instanceof Error ? error.message : "stake_failed",
       properties: { item_id: opts.itemId, slug: opts.slug },
     });

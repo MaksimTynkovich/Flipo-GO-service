@@ -15,8 +15,7 @@ type AdminNotifier struct {
 	api      *BotAPI
 	adminIDs []int64
 	adminSet map[int64]struct{}
-	// Dedupes first-time alerts within a single process.
-	newUserSeen  sync.Map
+	// Dedupes first-time bot /start alerts within a single process.
 	botStartSeen sync.Map
 }
 
@@ -64,16 +63,6 @@ func FormatActor(a AdminActor) string {
 		return fmt.Sprintf("%s (@%s, id=%d)", name, a.Username, a.TelegramID)
 	}
 	return fmt.Sprintf("%s (id=%d)", name, a.TelegramID)
-}
-
-func (n *AdminNotifier) NotifyNewUser(ctx context.Context, actor AdminActor) {
-	if !n.Enabled() || actor.TelegramID == 0 || n.IsAdmin(actor.TelegramID) {
-		return
-	}
-	if _, loaded := n.newUserSeen.LoadOrStore(actor.TelegramID, struct{}{}); loaded {
-		return
-	}
-	n.notify(ctx, actor, fmt.Sprintf("🆕 Открыл приложение\n%s", FormatActor(actor)))
 }
 
 func (n *AdminNotifier) NotifyBotStart(ctx context.Context, actor AdminActor) {

@@ -22,7 +22,6 @@ type Claims struct {
 }
 
 type AdminEventNotifier interface {
-	NotifyNewUser(ctx context.Context, actor telegram.AdminActor)
 	NotifyReferralJoined(ctx context.Context, actor, referrer telegram.AdminActor)
 }
 
@@ -129,15 +128,6 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 
 	if err := s.users.Upsert(ctx, user); err != nil {
 		return "", nil, err
-	}
-
-	if isNew && s.adminEvents != nil {
-		s.adminEvents.NotifyNewUser(ctx, telegram.AdminActor{
-			TelegramID: user.TelegramID,
-			Username:   user.Username,
-			FirstName:  user.FirstName,
-			LastName:   user.LastName,
-		})
 	}
 
 	if isNew && s.referrals != nil && code != "" {

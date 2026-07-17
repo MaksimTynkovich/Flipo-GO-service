@@ -134,6 +134,11 @@ const ERROR_LABELS: Record<string, string> = {
   deposit_failed: "Ошибка зачисления подарка",
   liquidate_failed: "Ошибка продажи подарка",
   stake_failed: "Ошибка стейкинга",
+  staking_stake_failed: "Ошибка стейкинга (API)",
+  staking_pool_full: "Пул стейкинга заполнен",
+  staking_personal_limit: "Личный лимит стейкинга",
+  gift_already_staked: "Подарок уже в стейке",
+  invalid_stake: "Подарок недоступен для стейкинга",
   unstake_failed: "Ошибка unstake",
 };
 

@@ -832,7 +832,7 @@ function ActivityPanel({
             />
           </div>
           <div>
-            <p className="mb-2 text-xs font-medium text-muted">Ошибки</p>
+            <p className="mb-2 text-xs font-medium text-muted">Ошибки (текст)</p>
             <AdminRankList
               items={analytics.top_failures}
               emptyText="Ошибок нет."
@@ -871,6 +871,11 @@ function ActivityPanel({
                       {event.status ? ` · ${humanizeAnalyticsStatus(event.status)}` : ""}
                       {event.error_code ? ` · ${humanizeAnalyticsName(event.error_code)}` : ""}
                     </p>
+                    {event.error_message ? (
+                      <p className="mt-1 text-[11px] leading-relaxed text-red-300/90">
+                        {event.error_message}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>
