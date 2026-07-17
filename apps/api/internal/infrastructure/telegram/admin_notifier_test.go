@@ -16,6 +16,7 @@ func TestAdminNotifierSkipsAdmins(t *testing.T) {
 
 	// Should no-op for admin actors (no panic / no send attempt beyond Enabled checks).
 	n.NotifyNewUser(context.Background(), AdminActor{TelegramID: 111, Username: "admin"})
+	n.NotifyBotStart(context.Background(), AdminActor{TelegramID: 111, Username: "admin"})
 	n.NotifyDeposit(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
 	n.NotifyWithdraw(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
 	n.NotifyReferralShare(context.Background(), AdminActor{TelegramID: 111}, "copy")

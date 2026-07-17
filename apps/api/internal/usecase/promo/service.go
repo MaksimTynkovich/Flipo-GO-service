@@ -2,6 +2,7 @@ package promo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 type AdminPromoNotifier interface {
 	NotifyPromoActivated(ctx context.Context, actor telegram.AdminActor, code string, bonusNanoton int64)
+	NotifyPromoActivationFailed(ctx context.Context, actor telegram.AdminActor, code, reason string)
 }
 
 type ChannelNotSubscribedError struct {
@@ -72,6 +74,19 @@ type StatusView struct {
 
 func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (*StatusView, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
+	status, err := s.activate(ctx, userID, code)
+	if err != nil {
+		s.notifyActivationFailed(ctx, userID, code, promoFailureReason(err))
+		return nil, err
+	}
+	return status, nil
+}
+
+func (s *Service) NotifyActivationFailed(ctx context.Context, userID uuid.UUID, code, reason string) {
+	s.notifyActivationFailed(ctx, userID, strings.ToUpper(strings.TrimSpace(code)), reason)
+}
+
+func (s *Service) activate(ctx context.Context, userID uuid.UUID, code string) (*StatusView, error) {
 	if code == "" {
 		return nil, domain.ErrPromoInvalid
 	}
@@ -162,6 +177,57 @@ func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (
 	}
 	status.ReplacedPromoCode = replacedCode
 	return status, nil
+}
+
+func (s *Service) notifyActivationFailed(ctx context.Context, userID uuid.UUID, code, reason string) {
+	if s.admin == nil {
+		return
+	}
+	actor := telegram.AdminActor{}
+	if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+		actor = telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}
+	}
+	s.admin.NotifyPromoActivationFailed(ctx, actor, code, reason)
+}
+
+func promoFailureReason(err error) string {
+	if err == nil {
+		return "неизвестная ошибка"
+	}
+	var channelErr *ChannelNotSubscribedError
+	if errors.As(err, &channelErr) {
+		channel := ""
+		if channelErr != nil {
+			channel = strings.TrimSpace(channelErr.Channel)
+		}
+		if channel != "" {
+			return fmt.Sprintf("не подписан на канал %s", channel)
+		}
+		return "не подписан на обязательный канал"
+	}
+	switch {
+	case errors.Is(err, domain.ErrPromoInvalid):
+		return "промокод недействителен"
+	case errors.Is(err, domain.ErrPromoExpired):
+		return "промокод истёк"
+	case errors.Is(err, domain.ErrPromoExhausted):
+		return "промокод исчерпан"
+	case errors.Is(err, domain.ErrPromoAlreadyRedeemed):
+		return "промокод уже использован"
+	case errors.Is(err, domain.ErrPromoWagerPending):
+		return "сначала нужно отыграть активный бонус"
+	default:
+		msg := strings.TrimSpace(err.Error())
+		if msg == "" {
+			return "не удалось активировать промокод"
+		}
+		return msg
+	}
 }
 
 func (s *Service) ensureChannelSubscribed(ctx context.Context, userID uuid.UUID) error {

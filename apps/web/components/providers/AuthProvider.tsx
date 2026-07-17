@@ -45,6 +45,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function init() {
+      const AUTH_TIMEOUT_MS = 20_000;
+      const timeoutId = window.setTimeout(() => {
+        trackEvent({
+          event_name: "auth_loading_timeout",
+          event_category: "auth",
+          status: "error",
+          error_code: "auth_loading_timeout",
+          error_message: `auth still loading after ${AUTH_TIMEOUT_MS}ms`,
+          properties: {
+            elapsed_ms: AUTH_TIMEOUT_MS,
+            has_init_data: hasTelegramInitData(),
+            has_token: Boolean(localStorage.getItem("flipo_token")),
+          },
+        });
+      }, AUTH_TIMEOUT_MS);
+
       try {
         initTelegramWebApp();
 
@@ -134,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         setError(formatUserError(e, "Не удалось войти"));
       } finally {
+        window.clearTimeout(timeoutId);
         setLoading(false);
         setReady(true);
       }

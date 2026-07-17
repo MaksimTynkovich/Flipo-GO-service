@@ -72,10 +72,9 @@ function formatShortWhen(value?: string | null) {
   const d = new Date(value);
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-  return d.toLocaleDateString([], { day: "2-digit", month: "short" });
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (sameDay) return time;
+  return `${d.toLocaleDateString([], { day: "2-digit", month: "short" })} ${time}`;
 }
 
 function truncateMiddle(value: string, head = 6, tail = 4) {

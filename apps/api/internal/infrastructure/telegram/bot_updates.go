@@ -3,8 +3,10 @@ package telegram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"gorm.io/gorm"
 )
 
@@ -51,6 +53,7 @@ type BotUpdates struct {
 	webAppButtonTextResolver WebAppButtonTextResolver
 	adminNotifier            *AdminNotifier
 	users                    UserLookup
+	analytics                *analyticsuc.Service
 }
 
 func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName, channelURL, supportURL, welcomeText string) *BotUpdates {
@@ -81,6 +84,10 @@ func (h *BotUpdates) SetUserLookup(users UserLookup) {
 	h.users = users
 }
 
+func (h *BotUpdates) SetAnalytics(analytics *analyticsuc.Service) {
+	h.analytics = analytics
+}
+
 func (h *BotUpdates) Enabled() bool {
 	return h.api != nil && h.api.Enabled()
 }
@@ -95,13 +102,41 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 		return nil
 	}
 
-	h.maybeNotifyNewUser(ctx, update.Message)
-
 	payload := strings.TrimSpace(strings.TrimPrefix(text, "/start"))
+	h.trackBotStart(ctx, update.Message, payload)
+	h.maybeNotifyBotStart(ctx, update.Message)
+
 	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload)
 }
 
-func (h *BotUpdates) maybeNotifyNewUser(ctx context.Context, msg *Message) {
+func (h *BotUpdates) trackBotStart(ctx context.Context, msg *Message, payload string) {
+	if h.analytics == nil || msg == nil || msg.From == nil || msg.From.ID == 0 {
+		return
+	}
+	telegramID := msg.From.ID
+	registered := false
+	if h.users != nil {
+		if exists, err := h.users.FindByTelegramID(ctx, telegramID); err == nil {
+			registered = exists
+		}
+	}
+	h.analytics.Track(ctx, analyticsuc.EventInput{
+		TelegramID:    &telegramID,
+		AnonymousID:   fmt.Sprintf("tg:%d", telegramID),
+		Source:        "bot",
+		EventName:     "bot_start",
+		EventCategory: "acquisition",
+		Status:        "success",
+		StartParam:    payload,
+		Properties: map[string]any{
+			"is_registered": registered,
+			"username":      msg.From.Username,
+			"chat_id":       msg.Chat.ID,
+		},
+	})
+}
+
+func (h *BotUpdates) maybeNotifyBotStart(ctx context.Context, msg *Message) {
 	if h.adminNotifier == nil || msg == nil || msg.From == nil || msg.From.ID == 0 {
 		return
 	}
@@ -114,7 +149,7 @@ func (h *BotUpdates) maybeNotifyNewUser(ctx context.Context, msg *Message) {
 			return
 		}
 	}
-	h.adminNotifier.NotifyNewUser(ctx, AdminActor{
+	h.adminNotifier.NotifyBotStart(ctx, AdminActor{
 		TelegramID: msg.From.ID,
 		Username:   msg.From.Username,
 		FirstName:  msg.From.FirstName,

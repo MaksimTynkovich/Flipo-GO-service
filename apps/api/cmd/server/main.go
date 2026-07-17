@@ -286,6 +286,7 @@ func main() {
 			return userRepo.FindByTelegramID(ctx, telegramID)
 		},
 	})
+	botUpdates.SetAnalytics(analyticsSvc)
 	botUpdates.SetWebAppURLResolver(func(ctx context.Context) string {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {

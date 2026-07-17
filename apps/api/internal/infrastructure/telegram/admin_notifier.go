@@ -15,8 +15,9 @@ type AdminNotifier struct {
 	api      *BotAPI
 	adminIDs []int64
 	adminSet map[int64]struct{}
-	// Dedupes "new user" alerts across /start + first auth in the same process.
-	newUserSeen sync.Map
+	// Dedupes first-time alerts within a single process.
+	newUserSeen  sync.Map
+	botStartSeen sync.Map
 }
 
 func NewAdminNotifier(api *BotAPI, adminIDs []int64) *AdminNotifier {
@@ -72,7 +73,20 @@ func (n *AdminNotifier) NotifyNewUser(ctx context.Context, actor AdminActor) {
 	if _, loaded := n.newUserSeen.LoadOrStore(actor.TelegramID, struct{}{}); loaded {
 		return
 	}
-	n.notify(ctx, actor, fmt.Sprintf("🆕 Новый пользователь\n%s", FormatActor(actor)))
+	n.notify(ctx, actor, fmt.Sprintf("🆕 Открыл приложение\n%s", FormatActor(actor)))
+}
+
+func (n *AdminNotifier) NotifyBotStart(ctx context.Context, actor AdminActor) {
+	if !n.Enabled() || actor.TelegramID == 0 || n.IsAdmin(actor.TelegramID) {
+		return
+	}
+	if _, loaded := n.botStartSeen.LoadOrStore(actor.TelegramID, struct{}{}); loaded {
+		return
+	}
+	n.notify(ctx, actor, fmt.Sprintf(
+		"🤖 /start в боте\n%s\nЕщё не открывал приложение",
+		FormatActor(actor),
+	))
 }
 
 func (n *AdminNotifier) NotifyDeposit(ctx context.Context, actor AdminActor, amountNanoton int64) {
@@ -134,11 +148,32 @@ func (n *AdminNotifier) NotifyStake(ctx context.Context, actor AdminActor, giftN
 }
 
 func (n *AdminNotifier) NotifyPromoActivated(ctx context.Context, actor AdminActor, code string, bonusNanoton int64) {
-	n.notify(ctx, actor, fmt.Sprintf(
-		"🏷 Промокод\n%s\nКод: %s\nБонус: %s TON",
+	// Always alert admins — including when the actor is an admin (testing / ops).
+	n.notifyAll(ctx, fmt.Sprintf(
+		"🏷 Промокод активирован\n%s\nКод: %s\nБонус: %s TON",
 		FormatActor(actor),
 		strings.TrimSpace(code),
 		formatTON(bonusNanoton),
+	))
+}
+
+func (n *AdminNotifier) NotifyPromoActivationFailed(ctx context.Context, actor AdminActor, code, reason string) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		code = "—"
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "неизвестная ошибка"
+	}
+	if len(reason) > 400 {
+		reason = reason[:400] + "…"
+	}
+	n.notifyAll(ctx, fmt.Sprintf(
+		"🏷 Попытка активации промокода\n%s\nКод: %s\nПричина отказа: %s",
+		FormatActor(actor),
+		code,
+		reason,
 	))
 }
 

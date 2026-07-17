@@ -1,4 +1,5 @@
 const EVENT_LABELS: Record<string, string> = {
+  bot_start: "/start в боте",
   session_started: "Начало сессии",
   auth_started: "Начало авторизации",
   auth_succeeded: "Успешная авторизация",
@@ -6,6 +7,7 @@ const EVENT_LABELS: Record<string, string> = {
   auth_restored: "Восстановление сессии",
   auth_failed: "Ошибка авторизации",
   auth_debug_failed: "Ошибка debug-авторизации",
+  auth_loading_timeout: "Зависание на экране входа",
   telegram_access_denied: "Вход вне Telegram",
   referral_detected: "Обнаружен реферальный код",
   referral_assigned: "Назначен реферер",
@@ -70,6 +72,7 @@ const FLOW_LABELS: Record<string, string> = {
 };
 
 const FUNNEL_LABELS: Record<string, string> = {
+  acquisition: "Вход из бота",
   onboarding: "Онбординг",
   engagement: "Вовлечённость",
   deposit: "Пополнение",
@@ -113,6 +116,7 @@ const ERROR_LABELS: Record<string, string> = {
   risk_blocked: "Заблокировано risk-проверкой",
   invalid_payload: "Некорректные данные запроса",
   telegram_auth_failed: "Ошибка Telegram-авторизации",
+  auth_loading_timeout: "Зависание на экране входа",
   browser_access_blocked: "Вход из браузера (не Telegram)",
   debug_auth_failed: "Ошибка debug-авторизации",
   bet_failed: "Ошибка ставки",

@@ -215,8 +215,18 @@ func (r *AnalyticsRepo) GetOverview(ctx context.Context, since time.Time, filter
 
 	overview.Funnels = []domain.AnalyticsFunnel{
 		{
+			Name: "acquisition",
+			Steps: r.funnelCounts(ctx, since, []string{
+				"bot_start",
+				"session_started",
+				"auth_succeeded",
+				"screen_view",
+			}),
+		},
+		{
 			Name: "onboarding",
 			Steps: r.funnelCounts(ctx, since, []string{
+				"bot_start",
 				"session_started",
 				"auth_succeeded",
 				"deposit_intent_created",
@@ -785,7 +795,7 @@ func (r *AnalyticsRepo) funnelCounts(ctx context.Context, since time.Time, names
 		var count int64
 		r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
 			Where("occurred_at >= ? AND event_name = ?", since, name).
-			Distinct("COALESCE(user_id::text, anonymous_id, session_id)").
+			Distinct("COALESCE(user_id::text, telegram_id::text, NULLIF(anonymous_id, ''), NULLIF(session_id, ''))").
 			Count(&count)
 		step := domain.AnalyticsFunnelStep{Name: name, Count: count}
 		if i > 0 && previousCount > 0 {
@@ -823,7 +833,7 @@ func (r *AnalyticsRepo) funnelMixedCounts(ctx context.Context, since time.Time, 
 			query = query.Where("event_name = ?", step.EventName)
 		}
 		var count int64
-		query.Distinct("COALESCE(user_id::text, anonymous_id, session_id)").Count(&count)
+		query.Distinct("COALESCE(user_id::text, telegram_id::text, NULLIF(anonymous_id, ''), NULLIF(session_id, ''))").Count(&count)
 		funnelStep := domain.AnalyticsFunnelStep{Name: name, Count: count}
 		if i > 0 && previousCount > 0 {
 			funnelStep.DropOffPct = float64(previousCount-count) * 100 / float64(previousCount)

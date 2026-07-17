@@ -28,6 +28,7 @@ func (h *PromoHandler) Activate(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "promo", "promo_activated", "error", "promo_required", "Введите промокод", nil)
+		h.promo.NotifyActivationFailed(c.Request.Context(), userID, req.Code, "промокод не указан")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Введите промокод",
 			"code":  "promo_required",
