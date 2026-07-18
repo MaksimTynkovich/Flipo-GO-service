@@ -81,8 +81,9 @@ func (n *BotNotifier) SendWheelBonusSpins(ctx context.Context, telegramUserID in
 	if payload := strings.TrimSpace(opts.StartPayload); payload == "" {
 		opts.StartPayload = "wheel"
 	}
-	// Prefer startapp=wheel via deep link (OpenAppButtonMarkup). Do not rewrite
-	// HTTPS into /games/wheel — that forces web_app open without mode=fullscreen.
+	if webURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/"); webURL != "" && !isTelegramDeepLink(webURL) {
+		opts.WebAppURL = webURL + "/games/wheel"
+	}
 	markup := OpenAppButtonMarkup(opts)
 	return n.api.sendMessage(ctx, telegramUserID, text, markup, "")
 }

@@ -113,7 +113,7 @@ export default function TelegramSection() {
 
             <AdminField
               label="WebApp URL"
-              hint="Кнопка в рассылке. Лучше https://t.me/ваш_бот/app — откроется сразу fullscreen. HTTPS (flipo.rest) — без fullscreen на мобилке. Если пусто — BOT_USERNAME + WEBAPP_SHORT_NAME."
+              hint="Кнопка в рассылке. Можно указать https://t.me/ваш_бот/app или прямой HTTPS. Если пусто — возьмём ссылку из BOT_USERNAME и WEBAPP_SHORT_NAME."
             >
               <input
                 className="input-field"

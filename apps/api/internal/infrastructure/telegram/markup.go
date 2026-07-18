@@ -23,16 +23,11 @@ func OpenAppButtonMarkup(opts OpenAppButtonOptions) map[string]any {
 
 	button := map[string]any{"text": buttonText}
 
-	// Prefer Direct Link Mini App (tg://resolve?mode=fullscreen).
-	// That opens already fullscreen on mobile WITHOUT JS requestFullscreen
-	// (which relaunches/freezes WebViews on many Android/iOS Telegram builds).
-	// Fall back to web_app HTTPS only when bot short-name is not configured.
-	if deep := miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, opts.StartPayload); deep != "" {
-		button["url"] = deep
-	} else if appURL := resolveFallbackAppURL(opts); appURL != "" {
+	if appURL := resolveOpenAppURL(opts); appURL != "" {
 		if isTelegramDeepLink(appURL) {
 			// Never put https://t.me/bot/app into url buttons: on Android/iOS Telegram
 			// often opens the Mini App twice (direct-link handler + url navigation).
+			// tg://resolve opens a single instance.
 			button["url"] = toTgResolveDeepLink(appURL, opts.StartPayload)
 		} else {
 			button["web_app"] = map[string]string{"url": appURL}
@@ -53,22 +48,26 @@ func WebAppButtonMarkup(webAppURL, buttonText string) map[string]any {
 	})
 }
 
-func resolveFallbackAppURL(opts OpenAppButtonOptions) string {
-	customURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/")
-	if customURL == "" {
-		return ""
-	}
-	if isTelegramDeepLink(customURL) {
-		return customURL
-	}
-	if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
-		sep := "?"
-		if strings.Contains(customURL, "?") {
-			sep = "&"
+func resolveOpenAppURL(opts OpenAppButtonOptions) string {
+	if customURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/"); customURL != "" {
+		if !isTelegramDeepLink(customURL) {
+			if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
+				sep := "?"
+				if strings.Contains(customURL, "?") {
+					sep = "&"
+				}
+				return customURL + sep + "tgWebAppStartParam=" + url.QueryEscape(payload)
+			}
+			return customURL
 		}
-		return customURL + sep + "tgWebAppStartParam=" + url.QueryEscape(payload)
+		// Admin pasted a t.me / telegram.me Mini App link — prefer bot short-name resolve.
+		if deep := miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, opts.StartPayload); deep != "" {
+			return deep
+		}
+		return toTgResolveDeepLink(customURL, opts.StartPayload)
 	}
-	return customURL
+
+	return miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, opts.StartPayload)
 }
 
 func miniAppDeepLink(botUsername, shortName, startPayload string) string {
@@ -84,7 +83,7 @@ func buildTgResolve(botUsername, shortName, startPayload string) string {
 	q := url.Values{}
 	q.Set("domain", botUsername)
 	q.Set("appname", shortName)
-	// Open already in fullscreen so clients don't need JS requestFullscreen.
+	// Open already in fullscreen so clients don't expand → relaunch.
 	q.Set("mode", "fullscreen")
 	if payload := strings.TrimSpace(startPayload); payload != "" {
 		q.Set("startapp", payload)
@@ -97,7 +96,7 @@ func buildTgResolve(botUsername, shortName, startPayload string) string {
 func toTgResolveDeepLink(appURL, startPayload string) string {
 	trimmed := strings.TrimSpace(appURL)
 	if strings.HasPrefix(trimmed, "tg://resolve?") {
-		return ensureFullscreenMode(trimmed)
+		return trimmed
 	}
 
 	normalized := toTmeDeepLink(trimmed)
@@ -122,19 +121,6 @@ func toTgResolveDeepLink(appURL, startPayload string) string {
 		}
 	}
 	return buildTgResolve(segs[0], segs[1], payload)
-}
-
-func ensureFullscreenMode(tgResolve string) string {
-	u, err := url.Parse(tgResolve)
-	if err != nil {
-		return tgResolve
-	}
-	q := u.Query()
-	if q.Get("mode") == "" {
-		q.Set("mode", "fullscreen")
-		u.RawQuery = q.Encode()
-	}
-	return u.String()
 }
 
 func isTelegramDeepLink(appURL string) bool {
