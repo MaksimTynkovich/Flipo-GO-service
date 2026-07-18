@@ -80,6 +80,7 @@ func isExpectedClientError(err error, status int) bool {
 		domain.ErrTransferNotFound,
 		domain.ErrDuplicateRequest,
 		domain.ErrAlreadyJoined,
+		domain.ErrBetBelowMinimum,
 		domain.ErrBetLimitExceeded,
 		domain.ErrDailyWinCap,
 		domain.ErrUserBanned,

@@ -109,7 +109,10 @@ func (s *Service) ValidateBet(ctx context.Context, in BetCheckInput) error {
 	if err != nil {
 		return err
 	}
-	if in.Amount < cfg.MinBetNanoton || in.Amount > cfg.MaxBetNanoton {
+	if in.Amount < cfg.MinBetNanoton {
+		return domain.ErrBetBelowMinimum
+	}
+	if in.Amount > cfg.MaxBetNanoton {
 		return domain.ErrBetLimitExceeded
 	}
 	if in.MaxPayout > cfg.MaxPayoutNanoton {

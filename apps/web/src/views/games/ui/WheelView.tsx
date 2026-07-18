@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronRight, Gift, Infinity as InfinityIcon, UserRoundPlus, Users, X } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { PrizeWheel } from "@/components/games/PrizeWheel";
+import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
 import { WheelWinModal } from "@/components/games/WheelWinModal";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -164,6 +165,7 @@ export function WheelView() {
   const [resetMs, setResetMs] = useState(0);
   const [winBurst, setWinBurst] = useState<string | null>(null);
   const [prizesOpen, setPrizesOpen] = useState(false);
+  const [channelSheetOpen, setChannelSheetOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -307,9 +309,8 @@ export function WheelView() {
       setResetMs(msUntilReset(fresh.next_daily_reset_at));
       if (!fresh.channel_subscribed) {
         setSpinning(false);
-        showToast({ variant: "error", title: "Нужна подписка на канал" });
-        openChannel();
-        haptics.notificationOccurred("error");
+        setChannelSheetOpen(true);
+        haptics.notificationOccurred("warning");
         return;
       }
       if (!fresh.can_spin && !fresh.unlimited_spins && !user?.is_admin) {
@@ -330,8 +331,7 @@ export function WheelView() {
       setWheelPrizeBalanceHold(false);
       takePendingWheelPrizeBalance();
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
-        showToast({ variant: "error", title: "Нужна подписка на канал" });
-        openChannel();
+        setChannelSheetOpen(true);
       } else {
         showToast({
           variant: "error",
@@ -493,6 +493,15 @@ export function WheelView() {
             </>
           )}
 
+        {!canInviteForSpin ? (
+          <aside className="wheel-tip" aria-label="Совет">
+            <Users className="wheel-tip__icon" strokeWidth={2} aria-hidden />
+            <p className="wheel-tip__text">
+              По статистике каждый приглашённый реферал увеличивает шанс крупного выигрыша
+            </p>
+          </aside>
+        ) : null}
+
           {(prizeChips.length > 0 || status?.channel_subscribed || user) && !loading ? (
             <nav className="wheel-menu" aria-label="Дополнительно">
               {user ? (
@@ -527,15 +536,6 @@ export function WheelView() {
             </nav>
           ) : null}
         </div>
-
-        {canInviteForSpin ? (
-          <aside className="wheel-tip" aria-label="Совет">
-            <Users className="wheel-tip__icon" strokeWidth={2} aria-hidden />
-            <p className="wheel-tip__text">
-              По статистике каждый приглашённый реферал увеличивает шанс крупного выигрыша
-            </p>
-          </aside>
-        ) : null}
 
         {topWins.length > 0 && !loading ? (
           <section className="wheel-feed" aria-label="Топ выигрышей за 24 часа">
@@ -581,6 +581,18 @@ export function WheelView() {
           </section>
         ) : null}
       </div>
+
+      {channelSheetOpen ? (
+        <WheelChannelSheet
+          channel={channel}
+          channelUrl={channelUrl}
+          onClose={() => {
+            setChannelSheetOpen(false);
+            void load();
+          }}
+          onOpenChannel={openChannel}
+        />
+      ) : null}
 
       {prizesOpen ? (
         <ModalOverlay

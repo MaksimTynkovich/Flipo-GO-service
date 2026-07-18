@@ -18,6 +18,7 @@ var (
 	ErrDuplicateRequest  = errors.New("повторный запрос")
 	ErrAlreadyJoined     = errors.New("вы уже в этой комнате")
 	ErrChainUnavailable  = errors.New("проверка сети TON недоступна")
+	ErrBetBelowMinimum   = errors.New("ставка ниже минимума")
 	ErrBetLimitExceeded  = errors.New("превышен лимит ставки")
 	ErrDailyWinCap       = errors.New("достигнут дневной лимит выигрыша")
 	ErrUserBanned        = errors.New("аккаунт заблокирован")

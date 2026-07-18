@@ -666,8 +666,12 @@ export type MarketListing = {
   };
 };
 
-export async function getMarketListings() {
-  return api<MarketListing[]>("/api/v1/market/listings");
+export async function getMarketListings(params?: { limit?: number; offset?: number }) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return api<MarketListing[]>(`/api/v1/market/listings${qs ? `?${qs}` : ""}`);
 }
 
 export async function getMarketListing(id: string) {

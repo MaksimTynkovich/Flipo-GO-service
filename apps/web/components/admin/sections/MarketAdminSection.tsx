@@ -105,7 +105,9 @@ export default function MarketAdminSection() {
   async function loadListings() {
     setLoading(true);
     try {
-      const data = await loadCached("admin:market:listings", getMarketListings);
+      const data = await loadCached("admin:market:listings", () =>
+        getMarketListings({ limit: 100, offset: 0 }),
+      );
       setListings(data);
       setDraftPrices(
         Object.fromEntries(data.map((listing) => [listing.id, nanotonToTonInput(listing.price_nanoton)])),

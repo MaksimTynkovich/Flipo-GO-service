@@ -397,6 +397,11 @@ func writeGameBetError(c *gin.Context, err error) {
 			"error": "Ставки больше не принимаются.",
 			"code":  "round_not_open",
 		})
+	case errors.Is(err, domain.ErrBetBelowMinimum):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Минимальная сумма ставки — 0.1 TON.",
+			"code":  "bet_below_minimum",
+		})
 	case errors.Is(err, domain.ErrBetLimitExceeded):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Ставка превышает лимит.",
