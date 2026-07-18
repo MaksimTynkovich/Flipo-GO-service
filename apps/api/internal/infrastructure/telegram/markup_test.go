@@ -61,7 +61,7 @@ func TestOpenAppButtonMarkupCustomText(t *testing.T) {
 
 func TestOpenAppButtonMarkupTelegramDeepLink(t *testing.T) {
 	markup := OpenAppButtonMarkup(OpenAppButtonOptions{
-		WebAppURL: "https://t.me/flipo_bot/app",
+		WebAppURL: "https://telegram.me/flipo_bot/app",
 	})
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]

@@ -172,6 +172,7 @@ func main() {
 		StartPayload:    "wheel",
 	})
 	wheelSvc.SetUserNotifier(wheelBot)
+	wheelSvc.SetAdminNotifier(adminNotifier)
 	referralSvc.SetWheelBonusGranter(wheelSvc)
 	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)

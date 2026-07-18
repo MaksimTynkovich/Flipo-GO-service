@@ -219,12 +219,21 @@ func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload string) m
 }
 
 func (h *BotUpdates) resolvedWebAppURL(ctx context.Context) string {
+	// Prefer a real HTTPS Mini App URL for web_app buttons. Deep links (t.me/…)
+	// must use url buttons and can open the app twice on some Telegram clients.
+	candidates := make([]string, 0, 2)
 	if h.webAppURLResolver != nil {
-		if url := strings.TrimSpace(h.webAppURLResolver(ctx)); url != "" {
-			return strings.TrimRight(url, "/")
-		}
+		candidates = append(candidates, h.webAppURLResolver(ctx))
 	}
-	return h.webAppURL
+	candidates = append(candidates, h.webAppURL)
+	for _, raw := range candidates {
+		url := strings.TrimRight(strings.TrimSpace(raw), "/")
+		if url == "" || isTelegramDeepLink(url) {
+			continue
+		}
+		return url
+	}
+	return ""
 }
 
 func (h *BotUpdates) resolvedButtonText(ctx context.Context) string {
