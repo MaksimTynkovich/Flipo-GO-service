@@ -15,9 +15,10 @@ function CrashLiveMult() {
 
     const tick = (now: number) => {
       const t = ((now - t0) % CYCLE_MS) / CYCLE_MS;
-      // Slow start, then climbs like a real crash round — reset before "crash"
-      const climbed = 1 + Math.pow(t, 1.45) * 4.2;
+      // Slow start, then climbs 1.00× → 5.00× like a real crash round.
+      const climbed = 1 + Math.pow(t, 1.45) * 4;
       setMult(climbed);
+      raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
