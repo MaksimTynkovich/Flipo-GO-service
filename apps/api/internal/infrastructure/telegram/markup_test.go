@@ -1,6 +1,9 @@
 package telegram
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestWebAppButtonMarkup(t *testing.T) {
 	markup := WebAppButtonMarkup("https://example.com", "")
@@ -42,8 +45,12 @@ func TestOpenAppButtonMarkupMiniAppFallback(t *testing.T) {
 	})
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
-	if got := btn["url"]; got != "https://t.me/flipo_bot/app" {
+	got, _ := btn["url"].(string)
+	if got != "tg://resolve?appname=app&domain=flipo_bot" {
 		t.Fatalf("unexpected url: %v", got)
+	}
+	if _, ok := btn["web_app"]; ok {
+		t.Fatal("expected url button, not web_app")
 	}
 }
 
@@ -61,14 +68,40 @@ func TestOpenAppButtonMarkupCustomText(t *testing.T) {
 
 func TestOpenAppButtonMarkupTelegramDeepLink(t *testing.T) {
 	markup := OpenAppButtonMarkup(OpenAppButtonOptions{
-		WebAppURL: "https://telegram.me/flipo_bot/app",
+		WebAppURL: "https://t.me/flipo_bot/app?startapp=wheel",
 	})
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
-	if got := btn["url"]; got != "https://t.me/flipo_bot/app" {
-		t.Fatalf("unexpected url: %v", got)
+	got, _ := btn["url"].(string)
+	if !strings.HasPrefix(got, "tg://resolve?") {
+		t.Fatalf("expected tg://resolve url, got %v", got)
+	}
+	if !strings.Contains(got, "domain=flipo_bot") || !strings.Contains(got, "appname=app") {
+		t.Fatalf("unexpected resolve params: %v", got)
+	}
+	if !strings.Contains(got, "startapp=wheel") {
+		t.Fatalf("expected startapp=wheel, got %v", got)
 	}
 	if _, ok := btn["web_app"]; ok {
 		t.Fatal("expected url button, not web_app")
+	}
+}
+
+func TestOpenAppButtonMarkupHttpsPreferredOverDeepLink(t *testing.T) {
+	markup := OpenAppButtonMarkup(OpenAppButtonOptions{
+		WebAppURL:       "https://flipo.example",
+		BotUsername:     "flipo_bot",
+		WebAppShortName: "app",
+		StartPayload:    "wheel",
+		ButtonText:      "Играть",
+	})
+	row := markup["inline_keyboard"].([][]map[string]any)[0]
+	btn := row[0]
+	webApp, ok := btn["web_app"].(map[string]string)
+	if !ok {
+		t.Fatalf("expected web_app button, got %#v", btn)
+	}
+	if webApp["url"] != "https://flipo.example?tgWebAppStartParam=wheel" {
+		t.Fatalf("unexpected web_app url: %s", webApp["url"])
 	}
 }

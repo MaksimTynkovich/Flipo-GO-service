@@ -25,7 +25,10 @@ func OpenAppButtonMarkup(opts OpenAppButtonOptions) map[string]any {
 
 	if appURL := resolveOpenAppURL(opts); appURL != "" {
 		if isTelegramDeepLink(appURL) {
-			button["url"] = toTmeDeepLink(appURL)
+			// Never put https://t.me/bot/app into url buttons: on Android/iOS Telegram
+			// often opens the Mini App twice (direct-link handler + url navigation).
+			// tg://resolve opens a single instance.
+			button["url"] = toTgResolveDeepLink(appURL, opts.StartPayload)
 		} else {
 			button["web_app"] = map[string]string{"url": appURL}
 		}
@@ -47,8 +50,6 @@ func WebAppButtonMarkup(webAppURL, buttonText string) map[string]any {
 
 func resolveOpenAppURL(opts OpenAppButtonOptions) string {
 	if customURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/"); customURL != "" {
-		// Deep links cannot be used as web_app.url — fall through to bot short-name link
-		// when we need startapp, or keep as url-button deep link below.
 		if !isTelegramDeepLink(customURL) {
 			if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
 				sep := "?"
@@ -59,15 +60,11 @@ func resolveOpenAppURL(opts OpenAppButtonOptions) string {
 			}
 			return customURL
 		}
-		// If admin pasted a telegram.me / t.me Mini App link as WebAppURL, still honour
-		// start payload via the bot short-name deep link when possible.
-		if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
-			if deep := miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, payload); deep != "" {
-				return deep
-			}
-			return appendStartApp(toTmeDeepLink(customURL), payload)
+		// Admin pasted a t.me / telegram.me Mini App link — prefer bot short-name resolve.
+		if deep := miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, opts.StartPayload); deep != "" {
+			return deep
 		}
-		return toTmeDeepLink(customURL)
+		return toTgResolveDeepLink(customURL, opts.StartPayload)
 	}
 
 	return miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, opts.StartPayload)
@@ -79,33 +76,60 @@ func miniAppDeepLink(botUsername, shortName, startPayload string) string {
 	if botUsername == "" || shortName == "" {
 		return ""
 	}
-	appURL := "https://t.me/" + botUsername + "/" + shortName
-	return appendStartApp(appURL, startPayload)
+	return buildTgResolve(botUsername, shortName, startPayload)
 }
 
-func appendStartApp(appURL, startPayload string) string {
+func buildTgResolve(botUsername, shortName, startPayload string) string {
+	q := url.Values{}
+	q.Set("domain", botUsername)
+	q.Set("appname", shortName)
+	if payload := strings.TrimSpace(startPayload); payload != "" {
+		q.Set("startapp", payload)
+	}
+	return "tg://resolve?" + q.Encode()
+}
+
+// toTgResolveDeepLink converts https://t.me/bot/app(?startapp=) into tg://resolve?…
+// so inline url buttons do not double-open the Mini App on mobile.
+func toTgResolveDeepLink(appURL, startPayload string) string {
+	trimmed := strings.TrimSpace(appURL)
+	if strings.HasPrefix(trimmed, "tg://resolve?") {
+		return trimmed
+	}
+
+	normalized := toTmeDeepLink(trimmed)
+	if !strings.HasPrefix(normalized, "https://t.me/") {
+		return normalized
+	}
+
+	rest := strings.TrimPrefix(normalized, "https://t.me/")
+	pathPart, queryPart, hasQuery := strings.Cut(rest, "?")
+	pathPart = strings.Trim(pathPart, "/")
+	segs := strings.Split(pathPart, "/")
+	if len(segs) < 2 || segs[0] == "" || segs[1] == "" {
+		return normalized
+	}
+
 	payload := strings.TrimSpace(startPayload)
-	if payload == "" {
-		return appURL
+	if hasQuery {
+		if v, err := url.ParseQuery(queryPart); err == nil {
+			if start := strings.TrimSpace(v.Get("startapp")); start != "" && payload == "" {
+				payload = start
+			}
+		}
 	}
-	if strings.Contains(appURL, "startapp=") {
-		return appURL
-	}
-	sep := "?"
-	if strings.Contains(appURL, "?") {
-		sep = "&"
-	}
-	return appURL + sep + "startapp=" + url.QueryEscape(payload)
+	return buildTgResolve(segs[0], segs[1], payload)
 }
 
 func isTelegramDeepLink(appURL string) bool {
-	return strings.HasPrefix(appURL, "https://t.me/") ||
+	return strings.HasPrefix(appURL, "tg://resolve?") ||
+		strings.HasPrefix(appURL, "https://t.me/") ||
 		strings.HasPrefix(appURL, "http://t.me/") ||
 		strings.HasPrefix(appURL, "https://telegram.me/") ||
 		strings.HasPrefix(appURL, "http://telegram.me/")
 }
 
-// toTmeDeepLink normalizes telegram.me → t.me (canonical host for Mini App links).
+// toTmeDeepLink normalizes telegram.me → t.me for parsing (not for url buttons).
 func toTmeDeepLink(appURL string) string {
 	switch {
 	case strings.HasPrefix(appURL, "https://telegram.me/"):

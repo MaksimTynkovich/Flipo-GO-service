@@ -160,7 +160,12 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 
 func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings) map[string]any {
 	webAppURL := strings.TrimSpace(settings.WebAppURL)
-	if webAppURL == "" {
+	// Deep links must not be used as web_app.url; prefer HTTPS from env.
+	if webAppURL == "" || strings.HasPrefix(webAppURL, "https://t.me/") ||
+		strings.HasPrefix(webAppURL, "http://t.me/") ||
+		strings.HasPrefix(webAppURL, "https://telegram.me/") ||
+		strings.HasPrefix(webAppURL, "http://telegram.me/") ||
+		strings.HasPrefix(webAppURL, "tg://") {
 		webAppURL = s.envWebAppURL
 	}
 	return telegram.OpenAppButtonMarkup(telegram.OpenAppButtonOptions{
