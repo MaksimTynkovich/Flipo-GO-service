@@ -162,7 +162,7 @@ export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTe
   }
 }
 
-/** Expand the Mini App on cold open (fullscreen is opt-in — see enableTelegramFullscreen). */
+/** Expand the Mini App and enter fullscreen on mobile before first paint when possible. */
 export function initTelegramWebApp() {
   const webApp = getTelegramWebApp();
   if (!webApp) {
@@ -178,9 +178,7 @@ export function initTelegramWebApp() {
     } catch {
       // Older clients without Bot API 8.0+ orientation lock.
     }
-    // Prefer expand() on cold open. Automatic requestFullscreen relaunches the
-    // WebView on some Android/iOS Telegram builds; call enableTelegramFullscreen
-    // only after the app is stable if true fullscreen is required.
+    enableTelegramFullscreen();
   }
 
   const syncSafeArea = () => applyTelegramSafeAreaToDocument();
@@ -190,23 +188,81 @@ export function initTelegramWebApp() {
   [50, 150, 400, 800].forEach((delay) => window.setTimeout(syncSafeArea, delay));
 }
 
+const FULLSCREEN_SESSION_KEY = "flipo_tg_fullscreen";
+
+/** Once per JS realm — bootstrap + initTelegramWebApp both call enable. */
+let fullscreenRequestedThisDocument = false;
+
 /**
  * Enter Telegram fullscreen on mobile. Safe to call multiple times.
- * Prefer calling from the early bootstrap / initTelegramWebApp — not after
- * a delayed auth splash (that shows expand first, then relaunches).
+ * Call as early as possible (bootstrap / initTelegramWebApp) — not after the
+ * auth splash, or the half-sheet → fullscreen transition looks like a double open.
+ *
+ * Some mobile Telegram builds relaunch the WebView on the first requestFullscreen.
+ * We mark the attempt in sessionStorage so the post-relaunch load does not request
+ * again (that loop felt like "opens only on the second try").
  */
 export function enableTelegramFullscreen() {
   const webApp = getTelegramWebApp();
   if (!webApp || !isTelegramMobilePlatform(webApp.platform)) {
     return;
   }
-  try {
-    if (!webApp.isFullscreen) {
-      webApp.requestFullscreen?.();
+
+  if (webApp.isFullscreen) {
+    try {
+      sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "done");
+    } catch {
+      // ignore
     }
+    applyTelegramSafeAreaToDocument();
+    return;
+  }
+
+  if (!webApp.requestFullscreen) {
+    applyTelegramSafeAreaToDocument();
+    return;
+  }
+
+  if (fullscreenRequestedThisDocument) {
+    applyTelegramSafeAreaToDocument();
+    return;
+  }
+
+  try {
+    // Fresh document after a fullscreen relaunch — do not request again.
+    if (sessionStorage.getItem(FULLSCREEN_SESSION_KEY) === "pending") {
+      sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "done");
+      applyTelegramSafeAreaToDocument();
+      return;
+    }
+  } catch {
+    // sessionStorage unavailable
+  }
+
+  fullscreenRequestedThisDocument = true;
+  try {
+    sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "pending");
+  } catch {
+    // ignore
+  }
+
+  try {
+    webApp.requestFullscreen();
   } catch {
     // Older Telegram clients only support expand().
   }
+
+  webApp.onEvent?.("fullscreenChanged", () => {
+    if (webApp.isFullscreen) {
+      try {
+        sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "done");
+      } catch {
+        // ignore
+      }
+    }
+    applyTelegramSafeAreaToDocument();
+  });
+
   applyTelegramSafeAreaToDocument();
 }
 

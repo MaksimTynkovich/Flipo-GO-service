@@ -94,8 +94,22 @@ const tgThemeBootstrap = `
       try {
         webApp.lockOrientation?.();
       } catch (_) {}
-      // Do not requestFullscreen here — on many mobile Telegram clients a cold-open
-      // fullscreen call relaunches the WebView ("opens only on the second try").
+      // Fullscreen before React paints — avoids half-sheet → fullscreen "double open".
+      // sessionStorage guard in enableTelegramFullscreen prevents relaunch loops.
+      try {
+        if (webApp.isFullscreen) {
+          try { sessionStorage.setItem("flipo_tg_fullscreen", "done"); } catch (_) {}
+        } else if (webApp.requestFullscreen) {
+          var fsState = null;
+          try { fsState = sessionStorage.getItem("flipo_tg_fullscreen"); } catch (_) {}
+          if (fsState === "pending") {
+            try { sessionStorage.setItem("flipo_tg_fullscreen", "done"); } catch (_) {}
+          } else {
+            try { sessionStorage.setItem("flipo_tg_fullscreen", "pending"); } catch (_) {}
+            webApp.requestFullscreen();
+          }
+        }
+      } catch (_) {}
     }
     const sumInsets = (content, safe) => ({
       top: (content?.top || 0) + (safe?.top || 0),
