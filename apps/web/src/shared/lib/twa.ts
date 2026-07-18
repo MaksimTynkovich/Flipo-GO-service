@@ -162,7 +162,7 @@ export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTe
   }
 }
 
-/** Expand the Mini App viewport (legacy max height). Does not enter fullscreen. */
+/** Expand the Mini App and enter fullscreen on mobile (before first paint when possible). */
 export function initTelegramWebApp() {
   const webApp = getTelegramWebApp();
   if (!webApp) {
@@ -178,6 +178,7 @@ export function initTelegramWebApp() {
     } catch {
       // Older clients without Bot API 8.0+ orientation lock.
     }
+    enableTelegramFullscreen();
   }
 
   const syncSafeArea = () => applyTelegramSafeAreaToDocument();
@@ -188,9 +189,9 @@ export function initTelegramWebApp() {
 }
 
 /**
- * Request Telegram fullscreen mode. Avoid on cold open — after expand() many
- * mobile clients re-launch the WebView (looks like a second Mini App open).
- * Prefer BotFather / deep-link `mode=fullscreen`, or call only on user gesture.
+ * Enter Telegram fullscreen on mobile. Safe to call multiple times.
+ * Prefer calling from the early bootstrap / initTelegramWebApp — not after
+ * a delayed auth splash (that shows expand first, then relaunches).
  */
 export function enableTelegramFullscreen() {
   const webApp = getTelegramWebApp();

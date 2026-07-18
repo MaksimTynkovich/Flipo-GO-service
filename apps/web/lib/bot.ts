@@ -24,13 +24,14 @@ export function depositBotMention(): string {
   return `@${DEPOSIT_BOT_USERNAME}`;
 }
 
-/** Direct link to open the mini app inside Telegram. */
+/** Direct link to open the mini app inside Telegram (fullscreen on mobile). */
 export function miniAppTelegramUrl(startApp?: string): string {
   const base = `https://t.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}`;
-  if (!startApp?.trim()) {
-    return base;
+  const params = new URLSearchParams({ mode: "fullscreen" });
+  if (startApp?.trim()) {
+    params.set("startapp", startApp.trim());
   }
-  return `${base}?startapp=${encodeURIComponent(startApp.trim())}`;
+  return `${base}?${params.toString()}`;
 }
 
 /** Referral deep link (startapp passes ref code into Telegram initData.start_param). */
@@ -44,5 +45,5 @@ export function referralTelegramUrl(referrerTelegramId: number | string): string
       ? numericId.toString(36).toLowerCase()
       : String(referrerTelegramId).trim().toLowerCase();
   const payload = `ref_${referralCode}`;
-  return `https://t.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}?startapp=${payload}`;
+  return miniAppTelegramUrl(payload);
 }

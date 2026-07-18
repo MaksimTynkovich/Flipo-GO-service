@@ -162,9 +162,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         setReady(true);
         markBootStage("app_ready");
-        // Do not call requestFullscreen on cold open: on iOS/Android Telegram
-        // expands the Mini App, then fullscreen re-launches the WebView — looks
-        // like a double open. expand() in initTelegramWebApp is enough.
+        // Fullscreen is requested in the early bootstrap / initTelegramWebApp
+        // (before paint). Do not request it again after the splash — that
+        // relaunches the WebView and looks like a double open.
       }
     }
     init();

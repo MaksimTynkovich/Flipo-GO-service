@@ -83,6 +83,8 @@ func buildTgResolve(botUsername, shortName, startPayload string) string {
 	q := url.Values{}
 	q.Set("domain", botUsername)
 	q.Set("appname", shortName)
+	// Open already in fullscreen so clients don't expand → relaunch.
+	q.Set("mode", "fullscreen")
 	if payload := strings.TrimSpace(startPayload); payload != "" {
 		q.Set("startapp", payload)
 	}

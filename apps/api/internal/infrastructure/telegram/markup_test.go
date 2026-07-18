@@ -46,7 +46,7 @@ func TestOpenAppButtonMarkupMiniAppFallback(t *testing.T) {
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
 	got, _ := btn["url"].(string)
-	if got != "tg://resolve?appname=app&domain=flipo_bot" {
+	if got != "tg://resolve?appname=app&domain=flipo_bot&mode=fullscreen" {
 		t.Fatalf("unexpected url: %v", got)
 	}
 	if _, ok := btn["web_app"]; ok {
@@ -81,6 +81,9 @@ func TestOpenAppButtonMarkupTelegramDeepLink(t *testing.T) {
 	}
 	if !strings.Contains(got, "startapp=wheel") {
 		t.Fatalf("expected startapp=wheel, got %v", got)
+	}
+	if !strings.Contains(got, "mode=fullscreen") {
+		t.Fatalf("expected mode=fullscreen, got %v", got)
 	}
 	if _, ok := btn["web_app"]; ok {
 		t.Fatal("expected url button, not web_app")

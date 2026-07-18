@@ -94,8 +94,14 @@ const tgThemeBootstrap = `
       try {
         webApp.lockOrientation?.();
       } catch (_) {}
+      // Request fullscreen before React paints so the user never sees a
+      // half-sheet → fullscreen relaunch (that looked like a double open).
+      try {
+        if (!webApp.isFullscreen) {
+          webApp.requestFullscreen?.();
+        }
+      } catch (_) {}
     }
-    // Do not requestFullscreen here — cold-open fullscreen re-launches the WebView on mobile.
     const sumInsets = (content, safe) => ({
       top: (content?.top || 0) + (safe?.top || 0),
       bottom: (content?.bottom || 0) + (safe?.bottom || 0),
