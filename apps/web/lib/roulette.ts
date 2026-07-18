@@ -9,6 +9,8 @@ export const SEGMENT_ANGLE = 360 / ROULETTE_SEGMENTS;
 export const SPIN_DURATION_MS = 12_000;
 /** Пауза после остановки колеса до объявления результата (0 = сразу) */
 export const RESULT_PAUSE_MS = 0;
+/** Must match backend ROULETTE_RESULT_DISPLAY_SECONDS — used for HTTP resync */
+export const RESULT_DISPLAY_MS = 3_000;
 /** Доля половины сектора — случайное смещение остановки внутри ячейки */
 export const SEGMENT_JITTER_RATIO = 0.38;
 

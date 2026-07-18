@@ -5,6 +5,19 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 const NGROK_API = API_URL.includes("ngrok-free.app") || API_URL.includes("ngrok.io");
 
+/**
+ * Browser game/user WS must hit the Mini App origin so Next rewrites `/ws` → API.
+ * Hard-coded NEXT_PUBLIC_WS_URL (or localhost fallback) bypasses that and dies behind CF.
+ */
+export function resolvePublicWsUrl(): string {
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}`;
+  }
+  const fromEnv = (process.env.NEXT_PUBLIC_WS_URL || "").trim().replace(/\/$/, "");
+  return fromEnv || "ws://localhost:8080";
+}
+
 export function resolveAsset(url?: string | null): string | undefined {
   if (!url) return url ?? undefined;
   if (/^(https?:|data:|blob:)/i.test(url)) return url;

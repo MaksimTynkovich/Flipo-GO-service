@@ -21,7 +21,7 @@ import {
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
-import { numberColor, RouletteRoundState } from "@/lib/roulette";
+import { numberColor, RESULT_DISPLAY_MS, RouletteRoundState } from "@/lib/roulette";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
@@ -87,24 +87,14 @@ function RoulettePageContent() {
     return disconnect;
   }, [loadHistory, loadRoundBets]);
 
-  // HTTP fallback when WS drops mid-round: spin starts only on `phase: spinning`,
-  // and result/next round only on later ticks. Poll after deadline until phase moves.
+  // HTTP fallback when WS drops mid-round. Spin/result/next-betting only arrive on WS
+  // ticks — without polling after each deadline the UI freezes until a full refresh.
   useEffect(() => {
     if (!state?.phase) return;
 
-    const endRaw =
-      state.phase === "betting"
-        ? state.ends_at
-        : state.phase === "spinning"
-          ? state.spin_ends_at || state.ends_at
-          : undefined;
-    if (!endRaw) return;
-
-    const endsAtMs = new Date(endRaw).getTime();
-    if (!Number.isFinite(endsAtMs)) return;
-
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
 
     const poll = () => {
       getRouletteState()
@@ -114,19 +104,37 @@ function RoulettePageContent() {
         .catch(() => {});
     };
 
-    const msUntilEnd = endsAtMs - Date.now();
-    const startTimer = window.setTimeout(
-      () => {
-        if (cancelled) return;
-        poll();
-        intervalId = setInterval(poll, 1000);
-      },
-      Math.max(0, msUntilEnd),
-    );
+    const armAfter = (delayMs: number, everyMs: number) => {
+      startTimer = setTimeout(
+        () => {
+          if (cancelled) return;
+          poll();
+          intervalId = setInterval(poll, everyMs);
+        },
+        Math.max(0, delayMs),
+      );
+    };
+
+    if (state.phase === "betting" && state.ends_at) {
+      const endsAtMs = new Date(state.ends_at).getTime();
+      if (!Number.isFinite(endsAtMs)) return;
+      armAfter(endsAtMs - Date.now(), 1000);
+    } else if (state.phase === "spinning") {
+      const endRaw = state.spin_ends_at || state.ends_at;
+      if (!endRaw) return;
+      const endsAtMs = new Date(endRaw).getTime();
+      if (!Number.isFinite(endsAtMs)) return;
+      armAfter(endsAtMs - Date.now(), 1000);
+    } else if (state.phase === "result") {
+      // Result state has no ends_at; engine sleeps RESULT_DISPLAY then opens betting.
+      armAfter(RESULT_DISPLAY_MS - 500, 1000);
+    } else {
+      return;
+    }
 
     return () => {
       cancelled = true;
-      window.clearTimeout(startTimer);
+      if (startTimer != null) clearTimeout(startTimer);
       if (intervalId) clearInterval(intervalId);
     };
   }, [state?.phase, state?.ends_at, state?.spin_ends_at, state?.round_id]);

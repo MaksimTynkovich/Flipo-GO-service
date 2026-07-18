@@ -141,16 +141,78 @@ function CrashPageContent() {
   }, []);
 
   useEffect(() => {
-    getCrashState().then((s) => setState(s as CrashRoundState)).catch(() => {});
+    const refreshState = () => {
+      getCrashState()
+        .then((s) => setState(s as CrashRoundState))
+        .catch(() => {});
+    };
+
+    refreshState();
     loadHistory();
     loadActiveBets();
     loadRoundBets();
-    const disconnect = connectGameWS("crash", (msg) => {
-      if (msg.event === "tick") setState(msg.payload as CrashRoundState);
-      if (msg.event === "bets") setRoundBets(msg.payload as CrashRoundBetsData);
-    });
+    const disconnect = connectGameWS(
+      "crash",
+      (msg) => {
+        if (msg.event === "tick") setState(msg.payload as CrashRoundState);
+        if (msg.event === "bets") setRoundBets(msg.payload as CrashRoundBetsData);
+      },
+      { onOpen: refreshState },
+    );
     return disconnect;
   }, [loadHistory, loadActiveBets, loadRoundBets]);
+
+  // HTTP fallback: phase transitions (betting→running, crashed→next) only arrive on WS.
+  // If the socket drops, countdown ends and the UI freezes on 1.00× until refresh.
+  useEffect(() => {
+    if (!state) return;
+
+    const phase = state.phase;
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = () => {
+      getCrashState()
+        .then((s) => {
+          if (!cancelled) setState(s as CrashRoundState);
+        })
+        .catch(() => {});
+    };
+
+    if (phase === "running") {
+      intervalId = setInterval(poll, 750);
+    } else if (phase === "betting" && state.ends_at) {
+      const endsAtMs = new Date(state.ends_at).getTime();
+      if (!Number.isFinite(endsAtMs)) return;
+      startTimer = setTimeout(
+        () => {
+          if (cancelled) return;
+          poll();
+          intervalId = setInterval(poll, 500);
+        },
+        Math.max(0, endsAtMs - Date.now()),
+      );
+    } else if (phase === "crashed" || phase === "waiting") {
+      // Engine sleeps ~3s on crashed before the next betting round.
+      startTimer = setTimeout(
+        () => {
+          if (cancelled) return;
+          poll();
+          intervalId = setInterval(poll, 1000);
+        },
+        2500,
+      );
+    } else {
+      return;
+    }
+
+    return () => {
+      cancelled = true;
+      if (startTimer != null) clearTimeout(startTimer);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [state?.phase, state?.ends_at, state?.round_id]);
 
   useEffect(() => {
     if (state?.round_id) loadRoundBets();

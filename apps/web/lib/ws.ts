@@ -1,4 +1,4 @@
-import { AUTH_SESSION_REFRESHED, getAuthToken, silentReauth, WS_URL } from "./api";
+import { AUTH_SESSION_REFRESHED, getAuthToken, resolvePublicWsUrl, silentReauth } from "./api";
 import { trackErrorSurface } from "./analytics";
 
 export type WSMessage = {
@@ -46,7 +46,8 @@ export function connectGameWS(
   function connect() {
     if (closed) return;
 
-    ws = new WebSocket(`${WS_URL}/ws/games/${game}`);
+    const base = resolvePublicWsUrl();
+    ws = new WebSocket(`${base}/ws/games/${game}`);
 
     ws.onopen = () => {
       attempt = 0;
@@ -118,7 +119,8 @@ export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
       return;
     }
 
-    ws = new WebSocket(`${WS_URL}/ws/user?token=${encodeURIComponent(token)}`);
+    const base = resolvePublicWsUrl();
+    ws = new WebSocket(`${base}/ws/user?token=${encodeURIComponent(token)}`);
 
     ws.onerror = () => {
       trackWSIssue("user", "ws_user_error", "User WebSocket connection error");
