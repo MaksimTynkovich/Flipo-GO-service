@@ -16,6 +16,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
+	"github.com/flipo/flipo/apps/api/internal/usecase/wheel"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -27,6 +28,7 @@ type AdminHandler struct {
 	outcome           *outcome.Service
 	treasury          *treasury.Service
 	telegram          *telegramadmin.Service
+	wheel             *wheel.Service
 	botSync           *market.BotSyncService
 	hotAddr           string
 	onSocialSimUpdate func(domain.SocialSimSettings)
@@ -50,6 +52,28 @@ func (h *AdminHandler) SetSocialSimUpdater(fn func(domain.SocialSimSettings)) {
 
 func (h *AdminHandler) SetBotGiftSync(sync *market.BotSyncService) {
 	h.botSync = sync
+}
+
+func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
+	h.wheel = wheelSvc
+}
+
+func (h *AdminHandler) WheelStats(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"spins_today":              0,
+			"prizes_today_nanoton":     0,
+			"spins_all_time":           0,
+			"prizes_all_time_nanoton":  0,
+		})
+		return
+	}
+	stats, err := h.wheel.AdminStats(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
 }
 
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {

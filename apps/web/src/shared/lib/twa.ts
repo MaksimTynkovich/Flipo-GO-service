@@ -162,7 +162,7 @@ export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTe
   }
 }
 
-/** Open the mini app maximally: expand (legacy) + fullscreen (Bot API 8.0+). */
+/** Open the mini app maximally: expand (legacy). Fullscreen is deferred — see enableTelegramFullscreen. */
 export function initTelegramWebApp() {
   const webApp = getTelegramWebApp();
   if (!webApp) {
@@ -180,19 +180,30 @@ export function initTelegramWebApp() {
     }
   }
 
-  try {
-    if (isTelegramMobilePlatform(webApp.platform) && !webApp.isFullscreen) {
-      webApp.requestFullscreen?.();
-    }
-  } catch {
-    // Older Telegram clients only support expand().
-  }
-
   const syncSafeArea = () => applyTelegramSafeAreaToDocument();
   syncSafeArea();
   applyTelegramPlatformClass(webApp);
   requestAnimationFrame(syncSafeArea);
   [50, 150, 400, 800].forEach((delay) => window.setTimeout(syncSafeArea, delay));
+}
+
+/**
+ * Fullscreen right after WebView open freezes some Telegram Android clients (~1/50).
+ * Call only after auth / first paint is ready.
+ */
+export function enableTelegramFullscreen() {
+  const webApp = getTelegramWebApp();
+  if (!webApp || !isTelegramMobilePlatform(webApp.platform)) {
+    return;
+  }
+  try {
+    if (!webApp.isFullscreen) {
+      webApp.requestFullscreen?.();
+    }
+  } catch {
+    // Older Telegram clients only support expand().
+  }
+  applyTelegramSafeAreaToDocument();
 }
 
 const EMPTY_SAFE_AREA: SafeAreaInset = { top: 0, bottom: 0, left: 0, right: 0 };

@@ -44,6 +44,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
 	"github.com/flipo/flipo/apps/api/internal/usecase/wallet"
+	"github.com/flipo/flipo/apps/api/internal/usecase/wheel"
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
 	pvpworker "github.com/flipo/flipo/apps/api/internal/worker/pvp"
@@ -144,7 +145,11 @@ func main() {
 	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo, giftTraitRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
-	adminNotifier := telegram.NewAdminNotifier(botAPI, cfg.AdminTelegramIDs)
+	adminIDs := cfg.AdminTelegramIDs
+	if !cfg.AdminNotifyEnabled {
+		adminIDs = nil
+	}
+	adminNotifier := telegram.NewAdminNotifier(botAPI, adminIDs)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
@@ -154,6 +159,11 @@ func main() {
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
 	balanceSvc := balance.NewService(userRepo)
+	wheelRepo := postgres.NewWheelRepo(db)
+	wheelSvc := wheel.NewService(wheelRepo, userRepo, balanceSvc)
+	wheelSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
+	wheelSvc.SetAdminChecker(authSvc.IsAdmin)
+	referralSvc.SetWheelBonusGranter(wheelSvc)
 	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 	promoSvc.SetAdminNotifier(adminNotifier)
@@ -161,9 +171,11 @@ func main() {
 	walletSvc.SetPromoGate(promoSvc)
 	walletSvc.SetAdminNotifier(adminNotifier)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
-	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath, cfg.TelegramMTProtoEnabled)
 	if mtprotoCfg.Enabled() {
 		slog.Info("telegram mtproto gift scanner enabled", "session", cfg.TelegramSessionPath)
+	} else if !cfg.TelegramMTProtoEnabled {
+		slog.Info("telegram mtproto disabled via TELEGRAM_MTPROTO_ENABLED=false")
 	} else {
 		slog.Warn("telegram mtproto gift scanner disabled; set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH and run make tg-auth")
 	}
@@ -311,6 +323,7 @@ func main() {
 
 	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
 	adminHandler.SetBotGiftSync(botSyncSvc)
+	adminHandler.SetWheelService(wheelSvc)
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
 		socialSim.ApplySettings(settings)
@@ -326,6 +339,7 @@ func main() {
 		MarketHandler:    handlers.NewMarketHandler(marketSvc, analyticsSvc),
 		ReferralHandler:  handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:     handlers.NewPromoHandler(promoSvc, analyticsSvc),
+		WheelHandler:     handlers.NewWheelHandler(wheelSvc),
 		WalletHandler:    handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		TelegramHandler:  handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
 		AdminHandler:     adminHandler,

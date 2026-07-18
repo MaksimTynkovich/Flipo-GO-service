@@ -51,7 +51,12 @@ type Config struct {
 	TelegramAPIID                int
 	TelegramAPIHash              string
 	TelegramSessionPath          string
-	AdminTelegramIDs             []int64
+	// TelegramMTProtoEnabled gates the userbot (gift scan/transfer, MRKT auth).
+	// false keeps credentials in .env but never opens an MTProto session.
+	TelegramMTProtoEnabled bool
+	AdminTelegramIDs       []int64
+	// AdminNotifyEnabled gates Bot API DM alerts to ADMIN_TELEGRAM_IDS.
+	AdminNotifyEnabled bool
 	PromoRequiredChannel         string
 	BotsDataDir                  string
 	BotsAssetsBaseURL            string
@@ -111,7 +116,9 @@ func Load() *Config {
 		TelegramAPIID:                getEnvInt("TELEGRAM_API_ID", 0),
 		TelegramAPIHash:              getEnv("TELEGRAM_API_HASH", ""),
 		TelegramSessionPath:          getEnv("TELEGRAM_SESSION_PATH", "data/telegram/session.json"),
+		TelegramMTProtoEnabled:       getEnvBool("TELEGRAM_MTPROTO_ENABLED", true),
 		AdminTelegramIDs:             parseInt64List(getEnv("ADMIN_TELEGRAM_IDS", "")),
+		AdminNotifyEnabled:           getEnvBool("ADMIN_NOTIFY_ENABLED", true),
 		PromoRequiredChannel:         firstNonEmpty(getEnv("PROMO_REQUIRED_CHANNEL", ""), getEnv("NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL", "")),
 		BotsDataDir:                  getEnv("BOTS_DATA_DIR", "assets/bots"),
 		BotsAssetsBaseURL:            getEnv("BOTS_ASSETS_BASE_URL", "/static/bots"),

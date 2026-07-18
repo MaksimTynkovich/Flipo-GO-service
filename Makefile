@@ -1,10 +1,10 @@
 .PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate api web test lint gift-quote gift-prices-refresh
 
 up:
-	docker compose -f deploy/docker-compose.yml up -d postgres redis
+	docker compose -f deploy/docker-compose.yml --env-file .env up -d postgres redis
 
 down:
-	docker compose -f deploy/docker-compose.yml down
+	docker compose -f deploy/docker-compose.yml --env-file .env down
 
 dev: up
 	@echo "Starting API and Web in dev mode..."

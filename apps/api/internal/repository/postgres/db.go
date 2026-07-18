@@ -69,6 +69,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.ReferralPerk{},
 		&domain.ReferralMilestone{},
 		&domain.GameOutcomeOverride{},
+		&domain.WheelSegment{},
+		&domain.UserWheelState{},
+		&domain.WheelSpin{},
 	); err != nil {
 		return err
 	}
@@ -91,6 +94,9 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := migrateReferralV2(db); err != nil {
+		return err
+	}
+	if err := migrateDailyWheel(db); err != nil {
 		return err
 	}
 	return migrateInventoryGiftHistory(db)

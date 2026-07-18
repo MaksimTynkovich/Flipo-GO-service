@@ -73,7 +73,7 @@ func (n *AdminNotifier) NotifyBotStart(ctx context.Context, actor AdminActor) {
 		return
 	}
 	n.notify(ctx, actor, fmt.Sprintf(
-		"🤖 /start в боте\n%s\nЕщё не открывал приложение",
+		"🤖 /start в боте\n%s",
 		FormatActor(actor),
 	))
 }

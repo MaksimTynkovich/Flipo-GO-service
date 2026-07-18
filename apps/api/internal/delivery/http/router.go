@@ -24,6 +24,7 @@ type Deps struct {
 	WalletHandler    *handlers.WalletHandler
 	TelegramHandler  *handlers.TelegramHandler
 	PromoHandler     *handlers.PromoHandler
+	WheelHandler     *handlers.WheelHandler
 	AdminHandler     *handlers.AdminHandler
 	AnalyticsHandler *handlers.AnalyticsHandler
 	PresenceHandler  *handlers.PresenceHandler
@@ -110,6 +111,9 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/promos/activate", deps.PromoHandler.Activate)
 			authed.GET("/promos/status", deps.PromoHandler.Status)
 
+			authed.GET("/wheel/status", deps.WheelHandler.Status)
+			authed.POST("/wheel/spin", deps.WheelHandler.Spin)
+
 			authed.POST("/wallet/deposit/intent", deps.WalletHandler.CreateDepositIntent)
 			authed.POST("/wallet/deposit/:id/confirm", deps.WalletHandler.ConfirmDeposit)
 			authed.POST("/wallet/withdraw", deps.WalletHandler.RequestWithdrawal)
@@ -171,6 +175,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)
 			admin.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
 			admin.DELETE("/marketing/promos/:code", deps.AdminHandler.DeletePromoCode)
+			admin.GET("/marketing/wheel", deps.AdminHandler.WheelStats)
 			admin.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
 			admin.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
 			admin.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)

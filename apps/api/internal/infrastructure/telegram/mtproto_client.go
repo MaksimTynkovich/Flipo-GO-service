@@ -20,17 +20,23 @@ type MTProtoConfig struct {
 	AppID       int
 	AppHash     string
 	SessionPath string
+	// Disabled forces the userbot off even when credentials are present (local/dev).
+	Disabled bool
 }
 
-func MTProtoConfigFromEnv(appID int, appHash, sessionPath string) MTProtoConfig {
+func MTProtoConfigFromEnv(appID int, appHash, sessionPath string, enabled bool) MTProtoConfig {
 	return MTProtoConfig{
 		AppID:       appID,
 		AppHash:     appHash,
 		SessionPath: sessionPath,
+		Disabled:    !enabled,
 	}
 }
 
 func (c MTProtoConfig) Enabled() bool {
+	if c.Disabled {
+		return false
+	}
 	return c.AppID > 0 && c.AppHash != "" && c.SessionPath != ""
 }
 

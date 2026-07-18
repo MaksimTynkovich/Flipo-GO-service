@@ -1622,6 +1622,66 @@ export async function getPromoStatus() {
   return api<PromoStatus>("/api/v1/promos/status");
 }
 
+export type WheelSegment = {
+  id: string;
+  label: string;
+  amount_nanoton: number;
+  weight: number;
+  sort_order: number;
+};
+
+export type WheelRecentWin = {
+  display_name: string;
+  prize_nanoton: number;
+  segment_label: string;
+  created_at: string;
+};
+
+export type WheelStatus = {
+  channel_subscribed: boolean;
+  required_channel?: string;
+  daily_available: boolean;
+  bonus_spins: number;
+  spins_today: number;
+  can_spin: boolean;
+  unlimited_spins?: boolean;
+  next_daily_reset_at: string;
+  segments: WheelSegment[];
+  recent_wins: WheelRecentWin[];
+};
+
+export type WheelSpinResult = {
+  spin_id: string;
+  segment_id: string;
+  segment_label: string;
+  prize_nanoton: number;
+  spin_source: string;
+  bonus_spins: number;
+  daily_available: boolean;
+  spins_today: number;
+  unlimited_spins?: boolean;
+  created_at: string;
+};
+
+export type WheelAdminStats = {
+  spins_today: number;
+  prizes_today_nanoton: number;
+  spins_all_time: number;
+  prizes_all_time_nanoton: number;
+};
+
+export async function getWheelStatus() {
+  return api<WheelStatus>("/api/v1/wheel/status");
+}
+
+export async function spinWheel() {
+  return api<WheelSpinResult>("/api/v1/wheel/spin", { method: "POST" });
+}
+
+export async function getAdminWheelStats() {
+  return api<WheelAdminStats>("/api/v1/admin/marketing/wheel");
+}
+
 export type TelegramBroadcast = {
   id: string;
   message: string;

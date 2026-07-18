@@ -88,7 +88,7 @@ func main() {
 		store = postgres.NewGiftTraitPriceRepo(db)
 	}
 
-	mtproto := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	mtproto := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath, cfg.TelegramMTProtoEnabled)
 	market := gifts.NewMarketPrices("", cfg.MRKTAPIToken, mtproto)
 	valuator := gifts.NewValuatorFull(
 		market,

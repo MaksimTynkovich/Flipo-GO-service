@@ -133,6 +133,7 @@ const (
 	LedgerStakeYield    LedgerType = "stake_yield"
 	LedgerReferralBonus LedgerType = "referral_bonus"
 	LedgerPromoBonus    LedgerType = "promo_bonus"
+	LedgerWheelPrize    LedgerType = "wheel_prize"
 	LedgerWithdraw   LedgerType = "withdraw"
 	LedgerRefund     LedgerType = "refund"
 	LedgerMarketBuy  LedgerType = "market_buy"

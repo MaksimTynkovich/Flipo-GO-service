@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TonIcon } from "@/components/icons/TonIcon";
 
-type Tone = "crash" | "roulette" | "pvp";
+type Tone = "wheel" | "crash" | "roulette" | "pvp";
 
 function CrashLiveMult() {
   const [mult, setMult] = useState(1);
@@ -17,9 +18,7 @@ function CrashLiveMult() {
       // Slow start, then climbs like a real crash round — reset before "crash"
       const climbed = 1 + Math.pow(t, 1.45) * 4.2;
       setMult(climbed);
-      raf = requestAnimationFrame(tick);
     };
-
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
@@ -34,6 +33,48 @@ function CrashLiveMult() {
 
 /** Side preview art — readable metaphor for each mode. */
 export function GamesCardArt({ tone }: { tone: Tone }) {
+  if (tone === "wheel") {
+    return (
+      <div className="games-card__art games-card__art--wheel" aria-hidden>
+        <div className="games-art-wheel">
+          <div className="games-art-wheel__stage">
+            <span className="games-art-wheel__spark games-art-wheel__spark--1" />
+            <span className="games-art-wheel__spark games-art-wheel__spark--2" />
+            <span className="games-art-wheel__spark games-art-wheel__spark--3" />
+            <span className="games-art-wheel__spark games-art-wheel__spark--4" />
+
+            <div className="games-art-wheel__reel">
+              <div className="games-art-wheel__track">
+                <div className="games-art-wheel__cell games-art-wheel__cell--common">
+                  <span className="games-art-wheel__amount">0.10</span>
+                  <span className="games-art-wheel__unit">
+                    <TonIcon variant="brand" className="games-art-wheel__ton" title="" />
+                  </span>
+                </div>
+                <div className="games-art-wheel__cell games-art-wheel__cell--focus">
+                  <span className="games-art-wheel__amount">1.00</span>
+                  <span className="games-art-wheel__unit">
+                    <TonIcon variant="brand" className="games-art-wheel__ton" title="" />
+                  </span>
+                </div>
+                <div className="games-art-wheel__cell games-art-wheel__cell--jackpot">
+                  <span className="games-art-wheel__amount">2.00</span>
+                  <span className="games-art-wheel__unit">
+                    <TonIcon variant="brand" className="games-art-wheel__ton" title="" />
+                  </span>
+                </div>
+              </div>
+              <span className="games-art-wheel__marker">
+                <span className="games-art-wheel__marker-glow" />
+                <span className="games-art-wheel__marker-line" />
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (tone === "crash") {
     return (
       <div className="games-card__art games-card__art--crash" aria-hidden>

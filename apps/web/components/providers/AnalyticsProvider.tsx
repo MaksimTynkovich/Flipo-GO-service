@@ -12,6 +12,7 @@ import {
   trackEvent,
   trackScreenView,
 } from "@/lib/analytics";
+import { markBootStage } from "@/lib/boot";
 
 function trackSessionStarted(reason: string) {
   trackEvent({
@@ -29,6 +30,7 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    markBootStage("react");
     installClientErrorLogging();
     // Always treat cold mount as a visit; rotate if previous session went idle.
     rotateAnalyticsSessionIfNeeded(true);

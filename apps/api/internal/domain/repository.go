@@ -18,7 +18,7 @@ type UserRepository interface {
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
-	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
+	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) (bool, error)
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	CountReferralsSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -115,6 +115,18 @@ type ReferralRepository interface {
 	CreateMilestone(ctx context.Context, milestone *ReferralMilestone) error
 	SumUserPvPNetLossSince(ctx context.Context, userID uuid.UUID, since time.Time, excludeReferrerInRoom bool) (int64, error)
 	CountQualifiedReferrals(ctx context.Context, referrerID uuid.UUID, minAge time.Duration, minDeposit, minStake int64) (int64, error)
+}
+
+type WheelRepository interface {
+	ListActiveSegments(ctx context.Context) ([]WheelSegment, error)
+	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserWheelState, error)
+	SaveState(ctx context.Context, state *UserWheelState) error
+	AddBonusSpins(ctx context.Context, userID uuid.UUID, delta int) error
+	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	CreateSpin(ctx context.Context, spin *WheelSpin) error
+	ListRecentWins(ctx context.Context, limit int) ([]WheelRecentWin, error)
+	SumPrizesSince(ctx context.Context, since time.Time) (int64, error)
+	CountSpinsGlobalSince(ctx context.Context, since time.Time) (int64, error)
 }
 
 type GameRepository interface {

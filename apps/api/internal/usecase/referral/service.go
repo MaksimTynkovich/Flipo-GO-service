@@ -18,6 +18,11 @@ type Service struct {
 	balance   *balance.Service
 	notifier  balance.BalanceNotifier
 	promoActivator PromoActivator
+	wheelBonus WheelBonusGranter
+}
+
+type WheelBonusGranter interface {
+	AddReferralBonusSpin(ctx context.Context, referrerID uuid.UUID) error
 }
 
 func NewService(users domain.UserRepository, platform domain.PlatformRepository) *Service {
@@ -42,6 +47,10 @@ func (s *Service) SetBalanceService(balanceSvc *balance.Service) {
 
 func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 	s.notifier = notifier
+}
+
+func (s *Service) SetWheelBonusGranter(granter WheelBonusGranter) {
+	s.wheelBonus = granter
 }
 
 type Stats struct {
@@ -155,7 +164,14 @@ func (s *Service) TryAssignReferrer(ctx context.Context, userID uuid.UUID, code 
 		if _, err := s.users.FindByID(ctx, referrerID); err != nil {
 			return nil
 		}
-		return s.users.SetReferrerIfEmpty(ctx, userID, referrerID)
+		assigned, err := s.users.SetReferrerIfEmpty(ctx, userID, referrerID)
+		if err != nil {
+			return err
+		}
+		if assigned {
+			s.grantWheelBonusSpin(ctx, referrerID)
+		}
+		return nil
 	}
 
 	referrerTelegramID, ok := ParseReferrerTelegramID(code)
@@ -166,5 +182,19 @@ func (s *Service) TryAssignReferrer(ctx context.Context, userID uuid.UUID, code 
 	if err != nil || referrer == nil || referrer.ID == userID {
 		return nil
 	}
-	return s.users.SetReferrerIfEmpty(ctx, userID, referrer.ID)
+	assigned, err := s.users.SetReferrerIfEmpty(ctx, userID, referrer.ID)
+	if err != nil {
+		return err
+	}
+	if assigned {
+		s.grantWheelBonusSpin(ctx, referrer.ID)
+	}
+	return nil
+}
+
+func (s *Service) grantWheelBonusSpin(ctx context.Context, referrerID uuid.UUID) {
+	if s.wheelBonus == nil {
+		return
+	}
+	_ = s.wheelBonus.AddReferralBonusSpin(ctx, referrerID)
 }

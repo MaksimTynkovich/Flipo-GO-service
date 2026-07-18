@@ -11,12 +11,14 @@ import {
   formatTON,
   deleteAdminPromoCode,
   getAdminPromoCodes,
+  getAdminWheelStats,
   getReferralStats,
   updateAdminYieldSettings,
   upsertAdminPromoCode,
   type AdminPromoCode,
   type AdminYieldSettings,
   type ReferralStats,
+  type WheelAdminStats,
 } from "@/lib/api";
 
 const EMPTY_PROMO: AdminPromoCode = {
@@ -45,10 +47,12 @@ export default function MarketingSection() {
   const [promos, setPromos] = useState<AdminPromoCode[]>([]);
   const [draft, setDraft] = useState<AdminPromoCode>(EMPTY_PROMO);
   const [referral, setReferral] = useState<ReferralStats | null>(null);
+  const [wheelStats, setWheelStats] = useState<WheelAdminStats | null>(null);
   const [yieldSettings, setYieldSettings] = useState<AdminYieldSettings | null>(null);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
   const [promosLoading, setPromosLoading] = useState(true);
   const [referralLoading, setReferralLoading] = useState(true);
+  const [wheelLoading, setWheelLoading] = useState(true);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const promoCode = draft.code.trim();
 
@@ -74,6 +78,17 @@ export default function MarketingSection() {
     }
   }
 
+  async function loadWheelStats() {
+    setWheelLoading(true);
+    try {
+      const data = await loadCached("admin:marketing:wheel", getAdminWheelStats);
+      setWheelStats(data);
+      primeCache("admin:marketing:wheel", data);
+    } finally {
+      setWheelLoading(false);
+    }
+  }
+
   async function loadYieldSettings() {
     setSettingsLoading(true);
     try {
@@ -91,10 +106,13 @@ export default function MarketingSection() {
       if (cachedPromos) setPromos(cachedPromos);
       const cachedReferral = readCached<ReferralStats>("admin:marketing:referral");
       if (cachedReferral) setReferral(cachedReferral);
+      const cachedWheel = readCached<WheelAdminStats>("admin:marketing:wheel");
+      if (cachedWheel) setWheelStats(cachedWheel);
       const cachedSettings = readCached<AdminYieldSettings>("admin:marketing:settings");
       if (cachedSettings) setYieldSettings(cachedSettings);
       loadPromos().catch(() => {});
       loadReferral().catch(() => {});
+      loadWheelStats().catch(() => {});
       loadYieldSettings().catch(() => {});
     });
   }, []);
@@ -120,7 +138,7 @@ export default function MarketingSection() {
   }
 
   return (
-    <AdminPage title="Маркетинг" description="Промокоды с вейджером и реферальная система.">
+    <AdminPage title="Маркетинг" description="Промокоды с вейджером, рефералы и колесо удачи.">
       {referral ? (
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Рефералов" value={String(referral.referral_count)} hint="Сколько пользователей закрепились за текущим реферером." />
@@ -129,6 +147,24 @@ export default function MarketingSection() {
           <Stat label="GGR share" value={`${referral.ggr_share_percent.toFixed(2)}%`} hint="Доля от игрового GGR квалифицированных рефералов." />
         </section>
       ) : referralLoading ? (
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="panel p-3">
+              <div className="h-3 w-16 animate-pulse rounded bg-surface-raised" />
+              <div className="mt-2 h-5 w-24 animate-pulse rounded bg-surface-raised" />
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {wheelStats ? (
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat label="Колесо сегодня" value={String(wheelStats.spins_today)} hint="Сколько прокрутов сделали все пользователи за текущие сутки UTC." />
+          <Stat label="Выплаты сегодня" value={`${formatTON(wheelStats.prizes_today_nanoton)} TON`} hint="Сумма реальных TON, начисленных с колеса сегодня." />
+          <Stat label="Колесо всего" value={String(wheelStats.spins_all_time)} hint="Всего прокрутов за всё время." />
+          <Stat label="Выплаты всего" value={`${formatTON(wheelStats.prizes_all_time_nanoton)} TON`} hint="Суммарные выплаты колеса за всё время." />
+        </section>
+      ) : wheelLoading ? (
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="panel p-3">

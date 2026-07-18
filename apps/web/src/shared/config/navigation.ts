@@ -7,6 +7,7 @@ export const APP_ROUTES = {
   crash: "/games/crash",
   roulette: "/games/roulette",
   pvp: "/games/pvp",
+  wheel: "/games/wheel",
   admin: "/admin",
   market: "/market",
   inventory: "/inventory",
@@ -62,6 +63,11 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
   },
   [APP_ROUTES.pvp]: {
     title: "Комнаты",
+    backHref: APP_ROUTES.games,
+    backLabel: "Игры",
+  },
+  [APP_ROUTES.wheel]: {
+    title: "Колесо удачи",
     backHref: APP_ROUTES.games,
     backLabel: "Игры",
   },
@@ -171,11 +177,21 @@ export type GameLobbyItem = {
   title: string;
   description: string;
   badge: string;
+  cta?: string;
   icon: LucideIcon;
-  tone: "crash" | "roulette" | "pvp";
+  tone: "wheel" | "crash" | "roulette" | "pvp";
 };
 
 export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
+  {
+    href: APP_ROUTES.wheel,
+    title: "Колесо удачи",
+    description: "Бесплатный прокрут каждый день — TON сразу на баланс.",
+    badge: "Бесплатно",
+    cta: "Крутить",
+    icon: Gift,
+    tone: "wheel",
+  },
   {
     href: APP_ROUTES.crash,
     title: "Crash",

@@ -78,7 +78,14 @@ func (b *BotAPI) IsChannelMember(ctx context.Context, channel string, userID int
 	}
 	if !result.OK {
 		desc := strings.ToLower(result.Description)
-		if strings.Contains(desc, "Пользователь не найден") || strings.Contains(desc, "not a member") {
+		// Treat "cannot verify" / not-a-member responses as unsubscribed, not as hard failures.
+		// Mini App pages that check subscription on load must not 500 when the bot lacks
+		// admin rights ("member list is inaccessible") or the user isn't in the channel.
+		if strings.Contains(desc, "user not found") ||
+			strings.Contains(desc, "not a member") ||
+			strings.Contains(desc, "member list is inaccessible") ||
+			strings.Contains(desc, "chat not found") ||
+			strings.Contains(desc, "bot is not a member") {
 			return false, nil
 		}
 		return false, fmt.Errorf("telegram getChatMember: %s", result.Description)

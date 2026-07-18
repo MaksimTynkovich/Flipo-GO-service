@@ -35,7 +35,7 @@ func main() {
 	userRepo := postgres.NewUserRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
 	giftTraitRepo := postgres.NewGiftTraitPriceRepo(db)
-	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath, cfg.TelegramMTProtoEnabled)
 	valuator := gifts.NewDefaultValuator(
 		cfg.MRKTAPIToken,
 		cfg.GiftAssetAPIKey,
@@ -46,7 +46,11 @@ func main() {
 		giftTraitRepo,
 	)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
-	adminNotifier := telegram.NewAdminNotifier(botAPI, cfg.AdminTelegramIDs)
+	adminIDs := cfg.AdminTelegramIDs
+	if !cfg.AdminNotifyEnabled {
+		adminIDs = nil
+	}
+	adminNotifier := telegram.NewAdminNotifier(botAPI, adminIDs)
 	depositNotifier := notifications.NewGiftDepositNotifier(
 		telegram.NewBotNotifier(cfg.BotToken),
 		nil,

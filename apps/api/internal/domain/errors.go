@@ -30,6 +30,8 @@ var (
 	ErrPromoInUse            = errors.New("у промокода есть активации")
 	ErrPromoWagerPending     = errors.New("сначала отыграйте активный бонус")
 	ErrChannelNotSubscribed  = errors.New("нужна подписка на канал")
+	ErrWheelNoSpins          = errors.New("нет доступных прокрутов")
+	ErrWheelUnavailable      = errors.New("колесо временно недоступно")
 	ErrGiftNotAvailable      = errors.New("подарок недоступен для ставки")
 	ErrGiftValueMismatch     = errors.New("стоимость подарка не подходит для ставки")
 	ErrStakingPoolFull       = errors.New("пул стейкинга заполнен")

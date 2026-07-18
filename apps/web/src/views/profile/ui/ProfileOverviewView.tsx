@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
+  Gift,
   Shield,
   Sparkles,
   Ticket,
@@ -176,6 +177,14 @@ export function ProfileOverviewView() {
           icon={<Sparkles className="h-4 w-4" />}
           title="Стейкинг"
           subtitle="До 48% APR"
+          onClick={() => haptics.impactOccurred("medium")}
+        />
+        <div className="mx-4 hairline-top" />
+        <ProfileMenuLink
+          href={APP_ROUTES.wheel}
+          icon={<Gift className="h-4 w-4" />}
+          title="Колесо удачи"
+          subtitle="Ежедневный бонус TON"
           onClick={() => haptics.impactOccurred("medium")}
         />
         <div className="mx-4 hairline-top" />
