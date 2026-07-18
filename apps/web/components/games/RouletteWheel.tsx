@@ -93,6 +93,8 @@ export function RouletteWheel({ state }: Props) {
   const rotationRef = useRef(0);
   const cancelSpin = useRef<(() => void) | null>(null);
   const resultHoldTimer = useRef<number | null>(null);
+  const landTimer = useRef<number | null>(null);
+  const [spinLanded, setSpinLanded] = useState(false);
   const [heldResult, setHeldResult] = useState<{
     number: number;
     color: "green" | "red" | "black";
@@ -103,11 +105,17 @@ export function RouletteWheel({ state }: Props) {
   const countdown = Math.max(1, Math.ceil(rawCountdown));
   const awaitingStart = phase === "betting" && rawCountdown <= 0;
   const winIndex = state ? resolveWheelIndex(state) : undefined;
+  // Result number is already in spinning state — show it once the wheel has stopped,
+  // even if the `result` WS tick was missed / delayed.
+  const landingDone =
+    spinLanded ||
+    (!!state && phase === "spinning" && isLandingPause(state) && state.result_number != null);
   const showHeldResult = heldResult != null && phase !== "betting" && phase !== "spinning";
+  const showResultHub = phase === "result" || showHeldResult || landingDone;
   const highlightWin =
     !!state &&
     winIndex !== undefined &&
-    (phase === "result" || isLandingPause(state) || showHeldResult);
+    (phase === "result" || landingDone || isLandingPause(state) || showHeldResult);
   const resultColor = heldResult?.color
     ?? (state?.result_number != null ? numberColor(state.result_number) : null);
   const displayResultNumber = heldResult?.number ?? state?.result_number ?? null;
@@ -120,14 +128,19 @@ export function RouletteWheel({ state }: Props) {
     }
   }, []);
 
+  const markLanded = useCallback(() => {
+    setSpinLanded(true);
+  }, []);
+
   const runSpinAnimation = useCallback(
-    (from: number, to: number, durationMs: number) => {
+    (from: number, to: number, durationMs: number, onComplete?: () => void) => {
       if (Math.abs(to - from) < 0.01) {
         applyRotation(to);
+        onComplete?.();
         return;
       }
       cancelSpin.current?.();
-      cancelSpin.current = animateSpin(from, to, Math.max(50, durationMs), applyRotation);
+      cancelSpin.current = animateSpin(from, to, Math.max(50, durationMs), applyRotation, onComplete);
     },
     [applyRotation],
   );
@@ -147,11 +160,13 @@ export function RouletteWheel({ state }: Props) {
     return () => {
       cancelSpin.current?.();
       if (resultHoldTimer.current) window.clearTimeout(resultHoldTimer.current);
+      if (landTimer.current) window.clearTimeout(landTimer.current);
     };
   }, []);
 
   useEffect(() => {
     if (state?.phase === "result" && state.result_number != null) {
+      setSpinLanded(true);
       setHeldResult({
         number: state.result_number,
         color: numberColor(state.result_number),
@@ -164,7 +179,8 @@ export function RouletteWheel({ state }: Props) {
       return;
     }
 
-    if (state?.phase === "betting" || state?.phase === "spinning") {
+    if (state?.phase === "betting") {
+      setSpinLanded(false);
       if (resultHoldTimer.current) {
         window.clearTimeout(resultHoldTimer.current);
         resultHoldTimer.current = null;
@@ -180,6 +196,10 @@ export function RouletteWheel({ state }: Props) {
 
     if (state.phase === "betting") {
       cancelSpin.current?.();
+      if (landTimer.current) {
+        window.clearTimeout(landTimer.current);
+        landTimer.current = null;
+      }
       lastSpinRound.current = null;
       roundJitter.current = 0;
       return;
@@ -190,6 +210,7 @@ export function RouletteWheel({ state }: Props) {
     if (state.phase === "result") {
       cancelSpin.current?.();
       snapToIndex(wheelIndex, state.round_id);
+      setSpinLanded(true);
       return;
     }
 
@@ -206,7 +227,13 @@ export function RouletteWheel({ state }: Props) {
     }
 
     lastSpinRound.current = state.round_id;
+    setSpinLanded(false);
     roundJitter.current = jitterForRound(state.round_id);
+
+    if (landTimer.current) window.clearTimeout(landTimer.current);
+    if (!Number.isNaN(spinEndMs)) {
+      landTimer.current = window.setTimeout(markLanded, Math.max(0, spinEndMs - Date.now()));
+    }
 
     const fromMod = ((rotationRef.current % 360) + 360) % 360;
     const target = spinTargetRotation(
@@ -225,14 +252,15 @@ export function RouletteWheel({ state }: Props) {
       const diff = Math.abs(target - from);
       if (diff < 0.05) {
         applyRotation(target);
+        markLanded();
       } else {
-        runSpinAnimation(from, target, CATCHUP_MS);
+        runSpinAnimation(from, target, CATCHUP_MS, markLanded);
       }
       return;
     }
 
-    runSpinAnimation(from, target, remaining);
-  }, [state, applyRotation, snapToIndex, runSpinAnimation]);
+    runSpinAnimation(from, target, remaining, markLanded);
+  }, [state, applyRotation, snapToIndex, runSpinAnimation, markLanded]);
 
   const cx = 110;
   const cy = 110;
@@ -328,8 +356,8 @@ export function RouletteWheel({ state }: Props) {
           className={cn(
             "roulette-hub pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[44%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center",
             phase === "betting" && countdown <= 3 && countdown > 0 && "roulette-hub--urgent",
-            (phase === "spinning" || awaitingStart) && "roulette-hub--spinning",
-            (phase === "result" || showHeldResult) && resultColor && `roulette-hub--${resultColor}`,
+            ((phase === "spinning" && !landingDone) || awaitingStart) && "roulette-hub--spinning",
+            showResultHub && resultColor && `roulette-hub--${resultColor}`,
           )}
         >
           <div className="roulette-hub__ring" aria-hidden />
@@ -341,10 +369,10 @@ export function RouletteWheel({ state }: Props) {
               <span className="roulette-hub__label">Ставки</span>
             </>
           ) : null}
-          {phase === "spinning" || awaitingStart ? (
+          {(phase === "spinning" && !landingDone) || awaitingStart ? (
             <span className="roulette-hub__spin">Крутим</span>
           ) : null}
-          {(phase === "result" || showHeldResult) && displayResultNumber != null ? (
+          {showResultHub && displayResultNumber != null ? (
             <>
               <span className="roulette-hub__value tabular-nums">{displayResultNumber}</span>
               <span className="roulette-hub__label">

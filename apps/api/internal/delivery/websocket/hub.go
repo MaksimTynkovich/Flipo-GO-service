@@ -5,9 +5,17 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+)
+
+// Cloudflare proxied WS idle timeout is ~100s; ping well under that.
+const (
+	wsWriteWait  = 10 * time.Second
+	wsPongWait   = 60 * time.Second
+	wsPingPeriod = 30 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -109,6 +117,10 @@ func (c *Client) ReadPump() {
 		c.Hub.Unregister(c)
 		_ = c.Conn.Close()
 	}()
+	_ = c.Conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	c.Conn.SetPongHandler(func(string) error {
+		return c.Conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	})
 	for {
 		if _, _, err := c.Conn.ReadMessage(); err != nil {
 			break
@@ -117,10 +129,27 @@ func (c *Client) ReadPump() {
 }
 
 func (c *Client) WritePump() {
-	defer func() { _ = c.Conn.Close() }()
-	for msg := range c.Send {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-			break
+	ticker := time.NewTicker(wsPingPeriod)
+	defer func() {
+		ticker.Stop()
+		_ = c.Conn.Close()
+	}()
+	for {
+		select {
+		case msg, ok := <-c.Send:
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if !ok {
+				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				return
+			}
+		case <-ticker.C:
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }

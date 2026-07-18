@@ -67,15 +67,69 @@ function RoulettePageContent() {
   }, []);
 
   useEffect(() => {
-    getRouletteState().then((s) => setState(s as RouletteRoundState)).catch(() => {});
+    const refreshState = () => {
+      getRouletteState()
+        .then((s) => setState(s as RouletteRoundState))
+        .catch(() => {});
+    };
+
+    refreshState();
     loadHistory();
     loadRoundBets();
-    const disconnect = connectGameWS("roulette", (msg) => {
-      if (msg.event === "tick") setState(msg.payload as RouletteRoundState);
-      if (msg.event === "bets") setRoundBets(msg.payload as RouletteRoundBetsData);
-    });
+    const disconnect = connectGameWS(
+      "roulette",
+      (msg) => {
+        if (msg.event === "tick") setState(msg.payload as RouletteRoundState);
+        if (msg.event === "bets") setRoundBets(msg.payload as RouletteRoundBetsData);
+      },
+      { onOpen: refreshState },
+    );
     return disconnect;
   }, [loadHistory, loadRoundBets]);
+
+  // HTTP fallback when WS drops mid-round: spin starts only on `phase: spinning`,
+  // and result/next round only on later ticks. Poll after deadline until phase moves.
+  useEffect(() => {
+    if (!state?.phase) return;
+
+    const endRaw =
+      state.phase === "betting"
+        ? state.ends_at
+        : state.phase === "spinning"
+          ? state.spin_ends_at || state.ends_at
+          : undefined;
+    if (!endRaw) return;
+
+    const endsAtMs = new Date(endRaw).getTime();
+    if (!Number.isFinite(endsAtMs)) return;
+
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const poll = () => {
+      getRouletteState()
+        .then((s) => {
+          if (!cancelled) setState(s as RouletteRoundState);
+        })
+        .catch(() => {});
+    };
+
+    const msUntilEnd = endsAtMs - Date.now();
+    const startTimer = window.setTimeout(
+      () => {
+        if (cancelled) return;
+        poll();
+        intervalId = setInterval(poll, 1000);
+      },
+      Math.max(0, msUntilEnd),
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [state?.phase, state?.ends_at, state?.spin_ends_at, state?.round_id]);
 
   useEffect(() => {
     loadRoundBets();

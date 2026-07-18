@@ -3,6 +3,7 @@ package websocket
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
@@ -118,6 +119,10 @@ func (c *UserClient) ReadPump() {
 		c.Hub.UnregisterUser(c)
 		_ = c.Conn.Close()
 	}()
+	_ = c.Conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	c.Conn.SetPongHandler(func(string) error {
+		return c.Conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	})
 	for {
 		if _, _, err := c.Conn.ReadMessage(); err != nil {
 			break
@@ -126,10 +131,27 @@ func (c *UserClient) ReadPump() {
 }
 
 func (c *UserClient) WritePump() {
-	defer func() { _ = c.Conn.Close() }()
-	for msg := range c.Send {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-			break
+	ticker := time.NewTicker(wsPingPeriod)
+	defer func() {
+		ticker.Stop()
+		_ = c.Conn.Close()
+	}()
+	for {
+		select {
+		case msg, ok := <-c.Send:
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if !ok {
+				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				return
+			}
+		case <-ticker.C:
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
