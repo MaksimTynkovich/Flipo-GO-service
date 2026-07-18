@@ -95,7 +95,7 @@ const tgThemeBootstrap = `
         webApp.lockOrientation?.();
       } catch (_) {}
     }
-    // Fullscreen is deferred until React marks app_ready (see enableTelegramFullscreen).
+    // Do not requestFullscreen here — cold-open fullscreen re-launches the WebView on mobile.
     const sumInsets = (content, safe) => ({
       top: (content?.top || 0) + (safe?.top || 0),
       bottom: (content?.bottom || 0) + (safe?.bottom || 0),

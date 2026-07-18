@@ -15,7 +15,6 @@ import { markBootStage } from "@/lib/boot";
 import { formatUserError } from "@/lib/user-errors";
 import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
 import {
-  enableTelegramFullscreen,
   getTelegramWebApp,
   hasTelegramInitData,
   initTelegramWebApp,
@@ -163,8 +162,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         setReady(true);
         markBootStage("app_ready");
-        // After first paint — fullscreen on cold open freezes some Android WebViews.
-        window.setTimeout(() => enableTelegramFullscreen(), 100);
+        // Do not call requestFullscreen on cold open: on iOS/Android Telegram
+        // expands the Mini App, then fullscreen re-launches the WebView — looks
+        // like a double open. expand() in initTelegramWebApp is enough.
       }
     }
     init();

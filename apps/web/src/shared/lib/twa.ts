@@ -162,7 +162,7 @@ export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTe
   }
 }
 
-/** Open the mini app maximally: expand (legacy). Fullscreen is deferred — see enableTelegramFullscreen. */
+/** Expand the Mini App viewport (legacy max height). Does not enter fullscreen. */
 export function initTelegramWebApp() {
   const webApp = getTelegramWebApp();
   if (!webApp) {
@@ -188,8 +188,9 @@ export function initTelegramWebApp() {
 }
 
 /**
- * Fullscreen right after WebView open freezes some Telegram Android clients (~1/50).
- * Call only after auth / first paint is ready.
+ * Request Telegram fullscreen mode. Avoid on cold open — after expand() many
+ * mobile clients re-launch the WebView (looks like a second Mini App open).
+ * Prefer BotFather / deep-link `mode=fullscreen`, or call only on user gesture.
  */
 export function enableTelegramFullscreen() {
   const webApp = getTelegramWebApp();
