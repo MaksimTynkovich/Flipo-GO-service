@@ -104,12 +104,12 @@ export function openTelegramLink(url: string): boolean {
   if (!webApp?.openTelegramLink) {
     return false;
   }
-  // Mini Apps require hostname t.me — t.me is rejected silently.
+  // Mini Apps require hostname t.me — telegram.me is rejected silently.
   let normalized = url.trim();
-  if (normalized.startsWith("https://t.me/")) {
-    normalized = `https://t.me/${normalized.slice("https://t.me/".length)}`;
-  } else if (normalized.startsWith("http://t.me/")) {
-    normalized = `https://t.me/${normalized.slice("http://t.me/".length)}`;
+  if (normalized.startsWith("https://telegram.me/")) {
+    normalized = `https://t.me/${normalized.slice("https://telegram.me/".length)}`;
+  } else if (normalized.startsWith("http://telegram.me/")) {
+    normalized = `https://t.me/${normalized.slice("http://telegram.me/".length)}`;
   } else if (normalized.startsWith("http://t.me/")) {
     normalized = `https://t.me/${normalized.slice("http://t.me/".length)}`;
   }

@@ -14,7 +14,7 @@ func TestOpenAppMarkupMiniAppLink(t *testing.T) {
 	if btn["text"] != "🚀 Открыть приложение" {
 		t.Fatalf("unexpected button text: %v", btn["text"])
 	}
-	if got := btn["url"]; got != "https://t.me/flipo_bot/app?startapp=ref_abc" {
+	if got := btn["url"]; got != "https://telegram.me/flipo_bot/app?startapp=ref_abc" {
 		t.Fatalf("unexpected url: %v", got)
 	}
 }

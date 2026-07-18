@@ -25,7 +25,9 @@ func OpenAppButtonMarkup(opts OpenAppButtonOptions) map[string]any {
 
 	if appURL := resolveOpenAppURL(opts); appURL != "" {
 		if isTelegramDeepLink(appURL) {
-			button["url"] = appURL
+			// url + https://t.me/bot/app opens the Mini App twice on some clients
+			// (direct-link handler + url navigation). telegram.me avoids that.
+			button["url"] = toTelegramMeDeepLink(appURL)
 		} else {
 			button["web_app"] = map[string]string{"url": appURL}
 		}
@@ -47,29 +49,73 @@ func WebAppButtonMarkup(webAppURL, buttonText string) map[string]any {
 
 func resolveOpenAppURL(opts OpenAppButtonOptions) string {
 	if customURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/"); customURL != "" {
-		if payload := strings.TrimSpace(opts.StartPayload); payload != "" && !isTelegramDeepLink(customURL) {
-			sep := "?"
-			if strings.Contains(customURL, "?") {
-				sep = "&"
+		// Deep links cannot be used as web_app.url — fall through to bot short-name link
+		// when we need startapp, or keep as url-button deep link below.
+		if !isTelegramDeepLink(customURL) {
+			if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
+				sep := "?"
+				if strings.Contains(customURL, "?") {
+					sep = "&"
+				}
+				return customURL + sep + "tgWebAppStartParam=" + url.QueryEscape(payload)
 			}
-			return customURL + sep + "tgWebAppStartParam=" + url.QueryEscape(payload)
+			return customURL
+		}
+		// If admin pasted a t.me Mini App link as WebAppURL, still honour start payload
+		// via the bot short-name deep link when possible.
+		if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
+			if deep := miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, payload); deep != "" {
+				return deep
+			}
+			return appendStartApp(customURL, payload)
 		}
 		return customURL
 	}
 
-	botUsername := strings.TrimPrefix(strings.TrimSpace(opts.BotUsername), "@")
-	shortName := strings.Trim(strings.TrimSpace(opts.WebAppShortName), "/")
-	if botUsername != "" && shortName != "" {
-		appURL := "https://t.me/" + botUsername + "/" + shortName
-		if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
-			appURL += "?startapp=" + url.QueryEscape(payload)
-		}
+	return miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, opts.StartPayload)
+}
+
+func miniAppDeepLink(botUsername, shortName, startPayload string) string {
+	botUsername = strings.TrimPrefix(strings.TrimSpace(botUsername), "@")
+	shortName = strings.Trim(strings.TrimSpace(shortName), "/")
+	if botUsername == "" || shortName == "" {
+		return ""
+	}
+	appURL := "https://telegram.me/" + botUsername + "/" + shortName
+	return appendStartApp(appURL, startPayload)
+}
+
+func appendStartApp(appURL, startPayload string) string {
+	payload := strings.TrimSpace(startPayload)
+	if payload == "" {
 		return appURL
 	}
-
-	return ""
+	if strings.Contains(appURL, "startapp=") {
+		return appURL
+	}
+	sep := "?"
+	if strings.Contains(appURL, "?") {
+		sep = "&"
+	}
+	return appURL + sep + "startapp=" + url.QueryEscape(payload)
 }
 
 func isTelegramDeepLink(appURL string) bool {
-	return strings.HasPrefix(appURL, "https://t.me/") || strings.HasPrefix(appURL, "http://t.me/")
+	return strings.HasPrefix(appURL, "https://t.me/") ||
+		strings.HasPrefix(appURL, "http://t.me/") ||
+		strings.HasPrefix(appURL, "https://telegram.me/") ||
+		strings.HasPrefix(appURL, "http://telegram.me/")
+}
+
+func toTelegramMeDeepLink(appURL string) string {
+	switch {
+	case strings.HasPrefix(appURL, "https://t.me/"):
+		return "https://telegram.me/" + strings.TrimPrefix(appURL, "https://t.me/")
+	case strings.HasPrefix(appURL, "http://t.me/"):
+		return "https://telegram.me/" + strings.TrimPrefix(appURL, "http://t.me/")
+	case strings.HasPrefix(appURL, "http://telegram.me/"):
+		return "https://telegram.me/" + strings.TrimPrefix(appURL, "http://telegram.me/")
+	default:
+		return appURL
+	}
 }

@@ -151,6 +151,37 @@ func (n *AdminNotifier) NotifyWheelShare(ctx context.Context, actor AdminActor, 
 	))
 }
 
+func (n *AdminNotifier) NotifyWheelSpin(ctx context.Context, actor AdminActor, prizeNanoton int64, segmentLabel, spinSource string) {
+	label := strings.TrimSpace(segmentLabel)
+	if label == "" {
+		label = "приз"
+	}
+	source := wheelSpinSourceLabel(spinSource)
+	n.notify(ctx, actor, fmt.Sprintf(
+		"🎡 Лаки страйк — вращение\n%s\nВыигрыш: %s TON\nСектор: %s\nСпин: %s",
+		FormatActor(actor),
+		formatTON(prizeNanoton),
+		label,
+		source,
+	))
+}
+
+func wheelSpinSourceLabel(source string) string {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "daily":
+		return "ежедневный"
+	case "bonus":
+		return "бонусный"
+	case "admin":
+		return "админ"
+	default:
+		if source == "" {
+			return "—"
+		}
+		return source
+	}
+}
+
 func shareActionLabel(action string) string {
 	switch strings.ToLower(strings.TrimSpace(action)) {
 	case "share", "send":

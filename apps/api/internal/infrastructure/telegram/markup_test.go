@@ -42,7 +42,7 @@ func TestOpenAppButtonMarkupMiniAppFallback(t *testing.T) {
 	})
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
-	if got := btn["url"]; got != "https://t.me/flipo_bot/app" {
+	if got := btn["url"]; got != "https://telegram.me/flipo_bot/app" {
 		t.Fatalf("unexpected url: %v", got)
 	}
 }
@@ -65,7 +65,7 @@ func TestOpenAppButtonMarkupTelegramDeepLink(t *testing.T) {
 	})
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
-	if got := btn["url"]; got != "https://t.me/flipo_bot/app" {
+	if got := btn["url"]; got != "https://telegram.me/flipo_bot/app" {
 		t.Fatalf("unexpected url: %v", got)
 	}
 	if _, ok := btn["web_app"]; ok {

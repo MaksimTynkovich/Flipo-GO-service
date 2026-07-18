@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -22,6 +23,10 @@ type ChannelChecker interface {
 
 type WheelUserNotifier interface {
 	SendWheelBonusSpins(ctx context.Context, telegramUserID int64, count int) error
+}
+
+type AdminWheelNotifier interface {
+	NotifyWheelSpin(ctx context.Context, actor telegram.AdminActor, prizeNanoton int64, segmentLabel, spinSource string)
 }
 
 type ChannelNotSubscribedError struct {
@@ -44,6 +49,7 @@ type Service struct {
 	channelChecker  ChannelChecker
 	isAdmin         func(telegramID int64) bool
 	notifier        WheelUserNotifier
+	admin           AdminWheelNotifier
 }
 
 func NewService(wheelRepo domain.WheelRepository, users domain.UserRepository, balanceSvc *balance.Service) *Service {
@@ -61,6 +67,10 @@ func (s *Service) SetAdminChecker(isAdmin func(telegramID int64) bool) {
 
 func (s *Service) SetUserNotifier(notifier WheelUserNotifier) {
 	s.notifier = notifier
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminWheelNotifier) {
+	s.admin = notifier
 }
 
 func (s *Service) RequiredChannel() string {
@@ -298,6 +308,17 @@ func (s *Service) Spin(ctx context.Context, userID uuid.UUID, telegramID int64) 
 	}
 	if err := s.wheel.SaveState(ctx, state); err != nil {
 		return nil, err
+	}
+
+	if s.admin != nil {
+		actor := telegram.AdminActor{TelegramID: telegramID}
+		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+			actor.TelegramID = user.TelegramID
+			actor.Username = user.Username
+			actor.FirstName = user.FirstName
+			actor.LastName = user.LastName
+		}
+		s.admin.NotifyWheelSpin(ctx, actor, segment.AmountNanoton, segment.Label, spinSource)
 	}
 
 	spinsToday++
