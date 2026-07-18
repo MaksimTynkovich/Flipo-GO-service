@@ -1,4 +1,4 @@
-import { AUTH_SESSION_REFRESHED, getAuthToken, silentReauth, WS_URL } from "./api";
+import { AUTH_SESSION_REFRESHED, getAuthToken, resolvePublicWsUrl, silentReauth } from "./api";
 import { trackErrorSurface } from "./analytics";
 
 export type WSMessage = {
@@ -24,35 +24,65 @@ function trackWSIssue(
   });
 }
 
-function attachGameWSHandlers(ws: WebSocket, game: "roulette" | "crash" | "pvp") {
-  ws.onerror = () => {
-    trackWSIssue(`games/${game}`, `ws_${game}_error`, "WebSocket connection error");
-  };
-  ws.onclose = (event) => {
-    if (event.code !== 1000) {
-      trackWSIssue(`games/${game}`, `ws_${game}_close`, event.reason || "connection closed", {
-        close_code: event.code,
-      });
-    }
-  };
-}
-
 export function connectGameWS(
   game: "roulette" | "crash" | "pvp",
   onMessage: (msg: WSMessage) => void,
 ): () => void {
-  const ws = new WebSocket(`${WS_URL}/ws/games/${game}`);
-  attachGameWSHandlers(ws, game);
+  let ws: WebSocket | null = null;
+  let closed = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 0;
 
-  ws.onmessage = (ev) => {
-    try {
-      onMessage(JSON.parse(ev.data));
-    } catch {
-      trackWSIssue(`games/${game}`, `ws_${game}_malformed`, "Malformed WebSocket payload");
-    }
+  function scheduleReconnect() {
+    if (closed) return;
+    if (retryTimer) clearTimeout(retryTimer);
+    // 1s, 2s, 4s … capped at 8s — games need faster recovery than user channel.
+    const delayMs = Math.min(8000, 1000 * 2 ** Math.min(attempt, 3));
+    attempt += 1;
+    retryTimer = setTimeout(connect, delayMs);
+  }
+
+  function connect() {
+    if (closed) return;
+
+    const base = resolvePublicWsUrl();
+    ws = new WebSocket(`${base}/ws/games/${game}`);
+
+    ws.onopen = () => {
+      attempt = 0;
+    };
+
+    ws.onerror = () => {
+      trackWSIssue(`games/${game}`, `ws_${game}_error`, "WebSocket connection error");
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        onMessage(JSON.parse(ev.data));
+      } catch {
+        trackWSIssue(`games/${game}`, `ws_${game}_malformed`, "Malformed WebSocket payload");
+      }
+    };
+
+    ws.onclose = (event) => {
+      if (event.code !== 1000) {
+        trackWSIssue(`games/${game}`, `ws_${game}_close`, event.reason || "connection closed", {
+          close_code: event.code,
+        });
+      }
+      if (!closed) {
+        scheduleReconnect();
+      }
+    };
+  }
+
+  connect();
+
+  return () => {
+    closed = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    ws?.close();
   };
-
-  return () => ws.close();
 }
 
 export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
@@ -85,7 +115,8 @@ export function connectUserWS(onMessage: (msg: WSMessage) => void): () => void {
       return;
     }
 
-    ws = new WebSocket(`${WS_URL}/ws/user?token=${encodeURIComponent(token)}`);
+    const base = resolvePublicWsUrl();
+    ws = new WebSocket(`${base}/ws/user?token=${encodeURIComponent(token)}`);
 
     ws.onerror = () => {
       trackWSIssue("user", "ws_user_error", "User WebSocket connection error");

@@ -1,6 +1,13 @@
 "use client";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+function resolveAnalyticsApiUrl(): string {
+  const configured = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+  if (configured) return configured.replace(/\/$/, "");
+  if (typeof window !== "undefined") return "";
+  return "http://localhost:8080";
+}
+
+const API_URL = resolveAnalyticsApiUrl();
 const TOKEN_KEY = "flipo_token";
 const SESSION_KEY = "flipo_analytics_session_id";
 const SESSION_AT_KEY = "flipo_analytics_session_at";

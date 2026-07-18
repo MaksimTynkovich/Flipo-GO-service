@@ -162,7 +162,7 @@ export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTe
   }
 }
 
-/** Expand the Mini App and enter fullscreen on mobile (before first paint when possible). */
+/** Expand the Mini App on cold open (fullscreen is opt-in — see enableTelegramFullscreen). */
 export function initTelegramWebApp() {
   const webApp = getTelegramWebApp();
   if (!webApp) {
@@ -178,7 +178,9 @@ export function initTelegramWebApp() {
     } catch {
       // Older clients without Bot API 8.0+ orientation lock.
     }
-    enableTelegramFullscreen();
+    // Prefer expand() on cold open. Automatic requestFullscreen relaunches the
+    // WebView on some Android/iOS Telegram builds; call enableTelegramFullscreen
+    // only after the app is stable if true fullscreen is required.
   }
 
   const syncSafeArea = () => applyTelegramSafeAreaToDocument();

@@ -94,13 +94,8 @@ const tgThemeBootstrap = `
       try {
         webApp.lockOrientation?.();
       } catch (_) {}
-      // Request fullscreen before React paints so the user never sees a
-      // half-sheet → fullscreen relaunch (that looked like a double open).
-      try {
-        if (!webApp.isFullscreen) {
-          webApp.requestFullscreen?.();
-        }
-      } catch (_) {}
+      // Do not requestFullscreen here — on many mobile Telegram clients a cold-open
+      // fullscreen call relaunches the WebView ("opens only on the second try").
     }
     const sumInsets = (content, safe) => ({
       top: (content?.top || 0) + (safe?.top || 0),

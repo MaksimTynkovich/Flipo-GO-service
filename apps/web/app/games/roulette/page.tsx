@@ -77,6 +77,42 @@ function RoulettePageContent() {
     return disconnect;
   }, [loadHistory, loadRoundBets]);
 
+  // HTTP fallback: spin starts only on WS `phase: spinning`. If the socket
+  // drops or a tick is missed, countdown hits 0 and the wheel stays static.
+  useEffect(() => {
+    if (state?.phase !== "betting" || !state.ends_at) return;
+
+    const endsAtMs = new Date(state.ends_at).getTime();
+    if (!Number.isFinite(endsAtMs)) return;
+
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const poll = () => {
+      getRouletteState()
+        .then((s) => {
+          if (!cancelled) setState(s as RouletteRoundState);
+        })
+        .catch(() => {});
+    };
+
+    const msUntilEnd = endsAtMs - Date.now();
+    const startTimer = window.setTimeout(
+      () => {
+        if (cancelled) return;
+        poll();
+        intervalId = setInterval(poll, 1000);
+      },
+      Math.max(0, msUntilEnd),
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [state?.phase, state?.ends_at, state?.round_id]);
+
   useEffect(() => {
     loadRoundBets();
   }, [state?.round_id, loadRoundBets]);
