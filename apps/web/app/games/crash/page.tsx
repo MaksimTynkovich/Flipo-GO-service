@@ -38,8 +38,6 @@ import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { crashBetClosedLabel } from "@/lib/bet-cta";
 import { useCountdownSeconds } from "@/src/shared/hooks/useCountdownSeconds";
-import { trackEvent } from "@/lib/analytics";
-import { isFresherCrashState } from "@/lib/crash";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 const AUTO_STORAGE_KEY = "flipo.crash.autoCashout";
@@ -143,81 +141,71 @@ function CrashPageContent() {
   }, []);
 
   useEffect(() => {
-    const lastWsAt = { current: Date.now() };
-    const stateRef = { current: null as CrashRoundState | null };
-
-    const applyState = (next: CrashRoundState, source: "ws" | "http") => {
-      if (!isFresherCrashState(stateRef.current, next)) return;
-      const prev = stateRef.current;
-      stateRef.current = next;
-      setState(next);
-      if (
-        source === "http" &&
-        prev &&
-        (prev.phase !== next.phase || prev.round_id !== next.round_id)
-      ) {
-        trackEvent({
-          event_name: "crash_sync_recovered",
-          event_category: "realtime",
-          status: "info",
-          properties: {
-            from_phase: prev.phase,
-            to_phase: next.phase,
-            from_round: prev.round_number,
-            to_round: next.round_number,
-            ws_stale_ms: Date.now() - lastWsAt.current,
-          },
-        });
-      }
-    };
-
-    const refreshState = (reason: string) => {
+    const applyState = (s: CrashRoundState) => setState(s);
+    const refreshState = () => {
       getCrashState()
-        .then((s) => applyState(s as CrashRoundState, "http"))
-        .catch(() => {
-          trackEvent({
-            event_name: "crash_sync_poll_failed",
-            event_category: "realtime",
-            status: "error",
-            error_code: "crash_sync_poll_failed",
-            properties: { reason },
-          });
-        });
+        .then((s) => applyState(s as CrashRoundState))
+        .catch(() => {});
     };
 
-    refreshState("mount");
+    refreshState();
     loadHistory();
     loadActiveBets();
     loadRoundBets();
     const disconnect = connectGameWS(
       "crash",
       (msg) => {
-        if (msg.event === "tick") {
-          lastWsAt.current = Date.now();
-          applyState(msg.payload as CrashRoundState, "ws");
-        }
+        if (msg.event === "tick") setState(msg.payload as CrashRoundState);
         if (msg.event === "bets") setRoundBets(msg.payload as CrashRoundBetsData);
       },
-      { onOpen: () => refreshState("ws_open") },
+      { onOpen: refreshState },
     );
+    return disconnect;
+  }, [loadHistory, loadActiveBets, loadRoundBets]);
 
-    // Poll only when WS is stale OR after crash (server sleeps 3s then new betting —
-    // previous poll skipped "crashed" and left the UI frozen until refresh).
-    const pollId = window.setInterval(() => {
-      const cur = stateRef.current;
-      const staleMs = Date.now() - lastWsAt.current;
-      const needsCrashBridge =
-        cur?.phase === "crashed" || cur?.phase === "waiting";
-      const wsStale = staleMs > 1500;
-      if (!needsCrashBridge && !wsStale) return;
-      refreshState(needsCrashBridge ? "after_crash" : "ws_stale");
-    }, 500);
+  // HTTP fallback: live mult only starts after WS delivers phase "running".
+  // If the socket drops at countdown end, UI freezes on 1.00× until refresh.
+  useEffect(() => {
+    if (!state) return;
+
+    const phase = state.phase;
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = () => {
+      getCrashState()
+        .then((s) => {
+          if (!cancelled) setState(s as CrashRoundState);
+        })
+        .catch(() => {});
+    };
+
+    if (phase === "running") {
+      // Backup while flying — WS ticks are ~100ms; poll is a safety net only.
+      intervalId = setInterval(poll, 750);
+    } else if (phase === "betting" && state.ends_at) {
+      const endsAtMs = new Date(state.ends_at).getTime();
+      if (!Number.isFinite(endsAtMs)) return;
+      const msUntilEnd = endsAtMs - Date.now();
+      startTimer = setTimeout(
+        () => {
+          if (cancelled) return;
+          poll();
+          intervalId = setInterval(poll, 500);
+        },
+        Math.max(0, msUntilEnd),
+      );
+    } else {
+      return;
+    }
 
     return () => {
-      disconnect();
-      window.clearInterval(pollId);
+      cancelled = true;
+      if (startTimer != null) clearTimeout(startTimer);
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [loadHistory, loadActiveBets, loadRoundBets]);
+  }, [state?.phase, state?.ends_at, state?.round_id]);
 
   useEffect(() => {
     if (state?.round_id) loadRoundBets();

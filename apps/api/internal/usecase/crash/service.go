@@ -114,10 +114,9 @@ func (s *Service) persistWorker() {
 		if err := s.cache.Set(ctx, "crash:round:current", data, 0); err != nil {
 			slog.Warn("crash redis set failed", "error", err)
 		}
-		// Do NOT Publish every tick to pubsub:game:crash.
-		// Local Hub already got NotifyGameTick; RedisBridge would re-broadcast the
-		// same payload and double traffic (~20 msg/s). Slow mobile clients then fill
-		// their Send buffer and get dropped — UI freezes on 1.00× / last crash.
+		if err := s.cache.Publish(ctx, "pubsub:game:crash", data); err != nil {
+			slog.Warn("crash redis publish failed", "error", err)
+		}
 		cancel()
 	}
 }
@@ -339,26 +338,6 @@ func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 		return err
 	}
 
-	prev := s.memState.Load()
-	phaseChanged := prev == nil || prev.RoundID != state.RoundID || prev.Phase != state.Phase
-	if phaseChanged {
-		from := ""
-		var prevRound int64
-		if prev != nil {
-			from = prev.Phase
-			prevRound = prev.RoundNumber
-		}
-		slog.Info("crash phase transition",
-			"round", state.RoundNumber,
-			"round_id", state.RoundID,
-			"from_phase", from,
-			"from_round", prevRound,
-			"to_phase", state.Phase,
-			"multiplier", state.Multiplier,
-			"crash_point", state.CrashPoint,
-		)
-	}
-
 	copy := *state
 	s.memState.Store(&copy)
 
@@ -373,7 +352,7 @@ func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 	select {
 	case s.persistCh <- data:
 	default:
-		slog.Warn("crash persist queue full", "phase", state.Phase, "round", state.RoundNumber)
+		slog.Warn("crash persist queue full")
 	}
 	return nil
 }

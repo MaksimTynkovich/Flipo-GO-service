@@ -205,7 +205,6 @@ func (e *Engine) runRound(ctx context.Context) {
 	}
 	_ = e.svc.PublishState(ctx, betState)
 	_ = e.svc.PublishBets(ctx, roundID)
-	slog.Info("crash round betting", "round", roundNum, "round_id", roundID, "bet_seconds", e.betS)
 	time.Sleep(time.Duration(e.betS) * time.Second)
 
 	runStarted := time.Now().UTC()
@@ -220,7 +219,6 @@ func (e *Engine) runRound(ctx context.Context) {
 		ServerSeedHash: serverSeedHash,
 	}
 	_ = e.svc.PublishState(ctx, runState)
-	slog.Info("crash round running", "round", roundNum, "round_id", roundID, "crash_point", crashPoint)
 
 	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
@@ -260,7 +258,6 @@ func (e *Engine) runRound(ctx context.Context) {
 		ServerSeedHash: serverSeedHash,
 	}
 	_ = e.svc.PublishState(ctx, crashState)
-	slog.Info("crash round crashed", "round", roundNum, "round_id", roundID, "crash_point", crashPoint)
 
 	go e.finishRound(context.Background(), round, crashPoint, roundID)
 

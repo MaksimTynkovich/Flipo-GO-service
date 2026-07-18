@@ -162,35 +162,23 @@ export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTe
   }
 }
 
-/** Expand the Mini App on cold open. Fullscreen is NOT requested here — see scheduleSafeFullscreen. */
-let telegramWebAppInitialized = false;
-
+/** Expand the Mini App and enter fullscreen on mobile before first paint when possible. */
 export function initTelegramWebApp() {
   const webApp = getTelegramWebApp();
   if (!webApp) {
     return;
   }
 
-  // Idempotent: bootstrap + AuthProvider + TelegramProvider all call this.
-  if (!telegramWebAppInitialized) {
-    telegramWebAppInitialized = true;
-    webApp.ready();
-    webApp.expand();
-    if (isTelegramMobilePlatform(webApp.platform)) {
-      webApp.disableVerticalSwipes?.();
-      try {
-        webApp.lockOrientation?.();
-      } catch {
-        // Older clients without Bot API 8.0+ orientation lock.
-      }
-    }
-  } else {
-    // Still expand if the sheet collapsed — safe, no WebView relaunch.
+  webApp.ready();
+  webApp.expand();
+  if (isTelegramMobilePlatform(webApp.platform)) {
+    webApp.disableVerticalSwipes?.();
     try {
-      webApp.expand();
+      webApp.lockOrientation?.();
     } catch {
-      // ignore
+      // Older clients without Bot API 8.0+ orientation lock.
     }
+    enableTelegramFullscreen();
   }
 
   const syncSafeArea = () => applyTelegramSafeAreaToDocument();
@@ -200,32 +188,81 @@ export function initTelegramWebApp() {
   [50, 150, 400, 800].forEach((delay) => window.setTimeout(syncSafeArea, delay));
 }
 
-const FS_DONE_KEY = "flipo_tg_fullscreen";
+const FULLSCREEN_SESSION_KEY = "flipo_tg_fullscreen";
+
+/** Once per JS realm — bootstrap + initTelegramWebApp both call enable. */
+let fullscreenRequestedThisDocument = false;
 
 /**
- * @deprecated Prefer deep-link `mode=fullscreen` + expand(). Automatic
- * requestFullscreen freezes/relaunches WebViews on many mobile Telegram builds.
- * Kept as a no-op alias for call sites that still import it.
+ * Enter Telegram fullscreen on mobile. Safe to call multiple times.
+ * Call as early as possible (bootstrap / initTelegramWebApp) — not after the
+ * auth splash, or the half-sheet → fullscreen transition looks like a double open.
+ *
+ * Some mobile Telegram builds relaunch the WebView on the first requestFullscreen.
+ * We mark the attempt in sessionStorage so the post-relaunch load does not request
+ * again (that loop felt like "opens only on the second try").
  */
 export function enableTelegramFullscreen() {
-  applyTelegramSafeAreaToDocument();
-}
-
-/**
- * Fullscreen must come from Telegram deep-link `mode=fullscreen` (bot buttons).
- * We never call requestFullscreen from JS — that API relaunches/freezes the
- * WebView on enough Android/iOS builds that the Mini App "won't open" until
- * Telegram is force-quit. expand() already gives a usable mobile viewport.
- */
-export function scheduleSafeFullscreen() {
   const webApp = getTelegramWebApp();
-  if (webApp?.isFullscreen) {
+  if (!webApp || !isTelegramMobilePlatform(webApp.platform)) {
+    return;
+  }
+
+  if (webApp.isFullscreen) {
     try {
-      sessionStorage.setItem(FS_DONE_KEY, "done");
+      sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "done");
     } catch {
       // ignore
     }
+    applyTelegramSafeAreaToDocument();
+    return;
   }
+
+  if (!webApp.requestFullscreen) {
+    applyTelegramSafeAreaToDocument();
+    return;
+  }
+
+  if (fullscreenRequestedThisDocument) {
+    applyTelegramSafeAreaToDocument();
+    return;
+  }
+
+  try {
+    // Fresh document after a fullscreen relaunch — do not request again.
+    if (sessionStorage.getItem(FULLSCREEN_SESSION_KEY) === "pending") {
+      sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "done");
+      applyTelegramSafeAreaToDocument();
+      return;
+    }
+  } catch {
+    // sessionStorage unavailable
+  }
+
+  fullscreenRequestedThisDocument = true;
+  try {
+    sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "pending");
+  } catch {
+    // ignore
+  }
+
+  try {
+    webApp.requestFullscreen();
+  } catch {
+    // Older Telegram clients only support expand().
+  }
+
+  webApp.onEvent?.("fullscreenChanged", () => {
+    if (webApp.isFullscreen) {
+      try {
+        sessionStorage.setItem(FULLSCREEN_SESSION_KEY, "done");
+      } catch {
+        // ignore
+      }
+    }
+    applyTelegramSafeAreaToDocument();
+  });
+
   applyTelegramSafeAreaToDocument();
 }
 
