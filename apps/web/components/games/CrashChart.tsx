@@ -8,7 +8,6 @@ import {
   calibrateClockOffsetMs,
   computeRunningMultiplier,
   crashHeatTone,
-  elapsedMsForMultiplier,
   flightProgressWorld,
   formatMultiplier,
   formatMultiplierLive,
@@ -69,7 +68,9 @@ type Particle = {
   hue: number;
 };
 
-const CLOCK_SYNC_BLEND = 0.22;
+/** Soft skew correction — only when local vs server bin drifts meaningfully. */
+const CLOCK_SYNC_BLEND = 0.06;
+const CLOCK_DRIFT_MULT = 0.04;
 const LIVE_EMIT_MS = 100;
 
 function liveCreditNanoton(
@@ -421,7 +422,6 @@ export function CrashChart({
   const runStartMs = useRef(0);
   const clockOffsetMs = useRef(0);
   const lastServerMult = useRef(1);
-  const lastTickAtMs = useRef(0);
   const runningReadyRef = useRef(false);
   const milestoneRef = useRef(1);
   const lastEmitMs = useRef(0);
@@ -495,7 +495,6 @@ export function CrashChart({
       runStartMs.current = 0;
       clockOffsetMs.current = 0;
       lastServerMult.current = 1;
-      lastTickAtMs.current = 0;
       milestoneRef.current = 1;
       particlesRef.current = [];
       smokeRef.current = [];
@@ -515,18 +514,31 @@ export function CrashChart({
       if (!runningReadyRef.current) {
         runningReadyRef.current = true;
         runStartMs.current = resolveRunStartMs(state);
-        clockOffsetMs.current = calibrateClockOffsetMs(runStartMs.current, serverMult, now);
+        // Mid-bin sample: server reports floor(raw), so +0.005 ≈ true elapsed.
+        const syncMult = serverMult <= 1 ? 1 : serverMult + 0.005;
+        clockOffsetMs.current = calibrateClockOffsetMs(runStartMs.current, syncMult, now);
         lastServerMult.current = serverMult;
-        lastTickAtMs.current = now;
         particlesRef.current = [];
         smokeRef.current = [];
         prevPosRef.current = null;
         crashAnimRef.current = null;
       } else if (serverMult !== lastServerMult.current) {
-        const targetOffset = calibrateClockOffsetMs(runStartMs.current, serverMult, now);
-        clockOffsetMs.current += (targetOffset - clockOffsetMs.current) * CLOCK_SYNC_BLEND;
         lastServerMult.current = serverMult;
-        lastTickAtMs.current = now;
+        // Floored WS ticks are stepped; only nudge clock when local curve
+        // drifted outside the server's 0.01× bin by a wide margin.
+        const localMult = computeRunningMultiplier({
+          runStartMs: runStartMs.current,
+          clockOffsetMs: clockOffsetMs.current,
+          nowMs: now,
+        });
+        const binLo = serverMult;
+        const binHi = serverMult + 0.01;
+        if (localMult < binLo - CLOCK_DRIFT_MULT || localMult > binHi + CLOCK_DRIFT_MULT) {
+          const syncMult = serverMult + 0.005;
+          const targetOffset = calibrateClockOffsetMs(runStartMs.current, syncMult, now);
+          clockOffsetMs.current +=
+            (targetOffset - clockOffsetMs.current) * CLOCK_SYNC_BLEND;
+        }
       }
     }
 
@@ -792,8 +804,6 @@ export function CrashChart({
         climbMult = computeRunningMultiplier({
           runStartMs: runStartMs.current,
           clockOffsetMs: clockOffsetMs.current,
-          serverMultiplier: lastServerMult.current,
-          lastTickAtMs: lastTickAtMs.current,
           nowMs: now,
         });
         const tipWorld = rocketWorldPos(climbMult, w, h);

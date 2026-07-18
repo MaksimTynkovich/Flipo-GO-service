@@ -82,30 +82,18 @@ export function calibrateClockOffsetMs(
 }
 
 /**
- * Smooth local extrapolation with soft server pull.
- * Avoid hard caps that freeze the curve between WS ticks.
+ * Continuous local growth from run start + clock skew.
+ * Do not blend toward floored WS samples — that creates sawtooth jumps
+ * whenever the server stays on the same 0.01× bin for >1 tick.
  */
 export function computeRunningMultiplier(params: {
   runStartMs: number;
   clockOffsetMs: number;
-  serverMultiplier: number;
-  lastTickAtMs: number;
   nowMs?: number;
 }): number {
   const now = params.nowMs ?? Date.now();
   const elapsed = Math.max(0, now - params.clockOffsetMs - params.runStartMs);
-  const smooth = Math.max(1, multiplierAtElapsedMs(elapsed));
-  const server = Math.max(1, params.serverMultiplier);
-  const sinceTick = Math.max(0, now - params.lastTickAtMs);
-
-  // Fresh tick: trust local smooth growth.
-  if (sinceTick <= CRASH_TICK_MS * 1.5) {
-    return smooth;
-  }
-
-  // Stale tick: ease toward server instead of freezing.
-  const lag = Math.min(1, (sinceTick - CRASH_TICK_MS) / (CRASH_TICK_MS * 4));
-  return smooth * (1 - lag * 0.35) + server * (lag * 0.35);
+  return Math.max(1, multiplierAtElapsedMs(elapsed));
 }
 
 export function liveMultiplier(elapsedMs: number): number {
