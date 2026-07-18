@@ -41,7 +41,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath, cfg.TelegramMTProtoEnabled)
 	stakeRepo := postgres.NewStakingRepo(db)
 	invRepo := postgres.NewInventoryRepo(db)
 	userRepo := postgres.NewUserRepo(db)

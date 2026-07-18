@@ -36,7 +36,9 @@ type WithdrawalPromoGate interface {
 
 type AdminWalletNotifier interface {
 	NotifyDeposit(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
-	NotifyWithdraw(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
+	NotifyDepositConfirmed(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
+	NotifyWithdrawAttempt(ctx context.Context, actor telegram.AdminActor, amountNanoton int64, pendingReview bool)
+	NotifyWithdrawConfirmed(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
 	NotifyWithdrawFailed(ctx context.Context, actor telegram.AdminActor, transferID string, amountNanoton int64, errMsg string)
 }
 
@@ -322,12 +324,12 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 		},
 	})
 	if s.admin != nil {
-		s.admin.NotifyWithdraw(ctx, telegram.AdminActor{
+		s.admin.NotifyWithdrawAttempt(ctx, telegram.AdminActor{
 			TelegramID: user.TelegramID,
 			Username:   user.Username,
 			FirstName:  user.FirstName,
 			LastName:   user.LastName,
-		}, receiveNanoton)
+		}, receiveNanoton, initialStatus == domain.TonStatusPendingReview)
 	}
 	if initialStatus == domain.TonStatusPendingReview {
 		s.analytics.Track(ctx, analyticsuc.EventInput{
@@ -368,6 +370,14 @@ func (s *Service) trackDepositConfirmed(ctx context.Context, userID uuid.UUID, a
 			"wallet_address": wallet,
 		},
 	})
+	if s.admin != nil {
+		s.admin.NotifyDepositConfirmed(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, amountNanoton)
+	}
 }
 
 func (s *Service) ListTransfers(ctx context.Context, userID uuid.UUID, limit int) ([]TransferView, error) {
@@ -422,6 +432,7 @@ func (s *Service) ProcessPendingDeposits(ctx context.Context) error {
 		if _, err := s.transfers.CompleteDepositAtomic(ctx, transfer.ID, incoming.TxHash, incoming.LT); err != nil {
 			continue
 		}
+		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
 		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
 	}
 	return nil
@@ -493,6 +504,10 @@ func (s *Service) ProcessPendingWithdrawals(ctx context.Context) error {
 				s.admin.NotifyWithdrawFailed(ctx, s.actorForUser(ctx, transfer.UserID), transfer.ID.String(), transfer.NetAmountNanoton(),
 					fmt.Sprintf("on-chain sent but DB complete failed: %v (tx=%s)", err, txHash))
 			}
+			continue
+		}
+		if s.admin != nil {
+			s.admin.NotifyWithdrawConfirmed(ctx, s.actorForUser(ctx, transfer.UserID), transfer.NetAmountNanoton())
 		}
 	}
 	return nil

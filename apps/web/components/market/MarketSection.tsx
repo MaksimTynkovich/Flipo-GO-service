@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarketGiftCard, MarketGiftCardSkeleton } from "@/components/market/MarketGiftCard";
 import { MarketGiftDetailSheet } from "@/components/market/MarketGiftDetailSheet";
 import { MarketToolbar, type MarketSort } from "@/components/market/MarketToolbar";
@@ -12,6 +12,8 @@ import { mainBalanceNanoton } from "@/lib/balance";
 import { formatCollectionSlug } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
 import { Gift, SearchX } from "lucide-react";
+
+const PAGE_SIZE = 20;
 
 type Props = {
   onPurchased?: () => void;
@@ -57,10 +59,24 @@ function filterAndSortListings(
   return next;
 }
 
+function mergeListings(prev: MarketListing[], next: MarketListing[]): MarketListing[] {
+  if (prev.length === 0) return next;
+  const seen = new Set(prev.map((item) => item.id));
+  const merged = [...prev];
+  for (const item of next) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    merged.push(item);
+  }
+  return merged;
+}
+
 export function MarketSection({ onPurchased }: Props) {
   const { user, setUser, ready } = useAuth();
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MarketListing | null>(null);
   const [buying, setBuying] = useState(false);
@@ -69,30 +85,88 @@ export function MarketSection({ onPurchased }: Props) {
   const [sort, setSort] = useState<MarketSort>("newest");
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+  const offsetRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const loadPage = useCallback(async (offset: number, append: boolean) => {
+    if (append) {
+      if (loadingMoreRef.current || !hasMoreRef.current) return;
+      loadingMoreRef.current = true;
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setLoadError(null);
+      hasMoreRef.current = true;
+      setHasMore(true);
+      offsetRef.current = 0;
+    }
+
     let lastError: unknown;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const attempts = append ? 1 : 2;
+    for (let attempt = 0; attempt < attempts; attempt++) {
       try {
-        if (attempt > 0) {
+        if (!append && attempt > 0) {
           await new Promise((resolve) => window.setTimeout(resolve, 400));
         }
-        setListings(await getMarketListings());
-        setLoading(false);
+        const page = await getMarketListings({ limit: PAGE_SIZE, offset });
+        setListings((prev) => (append ? mergeListings(prev, page) : page));
+        offsetRef.current = offset + page.length;
+        const more = page.length >= PAGE_SIZE;
+        hasMoreRef.current = more;
+        setHasMore(more);
+        setLoadError(null);
+        if (append) {
+          loadingMoreRef.current = false;
+          setLoadingMore(false);
+        } else {
+          setLoading(false);
+        }
         return;
       } catch (e) {
         lastError = e;
       }
     }
-    setLoadError(formatUserError(lastError, "Не удалось загрузить маркет"));
-    setLoading(false);
+
+    if (append) {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    } else {
+      setLoadError(formatUserError(lastError, "Не удалось загрузить маркет"));
+      setLoading(false);
+    }
   }, []);
+
+  const load = useCallback(async () => {
+    await loadPage(0, false);
+  }, [loadPage]);
+
+  const loadMore = useCallback(async () => {
+    await loadPage(offsetRef.current, true);
+  }, [loadPage]);
 
   useEffect(() => {
     if (!ready) return;
     void load();
   }, [ready, load]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || loading || !hasMore) return;
+
+    const root = document.querySelector<HTMLElement>(".app-frame__main");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadMore();
+        }
+      },
+      { root, rootMargin: "240px 0px", threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading, hasMore, loadMore, listings.length]);
 
   const collections = useMemo(() => {
     const counts = new Map<string, number>();
@@ -174,9 +248,16 @@ export function MarketSection({ onPurchased }: Props) {
           : visibleListings.map((listing) => (
               <MarketGiftCard key={listing.id} listing={listing} onClick={setSelected} />
             ))}
+        {loadingMore
+          ? Array.from({ length: 3 }).map((_, i) => (
+              <MarketGiftCardSkeleton key={`more-${i}`} />
+            ))
+          : null}
       </div>
 
-      {!loading && loadError && (
+      {!loading && hasMore ? <div ref={sentinelRef} className="h-1 w-full" aria-hidden /> : null}
+
+      {!loading && loadError && listings.length === 0 && (
         <div className="flex flex-col items-center gap-3 py-12 text-center">
           <SearchX className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
           <p className="text-sm font-medium">Не удалось загрузить</p>
@@ -201,7 +282,11 @@ export function MarketSection({ onPurchased }: Props) {
         </div>
       )}
 
-      {!loading && listings.length > 0 && visibleListings.length === 0 && (
+      {!loading &&
+        !loadingMore &&
+        !hasMore &&
+        listings.length > 0 &&
+        visibleListings.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <SearchX className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
           <p className="text-sm font-medium">Ничего не найдено</p>

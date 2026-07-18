@@ -36,7 +36,7 @@ export function TelegramAccessGate({ children }: { children: React.ReactNode }) 
   }, [allowed, checking, pathname]);
 
   if (checking) {
-    return <AppSplashScreen />;
+    return <AppSplashScreen showRecovery />;
   }
 
   if (!allowed) {

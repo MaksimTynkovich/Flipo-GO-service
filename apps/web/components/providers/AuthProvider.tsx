@@ -11,9 +11,15 @@ import {
   User,
 } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { markBootStage } from "@/lib/boot";
 import { formatUserError } from "@/lib/user-errors";
 import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
-import { getTelegramWebApp, hasTelegramInitData, initTelegramWebApp } from "@/src/shared/lib/twa";
+import {
+  enableTelegramFullscreen,
+  getTelegramWebApp,
+  hasTelegramInitData,
+  initTelegramWebApp,
+} from "@/src/shared/lib/twa";
 import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
 
 type AuthState = {
@@ -45,7 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function init() {
-      const AUTH_TIMEOUT_MS = 20_000;
+      markBootStage("auth_started");
+      const AUTH_TIMEOUT_MS = 12_000;
       const timeoutId = window.setTimeout(() => {
         trackEvent({
           event_name: "auth_loading_timeout",
@@ -140,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setError("Откройте приложение в Telegram.");
+        markBootStage("auth_failed");
       } catch (e) {
         trackEvent({
           event_name: "auth_failed",
@@ -149,17 +157,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error_message: e instanceof Error ? e.message : "auth_failed",
         });
         setError(formatUserError(e, "Не удалось войти"));
+        markBootStage("auth_failed");
       } finally {
         window.clearTimeout(timeoutId);
         setLoading(false);
         setReady(true);
+        markBootStage("app_ready");
+        // After first paint — fullscreen on cold open freezes some Android WebViews.
+        window.setTimeout(() => enableTelegramFullscreen(), 100);
       }
     }
     init();
   }, [isAdminRoute]);
 
   if (loading) {
-    return <AppSplashScreen />;
+    return <AppSplashScreen showRecovery />;
   }
 
   if (!user && error) {

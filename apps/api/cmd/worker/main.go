@@ -38,7 +38,7 @@ func main() {
 	platformRepo := postgres.NewPlatformRepo(db)
 	analyticsRepo := postgres.NewAnalyticsRepo(db)
 	giftTraitRepo := postgres.NewGiftTraitPriceRepo(db)
-	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath)
+	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath, cfg.TelegramMTProtoEnabled)
 	giftValuator := gifts.NewDefaultValuator(
 		cfg.MRKTAPIToken,
 		cfg.GiftAssetAPIKey,

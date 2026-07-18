@@ -13,6 +13,7 @@ import (
 )
 
 const UserIDKey = "user_id"
+const TelegramIDKey = "telegram_id"
 
 func JWTAuth(authSvc *auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -30,6 +31,7 @@ func JWTAuth(authSvc *auth.Service) gin.HandlerFunc {
 			return
 		}
 		c.Set(UserIDKey, claims.UserID)
+		c.Set(TelegramIDKey, claims.TelegramID)
 		c.Next()
 	}
 }
@@ -48,6 +50,20 @@ func GetUserID(c *gin.Context) uuid.UUID {
 		return uid
 	}
 	return uuid.Nil
+}
+
+func GetTelegramID(c *gin.Context) int64 {
+	id, _ := c.Get(TelegramIDKey)
+	switch v := id.(type) {
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	case int:
+		return int64(v)
+	default:
+		return 0
+	}
 }
 
 func corsAllowHeaders(c *gin.Context) string {

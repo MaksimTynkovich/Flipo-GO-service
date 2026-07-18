@@ -17,7 +17,9 @@ func TestAdminNotifierSkipsAdmins(t *testing.T) {
 	// Should no-op for admin actors (no panic / no send attempt beyond Enabled checks).
 	n.NotifyBotStart(context.Background(), AdminActor{TelegramID: 111, Username: "admin"})
 	n.NotifyDeposit(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
-	n.NotifyWithdraw(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
+	n.NotifyDepositConfirmed(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
+	n.NotifyWithdrawAttempt(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000, true)
+	n.NotifyWithdrawConfirmed(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
 	n.NotifyReferralShare(context.Background(), AdminActor{TelegramID: 111}, "copy")
 }
 
@@ -25,6 +27,11 @@ func TestNotifyGiftInventoryAllowsAdminActor(t *testing.T) {
 	n := NewAdminNotifier(NewBotAPI("token"), []int64{111})
 	// Gift deposits notify even when the depositor is an admin (notifyAll path).
 	n.NotifyGiftInventory(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "Vice Cream", 1_000_000_000)
+}
+
+func TestNotifyWheelShareAllowsAdminActor(t *testing.T) {
+	n := NewAdminNotifier(NewBotAPI("token"), []int64{111})
+	n.NotifyWheelShare(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "share")
 }
 
 func TestFormatActor(t *testing.T) {

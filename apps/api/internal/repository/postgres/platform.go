@@ -165,6 +165,8 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 		{GameType: domain.GameRoulette, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 50_000_000_000, MaxPayoutNanoton: 700_000_000_000, HouseEdgeBps: 667, RTPBps: 9333},
 		{GameType: domain.GameCrash, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 30_000_000_000, MaxPayoutNanoton: 500_000_000_000, HouseEdgeBps: 100, RTPBps: 9900},
 		{GameType: domain.GamePvP, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 20_000_000_000, MaxPayoutNanoton: 400_000_000_000, HouseEdgeBps: 0, RTPBps: 9500, PlatformFeeBps: 500},
+		// Wheel has no bets; limits are placeholders so the row fits game_configs.
+		{GameType: domain.GameWheel, Enabled: true, MinBetNanoton: 0, MaxBetNanoton: 0, MaxPayoutNanoton: 0, HouseEdgeBps: 0, RTPBps: 10000},
 	}
 	for i := range defaults {
 		var existing domain.GameConfig

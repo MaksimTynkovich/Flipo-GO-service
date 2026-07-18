@@ -60,7 +60,7 @@ func resolveOpenAppURL(opts OpenAppButtonOptions) string {
 	botUsername := strings.TrimPrefix(strings.TrimSpace(opts.BotUsername), "@")
 	shortName := strings.Trim(strings.TrimSpace(opts.WebAppShortName), "/")
 	if botUsername != "" && shortName != "" {
-		appURL := "https://telegram.me/" + botUsername + "/" + shortName
+		appURL := "https://t.me/" + botUsername + "/" + shortName
 		if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
 			appURL += "?startapp=" + url.QueryEscape(payload)
 		}
@@ -71,5 +71,5 @@ func resolveOpenAppURL(opts OpenAppButtonOptions) string {
 }
 
 func isTelegramDeepLink(appURL string) bool {
-	return strings.HasPrefix(appURL, "https://telegram.me/") || strings.HasPrefix(appURL, "http://telegram.me/")
+	return strings.HasPrefix(appURL, "https://t.me/") || strings.HasPrefix(appURL, "http://t.me/")
 }

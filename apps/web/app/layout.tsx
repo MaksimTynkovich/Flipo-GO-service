@@ -95,11 +95,7 @@ const tgThemeBootstrap = `
         webApp.lockOrientation?.();
       } catch (_) {}
     }
-    try {
-      if (isMobilePlatform(webApp.platform) && !webApp.isFullscreen) {
-        webApp.requestFullscreen?.();
-      }
-    } catch (_) {}
+    // Fullscreen is deferred until React marks app_ready (see enableTelegramFullscreen).
     const sumInsets = (content, safe) => ({
       top: (content?.top || 0) + (safe?.top || 0),
       bottom: (content?.bottom || 0) + (safe?.bottom || 0),
@@ -165,6 +161,138 @@ const tgThemeBootstrap = `
 })();
 `;
 
+const bootWatchdog = `
+(() => {
+  const BOOT_HANG_MS = 10000;
+  const ANON_KEY = "flipo_analytics_anonymous_id";
+  const SESSION_KEY = "flipo_analytics_session_id";
+  const ensureId = (key) => {
+    try {
+      let id = localStorage.getItem(key);
+      if (!id) {
+        id = (crypto.randomUUID && crypto.randomUUID()) ||
+          ("id_" + Math.random().toString(36).slice(2) + Date.now().toString(36));
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch (_) {
+      return "anon_" + Date.now().toString(36);
+    }
+  };
+  const post = (event) => {
+    try {
+      const body = JSON.stringify({
+        events: [{
+          event_name: event.event_name,
+          event_category: "acquisition",
+          source: "web",
+          status: event.status || "error",
+          error_code: event.error_code || "",
+          error_message: event.error_message || "",
+          path: location.pathname,
+          screen: location.pathname,
+          session_id: ensureId(SESSION_KEY),
+          anonymous_id: ensureId(ANON_KEY),
+          occurred_at: new Date().toISOString(),
+          properties: event.properties || {},
+        }],
+      });
+      const url = "/api/v1/analytics/events";
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+      } else {
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  };
+  const showRecovery = () => {
+    if (document.getElementById("flipo-boot-recovery")) return;
+    const el = document.createElement("div");
+    el.id = "flipo-boot-recovery";
+    el.setAttribute("role", "alert");
+    el.style.cssText =
+      "position:fixed;inset:0;z-index:2147483646;display:flex;flex-direction:column;" +
+      "align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;" +
+      "background:var(--background,#0c141c);color:var(--foreground,#f2f5f7);" +
+      "font-family:system-ui,-apple-system,sans-serif;";
+    el.innerHTML =
+      '<p style="margin:0;font-size:15px;line-height:1.45;max-width:280px;opacity:.9">' +
+      "Приложение долго загружается. Обычно помогает перезапуск." +
+      "</p>" +
+      '<button type="button" id="flipo-boot-reload" style="' +
+      "appearance:none;border:0;border-radius:12px;padding:12px 20px;font-size:14px;" +
+      "font-weight:600;background:#3390ec;color:#fff;cursor:pointer;" +
+      '">Перезагрузить</button>';
+    document.body.appendChild(el);
+    document.getElementById("flipo-boot-reload")?.addEventListener("click", () => {
+      post({
+        event_name: "boot_reload_clicked",
+        status: "info",
+        error_code: "boot_reload",
+        properties: {
+          elapsed_ms: Date.now() - (window.__flipoBoot?.t0 || Date.now()),
+          stages: window.__flipoBoot?.stages || {},
+        },
+      });
+      location.reload();
+    });
+  };
+  window.__flipoBoot = {
+    t0: Date.now(),
+    ready: false,
+    hangReported: false,
+    stages: { script: 0 },
+    mark(stage) {
+      if (!this.stages[stage]) this.stages[stage] = Date.now() - this.t0;
+      if (stage === "app_ready" || stage === "auth_failed") {
+        this.ready = true;
+        if (this.timer) clearTimeout(this.timer);
+        const overlay = document.getElementById("flipo-boot-recovery");
+        if (overlay) overlay.remove();
+      }
+    },
+    reportHang(reason, extra) {
+      if (this.ready || this.hangReported) return;
+      this.hangReported = true;
+      post({
+        event_name: "boot_hang",
+        status: "error",
+        error_code: "boot_hang",
+        error_message: reason || "boot hang",
+        properties: Object.assign(
+          {
+            elapsed_ms: Date.now() - this.t0,
+            stages: this.stages,
+            has_telegram: !!(window.Telegram && window.Telegram.WebApp),
+            has_init_data: !!(
+              window.Telegram &&
+              window.Telegram.WebApp &&
+              window.Telegram.WebApp.initData
+            ),
+            platform:
+              (window.Telegram &&
+                window.Telegram.WebApp &&
+                window.Telegram.WebApp.platform) ||
+              "unknown",
+            visibility: document.visibilityState,
+          },
+          extra || {},
+        ),
+      });
+      if (!(extra && extra.skip_ui)) showRecovery();
+    },
+  };
+  window.__flipoBoot.timer = setTimeout(() => {
+    window.__flipoBoot.reportHang("boot still not ready after " + BOOT_HANG_MS + "ms");
+  }, BOOT_HANG_MS);
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className={cn(sans.variable, "bg-background")}>
@@ -172,6 +300,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <Script id="tg-theme-bootstrap" strategy="beforeInteractive">
           {tgThemeBootstrap}
+        </Script>
+        <Script id="flipo-boot-watchdog" strategy="beforeInteractive">
+          {bootWatchdog}
         </Script>
         <Providers>
           <AppLayout>{children}</AppLayout>

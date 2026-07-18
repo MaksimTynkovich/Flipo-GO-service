@@ -22,6 +22,15 @@ import {
   type AdminSocialSimSettings,
 } from "@/lib/api";
 
+const MODE_LABELS: Record<string, string> = {
+  wheel: "Лаки страйк",
+  crash: "Crash",
+  roulette: "Рулетка",
+  pvp: "Комнаты",
+};
+
+const MODE_ORDER = ["wheel", "crash", "roulette", "pvp"] as const;
+
 function previewOnline(sim: AdminSocialSimSettings | null): number {
   if (!sim?.enabled || !sim.lobby_enabled) return 0;
   const hour = new Date().getHours();
@@ -39,11 +48,12 @@ export default function GamesSection() {
   const [risk, setRisk] = useState<AdminRiskSettings | null>(null);
   const [sim, setSim] = useState<AdminSocialSimSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingMode, setSavingMode] = useState<string | null>(null);
   const onlinePreview = useMemo(() => previewOnline(sim), [sim]);
 
   async function load() {
     setLoading(true);
-    const [statsData, configsData, riskData, simData] = await loadCached("admin:games", () =>
+    const [statsData, configsData, riskData, simData] = await loadCached("admin:games:v2", () =>
       Promise.all([
         getAdminGameStats(),
         getAdminGameConfigs(),
@@ -55,15 +65,37 @@ export default function GamesSection() {
     setConfigs(configsData);
     setRisk(riskData);
     setSim(simData);
-    primeCache("admin:games", [statsData, configsData, riskData, simData]);
+    primeCache("admin:games:v2", [statsData, configsData, riskData, simData]);
     setLoading(false);
+  }
+
+  async function toggleModeEnabled(cfg: AdminGameConfig, enabled: boolean) {
+    setSavingMode(cfg.game_type);
+    const next = { ...cfg, enabled };
+    try {
+      await updateAdminGameConfig(next);
+      setConfigs((prev) => prev.map((c) => (c.game_type === cfg.game_type ? next : c)));
+      showToast({
+        variant: "success",
+        title: enabled
+          ? `${MODE_LABELS[cfg.game_type] ?? cfg.game_type}: включён для всех`
+          : `${MODE_LABELS[cfg.game_type] ?? cfg.game_type}: только для админов`,
+      });
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось сохранить",
+      });
+    } finally {
+      setSavingMode(null);
+    }
   }
 
   useEffect(() => {
     runAfterFirstPaint(() => {
       const cached = readCached<
         [AdminGameStat[], AdminGameConfig[], AdminRiskSettings, AdminSocialSimSettings]
-      >("admin:games");
+      >("admin:games:v2");
       if (cached) {
         setStats(cached[0]);
         setConfigs(cached[1]);
@@ -75,7 +107,50 @@ export default function GamesSection() {
   }, []);
 
   return (
-    <AdminPage title="Игры" description="Настройки RTP, лимиты ставок и ротация seed.">
+    <AdminPage title="Игры" description="Доступность режимов, RTP, лимиты ставок и ротация seed.">
+      <section className="panel space-y-3">
+        <div>
+          <p className="text-base font-semibold">Доступность режимов</p>
+          <p className="text-sm text-muted">
+            Выключенный режим скрыт для пользователей и недоступен по API. Админы по-прежнему могут заходить.
+          </p>
+        </div>
+        {configs.length === 0 && loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-12 animate-pulse rounded-xl bg-surface-raised/50" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {MODE_ORDER.map((gameType) => {
+              const cfg = configs.find((c) => c.game_type === gameType);
+              if (!cfg) return null;
+              const saving = savingMode === gameType;
+              return (
+                <label
+                  key={gameType}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-surface-raised/50 px-3 py-3 text-sm"
+                >
+                  <span className="font-medium">{MODE_LABELS[gameType] ?? gameType}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="text-xs text-muted">{cfg.enabled ? "для всех" : "только админы"}</span>
+                    <input
+                      type="checkbox"
+                      checked={cfg.enabled}
+                      disabled={saving}
+                      onChange={(e) => {
+                        void toggleModeEnabled(cfg, e.target.checked);
+                      }}
+                    />
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <section className="panel space-y-3">
         <p className="text-base font-semibold">Статистика игр</p>
         {stats.length === 0 && loading ? (
@@ -103,9 +178,11 @@ export default function GamesSection() {
 
       <section className="panel space-y-3">
         <p className="text-base font-semibold">Конфигурация игр</p>
-        {configs.map((cfg) => (
+        {configs
+          .filter((cfg) => cfg.game_type !== "wheel")
+          .map((cfg) => (
           <div key={cfg.game_type} className="space-y-2 rounded-xl border border-border p-3 text-sm">
-            <p className="font-semibold uppercase">{cfg.game_type}</p>
+            <p className="font-semibold uppercase">{MODE_LABELS[cfg.game_type] ?? cfg.game_type}</p>
             <div className="grid grid-cols-2 gap-2">
               <AdminTonField
                 label="Мин. ставка (TON)"

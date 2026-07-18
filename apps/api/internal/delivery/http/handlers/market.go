@@ -24,8 +24,17 @@ func NewMarketHandler(svc *market.Service, analyticsSvc *analyticsuc.Service) *M
 }
 
 func (h *MarketHandler) List(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	listings, err := h.market.List(c.Request.Context(), limit, offset)
 	if err != nil {

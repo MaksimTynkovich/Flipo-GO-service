@@ -16,6 +16,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
+	"github.com/flipo/flipo/apps/api/internal/usecase/wheel"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -27,6 +28,7 @@ type AdminHandler struct {
 	outcome           *outcome.Service
 	treasury          *treasury.Service
 	telegram          *telegramadmin.Service
+	wheel             *wheel.Service
 	botSync           *market.BotSyncService
 	hotAddr           string
 	onSocialSimUpdate func(domain.SocialSimSettings)
@@ -50,6 +52,182 @@ func (h *AdminHandler) SetSocialSimUpdater(fn func(domain.SocialSimSettings)) {
 
 func (h *AdminHandler) SetBotGiftSync(sync *market.BotSyncService) {
 	h.botSync = sync
+}
+
+func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
+	h.wheel = wheelSvc
+}
+
+func (h *AdminHandler) WheelStats(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"today":                   gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
+			"last_7_days":             gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
+			"all_time":                gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
+			"sources_today":           gin.H{"daily": gin.H{"spins": 0, "prizes_nanoton": 0}, "bonus": gin.H{"spins": 0, "prizes_nanoton": 0}},
+			"sources_all_time":        gin.H{"daily": gin.H{"spins": 0, "prizes_nanoton": 0}, "bonus": gin.H{"spins": 0, "prizes_nanoton": 0}},
+			"prize_breakdown":         []any{},
+			"spins_by_day":            []any{},
+			"pending_bonus_spins":     0,
+			"spins_today":             0,
+			"prizes_today_nanoton":    0,
+			"spins_all_time":          0,
+			"prizes_all_time_nanoton": 0,
+		})
+		return
+	}
+	stats, err := h.wheel.AdminStats(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
+func (h *AdminHandler) ListWheelSegments(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+	items, err := h.wheel.AdminListSegments(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) UpdateWheelSegment(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	var body wheel.AdminSegmentUpdate
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	updated, err := h.wheel.AdminUpdateSegment(c.Request.Context(), id, body)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "приз не найден"})
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidAmount) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+func (h *AdminHandler) ListWheelSpinOverrides(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+	items, err := h.wheel.AdminListSpinOverrides(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.WheelSpinOverrideView{}
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) CreateWheelSpinOverride(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	var req struct {
+		TelegramID int64  `json:"telegram_id"`
+		SegmentID  string `json:"segment_id"`
+		Note       string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.TelegramID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "укажите telegram_id"})
+		return
+	}
+	segmentID, err := uuid.Parse(req.SegmentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный segment_id"})
+		return
+	}
+	item, err := h.wheel.AdminSetSpinOverride(c.Request.Context(), adminID, req.TelegramID, segmentID, req.Note)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "пользователь или приз не найден"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *AdminHandler) DeleteWheelSpinOverride(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	if err := h.wheel.AdminDeleteSpinOverride(c.Request.Context(), id); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "подкрутка не найдена"})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) GrantWheelBonusSpins(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	var req struct {
+		TelegramID int64 `json:"telegram_id"`
+		Count      int   `json:"count"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.TelegramID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "укажите telegram_id"})
+		return
+	}
+	result, err := h.wheel.AdminGrantBonusSpins(c.Request.Context(), req.TelegramID, req.Count)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "пользователь не найден"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {
@@ -132,6 +310,21 @@ func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, overview)
+}
+
+func (h *AdminHandler) AnalyticsStakingDropoff(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
+	if days <= 0 {
+		days = 7
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	since := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	out, err := h.analytics.StakingDropoff(c.Request.Context(), since, limit)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *AdminHandler) AnalyticsUserDrilldown(c *gin.Context) {

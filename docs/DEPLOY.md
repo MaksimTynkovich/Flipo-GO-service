@@ -136,8 +136,8 @@ Open the bot in Telegram and confirm Mini App auth works (no debug login UI).
 ## Manual / bare metal
 
 ```bash
-# infra
-docker compose -f deploy/docker-compose.yml up -d postgres redis
+# infra (from repo root; needs POSTGRES_PASSWORD in .env)
+docker compose -f deploy/docker-compose.yml --env-file .env up -d postgres redis
 
 # API
 cd apps/api && go build -o ../../bin/api ./cmd/server

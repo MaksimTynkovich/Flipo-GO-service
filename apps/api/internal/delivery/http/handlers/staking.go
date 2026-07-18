@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -28,7 +29,52 @@ func (h *StakingHandler) ListProfileGifts(c *gin.Context) {
 		respondInternal(c, err)
 		return
 	}
+	trackStakingGiftsValued(h.analytics, c.Request.Context(), userID, resp)
 	c.JSON(http.StatusOK, resp)
+}
+
+const maxStakingGiftSnapshot = 40
+
+func trackStakingGiftsValued(analyticsSvc *analyticsuc.Service, ctx context.Context, userID uuid.UUID, resp *staking.ProfileGiftsResponse) {
+	if resp == nil {
+		return
+	}
+	profileGifts := make([]map[string]any, 0, len(resp.Gifts))
+	var profileValuation, unstakedProfileValuation int64
+	profileCount, unstakedProfileCount := 0, 0
+	for _, g := range resp.Gifts {
+		if g.Source != string(domain.StakingSourceProfile) {
+			continue
+		}
+		profileCount++
+		profileValuation += g.PriceNanoton
+		if !g.IsStaked {
+			unstakedProfileCount++
+			unstakedProfileValuation += g.PriceNanoton
+		}
+		if len(profileGifts) >= maxStakingGiftSnapshot {
+			continue
+		}
+		profileGifts = append(profileGifts, map[string]any{
+			"slug":             g.Slug,
+			"name":             g.Name,
+			"collection_slug":  g.CollectionSlug,
+			"price_nanoton":    g.PriceNanoton,
+			"is_staked":        g.IsStaked,
+			"daily_yield_nanoton": g.DailyYieldNanoton,
+		})
+	}
+	trackUserEvent(analyticsSvc, ctx, userID, "staking", "staking_gifts_valued", "success", "", "", map[string]any{
+		"total_count":                   resp.Stats.TotalCount,
+		"staked_count":                  resp.Stats.StakedCount,
+		"profile_gift_count":            profileCount,
+		"unstaked_profile_count":        unstakedProfileCount,
+		"profile_valuation_nanoton":     profileValuation,
+		"unstaked_profile_valuation_nanoton": unstakedProfileValuation,
+		"unlockable_monthly_nanoton":    resp.Stats.UnlockableMonthlyNanoton,
+		"gifts":                         profileGifts,
+		"gifts_truncated":               profileCount > len(profileGifts),
+	})
 }
 
 func (h *StakingHandler) Stake(c *gin.Context) {

@@ -73,22 +73,47 @@ func (n *AdminNotifier) NotifyBotStart(ctx context.Context, actor AdminActor) {
 		return
 	}
 	n.notify(ctx, actor, fmt.Sprintf(
-		"🤖 /start в боте\n%s\nЕщё не открывал приложение",
+		"🤖 /start в боте\n%s",
 		FormatActor(actor),
 	))
 }
 
 func (n *AdminNotifier) NotifyDeposit(ctx context.Context, actor AdminActor, amountNanoton int64) {
 	n.notify(ctx, actor, fmt.Sprintf(
-		"💰 Депозит\n%s\nСумма: %s TON",
+		"💰 Попытка депозита\n%s\nСумма: %s TON",
+		FormatActor(actor),
+		formatTON(amountNanoton),
+	))
+}
+
+func (n *AdminNotifier) NotifyDepositConfirmed(ctx context.Context, actor AdminActor, amountNanoton int64) {
+	n.notify(ctx, actor, fmt.Sprintf(
+		"✅ Депозит подтверждён\n%s\nСумма: %s TON",
 		FormatActor(actor),
 		formatTON(amountNanoton),
 	))
 }
 
 func (n *AdminNotifier) NotifyWithdraw(ctx context.Context, actor AdminActor, amountNanoton int64) {
+	n.NotifyWithdrawAttempt(ctx, actor, amountNanoton, false)
+}
+
+func (n *AdminNotifier) NotifyWithdrawAttempt(ctx context.Context, actor AdminActor, amountNanoton int64, pendingReview bool) {
+	status := "в очереди"
+	if pendingReview {
+		status = "на проверке"
+	}
 	n.notify(ctx, actor, fmt.Sprintf(
-		"📤 Вывод\n%s\nСумма: %s TON",
+		"📤 Заявка на вывод\n%s\nСумма: %s TON\nСтатус: %s",
+		FormatActor(actor),
+		formatTON(amountNanoton),
+		status,
+	))
+}
+
+func (n *AdminNotifier) NotifyWithdrawConfirmed(ctx context.Context, actor AdminActor, amountNanoton int64) {
+	n.notify(ctx, actor, fmt.Sprintf(
+		"✅ Вывод подтверждён\n%s\nСумма: %s TON",
 		FormatActor(actor),
 		formatTON(amountNanoton),
 	))
@@ -113,14 +138,28 @@ func (n *AdminNotifier) NotifyWithdrawFailed(ctx context.Context, actor AdminAct
 }
 
 func (n *AdminNotifier) NotifyReferralShare(ctx context.Context, actor AdminActor, action string) {
-	label := "скопировал"
+	label := shareActionLabel(action)
+	n.notify(ctx, actor, fmt.Sprintf("🔗 Реферальная ссылка\n%s\nДействие: %s", FormatActor(actor), label))
+}
+
+func (n *AdminNotifier) NotifyWheelShare(ctx context.Context, actor AdminActor, action string) {
+	label := shareActionLabel(action)
+	n.notifyAll(ctx, fmt.Sprintf(
+		"🎡 Лаки страйк — поделился реф.ссылкой\n%s\nДействие: %s",
+		FormatActor(actor),
+		label,
+	))
+}
+
+func shareActionLabel(action string) string {
 	switch strings.ToLower(strings.TrimSpace(action)) {
 	case "share", "send":
-		label = "отправил"
+		return "отправил"
 	case "copy":
-		label = "скопировал"
+		return "скопировал"
+	default:
+		return "скопировал"
 	}
-	n.notify(ctx, actor, fmt.Sprintf("🔗 Реферальная ссылка\n%s\nДействие: %s", FormatActor(actor), label))
 }
 
 func (n *AdminNotifier) NotifyStake(ctx context.Context, actor AdminActor, giftName string, principalNanoton int64) {

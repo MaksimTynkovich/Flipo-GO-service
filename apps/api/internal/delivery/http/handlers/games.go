@@ -33,7 +33,27 @@ func NewGameHandler(r *roulette.Service, c *crash.Service, p *pvp.Service, riskS
 	return &GameHandler{roulette: r, crash: c, pvp: p, risk: riskSvc, fairness: fairnessSvc, analytics: analyticsSvc, funding: fundingSvc}
 }
 
+func (h *GameHandler) Modes(c *gin.Context) {
+	modes, err := h.risk.ListModeAccess(c.Request.Context(), middleware.GetTelegramID(c))
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"modes": modes})
+}
+
+func (h *GameHandler) requireMode(c *gin.Context, gameType domain.GameType) bool {
+	if err := h.risk.EnsureModeAccess(c.Request.Context(), gameType, middleware.GetTelegramID(c)); err != nil {
+		writeGameBetError(c, err)
+		return false
+	}
+	return true
+}
+
 func (h *GameHandler) RouletteCurrent(c *gin.Context) {
+	if !h.requireMode(c, domain.GameRoulette) {
+		return
+	}
 	state, err := h.roulette.CurrentState(c.Request.Context())
 	if err != nil {
 		respondInternal(c, err)
@@ -67,6 +87,9 @@ func (h *GameHandler) RouletteBets(c *gin.Context) {
 }
 
 func (h *GameHandler) RouletteBet(c *gin.Context) {
+	if !h.requireMode(c, domain.GameRoulette) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	var req struct {
 		Color           string `json:"color" binding:"required"`
@@ -99,7 +122,7 @@ func (h *GameHandler) RouletteBet(c *gin.Context) {
 		maxPayout = stakeAmount * 2
 	}
 	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
-		UserID: userID, GameType: domain.GameRoulette, RoundID: roundID,
+		UserID: userID, TelegramID: middleware.GetTelegramID(c), GameType: domain.GameRoulette, RoundID: roundID,
 		Amount: stakeAmount, MaxPayout: maxPayout,
 	}); err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "roulette_bet_placed", "error", "risk_blocked", err.Error(), map[string]any{"mode": "roulette", "amount_nanoton": stakeAmount, "color": req.Color, "funding": stake.FundingType})
@@ -117,6 +140,9 @@ func (h *GameHandler) RouletteBet(c *gin.Context) {
 }
 
 func (h *GameHandler) CrashCurrent(c *gin.Context) {
+	if !h.requireMode(c, domain.GameCrash) {
+		return
+	}
 	state, err := h.crash.CurrentState(c.Request.Context())
 	if err != nil {
 		respondInternal(c, err)
@@ -150,6 +176,9 @@ func (h *GameHandler) CrashBets(c *gin.Context) {
 }
 
 func (h *GameHandler) CrashBet(c *gin.Context) {
+	if !h.requireMode(c, domain.GameCrash) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	var req struct {
 		Funding                string   `json:"funding"`
@@ -178,7 +207,7 @@ func (h *GameHandler) CrashBet(c *gin.Context) {
 		roundID = state.RoundID
 	}
 	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
-		UserID: userID, GameType: domain.GameCrash, RoundID: roundID,
+		UserID: userID, TelegramID: middleware.GetTelegramID(c), GameType: domain.GameCrash, RoundID: roundID,
 		Amount: stakeAmount, MaxPayout: stakeAmount * 100,
 	}); err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "gameplay", "crash_bet_placed", "error", "risk_blocked", err.Error(), map[string]any{"mode": "crash", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
@@ -234,6 +263,9 @@ func (h *GameHandler) CrashCashout(c *gin.Context) {
 }
 
 func (h *GameHandler) PvPListRooms(c *gin.Context) {
+	if !h.requireMode(c, domain.GamePvP) {
+		return
+	}
 	state, err := h.pvp.CurrentState(c.Request.Context())
 	if err != nil {
 		respondInternal(c, err)
@@ -249,6 +281,9 @@ func (h *GameHandler) PvPListRooms(c *gin.Context) {
 }
 
 func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
+	if !h.requireMode(c, domain.GamePvP) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	var req struct {
 		Funding           string   `json:"funding"`
@@ -279,7 +314,7 @@ func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 		return
 	}
 	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
-		UserID: userID, GameType: domain.GamePvP,
+		UserID: userID, TelegramID: middleware.GetTelegramID(c), GameType: domain.GamePvP,
 		Amount: stakeAmount, MaxPayout: stakeAmount * 2,
 	}); err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "error", "risk_blocked", err.Error(), map[string]any{"mode": "pvp", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
@@ -297,6 +332,9 @@ func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
 }
 
 func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
+	if !h.requireMode(c, domain.GamePvP) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -358,6 +396,11 @@ func writeGameBetError(c *gin.Context, err error) {
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Ставки больше не принимаются.",
 			"code":  "round_not_open",
+		})
+	case errors.Is(err, domain.ErrBetBelowMinimum):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Минимальная сумма ставки — 0.1 TON.",
+			"code":  "bet_below_minimum",
 		})
 	case errors.Is(err, domain.ErrBetLimitExceeded):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{

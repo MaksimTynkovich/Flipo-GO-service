@@ -666,8 +666,12 @@ export type MarketListing = {
   };
 };
 
-export async function getMarketListings() {
-  return api<MarketListing[]>("/api/v1/market/listings");
+export async function getMarketListings(params?: { limit?: number; offset?: number }) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return api<MarketListing[]>(`/api/v1/market/listings${qs ? `?${qs}` : ""}`);
 }
 
 export async function getMarketListing(id: string) {
@@ -790,6 +794,14 @@ export async function reportReferralShare(action: "copy" | "share") {
   return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
     method: "POST",
     body: JSON.stringify({ action }),
+  });
+}
+
+export async function reportWheelShare(action: "copy" | "share") {
+  return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
+    method: "POST",
+    body: JSON.stringify({ action, source: "wheel" }),
+    keepalive: true,
   });
 }
 
@@ -1287,6 +1299,21 @@ export async function getAdminAuditLogs() {
   return api<AdminAuditLog[]>("/api/v1/admin/audit");
 }
 
+export type GameModeKey = "wheel" | "crash" | "roulette" | "pvp";
+
+export type GameModeAccess = {
+  enabled: boolean;
+  available: boolean;
+};
+
+export type GameModesResponse = {
+  modes: Record<GameModeKey, GameModeAccess>;
+};
+
+export async function getGameModes() {
+  return api<GameModesResponse>("/api/v1/games/modes");
+}
+
 export async function getAdminGameConfigs() {
   return api<AdminGameConfig[]>("/api/v1/admin/games/configs");
 }
@@ -1517,6 +1544,47 @@ export async function getAdminAnalyticsOverview(
   return api<AdminAnalyticsOverview>(`/api/v1/admin/analytics/overview?${params.toString()}`);
 }
 
+export type AdminStakingDropoffGift = {
+  slug: string;
+  name: string;
+  collection_slug?: string;
+  price_nanoton: number;
+  is_staked: boolean;
+  daily_yield_nanoton?: number;
+};
+
+export type AdminStakingDropoffUser = {
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  entered_at: string;
+  first_staking_at?: string;
+  last_staking_at?: string;
+  valued_at: string;
+  profile_gift_count: number;
+  unstaked_profile_count: number;
+  profile_valuation_nanoton: number;
+  unstaked_profile_valuation_nanoton: number;
+  gifts: AdminStakingDropoffGift[];
+};
+
+export type AdminStakingDropoff = {
+  viewers_with_profile_gifts: number;
+  dropoff_count: number;
+  dropoff_rate_pct: number;
+  total_unstaked_valuation_nanoton: number;
+  users: AdminStakingDropoffUser[];
+};
+
+export async function getAdminStakingDropoff(days = 7, limit = 50) {
+  const params = new URLSearchParams({
+    days: String(days),
+    limit: String(limit),
+  });
+  return api<AdminStakingDropoff>(`/api/v1/admin/analytics/staking-dropoff?${params.toString()}`);
+}
+
 export async function getAdminUserAnalytics(userId: string, limit = 60, sessionId?: string) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (sessionId) params.set("session_id", sessionId);
@@ -1620,6 +1688,187 @@ export async function activatePromoCode(code: string) {
 
 export async function getPromoStatus() {
   return api<PromoStatus>("/api/v1/promos/status");
+}
+
+export type WheelSegment = {
+  id: string;
+  label: string;
+  amount_nanoton: number;
+  weight: number;
+  sort_order: number;
+};
+
+export type WheelRecentWin = {
+  display_name: string;
+  photo_url?: string;
+  prize_nanoton: number;
+  segment_label: string;
+  created_at: string;
+};
+
+export type WheelStatus = {
+  channel_subscribed: boolean;
+  required_channel?: string;
+  daily_available: boolean;
+  bonus_spins: number;
+  spins_today: number;
+  can_spin: boolean;
+  unlimited_spins?: boolean;
+  next_daily_reset_at: string;
+  segments: WheelSegment[];
+  recent_wins: WheelRecentWin[];
+};
+
+export type WheelSpinResult = {
+  spin_id: string;
+  segment_id: string;
+  segment_label: string;
+  prize_nanoton: number;
+  spin_source: string;
+  bonus_spins: number;
+  daily_available: boolean;
+  spins_today: number;
+  unlimited_spins?: boolean;
+  created_at: string;
+};
+
+export type WheelAdminPeriodStats = {
+  spins: number;
+  unique_users: number;
+  prizes_nanoton: number;
+};
+
+export type WheelAdminSourceStats = {
+  spins: number;
+  prizes_nanoton: number;
+};
+
+export type WheelAdminSourceBreakdown = {
+  daily: WheelAdminSourceStats;
+  bonus: WheelAdminSourceStats;
+};
+
+export type WheelAdminPrizeBreakdown = {
+  segment_id: string;
+  label: string;
+  amount_nanoton: number;
+  hits: number;
+  total_prizes_nanoton: number;
+  share_percent: number;
+};
+
+export type WheelAdminDailyPoint = {
+  date: string;
+  spins: number;
+  unique_users: number;
+  prizes_nanoton: number;
+};
+
+export type WheelAdminStats = {
+  today: WheelAdminPeriodStats;
+  last_7_days: WheelAdminPeriodStats;
+  all_time: WheelAdminPeriodStats;
+  sources_today: WheelAdminSourceBreakdown;
+  sources_all_time: WheelAdminSourceBreakdown;
+  prize_breakdown: WheelAdminPrizeBreakdown[];
+  spins_by_day: WheelAdminDailyPoint[];
+  pending_bonus_spins: number;
+  spins_today: number;
+  prizes_today_nanoton: number;
+  spins_all_time: number;
+  prizes_all_time_nanoton: number;
+};
+
+export type AdminWheelSegment = {
+  id: string;
+  label: string;
+  amount_nanoton: number;
+  weight: number;
+  chance_percent: number;
+  sort_order: number;
+  active: boolean;
+};
+
+export async function getWheelStatus() {
+  return api<WheelStatus>("/api/v1/wheel/status");
+}
+
+export async function spinWheel() {
+  return api<WheelSpinResult>("/api/v1/wheel/spin", { method: "POST" });
+}
+
+export async function getAdminWheelStats() {
+  return api<WheelAdminStats>("/api/v1/admin/marketing/wheel");
+}
+
+export async function getAdminWheelSegments() {
+  return api<AdminWheelSegment[]>("/api/v1/admin/marketing/wheel/segments");
+}
+
+export async function updateAdminWheelSegment(
+  id: string,
+  body: {
+    label: string;
+    amount_nanoton: number;
+    weight?: number;
+    chance_percent?: number;
+    sort_order: number;
+    active: boolean;
+  },
+) {
+  return api<AdminWheelSegment>(`/api/v1/admin/marketing/wheel/segments/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export type AdminWheelSpinOverride = {
+  id: string;
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  segment_id: string;
+  segment_label: string;
+  amount_nanoton: number;
+  note?: string;
+  created_at: string;
+};
+
+export async function getAdminWheelSpinOverrides() {
+  return api<AdminWheelSpinOverride[]>("/api/v1/admin/marketing/wheel/overrides");
+}
+
+export async function createAdminWheelSpinOverride(body: {
+  telegram_id: number;
+  segment_id: string;
+  note?: string;
+}) {
+  return api<AdminWheelSpinOverride>("/api/v1/admin/marketing/wheel/overrides", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteAdminWheelSpinOverride(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/marketing/wheel/overrides/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export type AdminWheelGrantSpinsResult = {
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  granted: number;
+  bonus_spins: number;
+};
+
+export async function grantAdminWheelBonusSpins(body: { telegram_id: number; count: number }) {
+  return api<AdminWheelGrantSpinsResult>("/api/v1/admin/marketing/wheel/grant-spins", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export type TelegramBroadcast = {

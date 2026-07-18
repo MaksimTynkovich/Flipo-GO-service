@@ -18,7 +18,7 @@ type UserRepository interface {
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
-	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error
+	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) (bool, error)
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	CountReferralsSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -117,6 +117,31 @@ type ReferralRepository interface {
 	CountQualifiedReferrals(ctx context.Context, referrerID uuid.UUID, minAge time.Duration, minDeposit, minStake int64) (int64, error)
 }
 
+type WheelRepository interface {
+	ListActiveSegments(ctx context.Context) ([]WheelSegment, error)
+	ListAllSegments(ctx context.Context) ([]WheelSegment, error)
+	UpdateSegment(ctx context.Context, seg *WheelSegment) error
+	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserWheelState, error)
+	SaveState(ctx context.Context, state *UserWheelState) error
+	AddBonusSpins(ctx context.Context, userID uuid.UUID, delta int) error
+	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	CreateSpin(ctx context.Context, spin *WheelSpin) error
+	ListRecentWins(ctx context.Context, limit int) ([]WheelRecentWin, error)
+	ListTopWinsSince(ctx context.Context, since time.Time, limit int) ([]WheelRecentWin, error)
+	SumPrizesSince(ctx context.Context, since time.Time) (int64, error)
+	CountSpinsGlobalSince(ctx context.Context, since time.Time) (int64, error)
+	AdminPeriodStats(ctx context.Context, since time.Time) (WheelPeriodStats, error)
+	AdminSourceStats(ctx context.Context, since time.Time) ([]WheelSourceStats, error)
+	AdminSegmentHits(ctx context.Context) ([]WheelSegmentHitStats, error)
+	AdminSpinsByDay(ctx context.Context, since time.Time) ([]WheelDailyStats, error)
+	SumPendingBonusSpins(ctx context.Context) (int64, error)
+	GetSegmentByID(ctx context.Context, id uuid.UUID) (*WheelSegment, error)
+	UpsertPendingOverride(ctx context.Context, userID, segmentID, createdBy uuid.UUID, note string) (*WheelSpinOverride, error)
+	ListPendingOverrides(ctx context.Context) ([]WheelSpinOverrideView, error)
+	DeletePendingOverride(ctx context.Context, id uuid.UUID) error
+	ConsumePendingOverride(ctx context.Context, userID uuid.UUID) (*WheelSpinOverride, error)
+}
+
 type GameRepository interface {
 	CreateRound(ctx context.Context, round *GameRound) error
 	UpdateRound(ctx context.Context, round *GameRound) error
@@ -195,6 +220,7 @@ type AnalyticsRepository interface {
 	RecordEvents(ctx context.Context, events []AnalyticsEventCreate) error
 	GetOverview(ctx context.Context, since time.Time, filter AnalyticsOverviewFilter) (*AnalyticsOverview, error)
 	GetUserDrilldown(ctx context.Context, userID uuid.UUID, limit int, sessionID string) (*AnalyticsUserDrilldown, error)
+	GetStakingDropoff(ctx context.Context, since time.Time, limit int) (*AnalyticsStakingDropoff, error)
 }
 
 type PvPRepository interface {

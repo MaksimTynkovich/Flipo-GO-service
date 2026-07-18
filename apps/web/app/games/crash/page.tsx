@@ -6,6 +6,7 @@ import { CrashChart, type CrashStageFx } from "@/components/games/CrashChart";
 import { CrashHistory } from "@/components/games/CrashHistory";
 import { CrashRoundBets } from "@/components/games/CrashRoundBets";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
+import { GameModeGate } from "@/components/games/GameModeGate";
 import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { PageShell } from "@/components/PageShell";
@@ -57,6 +58,14 @@ function loadAutoSettings(): { enabled: boolean; target: string } {
 }
 
 export default function CrashPage() {
+  return (
+    <GameModeGate mode="crash">
+      <CrashPageContent />
+    </GameModeGate>
+  );
+}
+
+function CrashPageContent() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();

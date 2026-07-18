@@ -7,6 +7,10 @@ import { InventoryItem } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { connectUserWS } from "@/lib/ws";
 import { emitBalanceWin } from "@/lib/balance-win";
+import {
+  isWheelPrizeBalanceHeld,
+  stashWheelPrizeBalance,
+} from "@/lib/wheel-prize-balance";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 export const INVENTORY_DEPOSITED_EVENT = "flipo:inventory-deposited";
@@ -33,6 +37,22 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
           delta_nanoton?: number;
           ledger_type?: string;
         };
+
+        // Wheel credits the prize when the API returns; keep header balance
+        // frozen until the reel animation finishes (WheelView releases hold).
+        if (
+          payload.ledger_type === "wheel_prize" &&
+          payload.betting_balance != null &&
+          isWheelPrizeBalanceHeld()
+        ) {
+          stashWheelPrizeBalance({
+            betting_balance: payload.betting_balance,
+            promo_balance: payload.promo_balance,
+            delta_nanoton: payload.delta_nanoton,
+          });
+          return;
+        }
+
         if (payload.betting_balance != null) {
           setUser((prev) =>
             prev

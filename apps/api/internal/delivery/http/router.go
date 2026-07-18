@@ -24,6 +24,7 @@ type Deps struct {
 	WalletHandler    *handlers.WalletHandler
 	TelegramHandler  *handlers.TelegramHandler
 	PromoHandler     *handlers.PromoHandler
+	WheelHandler     *handlers.WheelHandler
 	AdminHandler     *handlers.AdminHandler
 	AnalyticsHandler *handlers.AnalyticsHandler
 	PresenceHandler  *handlers.PresenceHandler
@@ -110,12 +111,16 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/promos/activate", deps.PromoHandler.Activate)
 			authed.GET("/promos/status", deps.PromoHandler.Status)
 
+			authed.GET("/wheel/status", deps.WheelHandler.Status)
+			authed.POST("/wheel/spin", deps.WheelHandler.Spin)
+
 			authed.POST("/wallet/deposit/intent", deps.WalletHandler.CreateDepositIntent)
 			authed.POST("/wallet/deposit/:id/confirm", deps.WalletHandler.ConfirmDeposit)
 			authed.POST("/wallet/withdraw", deps.WalletHandler.RequestWithdrawal)
 			authed.GET("/wallet/transfers", deps.WalletHandler.ListTransfers)
 			authed.GET("/wallet/transfers/:id", deps.WalletHandler.GetTransfer)
 
+			authed.GET("/games/modes", deps.GameHandler.Modes)
 			authed.GET("/games/roulette/current", deps.GameHandler.RouletteCurrent)
 			authed.GET("/games/roulette/history", deps.GameHandler.RouletteHistory)
 			authed.GET("/games/roulette/bets", deps.GameHandler.RouletteBets)
@@ -140,6 +145,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.POST("/transfers/:id/review", deps.AdminHandler.ReviewTransfer)
 			admin.GET("/ledger", deps.AdminHandler.Ledger)
 			admin.GET("/analytics/overview", deps.AdminHandler.AnalyticsOverview)
+			admin.GET("/analytics/staking-dropoff", deps.AdminHandler.AnalyticsStakingDropoff)
 			admin.GET("/analytics/users/:id", deps.AdminHandler.AnalyticsUserDrilldown)
 			admin.GET("/games/stats", deps.AdminHandler.GameStats)
 			admin.GET("/games/configs", deps.AdminHandler.ListGameConfigs)
@@ -171,6 +177,13 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)
 			admin.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
 			admin.DELETE("/marketing/promos/:code", deps.AdminHandler.DeletePromoCode)
+			admin.GET("/marketing/wheel", deps.AdminHandler.WheelStats)
+			admin.GET("/marketing/wheel/segments", deps.AdminHandler.ListWheelSegments)
+			admin.PUT("/marketing/wheel/segments/:id", deps.AdminHandler.UpdateWheelSegment)
+			admin.GET("/marketing/wheel/overrides", deps.AdminHandler.ListWheelSpinOverrides)
+			admin.POST("/marketing/wheel/overrides", deps.AdminHandler.CreateWheelSpinOverride)
+			admin.DELETE("/marketing/wheel/overrides/:id", deps.AdminHandler.DeleteWheelSpinOverride)
+			admin.POST("/marketing/wheel/grant-spins", deps.AdminHandler.GrantWheelBonusSpins)
 			admin.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
 			admin.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
 			admin.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)

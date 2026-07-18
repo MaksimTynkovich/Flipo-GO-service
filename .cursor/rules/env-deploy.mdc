@@ -20,6 +20,8 @@ alwaysApply: false
 | `DEBUG_AUTH_ENABLED` | опционально | **false** |
 | `NEXT_PUBLIC_DEBUG_AUTH` | опционально | **false** |
 | `TON_CHAIN_DEV_MODE` | false | **false** |
+| `TELEGRAM_MTPROTO_ENABLED` | false (рекомендуется) | true при необходимости gift scan |
+| `ADMIN_NOTIFY_ENABLED` | false (рекомендуется) | true |
 | `JWT_SECRET` | любой | длинный random |
 | `ADMIN_TELEGRAM_IDS` | опционально | обязателен |
 

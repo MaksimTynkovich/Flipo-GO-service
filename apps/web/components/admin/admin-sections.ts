@@ -5,6 +5,7 @@ import FinanceSection from "./sections/FinanceSection";
 import GamesSection from "./sections/GamesSection";
 import MarketAdminSection from "./sections/MarketAdminSection";
 import MarketingSection from "./sections/MarketingSection";
+import StakingDropoffSection from "./sections/StakingDropoffSection";
 import TelegramSection from "./sections/TelegramSection";
 import UsersSection from "./sections/UsersSection";
 import OutcomeSection from "./sections/OutcomeSection";
@@ -12,6 +13,7 @@ import OutcomeSection from "./sections/OutcomeSection";
 export type AdminSectionId =
   | "dashboard"
   | "analytics"
+  | "staking-dropoff"
   | "users"
   | "games"
   | "market"
@@ -29,6 +31,7 @@ export type AdminNavItem = {
 export const ADMIN_NAV: AdminNavItem[] = [
   { id: "dashboard", href: "/admin", label: "Дашборд" },
   { id: "analytics", href: "/admin/analytics", label: "Аналитика" },
+  { id: "staking-dropoff", href: "/admin/staking-dropoff", label: "Отток стейкинга" },
   { id: "users", href: "/admin/users", label: "Пользователи" },
   { id: "games", href: "/admin/games", label: "Игры" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы" },
@@ -41,6 +44,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
 export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   dashboard: DashboardSection,
   analytics: AnalyticsSection,
+  "staking-dropoff": StakingDropoffSection,
   users: UsersSection,
   games: GamesSection,
   market: MarketAdminSection,
@@ -53,6 +57,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
 const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin": "dashboard",
   "/admin/analytics": "analytics",
+  "/admin/staking-dropoff": "staking-dropoff",
   "/admin/users": "users",
   "/admin/games": "games",
   "/admin/outcome": "outcome",

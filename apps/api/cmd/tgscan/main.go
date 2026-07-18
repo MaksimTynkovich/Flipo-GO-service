@@ -30,7 +30,7 @@ func main() {
 
 	cfg := loadConfig()
 	if !cfg.Enabled() {
-		fmt.Fprintln(os.Stderr, "MTProto not configured. Set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH in .env")
+		fmt.Fprintln(os.Stderr, "MTProto not configured or disabled. Set TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_PATH and TELEGRAM_MTPROTO_ENABLED=true")
 		os.Exit(1)
 	}
 
@@ -86,6 +86,7 @@ func main() {
 			}
 			return "data/telegram/session.json"
 		}(),
+		true,
 	)), nil, nil)
 	result.Gifts = valuator.Enrich(ctx, result.Gifts)
 	bySlug := make(map[string]flipotg.ScannedGift, len(result.Gifts))
@@ -126,9 +127,11 @@ func loadConfig() flipotg.MTProtoConfig {
 	if sessionPath == "" {
 		sessionPath = "data/telegram/session.json"
 	}
+	cfg := config.Load()
 	return flipotg.MTProtoConfigFromEnv(
 		flipotg.ParseTelegramAppID(os.Getenv("TELEGRAM_API_ID")),
 		os.Getenv("TELEGRAM_API_HASH"),
 		sessionPath,
+		cfg.TelegramMTProtoEnabled,
 	)
 }

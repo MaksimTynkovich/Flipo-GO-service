@@ -5,7 +5,7 @@ function normalizeChannelRef(channel: string): string {
   return channel.trim();
 }
 
-/** Prefer t.me — Telegram Mini Apps openTelegramLink rejects telegram.me. */
+/** Prefer t.me — Telegram Mini Apps openTelegramLink rejects t.me. */
 function toTmeUrl(pathOrUrl: string): string {
   const value = pathOrUrl.trim();
   if (!value) return "";
@@ -13,11 +13,11 @@ function toTmeUrl(pathOrUrl: string): string {
   if (value.startsWith("http://t.me/")) {
     return `https://t.me/${value.slice("http://t.me/".length)}`.replace(/\/$/, "");
   }
-  if (value.startsWith("https://telegram.me/")) {
-    return `https://t.me/${value.slice("https://telegram.me/".length)}`.replace(/\/$/, "");
+  if (value.startsWith("https://t.me/")) {
+    return `https://t.me/${value.slice("https://t.me/".length)}`.replace(/\/$/, "");
   }
-  if (value.startsWith("http://telegram.me/")) {
-    return `https://t.me/${value.slice("http://telegram.me/".length)}`.replace(/\/$/, "");
+  if (value.startsWith("http://t.me/")) {
+    return `https://t.me/${value.slice("http://t.me/".length)}`.replace(/\/$/, "");
   }
   return "";
 }

@@ -104,12 +104,12 @@ export function openTelegramLink(url: string): boolean {
   if (!webApp?.openTelegramLink) {
     return false;
   }
-  // Mini Apps require hostname t.me — telegram.me is rejected silently.
+  // Mini Apps require hostname t.me — t.me is rejected silently.
   let normalized = url.trim();
-  if (normalized.startsWith("https://telegram.me/")) {
-    normalized = `https://t.me/${normalized.slice("https://telegram.me/".length)}`;
-  } else if (normalized.startsWith("http://telegram.me/")) {
-    normalized = `https://t.me/${normalized.slice("http://telegram.me/".length)}`;
+  if (normalized.startsWith("https://t.me/")) {
+    normalized = `https://t.me/${normalized.slice("https://t.me/".length)}`;
+  } else if (normalized.startsWith("http://t.me/")) {
+    normalized = `https://t.me/${normalized.slice("http://t.me/".length)}`;
   } else if (normalized.startsWith("http://t.me/")) {
     normalized = `https://t.me/${normalized.slice("http://t.me/".length)}`;
   }
@@ -162,7 +162,7 @@ export function applyTelegramPlatformClass(webApp: TelegramWebApp | null = getTe
   }
 }
 
-/** Open the mini app maximally: expand (legacy) + fullscreen (Bot API 8.0+). */
+/** Open the mini app maximally: expand (legacy). Fullscreen is deferred — see enableTelegramFullscreen. */
 export function initTelegramWebApp() {
   const webApp = getTelegramWebApp();
   if (!webApp) {
@@ -180,19 +180,30 @@ export function initTelegramWebApp() {
     }
   }
 
-  try {
-    if (isTelegramMobilePlatform(webApp.platform) && !webApp.isFullscreen) {
-      webApp.requestFullscreen?.();
-    }
-  } catch {
-    // Older Telegram clients only support expand().
-  }
-
   const syncSafeArea = () => applyTelegramSafeAreaToDocument();
   syncSafeArea();
   applyTelegramPlatformClass(webApp);
   requestAnimationFrame(syncSafeArea);
   [50, 150, 400, 800].forEach((delay) => window.setTimeout(syncSafeArea, delay));
+}
+
+/**
+ * Fullscreen right after WebView open freezes some Telegram Android clients (~1/50).
+ * Call only after auth / first paint is ready.
+ */
+export function enableTelegramFullscreen() {
+  const webApp = getTelegramWebApp();
+  if (!webApp || !isTelegramMobilePlatform(webApp.platform)) {
+    return;
+  }
+  try {
+    if (!webApp.isFullscreen) {
+      webApp.requestFullscreen?.();
+    }
+  } catch {
+    // Older Telegram clients only support expand().
+  }
+  applyTelegramSafeAreaToDocument();
 }
 
 const EMPTY_SAFE_AREA: SafeAreaInset = { top: 0, bottom: 0, left: 0, right: 0 };

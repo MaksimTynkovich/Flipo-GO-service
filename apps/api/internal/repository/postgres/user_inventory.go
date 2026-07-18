@@ -185,14 +185,14 @@ func (r *UserRepo) ListIDsByStakingTier(ctx context.Context, tier domain.Staking
 	return ids, err
 }
 
-func (r *UserRepo) SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) error {
+func (r *UserRepo) SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) (bool, error) {
 	res := r.db.WithContext(ctx).Model(&domain.User{}).
 		Where("id = ? AND referrer_id IS NULL AND id != ?", userID, referrerID).
 		Update("referrer_id", referrerID)
 	if res.Error != nil {
-		return res.Error
+		return false, res.Error
 	}
-	return nil
+	return res.RowsAffected > 0, nil
 }
 
 func (r *UserRepo) CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error) {

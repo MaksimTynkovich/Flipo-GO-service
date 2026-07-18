@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { DEBUG_AUTH } from "@/lib/api";
 import { hasTelegramInitData } from "@/src/shared/lib/twa";
 
-const TELEGRAM_INIT_WAIT_MS = 300;
+const TELEGRAM_INIT_WAIT_MS = 800;
 
 export function useTelegramAccess() {
   const pathname = usePathname();

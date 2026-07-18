@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ChevronRight,
+  Gift,
   Shield,
   Sparkles,
   Ticket,

@@ -113,7 +113,7 @@ export default function TelegramSection() {
 
             <AdminField
               label="WebApp URL"
-              hint="Кнопка в рассылке. Можно указать https://telegram.me/ваш_бот/app или прямой HTTPS. Если пусто — возьмём ссылку из BOT_USERNAME и WEBAPP_SHORT_NAME."
+              hint="Кнопка в рассылке. Можно указать https://t.me/ваш_бот/app или прямой HTTPS. Если пусто — возьмём ссылку из BOT_USERNAME и WEBAPP_SHORT_NAME."
             >
               <input
                 className="input-field"
