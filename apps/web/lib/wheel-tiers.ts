@@ -12,9 +12,10 @@ export function prizeTierForAmount(amount: number, isMax = false): PrizeTier {
   return "common";
 }
 
-export function maxPrizeNanoton(amounts: Iterable<number>): number {
+export function maxPrizeNanoton(amounts: readonly number[]): number {
   let max = 0;
-  for (const n of amounts) {
+  for (let i = 0; i < amounts.length; i++) {
+    const n = amounts[i];
     if (n > max) max = n;
   }
   return max;
