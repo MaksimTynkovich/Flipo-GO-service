@@ -11,6 +11,31 @@ export type CrashRoundState = {
   server_seed_hash?: string;
 };
 
+const PHASE_ORDER: Record<string, number> = {
+  betting: 0,
+  running: 1,
+  crashed: 2,
+  waiting: 3,
+};
+
+/** Prefer newer round / later phase / higher live mult — avoid stale HTTP overwriting WS. */
+export function isFresherCrashState(
+  prev: CrashRoundState | null | undefined,
+  next: CrashRoundState,
+): boolean {
+  if (!prev) return true;
+  if (next.round_number !== prev.round_number) {
+    return next.round_number > prev.round_number;
+  }
+  const prevPhase = PHASE_ORDER[prev.phase] ?? -1;
+  const nextPhase = PHASE_ORDER[next.phase] ?? -1;
+  if (nextPhase !== prevPhase) return nextPhase > prevPhase;
+  if (next.phase === "running") {
+    return (next.multiplier ?? 1) >= (prev.multiplier ?? 1);
+  }
+  return next.round_id !== prev.round_id || next.phase !== prev.phase;
+}
+
 /** Must match backend CRASH_TICK_MS */
 export const CRASH_TICK_MS = Number(process.env.NEXT_PUBLIC_CRASH_TICK_MS ?? 100);
 

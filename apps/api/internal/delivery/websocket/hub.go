@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -54,12 +55,17 @@ func (h *Hub) runBroadcast(gameType string) {
 		}
 		h.mu.RUnlock()
 
+		dropped := 0
 		for _, client := range clients {
 			select {
 			case client.Send <- msg:
 			default:
+				dropped++
 				h.removeClient(client)
 			}
+		}
+		if dropped > 0 {
+			slog.Warn("ws clients dropped (slow consumer)", "game", gameType, "dropped", dropped, "remaining", len(clients)-dropped)
 		}
 	}
 }
@@ -109,18 +115,43 @@ func (c *Client) ReadPump() {
 		c.Hub.Unregister(c)
 		_ = c.Conn.Close()
 	}()
+	_ = c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.Conn.SetPongHandler(func(string) error {
+		_ = c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
 	for {
 		if _, _, err := c.Conn.ReadMessage(); err != nil {
 			break
 		}
+		_ = c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	}
 }
 
 func (c *Client) WritePump() {
-	defer func() { _ = c.Conn.Close() }()
-	for msg := range c.Send {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-			break
+	// Cloudflare proxies idle WebSockets ~100s; ping keeps the tunnel alive.
+	ping := time.NewTicker(25 * time.Second)
+	defer func() {
+		ping.Stop()
+		_ = c.Conn.Close()
+	}()
+
+	for {
+		select {
+		case msg, ok := <-c.Send:
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if !ok {
+				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				return
+			}
+		case <-ping.C:
+			_ = c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }

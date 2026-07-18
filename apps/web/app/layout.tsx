@@ -94,22 +94,10 @@ const tgThemeBootstrap = `
       try {
         webApp.lockOrientation?.();
       } catch (_) {}
-      // Fullscreen before React paints — avoids half-sheet → fullscreen "double open".
-      // sessionStorage guard in enableTelegramFullscreen prevents relaunch loops.
-      try {
-        if (webApp.isFullscreen) {
-          try { sessionStorage.setItem("flipo_tg_fullscreen", "done"); } catch (_) {}
-        } else if (webApp.requestFullscreen) {
-          var fsState = null;
-          try { fsState = sessionStorage.getItem("flipo_tg_fullscreen"); } catch (_) {}
-          if (fsState === "pending") {
-            try { sessionStorage.setItem("flipo_tg_fullscreen", "done"); } catch (_) {}
-          } else {
-            try { sessionStorage.setItem("flipo_tg_fullscreen", "pending"); } catch (_) {}
-            webApp.requestFullscreen();
-          }
-        }
-      } catch (_) {}
+      // NEVER call requestFullscreen on cold open — on many Android/iOS Telegram
+      // builds it relaunches or freezes the WebView (app "doesn't open" until
+      // Telegram is force-quit). Fullscreen comes from deep-link mode=fullscreen;
+      // expand() is enough for a playable viewport.
     }
     const sumInsets = (content, safe) => ({
       top: (content?.top || 0) + (safe?.top || 0),
@@ -226,6 +214,24 @@ const bootWatchdog = `
     } catch (_) {}
   };
   const showRecovery = () => {
+    // One soft reload before showing the CTA — recovers stuck WebViews without
+    // forcing the user to kill Telegram.
+    try {
+      if (!sessionStorage.getItem("flipo_boot_autoreload")) {
+        sessionStorage.setItem("flipo_boot_autoreload", "1");
+        post({
+          event_name: "boot_autoreload",
+          status: "info",
+          error_code: "boot_autoreload",
+          properties: {
+            elapsed_ms: Date.now() - (window.__flipoBoot?.t0 || Date.now()),
+            stages: window.__flipoBoot?.stages || {},
+          },
+        });
+        location.reload();
+        return;
+      }
+    } catch (_) {}
     if (document.getElementById("flipo-boot-recovery")) return;
     const el = document.createElement("div");
     el.id = "flipo-boot-recovery";
@@ -269,6 +275,7 @@ const bootWatchdog = `
         if (this.timer) clearTimeout(this.timer);
         const overlay = document.getElementById("flipo-boot-recovery");
         if (overlay) overlay.remove();
+        try { sessionStorage.removeItem("flipo_boot_autoreload"); } catch (_) {}
       }
     },
     reportHang(reason, extra) {

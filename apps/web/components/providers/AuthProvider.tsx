@@ -18,6 +18,7 @@ import {
   getTelegramWebApp,
   hasTelegramInitData,
   initTelegramWebApp,
+  scheduleSafeFullscreen,
 } from "@/src/shared/lib/twa";
 import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
 
@@ -30,6 +31,26 @@ type AuthState = {
 };
 
 const AuthContext = createContext<AuthState | null>(null);
+
+const AUTH_HARD_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label}_timeout`));
+    }, ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        window.clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -49,6 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function init() {
       markBootStage("auth_started");
       const AUTH_TIMEOUT_MS = 12_000;
@@ -76,7 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = localStorage.getItem("flipo_token");
         if (token && (inTelegram || allowBrowserSession)) {
           try {
-            setUser(await getMe());
+            const me = await withTimeout(getMe(), AUTH_HARD_TIMEOUT_MS, "get_me");
+            if (cancelled) return;
+            setUser(me);
             trackEvent({
               event_name: "auth_restored",
               event_category: "auth",
@@ -111,7 +136,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             start_param: referralCode,
             properties: { source: referralCode ? "referral" : "direct" },
           });
-          const { token: newToken, user: authUser } = await authTelegram(initData, referralCode);
+          const { token: newToken, user: authUser } = await withTimeout(
+            authTelegram(initData, referralCode),
+            AUTH_HARD_TIMEOUT_MS,
+            "auth_telegram",
+          );
+          if (cancelled) return;
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
           trackEvent({
@@ -132,7 +162,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             status: "info",
             properties: { source: "debug" },
           });
-          const { token: newToken, user: authUser } = await authDebug();
+          const { token: newToken, user: authUser } = await withTimeout(
+            authDebug(),
+            AUTH_HARD_TIMEOUT_MS,
+            "auth_debug",
+          );
+          if (cancelled) return;
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
           trackEvent({
@@ -152,22 +187,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           event_name: "auth_failed",
           event_category: "auth",
           status: "error",
-          error_code: "auth_failed",
+          error_code: e instanceof Error && e.message.endsWith("_timeout") ? e.message : "auth_failed",
           error_message: e instanceof Error ? e.message : "auth_failed",
         });
         setError(formatUserError(e, "Не удалось войти"));
         markBootStage("auth_failed");
       } finally {
         window.clearTimeout(timeoutId);
-        setLoading(false);
-        setReady(true);
-        markBootStage("app_ready");
-        // Fullscreen is requested in the early bootstrap / initTelegramWebApp
-        // (before paint). Do not request it again after the splash — that
-        // relaunches the WebView and looks like a double open.
+        if (!cancelled) {
+          setLoading(false);
+          setReady(true);
+          markBootStage("app_ready");
+          // Deferred, opt-out fullscreen — never on cold open.
+          scheduleSafeFullscreen();
+        }
       }
     }
     init();
+    return () => {
+      cancelled = true;
+    };
   }, [isAdminRoute]);
 
   if (loading) {
@@ -178,6 +217,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
         <p className="text-danger">{error}</p>
+        <button
+          type="button"
+          className="rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground"
+          onClick={() => window.location.reload()}
+        >
+          Попробовать снова
+        </button>
         {DEBUG_AUTH && (
           <p className="text-xs text-zinc-500">
             Check that API has DEBUG_AUTH_ENABLED=true and is reachable at{" "}

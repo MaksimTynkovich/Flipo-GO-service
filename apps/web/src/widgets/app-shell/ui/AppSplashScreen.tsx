@@ -40,6 +40,11 @@ export function AppSplashScreen({ showRecovery = false, slowMs = 8000 }: AppSpla
             className="rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground"
             onClick={() => {
               reportBootHang("splash_reload_clicked", { surface: "splash", action: "reload" });
+              try {
+                sessionStorage.removeItem("flipo_boot_autoreload");
+              } catch {
+                // ignore
+              }
               window.location.reload();
             }}
           >
