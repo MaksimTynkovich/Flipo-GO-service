@@ -242,8 +242,9 @@ func (s *Service) UpdateGameConfig(ctx context.Context, adminID uuid.UUID, cfg d
 		return err
 	}
 	return s.audit(ctx, adminID, "game_config_updated", "game_config", string(cfg.GameType), map[string]any{
-		"rtp_bps":       cfg.RTPBps,
-		"max_bet":       cfg.MaxBetNanoton,
+		"enabled":        cfg.Enabled,
+		"rtp_bps":        cfg.RTPBps,
+		"max_bet":        cfg.MaxBetNanoton,
 		"house_edge_bps": cfg.HouseEdgeBps,
 	})
 }

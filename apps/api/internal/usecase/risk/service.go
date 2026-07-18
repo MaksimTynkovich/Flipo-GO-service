@@ -2,29 +2,90 @@ package risk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Service struct {
 	platform domain.PlatformRepository
 	games    domain.GameRepository
 	users    domain.UserRepository
+	isAdmin  func(telegramID int64) bool
 }
 
 func NewService(platform domain.PlatformRepository, games domain.GameRepository, users domain.UserRepository) *Service {
 	return &Service{platform: platform, games: games, users: users}
 }
 
+func (s *Service) SetAdminChecker(isAdmin func(telegramID int64) bool) {
+	s.isAdmin = isAdmin
+}
+
+func (s *Service) isTelegramAdmin(telegramID int64) bool {
+	return s.isAdmin != nil && telegramID > 0 && s.isAdmin(telegramID)
+}
+
+type ModeAccess struct {
+	Enabled   bool `json:"enabled"`
+	Available bool `json:"available"`
+}
+
+// ListModeAccess returns enabled/available flags for all user-facing modes.
+func (s *Service) ListModeAccess(ctx context.Context, telegramID int64) (map[string]ModeAccess, error) {
+	configs, err := s.platform.ListGameConfigs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byType := make(map[domain.GameType]domain.GameConfig, len(configs))
+	for _, cfg := range configs {
+		byType[cfg.GameType] = cfg
+	}
+	admin := s.isTelegramAdmin(telegramID)
+	out := make(map[string]ModeAccess, len(domain.AllGameModes))
+	for _, mode := range domain.AllGameModes {
+		cfg, ok := byType[mode]
+		enabled := true
+		if ok {
+			enabled = cfg.Enabled
+		}
+		out[string(mode)] = ModeAccess{
+			Enabled:   enabled,
+			Available: enabled || admin,
+		}
+	}
+	return out, nil
+}
+
+// EnsureModeAccess blocks non-admins when a mode is disabled for users.
+func (s *Service) EnsureModeAccess(ctx context.Context, gameType domain.GameType, telegramID int64) error {
+	cfg, err := s.platform.GetGameConfig(ctx, gameType)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if cfg.Enabled {
+		return nil
+	}
+	if s.isTelegramAdmin(telegramID) {
+		return nil
+	}
+	return domain.ErrGameDisabled
+}
+
 type BetCheckInput struct {
-	UserID    uuid.UUID
-	GameType  domain.GameType
-	RoundID   uuid.UUID
-	Amount    int64
-	MaxPayout int64
+	UserID     uuid.UUID
+	TelegramID int64
+	GameType   domain.GameType
+	RoundID    uuid.UUID
+	Amount     int64
+	MaxPayout  int64
 }
 
 func (s *Service) ValidateBet(ctx context.Context, in BetCheckInput) error {
@@ -36,12 +97,17 @@ func (s *Service) ValidateBet(ctx context.Context, in BetCheckInput) error {
 		return domain.ErrUserBanned
 	}
 
+	telegramID := in.TelegramID
+	if telegramID == 0 {
+		telegramID = user.TelegramID
+	}
+	if err := s.EnsureModeAccess(ctx, in.GameType, telegramID); err != nil {
+		return err
+	}
+
 	cfg, err := s.platform.GetGameConfig(ctx, in.GameType)
 	if err != nil {
 		return err
-	}
-	if !cfg.Enabled {
-		return domain.ErrGameDisabled
 	}
 	if in.Amount < cfg.MinBetNanoton || in.Amount > cfg.MaxBetNanoton {
 		return domain.ErrBetLimitExceeded

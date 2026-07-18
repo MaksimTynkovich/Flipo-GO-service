@@ -61,10 +61,18 @@ func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
 func (h *AdminHandler) WheelStats(c *gin.Context) {
 	if h.wheel == nil {
 		c.JSON(http.StatusOK, gin.H{
-			"spins_today":              0,
-			"prizes_today_nanoton":     0,
-			"spins_all_time":           0,
-			"prizes_all_time_nanoton":  0,
+			"today":                   gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
+			"last_7_days":             gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
+			"all_time":                gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
+			"sources_today":           gin.H{"daily": gin.H{"spins": 0, "prizes_nanoton": 0}, "bonus": gin.H{"spins": 0, "prizes_nanoton": 0}},
+			"sources_all_time":        gin.H{"daily": gin.H{"spins": 0, "prizes_nanoton": 0}, "bonus": gin.H{"spins": 0, "prizes_nanoton": 0}},
+			"prize_breakdown":         []any{},
+			"spins_by_day":            []any{},
+			"pending_bonus_spins":     0,
+			"spins_today":             0,
+			"prizes_today_nanoton":    0,
+			"spins_all_time":          0,
+			"prizes_all_time_nanoton": 0,
 		})
 		return
 	}
@@ -74,6 +82,50 @@ func (h *AdminHandler) WheelStats(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, stats)
+}
+
+func (h *AdminHandler) ListWheelSegments(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+	items, err := h.wheel.AdminListSegments(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) UpdateWheelSegment(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	var body wheel.AdminSegmentUpdate
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	updated, err := h.wheel.AdminUpdateSegment(c.Request.Context(), id, body)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "приз не найден"})
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidAmount) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
 }
 
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {
@@ -156,6 +208,21 @@ func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, overview)
+}
+
+func (h *AdminHandler) AnalyticsStakingDropoff(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
+	if days <= 0 {
+		days = 7
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	since := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	out, err := h.analytics.StakingDropoff(c.Request.Context(), since, limit)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *AdminHandler) AnalyticsUserDrilldown(c *gin.Context) {

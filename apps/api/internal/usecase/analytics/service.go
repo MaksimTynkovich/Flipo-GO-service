@@ -87,6 +87,16 @@ func (s *Service) UserDrilldown(ctx context.Context, userID uuid.UUID, limit int
 	return s.repo.GetUserDrilldown(ctx, userID, limit, sessionID)
 }
 
+func (s *Service) StakingDropoff(ctx context.Context, since time.Time, limit int) (*domain.AnalyticsStakingDropoff, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	return s.repo.GetStakingDropoff(ctx, since, limit)
+}
+
 func normalizeEvent(ctx context.Context, input EventInput) domain.AnalyticsEventCreate {
 	meta := RequestMetaFromContext(ctx)
 	properties := datatypes.JSON([]byte("{}"))

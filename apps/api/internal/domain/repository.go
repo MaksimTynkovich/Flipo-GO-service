@@ -119,14 +119,22 @@ type ReferralRepository interface {
 
 type WheelRepository interface {
 	ListActiveSegments(ctx context.Context) ([]WheelSegment, error)
+	ListAllSegments(ctx context.Context) ([]WheelSegment, error)
+	UpdateSegment(ctx context.Context, seg *WheelSegment) error
 	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserWheelState, error)
 	SaveState(ctx context.Context, state *UserWheelState) error
 	AddBonusSpins(ctx context.Context, userID uuid.UUID, delta int) error
 	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	CreateSpin(ctx context.Context, spin *WheelSpin) error
 	ListRecentWins(ctx context.Context, limit int) ([]WheelRecentWin, error)
+	ListTopWinsSince(ctx context.Context, since time.Time, limit int) ([]WheelRecentWin, error)
 	SumPrizesSince(ctx context.Context, since time.Time) (int64, error)
 	CountSpinsGlobalSince(ctx context.Context, since time.Time) (int64, error)
+	AdminPeriodStats(ctx context.Context, since time.Time) (WheelPeriodStats, error)
+	AdminSourceStats(ctx context.Context, since time.Time) ([]WheelSourceStats, error)
+	AdminSegmentHits(ctx context.Context) ([]WheelSegmentHitStats, error)
+	AdminSpinsByDay(ctx context.Context, since time.Time) ([]WheelDailyStats, error)
+	SumPendingBonusSpins(ctx context.Context) (int64, error)
 }
 
 type GameRepository interface {
@@ -207,6 +215,7 @@ type AnalyticsRepository interface {
 	RecordEvents(ctx context.Context, events []AnalyticsEventCreate) error
 	GetOverview(ctx context.Context, since time.Time, filter AnalyticsOverviewFilter) (*AnalyticsOverview, error)
 	GetUserDrilldown(ctx context.Context, userID uuid.UUID, limit int, sessionID string) (*AnalyticsUserDrilldown, error)
+	GetStakingDropoff(ctx context.Context, since time.Time, limit int) (*AnalyticsStakingDropoff, error)
 }
 
 type PvPRepository interface {

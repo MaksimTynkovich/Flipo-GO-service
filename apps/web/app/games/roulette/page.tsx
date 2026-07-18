@@ -6,6 +6,7 @@ import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButto
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
+import { GameModeGate } from "@/components/games/GameModeGate";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -28,6 +29,14 @@ import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts"
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
 export default function RoulettePage() {
+  return (
+    <GameModeGate mode="roulette">
+      <RoulettePageContent />
+    </GameModeGate>
+  );
+}
+
+function RoulettePageContent() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();

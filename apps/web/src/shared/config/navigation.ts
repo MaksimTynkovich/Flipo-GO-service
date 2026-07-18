@@ -185,9 +185,9 @@ export type GameLobbyItem = {
 export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   {
     href: APP_ROUTES.wheel,
-    title: "Колесо удачи",
-    description: "Бесплатный прокрут каждый день — TON сразу на баланс.",
-    badge: "Бесплатно",
+    title: "Лаки страйк",
+    description: "Бесплатное вращение.",
+    badge: "HIT",
     cta: "Крутить",
     icon: Gift,
     tone: "wheel",

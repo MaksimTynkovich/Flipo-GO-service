@@ -4,12 +4,12 @@ import "testing"
 
 func TestNormalizeChannelChatID(t *testing.T) {
 	tests := map[string]string{
-		"@flipo":                     "@flipo",
-		"flipo":                      "@flipo",
-		"https://telegram.me/flipo":  "@flipo",
-		"https://telegram.me/flipo/": "@flipo",
-		"-1001234567890":             "-1001234567890",
-		"  @my_channel  ":            "@my_channel",
+		"@flipo":              "@flipo",
+		"flipo":               "@flipo",
+		"https://t.me/flipo":  "@flipo",
+		"https://t.me/flipo/": "@flipo",
+		"-1001234567890":      "-1001234567890",
+		"  @my_channel  ":     "@my_channel",
 	}
 
 	for input, want := range tests {

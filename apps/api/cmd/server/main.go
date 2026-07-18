@@ -158,6 +158,7 @@ func main() {
 		auth.WithAdminEvents(adminNotifier),
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
+	riskSvc.SetAdminChecker(authSvc.IsAdmin)
 	balanceSvc := balance.NewService(userRepo)
 	wheelRepo := postgres.NewWheelRepo(db)
 	wheelSvc := wheel.NewService(wheelRepo, userRepo, balanceSvc)
@@ -339,7 +340,7 @@ func main() {
 		MarketHandler:    handlers.NewMarketHandler(marketSvc, analyticsSvc),
 		ReferralHandler:  handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:     handlers.NewPromoHandler(promoSvc, analyticsSvc),
-		WheelHandler:     handlers.NewWheelHandler(wheelSvc),
+		WheelHandler:     handlers.NewWheelHandler(wheelSvc, riskSvc),
 		WalletHandler:    handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		TelegramHandler:  handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
 		AdminHandler:     adminHandler,

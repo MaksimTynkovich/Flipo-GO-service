@@ -43,6 +43,7 @@ func (h *ReferralHandler) InviteeStatus(c *gin.Context) {
 
 type referralShareRequest struct {
 	Action string `json:"action"`
+	Source string `json:"source"`
 }
 
 func (h *ReferralHandler) ShareEvent(c *gin.Context) {
@@ -56,6 +57,11 @@ func (h *ReferralHandler) ShareEvent(c *gin.Context) {
 		respondBadRequest(c, nil, "action должен быть copy или share", "invalid_action")
 		return
 	}
+	source := strings.ToLower(strings.TrimSpace(req.Source))
+	if source != "" && source != "referral" && source != "wheel" {
+		respondBadRequest(c, nil, "source должен быть referral или wheel", "invalid_source")
+		return
+	}
 
 	userID := middleware.GetUserID(c)
 	user, err := h.auth.GetUser(c.Request.Context(), userID)
@@ -65,12 +71,17 @@ func (h *ReferralHandler) ShareEvent(c *gin.Context) {
 	}
 
 	if h.adminNotifier != nil {
-		h.adminNotifier.NotifyReferralShare(c.Request.Context(), telegram.AdminActor{
+		actor := telegram.AdminActor{
 			TelegramID: user.TelegramID,
 			Username:   user.Username,
 			FirstName:  user.FirstName,
 			LastName:   user.LastName,
-		}, action)
+		}
+		if source == "wheel" {
+			h.adminNotifier.NotifyWheelShare(c.Request.Context(), actor, action)
+		} else {
+			h.adminNotifier.NotifyReferralShare(c.Request.Context(), actor, action)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

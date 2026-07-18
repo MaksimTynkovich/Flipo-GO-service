@@ -265,6 +265,7 @@ func (r *AnalyticsRepo) GetOverview(ctx context.Context, since time.Time, filter
 			Name: "staking",
 			Steps: r.funnelMixedCounts(ctx, since, []funnelStepQuery{
 				{EventName: "staking_flow_viewed"},
+				{EventName: "staking_gifts_valued"},
 				{EventName: "staking_started"},
 				{EventName: "staking_yield_paid"},
 			}),
@@ -914,6 +915,217 @@ func (r *AnalyticsRepo) avgTimeOnScreen(ctx context.Context, since time.Time) ([
 		LIMIT 8
 	`, since).Scan(&items).Error
 	return items, err
+}
+
+type stakingDropoffRow struct {
+	UserID                       uuid.UUID      `gorm:"column:user_id"`
+	TelegramID                   int64          `gorm:"column:telegram_id"`
+	Username                     string         `gorm:"column:username"`
+	FirstName                    string         `gorm:"column:first_name"`
+	EnteredAt                    time.Time      `gorm:"column:entered_at"`
+	FirstStakingAt               *time.Time     `gorm:"column:first_staking_at"`
+	LastStakingAt                *time.Time     `gorm:"column:last_staking_at"`
+	ValuedAt                     time.Time      `gorm:"column:valued_at"`
+	ProfileGiftCount             int            `gorm:"column:profile_gift_count"`
+	UnstakedProfileCount         int            `gorm:"column:unstaked_profile_count"`
+	ProfileValuationNanoton      int64          `gorm:"column:profile_valuation_nanoton"`
+	UnstakedProfileValuationNano int64          `gorm:"column:unstaked_profile_valuation_nanoton"`
+	Properties                   datatypes.JSON `gorm:"column:properties"`
+}
+
+func (r *AnalyticsRepo) GetStakingDropoff(ctx context.Context, since time.Time, limit int) (*domain.AnalyticsStakingDropoff, error) {
+	now := time.Now().UTC()
+	if since.IsZero() {
+		since = now.Add(-7 * 24 * time.Hour)
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+
+	out := &domain.AnalyticsStakingDropoff{Users: []domain.AnalyticsStakingDropoffUser{}}
+
+	_ = r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(DISTINCT user_id)
+		FROM analytics_events
+		WHERE occurred_at >= ?
+			AND event_name = 'staking_gifts_valued'
+			AND user_id IS NOT NULL
+			AND COALESCE((properties->>'profile_gift_count')::int, 0) > 0
+			AND COALESCE((properties->>'unstaked_profile_count')::int, 0) > 0
+	`, since).Scan(&out.ViewersWithProfileGifts).Error
+
+	var rows []stakingDropoffRow
+	err := r.db.WithContext(ctx).Raw(`
+		WITH valued AS (
+			SELECT DISTINCT ON (user_id)
+				user_id,
+				occurred_at AS valued_at,
+				properties,
+				COALESCE((properties->>'profile_gift_count')::int, 0) AS profile_gift_count,
+				COALESCE((properties->>'unstaked_profile_count')::int, 0) AS unstaked_profile_count,
+				COALESCE((properties->>'profile_valuation_nanoton')::bigint, 0) AS profile_valuation_nanoton,
+				COALESCE((properties->>'unstaked_profile_valuation_nanoton')::bigint, 0) AS unstaked_profile_valuation_nanoton
+			FROM analytics_events
+			WHERE occurred_at >= ?
+				AND event_name = 'staking_gifts_valued'
+				AND user_id IS NOT NULL
+				AND COALESCE((properties->>'profile_gift_count')::int, 0) > 0
+				AND COALESCE((properties->>'unstaked_profile_count')::int, 0) > 0
+			ORDER BY user_id, occurred_at DESC
+		),
+		stakers AS (
+			SELECT DISTINCT user_id
+			FROM analytics_events
+			WHERE event_name = 'staking_started'
+				AND status = 'success'
+				AND user_id IS NOT NULL
+			UNION
+			SELECT DISTINCT user_id FROM staking_positions
+		),
+		first_enter AS (
+			SELECT user_id, MIN(occurred_at) AS entered_at
+			FROM analytics_events
+			WHERE user_id IS NOT NULL
+				AND event_name IN ('session_started', 'bot_start', 'auth_succeeded')
+			GROUP BY user_id
+		),
+		staking_views AS (
+			SELECT
+				user_id,
+				MIN(occurred_at) AS first_staking_at,
+				MAX(occurred_at) AS last_staking_at
+			FROM analytics_events
+			WHERE user_id IS NOT NULL
+				AND occurred_at >= ?
+				AND (
+					event_name = 'staking_flow_viewed'
+					OR (event_name IN ('screen_enter', 'screen_view') AND screen = '/profile/staking')
+				)
+			GROUP BY user_id
+		)
+		SELECT
+			u.id AS user_id,
+			u.telegram_id,
+			COALESCE(u.username, '') AS username,
+			COALESCE(u.first_name, '') AS first_name,
+			COALESCE(fe.entered_at, u.created_at) AS entered_at,
+			sv.first_staking_at,
+			sv.last_staking_at,
+			v.valued_at,
+			v.profile_gift_count,
+			v.unstaked_profile_count,
+			v.profile_valuation_nanoton,
+			v.unstaked_profile_valuation_nanoton,
+			v.properties
+		FROM valued v
+		JOIN users u ON u.id = v.user_id
+		LEFT JOIN stakers s ON s.user_id = v.user_id
+		LEFT JOIN first_enter fe ON fe.user_id = v.user_id
+		LEFT JOIN staking_views sv ON sv.user_id = v.user_id
+		WHERE s.user_id IS NULL
+		ORDER BY v.unstaked_profile_valuation_nanoton DESC, v.valued_at DESC
+		LIMIT ?
+	`, since, since, limit).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	out.DropoffCount = int64(len(rows))
+	if out.ViewersWithProfileGifts > 0 {
+		var dropoffTotal int64
+		_ = r.db.WithContext(ctx).Raw(`
+			WITH valued AS (
+				SELECT DISTINCT user_id
+				FROM analytics_events
+				WHERE occurred_at >= ?
+					AND event_name = 'staking_gifts_valued'
+					AND user_id IS NOT NULL
+					AND COALESCE((properties->>'profile_gift_count')::int, 0) > 0
+					AND COALESCE((properties->>'unstaked_profile_count')::int, 0) > 0
+			),
+			stakers AS (
+				SELECT DISTINCT user_id
+				FROM analytics_events
+				WHERE event_name = 'staking_started'
+					AND status = 'success'
+					AND user_id IS NOT NULL
+				UNION
+				SELECT DISTINCT user_id FROM staking_positions
+			)
+			SELECT COUNT(*)
+			FROM valued v
+			LEFT JOIN stakers s ON s.user_id = v.user_id
+			WHERE s.user_id IS NULL
+		`, since).Scan(&dropoffTotal).Error
+		out.DropoffCount = dropoffTotal
+		out.DropoffRatePct = float64(dropoffTotal) * 100 / float64(out.ViewersWithProfileGifts)
+
+		_ = r.db.WithContext(ctx).Raw(`
+			WITH valued AS (
+				SELECT DISTINCT ON (user_id)
+					user_id,
+					COALESCE((properties->>'unstaked_profile_valuation_nanoton')::bigint, 0) AS unstaked_profile_valuation_nanoton
+				FROM analytics_events
+				WHERE occurred_at >= ?
+					AND event_name = 'staking_gifts_valued'
+					AND user_id IS NOT NULL
+					AND COALESCE((properties->>'profile_gift_count')::int, 0) > 0
+					AND COALESCE((properties->>'unstaked_profile_count')::int, 0) > 0
+				ORDER BY user_id, occurred_at DESC
+			),
+			stakers AS (
+				SELECT DISTINCT user_id
+				FROM analytics_events
+				WHERE event_name = 'staking_started'
+					AND status = 'success'
+					AND user_id IS NOT NULL
+				UNION
+				SELECT DISTINCT user_id FROM staking_positions
+			)
+			SELECT COALESCE(SUM(v.unstaked_profile_valuation_nanoton), 0)
+			FROM valued v
+			LEFT JOIN stakers s ON s.user_id = v.user_id
+			WHERE s.user_id IS NULL
+		`, since).Scan(&out.TotalUnstakedValuationNanoton).Error
+	}
+
+	out.Users = make([]domain.AnalyticsStakingDropoffUser, 0, len(rows))
+	for _, row := range rows {
+		user := domain.AnalyticsStakingDropoffUser{
+			UserID:                       row.UserID,
+			TelegramID:                   row.TelegramID,
+			Username:                     row.Username,
+			FirstName:                    row.FirstName,
+			EnteredAt:                    row.EnteredAt,
+			FirstStakingAt:               row.FirstStakingAt,
+			LastStakingAt:                row.LastStakingAt,
+			ValuedAt:                     row.ValuedAt,
+			ProfileGiftCount:             row.ProfileGiftCount,
+			UnstakedProfileCount:         row.UnstakedProfileCount,
+			ProfileValuationNanoton:      row.ProfileValuationNanoton,
+			UnstakedProfileValuationNano: row.UnstakedProfileValuationNano,
+			Gifts:                        parseStakingDropoffGifts(row.Properties),
+		}
+		out.Users = append(out.Users, user)
+	}
+	return out, nil
+}
+
+func parseStakingDropoffGifts(raw datatypes.JSON) []domain.AnalyticsStakingDropoffGift {
+	out := []domain.AnalyticsStakingDropoffGift{}
+	if len(raw) == 0 {
+		return out
+	}
+	var props struct {
+		Gifts []domain.AnalyticsStakingDropoffGift `json:"gifts"`
+	}
+	if err := json.Unmarshal(raw, &props); err != nil {
+		return out
+	}
+	if props.Gifts == nil {
+		return out
+	}
+	return props.Gifts
 }
 
 var _ domain.AnalyticsRepository = (*AnalyticsRepo)(nil)

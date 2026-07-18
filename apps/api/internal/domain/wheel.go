@@ -53,3 +53,34 @@ type WheelRecentWin struct {
 	SegmentLabel  string    `json:"segment_label"`
 	CreatedAt     time.Time `json:"created_at"`
 }
+
+// WheelPeriodStats aggregates non-admin spins for a time window.
+type WheelPeriodStats struct {
+	Spins         int64
+	UniqueUsers   int64
+	PrizesNanoton int64
+}
+
+// WheelSourceStats aggregates non-admin spins by spin_source.
+type WheelSourceStats struct {
+	Source        string
+	Spins         int64
+	PrizesNanoton int64
+}
+
+// WheelSegmentHitStats aggregates non-admin prize hits by segment.
+type WheelSegmentHitStats struct {
+	SegmentID          uuid.UUID
+	Label              string
+	AmountNanoton      int64
+	Hits               int64
+	TotalPrizesNanoton int64
+}
+
+// WheelDailyStats aggregates non-admin spins for one UTC calendar day.
+type WheelDailyStats struct {
+	Date          time.Time
+	Spins         int64
+	UniqueUsers   int64
+	PrizesNanoton int64
+}

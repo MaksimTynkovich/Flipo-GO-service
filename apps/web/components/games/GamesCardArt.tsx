@@ -58,7 +58,7 @@ export function GamesCardArt({ tone }: { tone: Tone }) {
                   </span>
                 </div>
                 <div className="games-art-wheel__cell games-art-wheel__cell--jackpot">
-                  <span className="games-art-wheel__amount">2.00</span>
+                  <span className="games-art-wheel__amount">25.00</span>
                   <span className="games-art-wheel__unit">
                     <TonIcon variant="brand" className="games-art-wheel__ton" title="" />
                   </span>

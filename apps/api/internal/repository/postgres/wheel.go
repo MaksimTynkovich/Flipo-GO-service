@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -25,6 +26,36 @@ func (r *WheelRepo) ListActiveSegments(ctx context.Context) ([]domain.WheelSegme
 		Order("sort_order ASC, amount_nanoton ASC").
 		Find(&rows).Error
 	return rows, err
+}
+
+func (r *WheelRepo) ListAllSegments(ctx context.Context) ([]domain.WheelSegment, error) {
+	var rows []domain.WheelSegment
+	err := r.db.WithContext(ctx).
+		Order("sort_order ASC, amount_nanoton ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *WheelRepo) UpdateSegment(ctx context.Context, seg *domain.WheelSegment) error {
+	if seg == nil {
+		return fmt.Errorf("nil segment")
+	}
+	res := r.db.WithContext(ctx).Model(&domain.WheelSegment{}).
+		Where("id = ?", seg.ID).
+		Updates(map[string]any{
+			"label":           seg.Label,
+			"amount_nanoton":  seg.AmountNanoton,
+			"weight":          seg.Weight,
+			"sort_order":      seg.SortOrder,
+			"active":          seg.Active,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *WheelRepo) GetOrCreateState(ctx context.Context, userID uuid.UUID) (*domain.UserWheelState, error) {
@@ -77,6 +108,10 @@ func (r *WheelRepo) CreateSpin(ctx context.Context, spin *domain.WheelSpin) erro
 }
 
 func (r *WheelRepo) ListRecentWins(ctx context.Context, limit int) ([]domain.WheelRecentWin, error) {
+	return r.ListTopWinsSince(ctx, time.Time{}, limit)
+}
+
+func (r *WheelRepo) ListTopWinsSince(ctx context.Context, since time.Time, limit int) ([]domain.WheelRecentWin, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -88,13 +123,17 @@ func (r *WheelRepo) ListRecentWins(ctx context.Context, limit int) ([]domain.Whe
 		CreatedAt    time.Time
 	}
 	var rows []row
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Table("wheel_spins AS ws").
 		Select("u.username, u.first_name, ws.prize_nanoton, seg.label AS segment_label, ws.created_at").
 		Joins("JOIN users u ON u.id = ws.user_id").
 		Joins("JOIN wheel_segments seg ON seg.id = ws.segment_id").
-		Where("ws.spin_source <> ?", domain.WheelSpinSourceAdmin).
-		Order("ws.created_at DESC").
+		Where("ws.spin_source <> ?", domain.WheelSpinSourceAdmin)
+	if !since.IsZero() {
+		q = q.Where("ws.created_at >= ?", since.UTC())
+	}
+	err := q.
+		Order("ws.prize_nanoton DESC, ws.created_at DESC").
 		Limit(limit).
 		Scan(&rows).Error
 	if err != nil {
@@ -115,17 +154,153 @@ func (r *WheelRepo) ListRecentWins(ctx context.Context, limit int) ([]domain.Whe
 
 func (r *WheelRepo) SumPrizesSince(ctx context.Context, since time.Time) (int64, error) {
 	var total int64
-	err := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
-		Where("created_at >= ?", since.UTC()).
-		Select("COALESCE(SUM(prize_nanoton), 0)").
-		Scan(&total).Error
+	q := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
+		Where("spin_source <> ?", domain.WheelSpinSourceAdmin)
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	err := q.Select("COALESCE(SUM(prize_nanoton), 0)").Scan(&total).Error
 	return total, err
 }
 
 func (r *WheelRepo) CountSpinsGlobalSince(ctx context.Context, since time.Time) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
-		Where("created_at >= ?", since.UTC()).
-		Count(&count).Error
+	q := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
+		Where("spin_source <> ?", domain.WheelSpinSourceAdmin)
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	err := q.Count(&count).Error
 	return count, err
+}
+
+func (r *WheelRepo) AdminPeriodStats(ctx context.Context, since time.Time) (domain.WheelPeriodStats, error) {
+	type row struct {
+		Spins         int64
+		UniqueUsers   int64
+		PrizesNanoton int64
+	}
+	var out row
+	q := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
+		Select("COUNT(*) AS spins, COUNT(DISTINCT user_id) AS unique_users, COALESCE(SUM(prize_nanoton), 0) AS prizes_nanoton").
+		Where("spin_source <> ?", domain.WheelSpinSourceAdmin)
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&out).Error; err != nil {
+		return domain.WheelPeriodStats{}, err
+	}
+	return domain.WheelPeriodStats{
+		Spins:         out.Spins,
+		UniqueUsers:   out.UniqueUsers,
+		PrizesNanoton: out.PrizesNanoton,
+	}, nil
+}
+
+func (r *WheelRepo) AdminSourceStats(ctx context.Context, since time.Time) ([]domain.WheelSourceStats, error) {
+	type row struct {
+		Source        string
+		Spins         int64
+		PrizesNanoton int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
+		Select("spin_source AS source, COUNT(*) AS spins, COALESCE(SUM(prize_nanoton), 0) AS prizes_nanoton").
+		Where("spin_source <> ?", domain.WheelSpinSourceAdmin).
+		Group("spin_source").
+		Order("spin_source ASC")
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.WheelSourceStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.WheelSourceStats{
+			Source:        item.Source,
+			Spins:         item.Spins,
+			PrizesNanoton: item.PrizesNanoton,
+		})
+	}
+	return out, nil
+}
+
+func (r *WheelRepo) AdminSegmentHits(ctx context.Context) ([]domain.WheelSegmentHitStats, error) {
+	type row struct {
+		SegmentID          uuid.UUID
+		Label              string
+		AmountNanoton      int64
+		Hits               int64
+		TotalPrizesNanoton int64
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Table("wheel_spins AS ws").
+		Select(`ws.segment_id,
+			COALESCE(seg.label, '—') AS label,
+			COALESCE(MAX(seg.amount_nanoton), 0) AS amount_nanoton,
+			COUNT(*) AS hits,
+			COALESCE(SUM(ws.prize_nanoton), 0) AS total_prizes_nanoton`).
+		Joins("LEFT JOIN wheel_segments seg ON seg.id = ws.segment_id").
+		Where("ws.spin_source <> ?", domain.WheelSpinSourceAdmin).
+		Group("ws.segment_id, seg.label").
+		Order("hits DESC, total_prizes_nanoton DESC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.WheelSegmentHitStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.WheelSegmentHitStats{
+			SegmentID:          item.SegmentID,
+			Label:              item.Label,
+			AmountNanoton:      item.AmountNanoton,
+			Hits:               item.Hits,
+			TotalPrizesNanoton: item.TotalPrizesNanoton,
+		})
+	}
+	return out, nil
+}
+
+func (r *WheelRepo) AdminSpinsByDay(ctx context.Context, since time.Time) ([]domain.WheelDailyStats, error) {
+	type row struct {
+		Day           time.Time
+		Spins         int64
+		UniqueUsers   int64
+		PrizesNanoton int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
+		Select(`date_trunc('day', created_at AT TIME ZONE 'UTC') AS day,
+			COUNT(*) AS spins,
+			COUNT(DISTINCT user_id) AS unique_users,
+			COALESCE(SUM(prize_nanoton), 0) AS prizes_nanoton`).
+		Where("spin_source <> ?", domain.WheelSpinSourceAdmin).
+		Group("day").
+		Order("day ASC")
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.WheelDailyStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.WheelDailyStats{
+			Date:          item.Day.UTC(),
+			Spins:         item.Spins,
+			UniqueUsers:   item.UniqueUsers,
+			PrizesNanoton: item.PrizesNanoton,
+		})
+	}
+	return out, nil
+}
+
+func (r *WheelRepo) SumPendingBonusSpins(ctx context.Context) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.UserWheelState{}).
+		Select("COALESCE(SUM(bonus_spins), 0)").
+		Scan(&total).Error
+	return total, err
 }

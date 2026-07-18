@@ -25,6 +25,7 @@ const EVENT_LABELS: Record<string, string> = {
   disabled_click: "Клик по неактивной кнопке",
   deposit_flow_viewed: "Открыт пополнение",
   staking_flow_viewed: "Открыт стейкинг",
+  staking_gifts_valued: "Оценка подарков на стейкинге",
   input_started: "Начат ввод",
   input_completed: "Ввод завершён",
   input_abandon: "Ввод брошен",

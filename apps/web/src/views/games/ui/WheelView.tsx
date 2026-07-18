@@ -2,31 +2,39 @@
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { ChevronRight, Lock, Megaphone, Sparkles, Users, X } from "lucide-react";
+import { ChevronRight, Gift, Infinity as InfinityIcon, UserRoundPlus, Users, X } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { PrizeWheel } from "@/components/games/PrizeWheel";
 import { WheelWinModal } from "@/components/games/WheelWinModal";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import { BtnBusy } from "@/components/ui/BtnBusy";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import {
   ApiRequestError,
   formatTON,
   getMe,
   getWheelStatus,
+  reportWheelShare,
   spinWheel,
   type WheelSpinResult,
   type WheelStatus,
 } from "@/lib/api";
 import { referralTelegramUrl } from "@/lib/bot";
-import { PROMO_REQUIRED_CHANNEL, promoChannelMention, promoChannelUrl } from "@/lib/promo-channel";
+import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { formatUserError } from "@/lib/user-errors";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { openTelegramLink, openTelegramShare } from "@/src/shared/lib/twa";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { cn } from "@/lib/utils";
 import { prizeTierForAmount } from "@/lib/wheel-tiers";
+import {
+  setWheelPrizeBalanceHold,
+  takePendingWheelPrizeBalance,
+} from "@/lib/wheel-prize-balance";
+import { patchUserBalance } from "@/lib/apply-balance";
+import { emitBalanceWin } from "@/lib/balance-win";
 
 function msUntilReset(iso: string): number {
   const t = Date.parse(iso);
@@ -40,6 +48,70 @@ function formatCountdown(ms: number): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+type StatusCopyInput = {
+  loading: boolean;
+  unlimitedSpins: boolean;
+  needsChannel: boolean;
+  canSpin: boolean;
+  waitingDailyReset: boolean;
+  dailyAvailable: boolean;
+  bonusSpins: number;
+  resetMs: number;
+};
+
+function statusCopy({
+  loading,
+  unlimitedSpins,
+  needsChannel,
+  canSpin,
+  waitingDailyReset,
+  dailyAvailable,
+  bonusSpins,
+  resetMs,
+}: StatusCopyInput): string {
+  if (loading) return "Загрузка…";
+  if (unlimitedSpins) return "Безлимитные спины";
+  if (needsChannel) return "Подпишись на канал, чтобы крутить";
+  if (waitingDailyReset) return `Доступно через ${formatCountdown(resetMs)}`;
+  if (canSpin && dailyAvailable) return "1 бесплатный спин";
+  if (canSpin && bonusSpins > 0) return `Бонус ×${bonusSpins}`;
+  if (bonusSpins > 0) return `Бонус ×${bonusSpins}`;
+  return "Нет доступных спинов";
+}
+
+function StatValue({
+  unlimited,
+  value,
+}: {
+  unlimited: boolean;
+  value: string | number;
+}) {
+  if (unlimited) {
+    return (
+      <span className="wheel-stat__infinity" aria-label="Безлимит">
+        <InfinityIcon className="wheel-stat__infinity-icon" strokeWidth={2.25} />
+      </span>
+    );
+  }
+  return <>{value}</>;
+}
+
+const CTA_BASE =
+  "app-control wheel-cta flex h-14 w-full items-center justify-center gap-2 text-[15px] font-semibold tracking-tight";
+
+function formatWinAgo(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (sec < 60) return "только что";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} мин назад`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs} ч назад`;
+  const days = Math.floor(hrs / 24);
+  return `${days} дн назад`;
 }
 
 export function WheelView() {
@@ -75,6 +147,22 @@ export function WheelView() {
   }, [load]);
 
   useEffect(() => {
+    return () => {
+      const pendingBalance = takePendingWheelPrizeBalance();
+      setWheelPrizeBalanceHold(false);
+      if (!pendingBalance) return;
+      setUser((prev) =>
+        prev
+          ? patchUserBalance(prev, {
+              betting_balance: pendingBalance.betting_balance,
+              promo_balance: pendingBalance.promo_balance,
+            })
+          : prev,
+      );
+    };
+  }, [setUser]);
+
+  useEffect(() => {
     if (!status?.next_daily_reset_at) return;
     const tick = () => setResetMs(msUntilReset(status.next_daily_reset_at));
     tick();
@@ -84,7 +172,6 @@ export function WheelView() {
 
   const channel = status?.required_channel || PROMO_REQUIRED_CHANNEL;
   const channelUrl = promoChannelUrl(channel);
-  const channelLabel = promoChannelMention(channel);
 
   const prizeChips = useMemo(() => {
     const segs = [...(status?.segments ?? [])].sort(
@@ -123,15 +210,36 @@ export function WheelView() {
     const result = pendingResult;
     setSpinning(false);
     setPendingResult(null);
-    if (!result) return;
+    if (!result) {
+      setWheelPrizeBalanceHold(false);
+      takePendingWheelPrizeBalance();
+      return;
+    }
 
     applyStatusFromResult(result);
     haptics.notificationOccurred("success");
     setWinBurst(formatTON(result.prize_nanoton));
-    try {
-      setUser(await getMe());
-    } catch {
-      // WS may refresh balance.
+
+    const pendingBalance = takePendingWheelPrizeBalance();
+    setWheelPrizeBalanceHold(false);
+    if (pendingBalance) {
+      setUser((prev) =>
+        prev
+          ? patchUserBalance(prev, {
+              betting_balance: pendingBalance.betting_balance,
+              promo_balance: pendingBalance.promo_balance,
+            })
+          : prev,
+      );
+      if (pendingBalance.delta_nanoton && pendingBalance.delta_nanoton > 0) {
+        emitBalanceWin(pendingBalance.delta_nanoton);
+      }
+    } else {
+      try {
+        setUser(await getMe());
+      } catch {
+        // WS may still refresh balance.
+      }
     }
     void load();
   }
@@ -141,6 +249,8 @@ export function WheelView() {
     if (!status?.can_spin && !status?.unlimited_spins && !user?.is_admin) return;
     setWinBurst(null);
     setSpinning(true);
+    setWheelPrizeBalanceHold(true);
+    takePendingWheelPrizeBalance();
     haptics.impactOccurred("medium");
     try {
       const result = await spinWheel();
@@ -149,6 +259,8 @@ export function WheelView() {
     } catch (e) {
       setSpinning(false);
       setTargetSegmentId(null);
+      setWheelPrizeBalanceHold(false);
+      takePendingWheelPrizeBalance();
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
         showToast({ variant: "error", title: "Нужна подписка на канал" });
       } else {
@@ -171,10 +283,14 @@ export function WheelView() {
   function inviteFriend() {
     if (!user) return;
     const url = referralTelegramUrl(user.telegram_id);
-    const text = "Крути колесо удачи в Flipo — забирай TON каждый день!";
-    if (!openTelegramShare({ url, text })) {
+    const text =
+      "🎁 Халява в Flipo: каждый день бесплатно крути колесо удачи и забирай TON! 💸";
+    if (openTelegramShare({ url, text })) {
+      reportWheelShare("share").catch(() => {});
+    } else {
       void navigator.clipboard.writeText(`${url}\n\n${text}`);
       showToast({ variant: "success", title: "Ссылка скопирована" });
+      reportWheelShare("copy").catch(() => {});
     }
     haptics.impactOccurred("light");
   }
@@ -193,150 +309,182 @@ export function WheelView() {
       status.bonus_spins <= 0,
   );
 
+  const statusText = statusCopy({
+    loading,
+    unlimitedSpins,
+    needsChannel,
+    canSpin,
+    waitingDailyReset,
+    dailyAvailable: Boolean(status?.daily_available),
+    bonusSpins: status?.bonus_spins ?? 0,
+    resetMs,
+  });
+
+  const topWins = status?.recent_wins?.slice(0, 5) ?? [];
+
   return (
-    <PageShell flush className="wheel-page pb-6">
-      <header className="wheel-min-hero">
-        <div className="wheel-min-hero__row">
-          <h1 className="wheel-min-hero__title">Колесо удачи</h1>
-          {canSpin ? <span className="wheel-min-hero__live">Доступно</span> : null}
-        </div>
-      </header>
-
-      <section className="wheel-min-stage">
-        <PrizeWheel
-          segments={status?.segments ?? []}
-          targetSegmentId={targetSegmentId}
-          spinning={spinning}
-          ready={canSpin}
-          onSpinEnd={onSpinEnd}
-          onTick={() => haptics.selectionChanged()}
-        />
-
-        {/* Primary CTA — spin when available; locked look when not */}
-        {needsChannel ? (
-          <button
-            type="button"
-            disabled={!channelUrl}
-            onClick={openChannel}
-            className="wheel-min-cta wheel-min-cta--channel app-control"
-          >
-            Подписаться и крутить
-          </button>
-        ) : canSpin ? (
-          <button
-            type="button"
-            disabled={spinning || loading}
-            onClick={handleSpin}
-            className={cn(
-              "wheel-min-cta wheel-min-cta--spin app-control",
-              spinning && "wheel-min-cta--busy",
+    <PageShell flush>
+      <div className="wheel-page flex flex-col gap-3.5">
+        <div className="wheel-hero">
+          <p className="wheel-status" aria-live="polite" aria-atomic="true">
+            {loading ? (
+              <span className="wheel-status__skeleton" aria-hidden />
+            ) : (
+              statusText
             )}
-          >
-            {spinning ? "Крутим…" : "Крутить"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            className="wheel-min-cta wheel-min-cta--locked app-control"
-            aria-label="Нет доступных спинов"
-          >
-            <Lock className="h-4 w-4" strokeWidth={2.2} />
-            Крутить · 0
-          </button>
-        )}
+          </p>
+
+          <section className={cn("wheel-stage", !loading && !canSpin && !spinning && "wheel-stage--dim")}>
+            <PrizeWheel
+              segments={status?.segments ?? []}
+              targetSegmentId={targetSegmentId}
+              spinning={spinning}
+              ready={canSpin}
+              onSpinEnd={onSpinEnd}
+              onTick={() => haptics.selectionChanged()}
+            />
+          </section>
+        </div>
+
+        <div className="wheel-controls">
+          {loading ? (
+            <>
+              <div className="wheel-skeleton-cta" aria-hidden />
+              <div className="wheel-stats">
+                <div className="wheel-skeleton-tile" aria-hidden />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="wheel-actions">
+                {needsChannel ? (
+                  <button
+                    type="button"
+                    disabled={!channelUrl}
+                    onClick={openChannel}
+                    className={cn(CTA_BASE, "wheel-cta--channel")}
+                  >
+                    Подписаться и крутить
+                  </button>
+                ) : canSpin ? (
+                  <button
+                    type="button"
+                    disabled={spinning}
+                    onClick={handleSpin}
+                    className={cn(CTA_BASE, "wheel-cta--spin")}
+                  >
+                    {spinning ? <BtnBusy label="Крутим…" /> : "Крутить"}
+                  </button>
+                ) : canInviteForSpin ? (
+                  <div className="wheel-empty">
+                    <p className="wheel-empty__title">Спины закончились</p>
+                    <p className="wheel-empty__desc">
+                      Приглашай друзей и получай спины за каждого
+                    </p>
+                    <button
+                      type="button"
+                      onClick={inviteFriend}
+                      className={cn(CTA_BASE, "wheel-cta--invite-primary")}
+                    >
+                      <UserRoundPlus className="h-4 w-4" strokeWidth={2.25} />
+                      Пригласить друга +1 спин
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="wheel-stats" role="group" aria-label="Спины">
+                <div className="wheel-stat">
+                  <span className="wheel-stat__label">Сегодня</span>
+                  <span className="wheel-stat__value">
+                    <StatValue
+                      unlimited={unlimitedSpins}
+                      value={status?.daily_available ? "1" : "0"}
+                    />
+                  </span>
+                </div>
+                <div className="wheel-stat__divider" aria-hidden />
+                <div className="wheel-stat">
+                  <span className="wheel-stat__label">Бонус</span>
+                  <span className="wheel-stat__value">
+                    <StatValue
+                      unlimited={unlimitedSpins}
+                      value={status?.bonus_spins ?? 0}
+                    />
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {(prizeChips.length > 0 || status?.channel_subscribed) && !loading ? (
+            <nav className="wheel-menu" aria-label="Дополнительно">
+              {prizeChips.length > 0 ? (
+                <button
+                  type="button"
+                  className="wheel-menu__item"
+                  aria-haspopup="dialog"
+                  aria-expanded={prizesOpen}
+                  onClick={() => {
+                    haptics.impactOccurred("light");
+                    setPrizesOpen(true);
+                  }}
+                >
+                  <Gift className="wheel-menu__icon" strokeWidth={1.75} aria-hidden />
+                  <span className="wheel-menu__title">Посмотреть призы</span>
+                  <ChevronRight className="wheel-menu__chevron" strokeWidth={1.5} />
+                </button>
+              ) : null}
+            </nav>
+          ) : null}
+        </div>
 
         {canInviteForSpin ? (
-          <button
-            type="button"
-            onClick={inviteFriend}
-            className="wheel-min-cta wheel-min-cta--invite app-control"
-          >
-            <Users className="h-4 w-4" strokeWidth={2.2} />
-            Пригласить · +1
-          </button>
+          <aside className="wheel-tip" aria-label="Совет">
+            <Users className="wheel-tip__icon" strokeWidth={2} aria-hidden />
+            <p className="wheel-tip__text">
+              По статистике каждый приглашённый реферал увеличивает шанс крупного выигрыша
+            </p>
+          </aside>
         ) : null}
 
-        {waitingDailyReset ? (
-          <p className="wheel-min-hint">Бесплатный спин через {formatCountdown(resetMs)}</p>
+        {topWins.length > 0 && !loading ? (
+          <section className="wheel-feed">
+            <p className="wheel-feed__label">Топ выигрышей за 24ч</p>
+            <ul className="wheel-feed__list">
+              {topWins.map((win, i) => {
+                const tier = prizeTierForAmount(win.prize_nanoton);
+                const rank = i + 1;
+                return (
+                  <li
+                    key={`${win.created_at}-${i}`}
+                    className={cn(
+                      "wheel-feed__row",
+                      rank <= 3 && "wheel-feed__row--top",
+                      rank === 1 && "wheel-feed__row--gold",
+                    )}
+                  >
+                    <span
+                      className={cn("wheel-feed__rank", rank <= 3 && `wheel-feed__rank--${rank}`)}
+                      aria-label={`Место ${rank}`}
+                    >
+                      {rank}
+                    </span>
+                    <span className="wheel-feed__meta">
+                      <span className="wheel-feed__name">{win.display_name}</span>
+                      <span className="wheel-feed__ago">{formatWinAgo(win.created_at)}</span>
+                    </span>
+                    <span className={cn("wheel-feed__amount", `wheel-feed__amount--${tier}`)}>
+                      {formatTON(win.prize_nanoton)}
+                      <TonIcon variant="brand" className="h-3.5 w-3.5" />
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         ) : null}
-
-        {!needsChannel && canSpin && status?.daily_available ? (
-          <div className="wheel-min-meta">
-            <span>1 бесплатный сегодня</span>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="wheel-min-widget">
-        <div className="wheel-min-widget__cell">
-          <span className="wheel-min-widget__label">Спин</span>
-          <span className="wheel-min-widget__value">
-            {status?.daily_available ? "1" : "0"}
-          </span>
-        </div>
-        <div className="wheel-min-widget__divider" aria-hidden />
-        <div className="wheel-min-widget__cell">
-          <span className="wheel-min-widget__label">Бонус</span>
-          <span className="wheel-min-widget__value">{status?.bonus_spins ?? 0}</span>
-        </div>
-      </section>
-
-      {prizeChips.length > 0 ? (
-        <button
-          type="button"
-          className="wheel-min-prizes-btn app-control"
-          onClick={() => {
-            haptics.impactOccurred("light");
-            setPrizesOpen(true);
-          }}
-        >
-          <span className="wheel-min-prizes-btn__copy">
-            <span className="wheel-min-prizes-btn__title">Все призы</span>
-            <span className="wheel-min-prizes-btn__sub">
-              {prizeChips.length} номиналов
-            </span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2.2} />
-        </button>
-      ) : null}
-
-      <section className="wheel-min-actions">
-        {needsChannel && channelLabel ? (
-          <button type="button" onClick={openChannel} className="wheel-min-link app-control">
-            <Megaphone className="h-4 w-4" strokeWidth={2} />
-            <span>Подписка на {channelLabel}</span>
-          </button>
-        ) : null}
-
-        {status?.channel_subscribed ? (
-          <Link
-            href={APP_ROUTES.profileReferrals}
-            onClick={() => haptics.impactOccurred("light")}
-            className="wheel-min-link app-control"
-          >
-            <Sparkles className="h-4 w-4" strokeWidth={2} />
-            <span>Рефералы</span>
-          </Link>
-        ) : null}
-      </section>
-
-      {(status?.recent_wins?.length ?? 0) > 0 ? (
-        <section className="wheel-min-feed">
-          <p className="wheel-min-section-label">Недавние выигрыши</p>
-          <div className="wheel-min-feed__list">
-            {status!.recent_wins.slice(0, 5).map((win, i) => (
-              <div key={`${win.created_at}-${i}`} className="wheel-min-feed__item">
-                <span className="wheel-min-feed__name">{win.display_name}</span>
-                <span className="wheel-min-feed__prize">
-                  +{formatTON(win.prize_nanoton)}
-                  <TonIcon variant="brand" className="h-3.5 w-3.5" />
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      </div>
 
       {prizesOpen ? (
         <ModalOverlay
@@ -351,13 +499,15 @@ export function WheelView() {
               className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(88dvh,100%)] flex-col"
             >
               <div className="shrink-0 px-5 pt-2 sm:px-6">
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/10" />
                 <div className="relative flex items-center justify-center pb-1">
-                  <p className="text-center text-[15px] font-semibold">Призы</p>
+                  <p className="text-center text-[15px] font-semibold tracking-tight">
+                    Призы
+                  </p>
                   <button
                     type="button"
                     onClick={close}
-                    className="absolute right-0 flex size-8 items-center justify-center rounded-full text-muted"
+                    className="absolute right-0 flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground"
                     aria-label="Закрыть"
                   >
                     <X className="h-4 w-4" />
@@ -373,13 +523,13 @@ export function WheelView() {
                       style={{ "--i": index } as CSSProperties}
                       aria-label={`${formatTON(seg.amount_nanoton)} TON`}
                     >
-                      <span className="wheel-prize__row">
-                        <span className="wheel-prize__amount">
-                          {formatTON(seg.amount_nanoton)}
-                        </span>
-                        <span className="wheel-prize__ton-wrap" aria-hidden>
-                          <TonIcon variant="brand" className="wheel-prize__ton" />
-                        </span>
+                      <span className="wheel-prize__spark wheel-prize__spark--a" aria-hidden />
+                      <span className="wheel-prize__spark wheel-prize__spark--b" aria-hidden />
+                      <span className="wheel-prize__amount">
+                        {formatTON(seg.amount_nanoton)}
+                      </span>
+                      <span className="wheel-prize__gem" aria-hidden>
+                        <TonIcon variant="brand" className="wheel-prize__gem-icon" title="" />
                       </span>
                     </div>
                   ))}
@@ -389,6 +539,7 @@ export function WheelView() {
           )}
         </ModalOverlay>
       ) : null}
+
       {winBurst ? (
         <WheelWinModal
           amount={winBurst}
