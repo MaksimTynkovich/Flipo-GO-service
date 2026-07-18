@@ -1,35 +1,8 @@
 import { getTelegramWebApp } from "@/src/shared/lib/twa";
 import { getAnalyticsSessionId, getCurrentPath, trackErrorSurface, trackEvent } from "@/lib/analytics";
 
-function trimTrailingSlash(url: string) {
-  return url.replace(/\/$/, "");
-}
-
-/**
- * Public API base. Empty string = same-origin (Next rewrites /api → API).
- * Missing/empty NEXT_PUBLIC_API_URL must NOT fall back to localhost in the browser —
- * that breaks prod images built without the build-arg.
- */
-export function resolvePublicApiUrl(): string {
-  const configured = (process.env.NEXT_PUBLIC_API_URL || "").trim();
-  if (configured) return trimTrailingSlash(configured);
-  if (typeof window !== "undefined") return "";
-  return "http://localhost:8080";
-}
-
-/** Public WS base. Empty env → same host with ws/wss from page protocol. */
-export function resolvePublicWsUrl(): string {
-  const configured = (process.env.NEXT_PUBLIC_WS_URL || "").trim();
-  if (configured) return trimTrailingSlash(configured);
-  if (typeof window !== "undefined") {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${window.location.host}`;
-  }
-  return "ws://localhost:8080";
-}
-
-export const API_URL = resolvePublicApiUrl();
-export const WS_URL = resolvePublicWsUrl();
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 const NGROK_API = API_URL.includes("ngrok-free.app") || API_URL.includes("ngrok.io");
 
 export function resolveAsset(url?: string | null): string | undefined {

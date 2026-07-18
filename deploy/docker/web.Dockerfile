@@ -29,8 +29,5 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 EXPOSE 3000
-# Next.js binds to HOSTNAME; Docker sets it to the container id, so the process
-# listens only on eth0 and healthchecks to 127.0.0.1 fail (unhealthy forever).
-ENV PORT=3000 \
-    HOSTNAME=0.0.0.0
+ENV PORT=3000
 CMD ["node", "server.js"]
