@@ -25,9 +25,7 @@ func OpenAppButtonMarkup(opts OpenAppButtonOptions) map[string]any {
 
 	if appURL := resolveOpenAppURL(opts); appURL != "" {
 		if isTelegramDeepLink(appURL) {
-			// url + https://t.me/bot/app opens the Mini App twice on some clients
-			// (direct-link handler + url navigation). telegram.me avoids that.
-			button["url"] = toTelegramMeDeepLink(appURL)
+			button["url"] = toTmeDeepLink(appURL)
 		} else {
 			button["web_app"] = map[string]string{"url": appURL}
 		}
@@ -61,15 +59,15 @@ func resolveOpenAppURL(opts OpenAppButtonOptions) string {
 			}
 			return customURL
 		}
-		// If admin pasted a t.me Mini App link as WebAppURL, still honour start payload
-		// via the bot short-name deep link when possible.
+		// If admin pasted a telegram.me / t.me Mini App link as WebAppURL, still honour
+		// start payload via the bot short-name deep link when possible.
 		if payload := strings.TrimSpace(opts.StartPayload); payload != "" {
 			if deep := miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, payload); deep != "" {
 				return deep
 			}
-			return appendStartApp(customURL, payload)
+			return appendStartApp(toTmeDeepLink(customURL), payload)
 		}
-		return customURL
+		return toTmeDeepLink(customURL)
 	}
 
 	return miniAppDeepLink(opts.BotUsername, opts.WebAppShortName, opts.StartPayload)
@@ -81,7 +79,7 @@ func miniAppDeepLink(botUsername, shortName, startPayload string) string {
 	if botUsername == "" || shortName == "" {
 		return ""
 	}
-	appURL := "https://telegram.me/" + botUsername + "/" + shortName
+	appURL := "https://t.me/" + botUsername + "/" + shortName
 	return appendStartApp(appURL, startPayload)
 }
 
@@ -107,14 +105,15 @@ func isTelegramDeepLink(appURL string) bool {
 		strings.HasPrefix(appURL, "http://telegram.me/")
 }
 
-func toTelegramMeDeepLink(appURL string) string {
+// toTmeDeepLink normalizes telegram.me → t.me (canonical host for Mini App links).
+func toTmeDeepLink(appURL string) string {
 	switch {
-	case strings.HasPrefix(appURL, "https://t.me/"):
-		return "https://telegram.me/" + strings.TrimPrefix(appURL, "https://t.me/")
-	case strings.HasPrefix(appURL, "http://t.me/"):
-		return "https://telegram.me/" + strings.TrimPrefix(appURL, "http://t.me/")
+	case strings.HasPrefix(appURL, "https://telegram.me/"):
+		return "https://t.me/" + strings.TrimPrefix(appURL, "https://telegram.me/")
 	case strings.HasPrefix(appURL, "http://telegram.me/"):
-		return "https://telegram.me/" + strings.TrimPrefix(appURL, "http://telegram.me/")
+		return "https://t.me/" + strings.TrimPrefix(appURL, "http://telegram.me/")
+	case strings.HasPrefix(appURL, "http://t.me/"):
+		return "https://t.me/" + strings.TrimPrefix(appURL, "http://t.me/")
 	default:
 		return appURL
 	}
