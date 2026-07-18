@@ -72,6 +72,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.WheelSegment{},
 		&domain.UserWheelState{},
 		&domain.WheelSpin{},
+		&domain.WheelSpinOverride{},
 	); err != nil {
 		return err
 	}

@@ -25,7 +25,7 @@ import { referralTelegramUrl } from "@/lib/bot";
 import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { formatUserError } from "@/lib/user-errors";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
-import { openTelegramLink, openTelegramShare } from "@/src/shared/lib/twa";
+import { openTelegramLink, openTelegramShare, getTelegramWebApp } from "@/src/shared/lib/twa";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { cn } from "@/lib/utils";
 import { prizeTierForAmount } from "@/lib/wheel-tiers";
@@ -112,6 +112,44 @@ function formatWinAgo(iso: string): string {
   if (hrs < 24) return `${hrs} ч назад`;
   const days = Math.floor(hrs / 24);
   return `${days} дн назад`;
+}
+
+function winInitial(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  return trimmed.charAt(0).toUpperCase();
+}
+
+function winAvatarTone(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return hash % 5;
+}
+
+function WheelFeedAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
+  const [imgError, setImgError] = useState(false);
+  const showPhoto = Boolean(photoUrl) && !imgError;
+  return (
+    <span
+      className={cn(
+        "wheel-feed__avatar",
+        !showPhoto && `wheel-feed__avatar--${winAvatarTone(name)}`,
+      )}
+      aria-hidden
+    >
+      {showPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={photoUrl}
+          alt=""
+          className="wheel-feed__avatar-img"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        winInitial(name)
+      )}
+    </span>
+  );
 }
 
 export function WheelView() {
@@ -244,15 +282,45 @@ export function WheelView() {
     void load();
   }
 
+  function openChannel() {
+    if (!channelUrl) return;
+    openTelegramLink(channelUrl);
+    haptics.impactOccurred("light");
+  }
+
   async function handleSpin() {
     if (spinning) return;
-    if (!status?.can_spin && !status?.unlimited_spins && !user?.is_admin) return;
+    const unlimited = Boolean(status?.unlimited_spins || user?.is_admin);
+    const hasStock =
+      unlimited ||
+      Boolean(status?.daily_available) ||
+      (status?.bonus_spins ?? 0) > 0;
+    if (!hasStock) return;
+
     setWinBurst(null);
     setSpinning(true);
-    setWheelPrizeBalanceHold(true);
-    takePendingWheelPrizeBalance();
     haptics.impactOccurred("medium");
+
     try {
+      const fresh = await getWheelStatus();
+      setStatus(fresh);
+      setResetMs(msUntilReset(fresh.next_daily_reset_at));
+      if (!fresh.channel_subscribed) {
+        setSpinning(false);
+        showToast({ variant: "error", title: "Нужна подписка на канал" });
+        openChannel();
+        haptics.notificationOccurred("error");
+        return;
+      }
+      if (!fresh.can_spin && !fresh.unlimited_spins && !user?.is_admin) {
+        setSpinning(false);
+        showToast({ variant: "error", title: "Нет доступных спинов" });
+        haptics.notificationOccurred("error");
+        return;
+      }
+
+      setWheelPrizeBalanceHold(true);
+      takePendingWheelPrizeBalance();
       const result = await spinWheel();
       setPendingResult(result);
       setTargetSegmentId(result.segment_id);
@@ -263,6 +331,7 @@ export function WheelView() {
       takePendingWheelPrizeBalance();
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
         showToast({ variant: "error", title: "Нужна подписка на канал" });
+        openChannel();
       } else {
         showToast({
           variant: "error",
@@ -274,39 +343,46 @@ export function WheelView() {
     }
   }
 
-  function openChannel() {
-    if (!channelUrl) return;
-    openTelegramLink(channelUrl);
-    haptics.impactOccurred("light");
-  }
-
-  function inviteFriend() {
+  async function inviteFriend() {
     if (!user) return;
     const url = referralTelegramUrl(user.telegram_id);
     const text =
       "🎁 Халява в Flipo: каждый день бесплатно крути колесо удачи и забирай TON! 💸";
-    if (openTelegramShare({ url, text })) {
-      reportWheelShare("share").catch(() => {});
-    } else {
-      void navigator.clipboard.writeText(`${url}\n\n${text}`);
-      showToast({ variant: "success", title: "Ссылка скопирована" });
-      reportWheelShare("copy").catch(() => {});
-    }
     haptics.impactOccurred("light");
+
+    // Report BEFORE opening the share sheet — otherwise Telegram can cancel the fetch.
+    const webApp = getTelegramWebApp();
+    const canShare = typeof webApp?.openTelegramLink === "function";
+    const action = canShare ? "share" : "copy";
+    try {
+      await reportWheelShare(action);
+    } catch {
+      // Still open share / copy even if analytics notify failed.
+    }
+
+    if (canShare && openTelegramShare({ url, text })) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(`${url}\n\n${text}`);
+      showToast({ variant: "success", title: "Ссылка скопирована" });
+    } catch {
+      showToast({ variant: "error", title: "Не удалось скопировать ссылку" });
+    }
   }
 
   const unlimitedSpins = Boolean(status?.unlimited_spins || user?.is_admin);
-  const needsChannel = Boolean(status && !status.channel_subscribed && !unlimitedSpins);
-  const canSpin = Boolean(status?.can_spin || unlimitedSpins);
-  const canInviteForSpin = Boolean(
-    !unlimitedSpins && status?.channel_subscribed && !status.can_spin,
+  const needsChannel = Boolean(status && !status.channel_subscribed);
+  const hasSpinStock = Boolean(
+    unlimitedSpins || status?.daily_available || (status?.bonus_spins ?? 0) > 0,
   );
+  const canSpin = Boolean(status?.can_spin || unlimitedSpins);
+  const canInviteForSpin = Boolean(!unlimitedSpins && !hasSpinStock);
   const waitingDailyReset = Boolean(
     !unlimitedSpins &&
-      status?.channel_subscribed &&
-      !status.can_spin &&
-      !status.daily_available &&
-      status.bonus_spins <= 0,
+      !hasSpinStock &&
+      !status?.daily_available &&
+      (status?.bonus_spins ?? 0) <= 0,
   );
 
   const statusText = statusCopy({
@@ -334,12 +410,17 @@ export function WheelView() {
             )}
           </p>
 
-          <section className={cn("wheel-stage", !loading && !canSpin && !spinning && "wheel-stage--dim")}>
+          <section
+            className={cn(
+              "wheel-stage",
+              !loading && !hasSpinStock && !spinning && "wheel-stage--dim",
+            )}
+          >
             <PrizeWheel
               segments={status?.segments ?? []}
               targetSegmentId={targetSegmentId}
               spinning={spinning}
-              ready={canSpin}
+              ready={hasSpinStock}
               onSpinEnd={onSpinEnd}
               onTick={() => haptics.selectionChanged()}
             />
@@ -357,20 +438,13 @@ export function WheelView() {
           ) : (
             <>
               <div className="wheel-actions">
-                {needsChannel ? (
-                  <button
-                    type="button"
-                    disabled={!channelUrl}
-                    onClick={openChannel}
-                    className={cn(CTA_BASE, "wheel-cta--channel")}
-                  >
-                    Подписаться и крутить
-                  </button>
-                ) : canSpin ? (
+                {hasSpinStock ? (
                   <button
                     type="button"
                     disabled={spinning}
-                    onClick={handleSpin}
+                    onClick={() => {
+                      void handleSpin();
+                    }}
                     className={cn(CTA_BASE, "wheel-cta--spin")}
                   >
                     {spinning ? <BtnBusy label="Крутим…" /> : "Крутить"}
@@ -383,7 +457,9 @@ export function WheelView() {
                     </p>
                     <button
                       type="button"
-                      onClick={inviteFriend}
+                      onClick={() => {
+                        void inviteFriend();
+                      }}
                       className={cn(CTA_BASE, "wheel-cta--invite-primary")}
                     >
                       <UserRoundPlus className="h-4 w-4" strokeWidth={2.25} />
@@ -417,8 +493,21 @@ export function WheelView() {
             </>
           )}
 
-          {(prizeChips.length > 0 || status?.channel_subscribed) && !loading ? (
+          {(prizeChips.length > 0 || status?.channel_subscribed || user) && !loading ? (
             <nav className="wheel-menu" aria-label="Дополнительно">
+              {user ? (
+                <button
+                  type="button"
+                  className="wheel-menu__item"
+                  onClick={() => {
+                    void inviteFriend();
+                  }}
+                >
+                  <UserRoundPlus className="wheel-menu__icon" strokeWidth={1.75} aria-hidden />
+                  <span className="wheel-menu__title">Пригласить друга</span>
+                  <ChevronRight className="wheel-menu__chevron" strokeWidth={1.5} />
+                </button>
+              ) : null}
               {prizeChips.length > 0 ? (
                 <button
                   type="button"
@@ -449,19 +538,25 @@ export function WheelView() {
         ) : null}
 
         {topWins.length > 0 && !loading ? (
-          <section className="wheel-feed">
-            <p className="wheel-feed__label">Топ выигрышей за 24ч</p>
+          <section className="wheel-feed" aria-label="Топ выигрышей за 24 часа">
+            <div className="wheel-feed__head">
+              <span className="wheel-feed__spark" aria-hidden />
+              <p className="wheel-feed__label">Топ выигрышей за 24ч</p>
+            </div>
             <ul className="wheel-feed__list">
               {topWins.map((win, i) => {
                 const tier = prizeTierForAmount(win.prize_nanoton);
                 const rank = i + 1;
+                const name = win.display_name?.trim() || "Игрок";
+                const ago = formatWinAgo(win.created_at);
                 return (
                   <li
                     key={`${win.created_at}-${i}`}
                     className={cn(
                       "wheel-feed__row",
-                      rank <= 3 && "wheel-feed__row--top",
                       rank === 1 && "wheel-feed__row--gold",
+                      rank === 2 && "wheel-feed__row--silver",
+                      rank === 3 && "wheel-feed__row--bronze",
                     )}
                   >
                     <span
@@ -470,9 +565,10 @@ export function WheelView() {
                     >
                       {rank}
                     </span>
+                    <WheelFeedAvatar name={name} photoUrl={win.photo_url} />
                     <span className="wheel-feed__meta">
-                      <span className="wheel-feed__name">{win.display_name}</span>
-                      <span className="wheel-feed__ago">{formatWinAgo(win.created_at)}</span>
+                      <span className="wheel-feed__name">{name}</span>
+                      {ago ? <span className="wheel-feed__ago">{ago}</span> : null}
                     </span>
                     <span className={cn("wheel-feed__amount", `wheel-feed__amount--${tier}`)}>
                       {formatTON(win.prize_nanoton)}

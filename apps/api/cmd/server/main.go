@@ -164,6 +164,14 @@ func main() {
 	wheelSvc := wheel.NewService(wheelRepo, userRepo, balanceSvc)
 	wheelSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 	wheelSvc.SetAdminChecker(authSvc.IsAdmin)
+	wheelBot := telegram.NewBotNotifier(cfg.BotToken)
+	wheelBot.SetOpenApp(telegram.OpenAppButtonOptions{
+		WebAppURL:       cfg.WebAppURL,
+		BotUsername:     cfg.BotUsername,
+		WebAppShortName: cfg.WebAppShortName,
+		StartPayload:    "wheel",
+	})
+	wheelSvc.SetUserNotifier(wheelBot)
 	referralSvc.SetWheelBonusGranter(wheelSvc)
 	promoSvc := promo.NewService(platformRepo, gameRepo, userRepo, balanceSvc)
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)

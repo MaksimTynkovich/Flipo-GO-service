@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminFloatField, AdminIntField, AdminTonField } from "@/components/admin/AdminInputs";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
+import { AdminUserPicker } from "@/components/admin/AdminUserPicker";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
@@ -13,12 +14,17 @@ import {
   getAdminPromoCodes,
   getAdminWheelSegments,
   getAdminWheelStats,
+  getAdminWheelSpinOverrides,
+  createAdminWheelSpinOverride,
+  deleteAdminWheelSpinOverride,
+  grantAdminWheelBonusSpins,
   getReferralStats,
   updateAdminWheelSegment,
   updateAdminYieldSettings,
   upsertAdminPromoCode,
   type AdminPromoCode,
   type AdminWheelSegment,
+  type AdminWheelSpinOverride,
   type AdminYieldSettings,
   type ReferralStats,
   type WheelAdminStats,
@@ -53,6 +59,15 @@ export default function MarketingSection() {
   const [wheelStats, setWheelStats] = useState<WheelAdminStats | null>(null);
   const [wheelSegments, setWheelSegments] = useState<AdminWheelSegment[]>([]);
   const [wheelDrafts, setWheelDrafts] = useState<Record<string, AdminWheelSegment>>({});
+  const [wheelOverrides, setWheelOverrides] = useState<AdminWheelSpinOverride[]>([]);
+  const [overrideTelegramId, setOverrideTelegramId] = useState<number | null>(null);
+  const [overrideSegmentId, setOverrideSegmentId] = useState("");
+  const [overrideNote, setOverrideNote] = useState("");
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overridesLoading, setOverridesLoading] = useState(true);
+  const [grantTelegramId, setGrantTelegramId] = useState<number | null>(null);
+  const [grantCount, setGrantCount] = useState("1");
+  const [grantSaving, setGrantSaving] = useState(false);
   const [savingSegmentId, setSavingSegmentId] = useState<string | null>(null);
   const [yieldSettings, setYieldSettings] = useState<AdminYieldSettings | null>(null);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
@@ -103,8 +118,23 @@ export default function MarketingSection() {
       setWheelSegments(data);
       setWheelDrafts(Object.fromEntries(data.map((seg) => [seg.id, { ...seg }])));
       primeCache("admin:marketing:wheel-segments", data);
+      if (!overrideSegmentId && data.length > 0) {
+        const firstActive = data.find((s) => s.active) ?? data[0];
+        setOverrideSegmentId(firstActive.id);
+      }
     } finally {
       setSegmentsLoading(false);
+    }
+  }
+
+  async function loadWheelOverrides() {
+    setOverridesLoading(true);
+    try {
+      const data = await loadCached("admin:marketing:wheel-overrides", getAdminWheelSpinOverrides);
+      setWheelOverrides(data);
+      primeCache("admin:marketing:wheel-overrides", data);
+    } finally {
+      setOverridesLoading(false);
     }
   }
 
@@ -132,12 +162,15 @@ export default function MarketingSection() {
         setWheelSegments(cachedSegments);
         setWheelDrafts(Object.fromEntries(cachedSegments.map((seg) => [seg.id, { ...seg }])));
       }
+      const cachedOverrides = readCached<AdminWheelSpinOverride[]>("admin:marketing:wheel-overrides");
+      if (cachedOverrides) setWheelOverrides(cachedOverrides);
       const cachedSettings = readCached<AdminYieldSettings>("admin:marketing:settings");
       if (cachedSettings) setYieldSettings(cachedSettings);
       loadPromos().catch(() => {});
       loadReferral().catch(() => {});
       loadWheelStats().catch(() => {});
       loadWheelSegments().catch(() => {});
+      loadWheelOverrides().catch(() => {});
       loadYieldSettings().catch(() => {});
     });
   }, []);
@@ -192,6 +225,78 @@ export default function MarketingSection() {
       });
     } finally {
       setSavingSegmentId(null);
+    }
+  }
+
+  async function handleCreateOverride() {
+    if (overrideTelegramId == null || overrideTelegramId <= 0) {
+      showToast({ variant: "error", title: "Выберите игрока" });
+      return;
+    }
+    if (!overrideSegmentId) {
+      showToast({ variant: "error", title: "Выберите приз" });
+      return;
+    }
+    setOverrideSaving(true);
+    try {
+      await createAdminWheelSpinOverride({
+        telegram_id: overrideTelegramId,
+        segment_id: overrideSegmentId,
+        note: overrideNote.trim() || undefined,
+      });
+      showToast({ variant: "success", title: "Подкрутка назначена на следующий спин" });
+      setOverrideNote("");
+      await loadWheelOverrides();
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось назначить подкрутку",
+      });
+    } finally {
+      setOverrideSaving(false);
+    }
+  }
+
+  async function handleDeleteOverride(id: string) {
+    try {
+      await deleteAdminWheelSpinOverride(id);
+      setWheelOverrides((prev) => prev.filter((row) => row.id !== id));
+      showToast({ variant: "success", title: "Подкрутка снята" });
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось снять подкрутку",
+      });
+    }
+  }
+
+  async function handleGrantSpins() {
+    const count = Number(grantCount);
+    if (grantTelegramId == null || grantTelegramId <= 0) {
+      showToast({ variant: "error", title: "Выберите игрока" });
+      return;
+    }
+    if (!Number.isFinite(count) || count < 1 || count > 10) {
+      showToast({ variant: "error", title: "Можно начислить от 1 до 10 вращений" });
+      return;
+    }
+    setGrantSaving(true);
+    try {
+      const result = await grantAdminWheelBonusSpins({
+        telegram_id: grantTelegramId,
+        count: Math.round(count),
+      });
+      showToast({
+        variant: "success",
+        title: `Начислено ${result.granted} · всего бонусов ${result.bonus_spins}`,
+      });
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось начислить вращения",
+      });
+    } finally {
+      setGrantSaving(false);
     }
   }
 
@@ -455,6 +560,140 @@ export default function MarketingSection() {
             })}
           </div>
         )}
+      </section>
+
+      <section className="panel space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-base font-semibold">Подкрутка Лаки страйк</p>
+            <p className="text-sm text-muted">
+              Назначьте приз игроку — на следующем вращении он выпадет гарантированно. Повторное
+              назначение для того же Telegram ID заменяет предыдущее.
+            </p>
+          </div>
+          <AdminButton
+            variant="secondary"
+            disabled={overridesLoading}
+            onClick={() => loadWheelOverrides().catch(() => {})}
+          >
+            Обновить
+          </AdminButton>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <AdminUserPicker
+            value={overrideTelegramId}
+            onChange={(id) => setOverrideTelegramId(id)}
+            className="sm:col-span-2 lg:col-span-1"
+          />
+          <label className="text-xs text-muted">
+            Приз
+            <select
+              className="mt-1 w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-foreground"
+              value={overrideSegmentId}
+              onChange={(e) => setOverrideSegmentId(e.target.value)}
+            >
+              {wheelSegments
+                .filter((seg) => seg.active)
+                .map((seg) => (
+                  <option key={seg.id} value={seg.id}>
+                    {seg.label} · {formatTON(seg.amount_nanoton)} TON
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className="text-xs text-muted sm:col-span-2 lg:col-span-1">
+            Заметка
+            <input
+              className="mt-1 w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-foreground"
+              placeholder="опционально"
+              value={overrideNote}
+              onChange={(e) => setOverrideNote(e.target.value)}
+            />
+          </label>
+          <div className="flex items-end">
+            <AdminButton
+              className="w-full"
+              disabled={overrideSaving}
+              onClick={() => handleCreateOverride().catch(() => {})}
+            >
+              {overrideSaving ? "…" : "Назначить"}
+            </AdminButton>
+          </div>
+        </div>
+
+        {overridesLoading && wheelOverrides.length === 0 ? (
+          <div className="h-16 animate-pulse rounded-xl bg-surface-raised/50" />
+        ) : wheelOverrides.length === 0 ? (
+          <p className="text-sm text-muted">Активных подкруток нет</p>
+        ) : (
+          <div className="space-y-2">
+            {wheelOverrides.map((row) => {
+              const name = row.first_name || row.username || `id ${row.telegram_id}`;
+              return (
+                <div
+                  key={row.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface-raised/50 px-3 py-2.5"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="truncate text-sm font-medium">
+                      {name}
+                      {row.username ? (
+                        <span className="ml-1.5 font-normal text-muted">@{row.username}</span>
+                      ) : null}
+                      <span className="ml-1.5 font-normal text-muted">· {row.telegram_id}</span>
+                    </p>
+                    <p className="text-xs text-muted">
+                      {row.segment_label} · {formatTON(row.amount_nanoton)} TON
+                      {row.note ? ` · ${row.note}` : ""}
+                    </p>
+                  </div>
+                  <AdminButton variant="danger" onClick={() => handleDeleteOverride(row.id).catch(() => {})}>
+                    Снять
+                  </AdminButton>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="panel space-y-3">
+        <div>
+          <p className="text-base font-semibold">Начислить вращения</p>
+          <p className="text-sm text-muted">
+            Бонусные спины Лаки страйк (от 1 до 10). Игроку уйдёт уведомление в бот.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <AdminUserPicker
+            value={grantTelegramId}
+            onChange={(id) => setGrantTelegramId(id)}
+          />
+          <label className="text-xs text-muted">
+            Количество
+            <select
+              className="mt-1 w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-foreground"
+              value={grantCount}
+              onChange={(e) => setGrantCount(e.target.value)}
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-end">
+            <AdminButton
+              className="w-full"
+              disabled={grantSaving}
+              onClick={() => handleGrantSpins().catch(() => {})}
+            >
+              {grantSaving ? "…" : "Начислить"}
+            </AdminButton>
+          </div>
+        </div>
       </section>
 
       <section className="panel space-y-3">

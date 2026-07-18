@@ -29,6 +29,11 @@ func TestNotifyGiftInventoryAllowsAdminActor(t *testing.T) {
 	n.NotifyGiftInventory(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "Vice Cream", 1_000_000_000)
 }
 
+func TestNotifyWheelShareAllowsAdminActor(t *testing.T) {
+	n := NewAdminNotifier(NewBotAPI("token"), []int64{111})
+	n.NotifyWheelShare(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "share")
+}
+
 func TestFormatActor(t *testing.T) {
 	got := FormatActor(AdminActor{TelegramID: 42, Username: "bob", FirstName: "Bob", LastName: "Lee"})
 	want := "Bob Lee (@bob, id=42)"

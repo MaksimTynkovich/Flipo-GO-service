@@ -46,9 +46,37 @@ type WheelSpin struct {
 
 func (WheelSpin) TableName() string { return "wheel_spins" }
 
+// WheelSpinOverride — one-shot forced prize for a user's next wheel spin.
+type WheelSpinOverride struct {
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID     uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
+	SegmentID  uuid.UUID  `gorm:"type:uuid;not null" json:"segment_id"`
+	CreatedBy  uuid.UUID  `gorm:"type:uuid;not null" json:"created_by"`
+	Note       string     `gorm:"size:256" json:"note,omitempty"`
+	ConsumedAt *time.Time `json:"consumed_at,omitempty"`
+	CreatedAt  time.Time  `gorm:"index" json:"created_at"`
+}
+
+func (WheelSpinOverride) TableName() string { return "wheel_spin_overrides" }
+
+// WheelSpinOverrideView — pending override with user + segment labels for admin UI.
+type WheelSpinOverrideView struct {
+	ID              uuid.UUID `json:"id"`
+	UserID          uuid.UUID `json:"user_id"`
+	TelegramID      int64     `json:"telegram_id"`
+	Username        string    `json:"username"`
+	FirstName       string    `json:"first_name"`
+	SegmentID       uuid.UUID `json:"segment_id"`
+	SegmentLabel    string    `json:"segment_label"`
+	AmountNanoton   int64     `json:"amount_nanoton"`
+	Note            string    `json:"note,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
 type WheelRecentWin struct {
 	Username      string    `json:"username"`
 	FirstName     string    `json:"first_name"`
+	PhotoURL      string    `json:"photo_url,omitempty"`
 	PrizeNanoton  int64     `json:"prize_nanoton"`
 	SegmentLabel  string    `json:"segment_label"`
 	CreatedAt     time.Time `json:"created_at"`

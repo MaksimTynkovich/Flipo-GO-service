@@ -118,6 +118,7 @@ func (r *WheelRepo) ListTopWinsSince(ctx context.Context, since time.Time, limit
 	type row struct {
 		Username     string
 		FirstName    string
+		PhotoURL     string
 		PrizeNanoton int64
 		SegmentLabel string
 		CreatedAt    time.Time
@@ -125,7 +126,7 @@ func (r *WheelRepo) ListTopWinsSince(ctx context.Context, since time.Time, limit
 	var rows []row
 	q := r.db.WithContext(ctx).
 		Table("wheel_spins AS ws").
-		Select("u.username, u.first_name, ws.prize_nanoton, seg.label AS segment_label, ws.created_at").
+		Select("u.username, u.first_name, u.photo_url, ws.prize_nanoton, seg.label AS segment_label, ws.created_at").
 		Joins("JOIN users u ON u.id = ws.user_id").
 		Joins("JOIN wheel_segments seg ON seg.id = ws.segment_id").
 		Where("ws.spin_source <> ?", domain.WheelSpinSourceAdmin)
@@ -144,6 +145,7 @@ func (r *WheelRepo) ListTopWinsSince(ctx context.Context, since time.Time, limit
 		out = append(out, domain.WheelRecentWin{
 			Username:     r.Username,
 			FirstName:    r.FirstName,
+			PhotoURL:     r.PhotoURL,
 			PrizeNanoton: r.PrizeNanoton,
 			SegmentLabel: r.SegmentLabel,
 			CreatedAt:    r.CreatedAt,
@@ -303,4 +305,145 @@ func (r *WheelRepo) SumPendingBonusSpins(ctx context.Context) (int64, error) {
 		Select("COALESCE(SUM(bonus_spins), 0)").
 		Scan(&total).Error
 	return total, err
+}
+
+func (r *WheelRepo) GetSegmentByID(ctx context.Context, id uuid.UUID) (*domain.WheelSegment, error) {
+	var seg domain.WheelSegment
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&seg).Error
+	if err != nil {
+		return nil, err
+	}
+	return &seg, nil
+}
+
+func (r *WheelRepo) UpsertPendingOverride(ctx context.Context, userID, segmentID, createdBy uuid.UUID, note string) (*domain.WheelSpinOverride, error) {
+	var out domain.WheelSpinOverride
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing domain.WheelSpinOverride
+		err := tx.Where("user_id = ? AND consumed_at IS NULL", userID).First(&existing).Error
+		if err == nil {
+			existing.SegmentID = segmentID
+			existing.CreatedBy = createdBy
+			existing.Note = note
+			existing.CreatedAt = time.Now().UTC()
+			if err := tx.Save(&existing).Error; err != nil {
+				return err
+			}
+			out = existing
+			return nil
+		}
+		if err != gorm.ErrRecordNotFound {
+			return err
+		}
+		row := domain.WheelSpinOverride{
+			ID:        uuid.New(),
+			UserID:    userID,
+			SegmentID: segmentID,
+			CreatedBy: createdBy,
+			Note:      note,
+			CreatedAt: time.Now().UTC(),
+		}
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		out = row
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (r *WheelRepo) ListPendingOverrides(ctx context.Context) ([]domain.WheelSpinOverrideView, error) {
+	type row struct {
+		ID            uuid.UUID
+		UserID        uuid.UUID
+		TelegramID    int64
+		Username      string
+		FirstName     string
+		SegmentID     uuid.UUID
+		SegmentLabel  string
+		AmountNanoton int64
+		Note          string
+		CreatedAt     time.Time
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			o.id,
+			o.user_id,
+			u.telegram_id,
+			COALESCE(u.username, '') AS username,
+			COALESCE(u.first_name, '') AS first_name,
+			o.segment_id,
+			COALESCE(seg.label, '') AS segment_label,
+			COALESCE(seg.amount_nanoton, 0) AS amount_nanoton,
+			COALESCE(o.note, '') AS note,
+			o.created_at
+		FROM wheel_spin_overrides o
+		JOIN users u ON u.id = o.user_id
+		JOIN wheel_segments seg ON seg.id = o.segment_id
+		WHERE o.consumed_at IS NULL
+		ORDER BY o.created_at DESC
+	`).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.WheelSpinOverrideView, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.WheelSpinOverrideView{
+			ID:            item.ID,
+			UserID:        item.UserID,
+			TelegramID:    item.TelegramID,
+			Username:      item.Username,
+			FirstName:     item.FirstName,
+			SegmentID:     item.SegmentID,
+			SegmentLabel:  item.SegmentLabel,
+			AmountNanoton: item.AmountNanoton,
+			Note:          item.Note,
+			CreatedAt:     item.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
+func (r *WheelRepo) DeletePendingOverride(ctx context.Context, id uuid.UUID) error {
+	res := r.db.WithContext(ctx).
+		Where("id = ? AND consumed_at IS NULL", id).
+		Delete(&domain.WheelSpinOverride{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func (r *WheelRepo) ConsumePendingOverride(ctx context.Context, userID uuid.UUID) (*domain.WheelSpinOverride, error) {
+	var out domain.WheelSpinOverride
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row domain.WheelSpinOverride
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ? AND consumed_at IS NULL", userID).
+			Order("created_at ASC").
+			First(&row).Error
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		row.ConsumedAt = &now
+		if err := tx.Model(&domain.WheelSpinOverride{}).
+			Where("id = ? AND consumed_at IS NULL", row.ID).
+			Update("consumed_at", now).Error; err != nil {
+			return err
+		}
+		out = row
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

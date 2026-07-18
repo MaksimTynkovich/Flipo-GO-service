@@ -797,6 +797,7 @@ export async function reportWheelShare(action: "copy" | "share") {
   return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
     method: "POST",
     body: JSON.stringify({ action, source: "wheel" }),
+    keepalive: true,
   });
 }
 
@@ -1695,6 +1696,7 @@ export type WheelSegment = {
 
 export type WheelRecentWin = {
   display_name: string;
+  photo_url?: string;
   prize_nanoton: number;
   segment_label: string;
   created_at: string;
@@ -1812,6 +1814,55 @@ export async function updateAdminWheelSegment(
 ) {
   return api<AdminWheelSegment>(`/api/v1/admin/marketing/wheel/segments/${id}`, {
     method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export type AdminWheelSpinOverride = {
+  id: string;
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  segment_id: string;
+  segment_label: string;
+  amount_nanoton: number;
+  note?: string;
+  created_at: string;
+};
+
+export async function getAdminWheelSpinOverrides() {
+  return api<AdminWheelSpinOverride[]>("/api/v1/admin/marketing/wheel/overrides");
+}
+
+export async function createAdminWheelSpinOverride(body: {
+  telegram_id: number;
+  segment_id: string;
+  note?: string;
+}) {
+  return api<AdminWheelSpinOverride>("/api/v1/admin/marketing/wheel/overrides", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteAdminWheelSpinOverride(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/marketing/wheel/overrides/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export type AdminWheelGrantSpinsResult = {
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  granted: number;
+  bonus_spins: number;
+};
+
+export async function grantAdminWheelBonusSpins(body: { telegram_id: number; count: number }) {
+  return api<AdminWheelGrantSpinsResult>("/api/v1/admin/marketing/wheel/grant-spins", {
+    method: "POST",
     body: JSON.stringify(body),
   });
 }

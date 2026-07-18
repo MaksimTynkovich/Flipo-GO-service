@@ -144,7 +144,11 @@ func (n *AdminNotifier) NotifyReferralShare(ctx context.Context, actor AdminActo
 
 func (n *AdminNotifier) NotifyWheelShare(ctx context.Context, actor AdminActor, action string) {
 	label := shareActionLabel(action)
-	n.notify(ctx, actor, fmt.Sprintf("🎡 Колесо удачи — поделился\n%s\nДействие: %s", FormatActor(actor), label))
+	n.notifyAll(ctx, fmt.Sprintf(
+		"🎡 Лаки страйк — поделился реф.ссылкой\n%s\nДействие: %s",
+		FormatActor(actor),
+		label,
+	))
 }
 
 func shareActionLabel(action string) string {

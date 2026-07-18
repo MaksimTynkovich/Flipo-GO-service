@@ -128,6 +128,108 @@ func (h *AdminHandler) UpdateWheelSegment(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
+func (h *AdminHandler) ListWheelSpinOverrides(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+	items, err := h.wheel.AdminListSpinOverrides(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.WheelSpinOverrideView{}
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) CreateWheelSpinOverride(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	var req struct {
+		TelegramID int64  `json:"telegram_id"`
+		SegmentID  string `json:"segment_id"`
+		Note       string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.TelegramID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "укажите telegram_id"})
+		return
+	}
+	segmentID, err := uuid.Parse(req.SegmentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный segment_id"})
+		return
+	}
+	item, err := h.wheel.AdminSetSpinOverride(c.Request.Context(), adminID, req.TelegramID, segmentID, req.Note)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "пользователь или приз не найден"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *AdminHandler) DeleteWheelSpinOverride(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	if err := h.wheel.AdminDeleteSpinOverride(c.Request.Context(), id); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "подкрутка не найдена"})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) GrantWheelBonusSpins(c *gin.Context) {
+	if h.wheel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
+		return
+	}
+	var req struct {
+		TelegramID int64 `json:"telegram_id"`
+		Count      int   `json:"count"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.TelegramID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "укажите telegram_id"})
+		return
+	}
+	result, err := h.wheel.AdminGrantBonusSpins(c.Request.Context(), req.TelegramID, req.Count)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "пользователь не найден"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {
 	summary, err := h.admin.Summary(c.Request.Context())
 	if err != nil {

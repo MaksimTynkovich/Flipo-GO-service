@@ -20,6 +20,10 @@ type ChannelChecker interface {
 	IsChannelMember(ctx context.Context, channel string, telegramUserID int64) (bool, error)
 }
 
+type WheelUserNotifier interface {
+	SendWheelBonusSpins(ctx context.Context, telegramUserID int64, count int) error
+}
+
 type ChannelNotSubscribedError struct {
 	Channel string
 }
@@ -39,6 +43,7 @@ type Service struct {
 	requiredChannel string
 	channelChecker  ChannelChecker
 	isAdmin         func(telegramID int64) bool
+	notifier        WheelUserNotifier
 }
 
 func NewService(wheelRepo domain.WheelRepository, users domain.UserRepository, balanceSvc *balance.Service) *Service {
@@ -52,6 +57,10 @@ func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) 
 
 func (s *Service) SetAdminChecker(isAdmin func(telegramID int64) bool) {
 	s.isAdmin = isAdmin
+}
+
+func (s *Service) SetUserNotifier(notifier WheelUserNotifier) {
+	s.notifier = notifier
 }
 
 func (s *Service) RequiredChannel() string {
@@ -75,6 +84,7 @@ type SegmentView struct {
 
 type RecentWinView struct {
 	DisplayName   string    `json:"display_name"`
+	PhotoURL      string    `json:"photo_url,omitempty"`
 	PrizeNanoton  int64     `json:"prize_nanoton"`
 	SegmentLabel  string    `json:"segment_label"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -193,15 +203,10 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID, telegramID int64
 	if err != nil {
 		return nil, err
 	}
-	if admin {
-		subscribed = true
-	}
 	dailyAvailable := !sameDate(state.LastDailySpinDate, today)
 	hasSpinStock := dailyAvailable || state.BonusSpins > 0
-	canSpin := subscribed && hasSpinStock
-	if admin {
-		canSpin = true
-	}
+	// Admins keep unlimited spins, but still must be subscribed to the channel.
+	canSpin := subscribed && (hasSpinStock || admin)
 
 	wins, err := s.wheel.ListTopWinsSince(ctx, time.Now().UTC().Add(-24*time.Hour), 5)
 	if err != nil {
@@ -224,10 +229,9 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID, telegramID int64
 
 func (s *Service) Spin(ctx context.Context, userID uuid.UUID, telegramID int64) (*SpinResult, error) {
 	admin := s.telegramIsAdmin(telegramID)
-	if !admin {
-		if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
-			return nil, err
-		}
+	// Channel gate applies to everyone, including admins with unlimited spins.
+	if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+		return nil, err
 	}
 
 	segments, err := s.wheel.ListActiveSegments(ctx)
@@ -266,7 +270,7 @@ func (s *Service) Spin(ctx context.Context, userID uuid.UUID, telegramID int64) 
 		}
 	}
 
-	segment, roll, err := pickSegment(segments)
+	segment, roll, err := s.resolveSpinSegment(ctx, userID, segments)
 	if err != nil {
 		return nil, err
 	}
@@ -490,6 +494,108 @@ func (s *Service) AdminUpdateSegment(ctx context.Context, id uuid.UUID, in Admin
 	return nil, domain.ErrNotFound
 }
 
+func (s *Service) resolveSpinSegment(ctx context.Context, userID uuid.UUID, segments []domain.WheelSegment) (domain.WheelSegment, int, error) {
+	forced, err := s.wheel.ConsumePendingOverride(ctx, userID)
+	if err == nil && forced != nil {
+		seg, serr := s.wheel.GetSegmentByID(ctx, forced.SegmentID)
+		if serr == nil && seg != nil {
+			return *seg, -1, nil
+		}
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.WheelSegment{}, 0, err
+	}
+	return pickSegment(segments)
+}
+
+func (s *Service) AdminSetSpinOverride(ctx context.Context, adminID uuid.UUID, telegramID int64, segmentID uuid.UUID, note string) (*domain.WheelSpinOverrideView, error) {
+	user, err := s.users.FindByTelegramID(ctx, telegramID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	seg, err := s.wheel.GetSegmentByID(ctx, segmentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	if !seg.Active {
+		return nil, fmt.Errorf("сегмент неактивен")
+	}
+	note = strings.TrimSpace(note)
+	if len(note) > 256 {
+		note = note[:256]
+	}
+	if _, err := s.wheel.UpsertPendingOverride(ctx, user.ID, segmentID, adminID, note); err != nil {
+		return nil, err
+	}
+	items, err := s.wheel.ListPendingOverrides(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		if items[i].UserID == user.ID {
+			return &items[i], nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (s *Service) AdminListSpinOverrides(ctx context.Context) ([]domain.WheelSpinOverrideView, error) {
+	return s.wheel.ListPendingOverrides(ctx)
+}
+
+func (s *Service) AdminDeleteSpinOverride(ctx context.Context, id uuid.UUID) error {
+	if err := s.wheel.DeletePendingOverride(ctx, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+type AdminGrantSpinsResult struct {
+	TelegramID int64  `json:"telegram_id"`
+	Username   string `json:"username"`
+	FirstName  string `json:"first_name"`
+	Granted    int    `json:"granted"`
+	BonusSpins int    `json:"bonus_spins"`
+}
+
+func (s *Service) AdminGrantBonusSpins(ctx context.Context, telegramID int64, count int) (*AdminGrantSpinsResult, error) {
+	if count < 1 || count > 10 {
+		return nil, fmt.Errorf("можно начислить от 1 до 10 вращений")
+	}
+	user, err := s.users.FindByTelegramID(ctx, telegramID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	if err := s.wheel.AddBonusSpins(ctx, user.ID, count); err != nil {
+		return nil, err
+	}
+	state, err := s.wheel.GetOrCreateState(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if s.notifier != nil {
+		_ = s.notifier.SendWheelBonusSpins(ctx, user.TelegramID, count)
+	}
+	return &AdminGrantSpinsResult{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		FirstName:  user.FirstName,
+		Granted:    count,
+		BonusSpins: state.BonusSpins,
+	}, nil
+}
+
 func mapAdminSegments(segments []domain.WheelSegment) []AdminSegmentView {
 	total := 0
 	for _, seg := range segments {
@@ -631,6 +737,7 @@ func mapRecentWins(wins []domain.WheelRecentWin) []RecentWinView {
 		}
 		out = append(out, RecentWinView{
 			DisplayName:  name,
+			PhotoURL:     strings.TrimSpace(w.PhotoURL),
 			PrizeNanoton: w.PrizeNanoton,
 			SegmentLabel: w.SegmentLabel,
 			CreatedAt:    w.CreatedAt,

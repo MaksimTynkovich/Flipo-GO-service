@@ -7,15 +7,23 @@ import (
 )
 
 type BotNotifier struct {
-	api *BotAPI
+	api     *BotAPI
+	openApp OpenAppButtonOptions
 }
 
 func NewBotNotifier(token string) *BotNotifier {
 	return &BotNotifier{api: NewBotAPI(token)}
 }
 
+func (n *BotNotifier) SetOpenApp(opts OpenAppButtonOptions) {
+	if n == nil {
+		return
+	}
+	n.openApp = opts
+}
+
 func (n *BotNotifier) Enabled() bool {
-	return n.api.Enabled()
+	return n != nil && n.api != nil && n.api.Enabled()
 }
 
 func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int64, giftName string) error {
@@ -57,6 +65,42 @@ func (n *BotNotifier) SendWeeklyStakingComplete(ctx context.Context, telegramUse
 	}
 	text += "Пора добавить подарки в новый стейкинг."
 	return n.api.sendMessage(ctx, telegramUserID, text, nil, "")
+}
+
+func (n *BotNotifier) SendWheelBonusSpins(ctx context.Context, telegramUserID int64, count int) error {
+	if !n.Enabled() || telegramUserID == 0 || count <= 0 {
+		return nil
+	}
+	text := fmt.Sprintf(
+		"🎡 Вам поступили бесплатные вращения!\n\nНачислено: %d %s Лаки страйк.\nОткройте игру и испытайте удачу.",
+		count,
+		russianSpinWord(count),
+	)
+	opts := n.openApp
+	opts.ButtonText = "🚀 Играть"
+	if payload := strings.TrimSpace(opts.StartPayload); payload == "" {
+		opts.StartPayload = "wheel"
+	}
+	if webURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/"); webURL != "" && !isTelegramDeepLink(webURL) {
+		opts.WebAppURL = webURL + "/games/wheel"
+	}
+	markup := OpenAppButtonMarkup(opts)
+	return n.api.sendMessage(ctx, telegramUserID, text, markup, "")
+}
+
+func russianSpinWord(n int) string {
+	n = n % 100
+	if n >= 11 && n <= 14 {
+		return "вращений"
+	}
+	switch n % 10 {
+	case 1:
+		return "вращение"
+	case 2, 3, 4:
+		return "вращения"
+	default:
+		return "вращений"
+	}
 }
 
 func formatTON(nanoton int64) string {

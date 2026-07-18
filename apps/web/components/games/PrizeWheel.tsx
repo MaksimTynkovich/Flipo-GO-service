@@ -14,6 +14,8 @@ const STRIDE = CELL_W + GAP;
 const LOOPS = 6;
 /** Full spin duration. */
 const SPIN_MS = 8000;
+/** Distance (px) at which focus falls to 0 — soft crossfade between neighbors. */
+const FOCUS_FALLOFF = CELL_W * 0.72;
 
 /**
  * Ease-out quartic: brief opening (readable cells), then most of the
@@ -25,6 +27,12 @@ function easeReelSpin(t: number): number {
   return 1 - inv * inv * inv * inv;
 }
 
+function focusStrength(dist: number): number {
+  const t = Math.max(0, 1 - dist / FOCUS_FALLOFF);
+  // Smoothstep — soft in/out between neighbors instead of a hard switch.
+  return t * t * (3 - 2 * t);
+}
+
 type PrizeWheelProps = {
   segments: WheelSegment[];
   targetSegmentId?: string | null;
@@ -34,14 +42,6 @@ type PrizeWheelProps = {
   onTick?: () => void;
   className?: string;
 };
-
-function focusIndexFromScroll(scrollX: number, viewportW: number, cellCount: number): number {
-  if (cellCount === 0 || viewportW <= 0) return -1;
-  const center = scrollX + viewportW / 2;
-  const idx = Math.round((center - CELL_W / 2) / STRIDE);
-  if (idx < 0 || idx >= cellCount) return -1;
-  return idx;
-}
 
 export function PrizeWheel({
   segments,
@@ -58,7 +58,8 @@ export function PrizeWheel({
   const animatingRef = useRef(false);
   const [animating, setAnimating] = useState(false);
   const [landed, setLanded] = useState(false);
-  const [focusIndex, setFocusIndex] = useState(-1);
+  const [hasFocus, setHasFocus] = useState(false);
+  const hasFocusRef = useRef(false);
   const lastTickRef = useRef(0);
   const focusIndexRef = useRef(-1);
   const onTickRef = useRef(onTick);
@@ -96,18 +97,53 @@ export function PrizeWheel({
     }
   }
 
+  /**
+   * Continuous focus by proximity to the marker — paints CSS vars on cells
+   * so scale/glow crossfade between neighbors instead of snapping.
+   */
+  function paintFocus(scrollX: number) {
+    const track = trackRef.current;
+    const viewportW = viewportRef.current?.clientWidth ?? 0;
+    if (!track || viewportW <= 0) return;
+
+    const center = scrollX + viewportW / 2;
+    const cells = track.children;
+    let bestIdx = -1;
+    let bestStrength = 0;
+
+    for (let i = 0; i < cells.length; i++) {
+      const cellCenter = i * STRIDE + CELL_W / 2;
+      const strength = focusStrength(Math.abs(center - cellCenter));
+      const el = cells[i] as HTMLElement;
+      el.style.setProperty("--reel-focus", strength.toFixed(3));
+      if (strength > bestStrength) {
+        bestStrength = strength;
+        bestIdx = i;
+      }
+    }
+
+    const prev = focusIndexRef.current;
+    if (prev !== bestIdx) {
+      if (prev >= 0 && prev < cells.length) {
+        cells[prev].classList.remove("reel-cell--focus");
+      }
+      if (bestIdx >= 0 && bestIdx < cells.length) {
+        cells[bestIdx].classList.add("reel-cell--focus");
+      }
+      focusIndexRef.current = bestIdx;
+    }
+
+    if (bestIdx >= 0 && !hasFocusRef.current) {
+      hasFocusRef.current = true;
+      setHasFocus(true);
+    }
+  }
+
   // Keep DOM transform in sync after strip remounts / first paint.
   useEffect(() => {
     paintOffset(offsetRef.current);
+    paintFocus(offsetRef.current);
   }, [strip.length]);
-
-  function syncFocus(scrollX: number) {
-    const viewportW = viewportRef.current?.clientWidth ?? 0;
-    const next = focusIndexFromScroll(scrollX, viewportW, strip.length);
-    if (focusIndexRef.current === next) return;
-    focusIndexRef.current = next;
-    setFocusIndex(next);
-  }
 
   // Idle drift when ready
   useEffect(() => {
@@ -120,7 +156,7 @@ export function PrizeWheel({
       const cycle = sorted.length * STRIDE;
       const next = (offsetRef.current + dt * 0.018) % cycle;
       paintOffset(next);
-      syncFocus(next);
+      paintFocus(next);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -130,10 +166,10 @@ export function PrizeWheel({
   // Keep focus in sync on layout changes when not spinning
   useEffect(() => {
     if (animating) return;
-    syncFocus(offsetRef.current);
+    paintFocus(offsetRef.current);
     const viewport = viewportRef.current;
     if (!viewport || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => syncFocus(offsetRef.current));
+    const ro = new ResizeObserver(() => paintFocus(offsetRef.current));
     ro.observe(viewport);
     return () => ro.disconnect();
   }, [animating, strip.length]);
@@ -176,7 +212,7 @@ export function PrizeWheel({
       // Snap into first cycle — same cell under pointer, no jump on next idle
       const normalized = ((targetOffset % cycle) + cycle) % cycle;
       paintOffset(normalized);
-      syncFocus(normalized);
+      paintFocus(normalized);
       onSpinEndRef.current?.();
     };
 
@@ -187,7 +223,7 @@ export function PrizeWheel({
       const t = Math.min(1, elapsed / durationMs);
       const current = from + travel * ease(t);
       paintOffset(current);
-      syncFocus(current);
+      paintFocus(current);
 
       // Haptics follow perceived speed (dense while fast, sparse near stop).
       const speed = Math.abs(current - prevPos);
@@ -225,7 +261,7 @@ export function PrizeWheel({
         spinning && "prize-reel--spinning",
         ready && !spinning && "prize-reel--ready",
         landed && "prize-reel--landed",
-        focusIndex >= 0 && "prize-reel--has-focus",
+        hasFocus && "prize-reel--has-focus",
         className,
       )}
     >
@@ -239,16 +275,15 @@ export function PrizeWheel({
             {strip.map((seg, i) => {
               const isMax = maxAmount > 0 && seg.amount_nanoton === maxAmount;
               const tier = prizeTierForAmount(seg.amount_nanoton, isMax);
-              const focused = i === focusIndex;
               return (
                 <div
                   key={`${seg.id}-${i}`}
-                  className={cn(
-                    "reel-cell",
-                    `reel-cell--${tier}`,
-                    focused && "reel-cell--focus",
-                  )}
-                  style={{ width: CELL_W, minWidth: CELL_W }}
+                  className={cn("reel-cell", `reel-cell--${tier}`)}
+                  style={{
+                    width: CELL_W,
+                    minWidth: CELL_W,
+                    ["--reel-focus" as string]: 0,
+                  }}
                   aria-label={`${formatTON(seg.amount_nanoton)} TON`}
                 >
                   <span className="reel-cell__spark reel-cell__spark--a" aria-hidden />

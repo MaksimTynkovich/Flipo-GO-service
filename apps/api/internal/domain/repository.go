@@ -135,6 +135,11 @@ type WheelRepository interface {
 	AdminSegmentHits(ctx context.Context) ([]WheelSegmentHitStats, error)
 	AdminSpinsByDay(ctx context.Context, since time.Time) ([]WheelDailyStats, error)
 	SumPendingBonusSpins(ctx context.Context) (int64, error)
+	GetSegmentByID(ctx context.Context, id uuid.UUID) (*WheelSegment, error)
+	UpsertPendingOverride(ctx context.Context, userID, segmentID, createdBy uuid.UUID, note string) (*WheelSpinOverride, error)
+	ListPendingOverrides(ctx context.Context) ([]WheelSpinOverrideView, error)
+	DeletePendingOverride(ctx context.Context, id uuid.UUID) error
+	ConsumePendingOverride(ctx context.Context, userID uuid.UUID) (*WheelSpinOverride, error)
 }
 
 type GameRepository interface {
