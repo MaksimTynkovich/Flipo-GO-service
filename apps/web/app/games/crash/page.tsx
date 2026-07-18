@@ -141,16 +141,71 @@ function CrashPageContent() {
   }, []);
 
   useEffect(() => {
-    getCrashState().then((s) => setState(s as CrashRoundState)).catch(() => {});
+    const applyState = (s: CrashRoundState) => setState(s);
+    const refreshState = () => {
+      getCrashState()
+        .then((s) => applyState(s as CrashRoundState))
+        .catch(() => {});
+    };
+
+    refreshState();
     loadHistory();
     loadActiveBets();
     loadRoundBets();
-    const disconnect = connectGameWS("crash", (msg) => {
-      if (msg.event === "tick") setState(msg.payload as CrashRoundState);
-      if (msg.event === "bets") setRoundBets(msg.payload as CrashRoundBetsData);
-    });
+    const disconnect = connectGameWS(
+      "crash",
+      (msg) => {
+        if (msg.event === "tick") setState(msg.payload as CrashRoundState);
+        if (msg.event === "bets") setRoundBets(msg.payload as CrashRoundBetsData);
+      },
+      { onOpen: refreshState },
+    );
     return disconnect;
   }, [loadHistory, loadActiveBets, loadRoundBets]);
+
+  // HTTP fallback: live mult only starts after WS delivers phase "running".
+  // If the socket drops at countdown end, UI freezes on 1.00× until refresh.
+  useEffect(() => {
+    if (!state) return;
+
+    const phase = state.phase;
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = () => {
+      getCrashState()
+        .then((s) => {
+          if (!cancelled) setState(s as CrashRoundState);
+        })
+        .catch(() => {});
+    };
+
+    if (phase === "running") {
+      // Backup while flying — WS ticks are ~100ms; poll is a safety net only.
+      intervalId = setInterval(poll, 750);
+    } else if (phase === "betting" && state.ends_at) {
+      const endsAtMs = new Date(state.ends_at).getTime();
+      if (!Number.isFinite(endsAtMs)) return;
+      const msUntilEnd = endsAtMs - Date.now();
+      startTimer = setTimeout(
+        () => {
+          if (cancelled) return;
+          poll();
+          intervalId = setInterval(poll, 500);
+        },
+        Math.max(0, msUntilEnd),
+      );
+    } else {
+      return;
+    }
+
+    return () => {
+      cancelled = true;
+      if (startTimer != null) clearTimeout(startTimer);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [state?.phase, state?.ends_at, state?.round_id]);
 
   useEffect(() => {
     if (state?.round_id) loadRoundBets();

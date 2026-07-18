@@ -67,13 +67,23 @@ function RoulettePageContent() {
   }, []);
 
   useEffect(() => {
-    getRouletteState().then((s) => setState(s as RouletteRoundState)).catch(() => {});
+    const refreshState = () => {
+      getRouletteState()
+        .then((s) => setState(s as RouletteRoundState))
+        .catch(() => {});
+    };
+
+    refreshState();
     loadHistory();
     loadRoundBets();
-    const disconnect = connectGameWS("roulette", (msg) => {
-      if (msg.event === "tick") setState(msg.payload as RouletteRoundState);
-      if (msg.event === "bets") setRoundBets(msg.payload as RouletteRoundBetsData);
-    });
+    const disconnect = connectGameWS(
+      "roulette",
+      (msg) => {
+        if (msg.event === "tick") setState(msg.payload as RouletteRoundState);
+        if (msg.event === "bets") setRoundBets(msg.payload as RouletteRoundBetsData);
+      },
+      { onOpen: refreshState },
+    );
     return disconnect;
   }, [loadHistory, loadRoundBets]);
 

@@ -27,6 +27,7 @@ function trackWSIssue(
 export function connectGameWS(
   game: "roulette" | "crash" | "pvp",
   onMessage: (msg: WSMessage) => void,
+  options?: { onOpen?: () => void },
 ): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
@@ -50,6 +51,9 @@ export function connectGameWS(
 
     ws.onopen = () => {
       attempt = 0;
+      // Resync on every open so a reconnect mid-round does not keep a stale phase
+      // (e.g. crash stuck on 1.00× after countdown with a dead socket).
+      options?.onOpen?.();
     };
 
     ws.onerror = () => {
