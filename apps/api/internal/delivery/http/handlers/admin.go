@@ -377,7 +377,11 @@ func (h *AdminHandler) ReviewTransfer(c *gin.Context) {
 }
 
 func (h *AdminHandler) ListUsers(c *gin.Context) {
-	users, err := h.admin.ListUsers(c.Request.Context(), c.Query("q"), c.DefaultQuery("sort", "last_login"))
+	minReferrals, _ := strconv.Atoi(c.Query("min_referrals"))
+	if minReferrals < 0 {
+		minReferrals = 0
+	}
+	users, err := h.admin.ListUsers(c.Request.Context(), c.Query("q"), c.DefaultQuery("sort", "last_login"), minReferrals)
 	if err != nil {
 		respondInternal(c, err)
 		return

@@ -186,6 +186,7 @@ type AdminUserRow struct {
 	StakingDailyYieldNanoton   int64  `json:"staking_daily_yield_nanoton"`
 	StakingWeeklyYieldNanoton  int64  `json:"staking_weekly_yield_nanoton"`
 	BetsCount                  int64  `json:"bets_count"`
+	ReferralCount              int64  `json:"referral_count"`
 	CameViaReferral            bool   `json:"came_via_referral"`
 	ReferrerTelegramID         int64  `json:"referrer_telegram_id,omitempty"`
 	ReferrerUsername           string `json:"referrer_username,omitempty"`

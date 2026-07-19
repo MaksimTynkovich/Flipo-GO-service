@@ -179,9 +179,12 @@ func (r *AdminRepo) CreateAuditLog(ctx context.Context, log *domain.AdminAuditLo
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-func (r *AdminRepo) ListUsers(ctx context.Context, query, sort string, limit int) ([]domain.AdminUserRow, error) {
+func (r *AdminRepo) ListUsers(ctx context.Context, query, sort string, minReferrals, limit int) ([]domain.AdminUserRow, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if minReferrals < 0 {
+		minReferrals = 0
 	}
 	switch sort {
 	case "balance", "stake", "bets", "created", "last_login":
@@ -193,11 +196,11 @@ func (r *AdminRepo) ListUsers(ctx context.Context, query, sort string, limit int
 	var err error
 	switch sort {
 	case "stake":
-		users, err = r.listUsersByStake(ctx, query, limit)
+		users, err = r.listUsersByStake(ctx, query, minReferrals, limit)
 	case "bets":
-		users, err = r.listUsersByBets(ctx, query, limit)
+		users, err = r.listUsersByBets(ctx, query, minReferrals, limit)
 	default:
-		users, err = r.listUsersOrdered(ctx, query, sort, limit)
+		users, err = r.listUsersOrdered(ctx, query, sort, minReferrals, limit)
 	}
 	if err != nil {
 		return nil, err
@@ -205,12 +208,20 @@ func (r *AdminRepo) ListUsers(ctx context.Context, query, sort string, limit int
 	return r.enrichAdminUserRows(ctx, users)
 }
 
-func (r *AdminRepo) listUsersOrdered(ctx context.Context, query, sort string, limit int) ([]domain.User, error) {
+func (r *AdminRepo) listUsersOrdered(ctx context.Context, query, sort string, minReferrals, limit int) ([]domain.User, error) {
 	q := r.db.WithContext(ctx).Model(&domain.User{})
 	if query != "" {
 		like := "%" + query + "%"
 		q = q.Where("username ILIKE ? OR first_name ILIKE ? OR CAST(telegram_id AS TEXT) LIKE ?",
 			like, like, like)
+	}
+	if minReferrals > 0 {
+		q = q.Where(`id IN (
+			SELECT referrer_id FROM users
+			WHERE deleted_at IS NULL AND referrer_id IS NOT NULL
+			GROUP BY referrer_id
+			HAVING COUNT(*) >= ?
+		)`, minReferrals)
 	}
 	switch sort {
 	case "balance":
@@ -225,32 +236,49 @@ func (r *AdminRepo) listUsersOrdered(ctx context.Context, query, sort string, li
 	return users, err
 }
 
-func (r *AdminRepo) listUsersByStake(ctx context.Context, query string, limit int) ([]domain.User, error) {
+func (r *AdminRepo) listUsersByStake(ctx context.Context, query string, minReferrals, limit int) ([]domain.User, error) {
 	var ids []idRow
 	var err error
+	refFilter := ""
+	args := make([]any, 0, 6)
+	if minReferrals > 0 {
+		refFilter = `
+			AND sp.user_id IN (
+				SELECT referrer_id FROM users
+				WHERE deleted_at IS NULL AND referrer_id IS NOT NULL
+				GROUP BY referrer_id
+				HAVING COUNT(*) >= ?
+			)`
+		args = append(args, minReferrals)
+	}
 	if query != "" {
 		like := "%" + query + "%"
-		err = r.db.WithContext(ctx).Raw(`
+		sql := `
 			SELECT sp.user_id, SUM(sp.principal_nanoton) AS principal
 			FROM staking_positions sp
 			JOIN users u ON u.id = sp.user_id
 			WHERE sp.is_active = TRUE
 			  AND (u.username ILIKE ? OR u.first_name ILIKE ? OR CAST(u.telegram_id AS TEXT) LIKE ?)
+			` + refFilter + `
 			GROUP BY sp.user_id
 			HAVING SUM(sp.principal_nanoton) > 0
 			ORDER BY principal DESC
-			LIMIT ?
-		`, like, like, like, limit).Scan(&ids).Error
+			LIMIT ?`
+		args = append([]any{like, like, like}, args...)
+		args = append(args, limit)
+		err = r.db.WithContext(ctx).Raw(sql, args...).Scan(&ids).Error
 	} else {
-		err = r.db.WithContext(ctx).Raw(`
+		sql := `
 			SELECT user_id, SUM(principal_nanoton) AS principal
-			FROM staking_positions
+			FROM staking_positions sp
 			WHERE is_active = TRUE
+			` + refFilter + `
 			GROUP BY user_id
 			HAVING SUM(principal_nanoton) > 0
 			ORDER BY principal DESC
-			LIMIT ?
-		`, limit).Scan(&ids).Error
+			LIMIT ?`
+		args = append(args, limit)
+		err = r.db.WithContext(ctx).Raw(sql, args...).Scan(&ids).Error
 	}
 	if err != nil {
 		return nil, err
@@ -258,28 +286,46 @@ func (r *AdminRepo) listUsersByStake(ctx context.Context, query string, limit in
 	return r.loadUsersPreservingOrder(ctx, idsToUUIDs(ids))
 }
 
-func (r *AdminRepo) listUsersByBets(ctx context.Context, query string, limit int) ([]domain.User, error) {
+func (r *AdminRepo) listUsersByBets(ctx context.Context, query string, minReferrals, limit int) ([]domain.User, error) {
 	var ids []idRow
 	var err error
+	refFilter := ""
+	args := make([]any, 0, 6)
+	if minReferrals > 0 {
+		refFilter = `
+			AND gb.user_id IN (
+				SELECT referrer_id FROM users
+				WHERE deleted_at IS NULL AND referrer_id IS NOT NULL
+				GROUP BY referrer_id
+				HAVING COUNT(*) >= ?
+			)`
+		args = append(args, minReferrals)
+	}
 	if query != "" {
 		like := "%" + query + "%"
-		err = r.db.WithContext(ctx).Raw(`
+		sql := `
 			SELECT gb.user_id, COUNT(*) AS cnt
 			FROM game_bets gb
 			JOIN users u ON u.id = gb.user_id
-			WHERE u.username ILIKE ? OR u.first_name ILIKE ? OR CAST(u.telegram_id AS TEXT) LIKE ?
+			WHERE (u.username ILIKE ? OR u.first_name ILIKE ? OR CAST(u.telegram_id AS TEXT) LIKE ?)
+			` + refFilter + `
 			GROUP BY gb.user_id
 			ORDER BY cnt DESC
-			LIMIT ?
-		`, like, like, like, limit).Scan(&ids).Error
+			LIMIT ?`
+		args = append([]any{like, like, like}, args...)
+		args = append(args, limit)
+		err = r.db.WithContext(ctx).Raw(sql, args...).Scan(&ids).Error
 	} else {
-		err = r.db.WithContext(ctx).Raw(`
+		sql := `
 			SELECT user_id, COUNT(*) AS cnt
-			FROM game_bets
+			FROM game_bets gb
+			WHERE TRUE
+			` + refFilter + `
 			GROUP BY user_id
 			ORDER BY cnt DESC
-			LIMIT ?
-		`, limit).Scan(&ids).Error
+			LIMIT ?`
+		args = append(args, limit)
+		err = r.db.WithContext(ctx).Raw(sql, args...).Scan(&ids).Error
 	}
 	if err != nil {
 		return nil, err
@@ -363,6 +409,22 @@ func (r *AdminRepo) enrichAdminUserRows(ctx context.Context, users []domain.User
 		betsByUser[a.UserID] = a.Count
 	}
 
+	type refCountAgg struct {
+		ReferrerID uuid.UUID `gorm:"column:referrer_id"`
+		Count      int64     `gorm:"column:cnt"`
+	}
+	var refCounts []refCountAgg
+	_ = r.db.WithContext(ctx).Raw(`
+		SELECT referrer_id, COUNT(*) AS cnt
+		FROM users
+		WHERE deleted_at IS NULL AND referrer_id IN ?
+		GROUP BY referrer_id
+	`, ids).Scan(&refCounts)
+	referralsByUser := make(map[uuid.UUID]int64, len(refCounts))
+	for _, a := range refCounts {
+		referralsByUser[a.ReferrerID] = a.Count
+	}
+
 	referrerIDs := make([]uuid.UUID, 0)
 	seenReferrer := make(map[uuid.UUID]struct{})
 	for _, u := range users {
@@ -386,7 +448,11 @@ func (r *AdminRepo) enrichAdminUserRows(ctx context.Context, users []domain.User
 	}
 
 	for _, u := range users {
-		row := domain.AdminUserRow{User: u, BetsCount: betsByUser[u.ID]}
+		row := domain.AdminUserRow{
+			User:          u,
+			BetsCount:     betsByUser[u.ID],
+			ReferralCount: referralsByUser[u.ID],
+		}
 		if a, ok := byUser[u.ID]; ok {
 			row.StakingPrincipalNanoton = a.Principal
 			row.ActiveStakes = a.Count

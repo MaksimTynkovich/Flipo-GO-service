@@ -1159,6 +1159,7 @@ export type AdminUser = {
   staking_daily_yield_nanoton: number;
   staking_weekly_yield_nanoton: number;
   bets_count: number;
+  referral_count: number;
   came_via_referral: boolean;
   referrer_telegram_id?: number;
   referrer_username?: string;
@@ -1565,10 +1566,15 @@ export type AdminUserTransfersResponse = {
   items: WalletTransfer[];
 };
 
-export async function getAdminUsers(query = "", sort: AdminUserSort = "last_login") {
+export async function getAdminUsers(
+  query = "",
+  sort: AdminUserSort = "last_login",
+  minReferrals = 0,
+) {
   const params = new URLSearchParams();
   if (query.trim()) params.set("q", query.trim());
   if (sort) params.set("sort", sort);
+  if (minReferrals > 0) params.set("min_referrals", String(minReferrals));
   const qs = params.toString();
   return api<AdminUser[]>(`/api/v1/admin/users${qs ? `?${qs}` : ""}`);
 }

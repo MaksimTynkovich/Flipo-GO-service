@@ -94,7 +94,7 @@ export default function SystemSection() {
                 value={form.message}
                 maxLength={500}
                 onChange={(e) => setSettings({ ...form, message: e.target.value })}
-                placeholder="Проводим техническое обслуживание. Скоро вернёмся."
+                placeholder="Скоро вернёмся."
               />
             </AdminField>
 

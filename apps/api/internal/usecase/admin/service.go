@@ -77,8 +77,8 @@ func (s *Service) AuditLogs(ctx context.Context) ([]domain.AdminAuditLog, error)
 	return s.admin.ListAuditLogs(ctx, 30)
 }
 
-func (s *Service) ListUsers(ctx context.Context, query, sort string) ([]domain.AdminUserRow, error) {
-	rows, err := s.admin.ListUsers(ctx, query, sort, 50)
+func (s *Service) ListUsers(ctx context.Context, query, sort string, minReferrals int) ([]domain.AdminUserRow, error) {
+	rows, err := s.admin.ListUsers(ctx, query, sort, minReferrals, 50)
 	if err != nil {
 		return nil, err
 	}

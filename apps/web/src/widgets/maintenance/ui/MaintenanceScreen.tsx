@@ -2,7 +2,7 @@
 
 import { Wrench } from "lucide-react";
 
-const DEFAULT_MESSAGE = "Проводим техническое обслуживание. Скоро вернёмся.";
+const DEFAULT_MESSAGE = "Скоро вернёмся.";
 
 export function MaintenanceScreen({ message }: { message?: string }) {
   const text = (message || "").trim() || DEFAULT_MESSAGE;

@@ -16,7 +16,7 @@ func NewMaintenanceHandler(platform domain.PlatformRepository) *MaintenanceHandl
 	return &MaintenanceHandler{platform: platform}
 }
 
-const publicDefaultMaintenanceMessage = "Проводим техническое обслуживание. Скоро вернёмся."
+const publicDefaultMaintenanceMessage = "Скоро вернёмся."
 
 func (h *MaintenanceHandler) Status(c *gin.Context) {
 	settings, err := h.platform.GetMaintenanceSettings(c.Request.Context())

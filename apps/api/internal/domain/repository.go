@@ -217,7 +217,7 @@ type AdminRepository interface {
 	ListRiskUsers(ctx context.Context, limit int) ([]AdminRiskUser, error)
 	ListAuditLogs(ctx context.Context, limit int) ([]AdminAuditLog, error)
 	CreateAuditLog(ctx context.Context, log *AdminAuditLog) error
-	ListUsers(ctx context.Context, query, sort string, limit int) ([]AdminUserRow, error)
+	ListUsers(ctx context.Context, query, sort string, minReferrals, limit int) ([]AdminUserRow, error)
 	UserAudience(ctx context.Context) (*AdminUserAudience, error)
 	ListUserBets(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]GameBet, error)
 	UserBetsSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserBetsSummary, error)

@@ -43,7 +43,7 @@ func (s *MaintenanceState) Load(settings *domain.PlatformMaintenanceSettings) {
 	s.Set(settings.Enabled, settings.Message)
 }
 
-const defaultMaintenanceMessage = "Проводим техническое обслуживание. Скоро вернёмся."
+const defaultMaintenanceMessage = "Скоро вернёмся."
 
 // MaintenanceGate blocks public/player API traffic while maintenance mode is on.
 // Auth, admin panel, admins with a valid JWT, webhook, health, and the public

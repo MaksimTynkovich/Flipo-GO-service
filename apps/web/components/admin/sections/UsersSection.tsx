@@ -109,6 +109,8 @@ export default function UsersSection() {
   const { showToast } = useToast();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<AdminUserSort>("last_login");
+  const [minReferralsInput, setMinReferralsInput] = useState("");
+  const [minReferrals, setMinReferrals] = useState(0);
   const [audience, setAudience] = useState<AdminUserAudience | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [riskUsers, setRiskUsers] = useState<AdminRiskUser[]>([]);
@@ -137,14 +139,20 @@ export default function UsersSection() {
     return map;
   }, [riskUsers]);
 
-  async function load(search = query, nextSort = sort) {
+  function parseMinReferrals(raw: string) {
+    const n = Number.parseInt(raw.trim(), 10);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return n;
+  }
+
+  async function load(search = query, nextSort = sort, nextMinReferrals = minReferrals) {
     setLoading(true);
     try {
-      const cacheKey = `admin:users:v9:${nextSort}:${search.trim().toLowerCase() || "default"}`;
+      const cacheKey = `admin:users:v10:${nextSort}:${nextMinReferrals}:${search.trim().toLowerCase() || "default"}`;
       const [audienceData, userData, riskData] = await loadCached(cacheKey, () =>
         Promise.all([
           getAdminUserAudience(),
-          getAdminUsers(search, nextSort),
+          getAdminUsers(search, nextSort, nextMinReferrals),
           getAdminRiskUsers(),
         ]),
       );
@@ -157,9 +165,16 @@ export default function UsersSection() {
     }
   }
 
+  async function searchUsers() {
+    const nextMin = parseMinReferrals(minReferralsInput);
+    setMinReferrals(nextMin);
+    setMinReferralsInput(nextMin > 0 ? String(nextMin) : "");
+    await load(query, sort, nextMin);
+  }
+
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cached = readCached<UsersPayload>("admin:users:v9:last_login:default");
+      const cached = readCached<UsersPayload>("admin:users:v10:last_login:0:default");
       if (cached) {
         setAudience(cached[0]);
         setUsers(cached[1]);
@@ -221,7 +236,13 @@ export default function UsersSection() {
 
   async function changeSort(next: AdminUserSort) {
     setSort(next);
-    await load(query, next);
+    await load(query, next, minReferrals);
+  }
+
+  async function clearMinReferralsFilter() {
+    setMinReferrals(0);
+    setMinReferralsInput("");
+    await load(query, sort, 0);
   }
 
   async function changeBetsPeriod(period: AdminUserPeriod) {
@@ -363,14 +384,32 @@ export default function UsersSection() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") load(query, sort).catch(() => {});
+            if (e.key === "Enter") searchUsers().catch(() => {});
           }}
           className="input-field h-8 min-w-[180px] flex-1"
           placeholder="Имя, username или Telegram ID"
         />
-        <AdminChip onClick={() => load(query, sort).catch(() => {})}>
+        <input
+          type="number"
+          min={1}
+          inputMode="numeric"
+          value={minReferralsInput}
+          onChange={(e) => setMinReferralsInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") searchUsers().catch(() => {});
+          }}
+          className="input-field h-8 w-[7.5rem]"
+          placeholder="От N реф."
+          title="Минимум приглашённых рефералов"
+        />
+        <AdminChip onClick={() => searchUsers().catch(() => {})}>
           {loading ? "…" : "Найти"}
         </AdminChip>
+        {minReferrals > 0 ? (
+          <AdminChip active onClick={() => clearMinReferralsFilter().catch(() => {})}>
+            Реф. ≥ {minReferrals} ×
+          </AdminChip>
+        ) : null}
       </AdminToolbar>
 
       <AdminToolbar>
@@ -525,6 +564,9 @@ export default function UsersSection() {
                         </p>
                         <p className="mt-0.5 text-[11px] text-muted">
                           {formatShortWhen(user.last_login_at)}
+                          {(user.referral_count ?? 0) > 0
+                            ? ` · ${user.referral_count} реф.`
+                            : ""}
                           {user.is_banned ? " · ban" : ""}
                           {user.withdrawals_disabled ? " · no-withdraw" : ""}
                           {risky ? " · risk" : ""}
@@ -556,6 +598,11 @@ export default function UsersSection() {
                   : `TG ${selected.telegram_id}`
               }
             >
+              <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+                <AdminChip active={(selected.referral_count ?? 0) > 0}>
+                  Рефералы: {selected.referral_count ?? 0}
+                </AdminChip>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <AdminMetric
                   label="Баланс"
@@ -573,6 +620,12 @@ export default function UsersSection() {
                   accent
                 />
                 <AdminMetric label="Игр" value={String(selected.bets_count ?? 0)} />
+                <AdminMetric
+                  label="Приглашено"
+                  value={String(selected.referral_count ?? 0)}
+                  hint="Рефералы по ссылке"
+                  accent={(selected.referral_count ?? 0) > 0}
+                />
                 <AdminMetric label="Последний вход" value={formatShortWhen(selected.last_login_at)} />
               </div>
 
