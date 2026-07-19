@@ -801,13 +801,14 @@ func (h *AdminHandler) UpdateYieldSettings(c *gin.Context) {
 func (h *AdminHandler) CreateBroadcast(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	var req struct {
-		Message string `json:"message" binding:"required"`
+		Message              string `json:"message" binding:"required"`
+		IncludeChannelButton bool   `json:"include_channel_button"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	broadcast, err := h.telegram.CreateBroadcast(c.Request.Context(), adminID, req.Message)
+	broadcast, err := h.telegram.CreateBroadcast(c.Request.Context(), adminID, req.Message, req.IncludeChannelButton)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

@@ -1892,6 +1892,7 @@ export async function grantAdminWheelBonusSpins(body: { telegram_id: number; cou
 export type TelegramBroadcast = {
   id: string;
   message: string;
+  include_channel_button?: boolean;
   status: string;
   total_users: number;
   sent_count: number;
@@ -1900,10 +1901,10 @@ export type TelegramBroadcast = {
   finished_at?: string;
 };
 
-export async function createAdminBroadcast(message: string) {
+export async function createAdminBroadcast(message: string, includeChannelButton = false) {
   return api<TelegramBroadcast>("/api/v1/admin/telegram/broadcast", {
     method: "POST",
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, include_channel_button: includeChannelButton }),
   });
 }
 

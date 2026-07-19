@@ -275,15 +275,16 @@ func (PromoRedemption) TableName() string { return "promo_redemptions" }
 
 // TelegramBroadcast — queued mass message to all players.
 type TelegramBroadcast struct {
-	ID          uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Message     string     `gorm:"type:text;not null" json:"message"`
-	Status      string     `gorm:"size:32;not null;default:'queued';index" json:"status"`
-	TotalUsers  int        `gorm:"not null;default:0" json:"total_users"`
-	SentCount   int        `gorm:"not null;default:0" json:"sent_count"`
-	FailedCount int        `gorm:"not null;default:0" json:"failed_count"`
-	CreatedBy   uuid.UUID  `gorm:"type:uuid;not null" json:"created_by"`
-	CreatedAt   time.Time  `json:"created_at"`
-	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Message              string     `gorm:"type:text;not null" json:"message"`
+	IncludeChannelButton bool       `gorm:"not null;default:false" json:"include_channel_button"`
+	Status               string     `gorm:"size:32;not null;default:'queued';index" json:"status"`
+	TotalUsers           int        `gorm:"not null;default:0" json:"total_users"`
+	SentCount            int        `gorm:"not null;default:0" json:"sent_count"`
+	FailedCount          int        `gorm:"not null;default:0" json:"failed_count"`
+	CreatedBy            uuid.UUID  `gorm:"type:uuid;not null" json:"created_by"`
+	CreatedAt            time.Time  `json:"created_at"`
+	FinishedAt           *time.Time `json:"finished_at,omitempty"`
 }
 
 func (TelegramBroadcast) TableName() string { return "telegram_broadcasts" }

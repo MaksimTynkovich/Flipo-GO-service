@@ -25,6 +25,7 @@ export default function TelegramSection() {
   const [settings, setSettings] = useState<AdminBotSettings | null>(null);
   const [broadcasts, setBroadcasts] = useState<TelegramBroadcast[]>([]);
   const [message, setMessage] = useState("");
+  const [includeChannelButton, setIncludeChannelButton] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [broadcastsLoading, setBroadcastsLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -174,6 +175,18 @@ export default function TelegramSection() {
             />
           </AdminField>
 
+          <label className="flex items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={includeChannelButton}
+              onChange={(e) => setIncludeChannelButton(e.target.checked)}
+            />
+            Добавить кнопку канала
+          </label>
+          <p className="text-xs text-muted -mt-2">
+            Вторая кнопка в inline-клавиатуре ведёт на TELEGRAM_CHANNEL_URL из .env (как в /start).
+          </p>
+
           <AdminToolbar>
             <AdminButton
               disabled={!message.trim() || sending}
@@ -191,8 +204,9 @@ export default function TelegramSection() {
                   primeCache("admin:telegram:settings", nextSettings);
                   setSettings(nextSettings);
 
-                  await createAdminBroadcast(text);
+                  await createAdminBroadcast(text, includeChannelButton);
                   setMessage("");
+                  setIncludeChannelButton(false);
                   showToast({ variant: "success", title: "Рассылка запущена" });
                   await loadBroadcasts();
                 } catch (error) {

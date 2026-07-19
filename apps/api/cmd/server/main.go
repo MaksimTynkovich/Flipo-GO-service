@@ -150,7 +150,7 @@ func main() {
 		adminIDs = nil
 	}
 	adminNotifier := telegram.NewAdminNotifier(botAPI, adminIDs)
-	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
+	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL, cfg.ChannelURL)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),

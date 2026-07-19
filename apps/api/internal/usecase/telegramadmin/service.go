@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const channelButtonText = "📢 Наш канал"
+
 type Service struct {
 	platform        domain.PlatformRepository
 	users           domain.UserRepository
@@ -20,6 +22,7 @@ type Service struct {
 	botUsername     string
 	webAppShortName string
 	envWebAppURL    string
+	channelURL      string
 	processMu       sync.Mutex
 }
 
@@ -30,6 +33,7 @@ func NewService(
 	botUsername string,
 	webAppShortName string,
 	envWebAppURL string,
+	channelURL string,
 ) *Service {
 	return &Service{
 		platform:        platform,
@@ -38,13 +42,17 @@ func NewService(
 		botUsername:     botUsername,
 		webAppShortName: webAppShortName,
 		envWebAppURL:    strings.TrimRight(strings.TrimSpace(envWebAppURL), "/"),
+		channelURL:      strings.TrimSpace(channelURL),
 	}
 }
 
-func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, message string) (*domain.TelegramBroadcast, error) {
+func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, message string, includeChannelButton bool) (*domain.TelegramBroadcast, error) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return nil, fmt.Errorf("message is required")
+	}
+	if includeChannelButton && s.channelURL == "" {
+		return nil, fmt.Errorf("TELEGRAM_CHANNEL_URL не задан в .env")
 	}
 
 	settings, err := s.platform.GetBotSettings(ctx)
@@ -64,11 +72,12 @@ func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, messag
 	}
 
 	broadcast := &domain.TelegramBroadcast{
-		ID:         uuid.New(),
-		Message:    message,
-		Status:     "queued",
-		TotalUsers: int(total),
-		CreatedBy:  adminID,
+		ID:                   uuid.New(),
+		Message:              message,
+		IncludeChannelButton: includeChannelButton,
+		Status:               "queued",
+		TotalUsers:           int(total),
+		CreatedBy:            adminID,
 	}
 	if err := s.platform.CreateBroadcast(ctx, broadcast); err != nil {
 		return nil, err
@@ -123,7 +132,7 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 	if err != nil {
 		return err
 	}
-	markup := s.broadcastMarkup(*settings)
+	markup := s.broadcastMarkup(*settings, broadcast.IncludeChannelButton)
 	if markup == nil {
 		slog.Warn("broadcast without open-app button", "broadcast_id", broadcast.ID, "hint", "set webapp_url in admin or BOT_USERNAME/WEBAPP_SHORT_NAME in env")
 	}
@@ -158,7 +167,7 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 	return s.platform.UpdateBroadcast(ctx, broadcast)
 }
 
-func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings) map[string]any {
+func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings, includeChannelButton bool) map[string]any {
 	webAppURL := strings.TrimSpace(settings.WebAppURL)
 	// Deep links must not be used as web_app.url; prefer HTTPS from env.
 	if webAppURL == "" || strings.HasPrefix(webAppURL, "https://t.me/") ||
@@ -168,10 +177,27 @@ func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings) map[strin
 		strings.HasPrefix(webAppURL, "tg://") {
 		webAppURL = s.envWebAppURL
 	}
-	return telegram.OpenAppButtonMarkup(telegram.OpenAppButtonOptions{
+
+	rows := make([][]map[string]any, 0, 2)
+	if openApp := telegram.OpenAppButtonMarkup(telegram.OpenAppButtonOptions{
 		WebAppURL:       webAppURL,
 		BotUsername:     s.botUsername,
 		WebAppShortName: s.webAppShortName,
 		ButtonText:      settings.WebAppButtonText,
-	})
+	}); openApp != nil {
+		if kb, ok := openApp["inline_keyboard"].([][]map[string]any); ok {
+			rows = append(rows, kb...)
+		}
+	}
+
+	if includeChannelButton && s.channelURL != "" {
+		rows = append(rows, []map[string]any{
+			{"text": channelButtonText, "url": s.channelURL},
+		})
+	}
+
+	if len(rows) == 0 {
+		return nil
+	}
+	return map[string]any{"inline_keyboard": rows}
 }
