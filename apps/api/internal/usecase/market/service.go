@@ -59,8 +59,8 @@ func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 	s.notifier = notifier
 }
 
-func (s *Service) List(ctx context.Context, limit, offset int) ([]ListingView, error) {
-	listings, err := s.market.ListActive(ctx, limit, offset)
+func (s *Service) List(ctx context.Context, limit, offset int, sort string) ([]ListingView, error) {
+	listings, err := s.market.ListActive(ctx, limit, offset, sort)
 	if err != nil {
 		return nil, err
 	}

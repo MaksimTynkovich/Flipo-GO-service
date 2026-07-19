@@ -20,18 +20,30 @@ func NewMarketRepo(db *gorm.DB) *MarketRepo {
 	return &MarketRepo{db: db}
 }
 
-func (r *MarketRepo) ListActive(ctx context.Context, limit, offset int) ([]domain.MarketListing, error) {
+func (r *MarketRepo) ListActive(ctx context.Context, limit, offset int, sort string) ([]domain.MarketListing, error) {
 	var listings []domain.MarketListing
+	order := marketListOrder(sort)
 	q := r.db.WithContext(ctx).
 		Preload("Item").
 		Preload("Seller").
 		Where("status = ?", domain.ListingActive).
-		Order("price_nanoton DESC, created_at DESC")
+		Order(order)
 	if limit > 0 {
 		q = q.Limit(limit).Offset(offset)
 	}
 	err := q.Find(&listings).Error
 	return listings, err
+}
+
+func marketListOrder(sort string) string {
+	switch sort {
+	case "price_asc":
+		return "price_nanoton ASC, created_at DESC"
+	case "price_desc":
+		return "price_nanoton DESC, created_at DESC"
+	default: // newest
+		return "created_at DESC, price_nanoton DESC"
+	}
 }
 
 func (r *MarketRepo) ListActiveBySource(ctx context.Context, source domain.ListingSource) ([]domain.MarketListing, error) {

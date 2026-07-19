@@ -34,29 +34,20 @@ function listingSearchText(listing: MarketListing): string {
     .toLowerCase();
 }
 
-function filterAndSortListings(
+function filterListings(
   listings: MarketListing[],
   query: string,
-  sort: MarketSort,
   selectedCollections: string[],
 ): MarketListing[] {
   const q = query.trim().toLowerCase();
   const collectionSet =
     selectedCollections.length > 0 ? new Set(selectedCollections) : null;
 
-  let next = listings.filter((listing) => {
+  return listings.filter((listing) => {
     if (collectionSet && !collectionSet.has(listing.item.collection_slug)) return false;
     if (q && !listingSearchText(listing).includes(q)) return false;
     return true;
   });
-
-  next = [...next].sort((a, b) => {
-    if (sort === "price_asc") return a.price_nanoton - b.price_nanoton;
-    if (sort === "price_desc") return b.price_nanoton - a.price_nanoton;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-
-  return next;
 }
 
 function mergeListings(prev: MarketListing[], next: MarketListing[]): MarketListing[] {
@@ -88,7 +79,9 @@ export function MarketSection({ onPurchased }: Props) {
   const offsetRef = useRef(0);
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
+  const sortRef = useRef(sort);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  sortRef.current = sort;
 
   const loadPage = useCallback(async (offset: number, append: boolean) => {
     if (append) {
@@ -96,6 +89,8 @@ export function MarketSection({ onPurchased }: Props) {
       loadingMoreRef.current = true;
       setLoadingMore(true);
     } else {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
       setLoading(true);
       setLoadError(null);
       hasMoreRef.current = true;
@@ -103,6 +98,7 @@ export function MarketSection({ onPurchased }: Props) {
       offsetRef.current = 0;
     }
 
+    const requestSort = sortRef.current;
     let lastError: unknown;
     const attempts = append ? 1 : 2;
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -110,7 +106,19 @@ export function MarketSection({ onPurchased }: Props) {
         if (!append && attempt > 0) {
           await new Promise((resolve) => window.setTimeout(resolve, 400));
         }
-        const page = await getMarketListings({ limit: PAGE_SIZE, offset });
+        const page = await getMarketListings({
+          limit: PAGE_SIZE,
+          offset,
+          sort: requestSort,
+        });
+        // Drop stale responses if sort changed while the request was in flight.
+        if (sortRef.current !== requestSort) {
+          if (append) {
+            loadingMoreRef.current = false;
+            setLoadingMore(false);
+          }
+          return;
+        }
         setListings((prev) => (append ? mergeListings(prev, page) : page));
         offsetRef.current = offset + page.length;
         const more = page.length >= PAGE_SIZE;
@@ -129,6 +137,13 @@ export function MarketSection({ onPurchased }: Props) {
       }
     }
 
+    if (sortRef.current !== requestSort) {
+      if (append) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
+      return;
+    }
     if (append) {
       loadingMoreRef.current = false;
       setLoadingMore(false);
@@ -149,7 +164,7 @@ export function MarketSection({ onPurchased }: Props) {
   useEffect(() => {
     if (!ready) return;
     void load();
-  }, [ready, load]);
+  }, [ready, sort, load]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -187,8 +202,8 @@ export function MarketSection({ onPurchased }: Props) {
   }, [collections]);
 
   const visibleListings = useMemo(
-    () => filterAndSortListings(listings, query, sort, selectedCollections),
-    [listings, query, sort, selectedCollections],
+    () => filterListings(listings, query, selectedCollections),
+    [listings, query, selectedCollections],
   );
 
   const hasActiveFilters = Boolean(

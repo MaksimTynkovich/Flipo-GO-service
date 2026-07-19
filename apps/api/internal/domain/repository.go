@@ -52,7 +52,7 @@ type InventoryRepository interface {
 }
 
 type MarketRepository interface {
-	ListActive(ctx context.Context, limit, offset int) ([]MarketListing, error)
+	ListActive(ctx context.Context, limit, offset int, sort string) ([]MarketListing, error)
 	ListActiveBySource(ctx context.Context, source ListingSource) ([]MarketListing, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*MarketListing, error)
 	ListBySeller(ctx context.Context, sellerID uuid.UUID) ([]MarketListing, error)

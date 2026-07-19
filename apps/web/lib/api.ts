@@ -679,10 +679,15 @@ export type MarketListing = {
   };
 };
 
-export async function getMarketListings(params?: { limit?: number; offset?: number }) {
+export async function getMarketListings(params?: {
+  limit?: number;
+  offset?: number;
+  sort?: "newest" | "price_asc" | "price_desc";
+}) {
   const q = new URLSearchParams();
   if (params?.limit != null) q.set("limit", String(params.limit));
   if (params?.offset != null) q.set("offset", String(params.offset));
+  if (params?.sort) q.set("sort", params.sort);
   const qs = q.toString();
   return api<MarketListing[]>(`/api/v1/market/listings${qs ? `?${qs}` : ""}`);
 }

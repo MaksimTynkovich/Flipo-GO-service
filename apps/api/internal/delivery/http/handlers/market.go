@@ -26,6 +26,7 @@ func NewMarketHandler(svc *market.Service, analyticsSvc *analyticsuc.Service) *M
 func (h *MarketHandler) List(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	sort := c.DefaultQuery("sort", "newest")
 	if limit <= 0 {
 		limit = 20
 	}
@@ -35,8 +36,13 @@ func (h *MarketHandler) List(c *gin.Context) {
 	if offset < 0 {
 		offset = 0
 	}
+	switch sort {
+	case "newest", "price_asc", "price_desc":
+	default:
+		sort = "newest"
+	}
 
-	listings, err := h.market.List(c.Request.Context(), limit, offset)
+	listings, err := h.market.List(c.Request.Context(), limit, offset, sort)
 	if err != nil {
 		respondInternal(c, err)
 		return
