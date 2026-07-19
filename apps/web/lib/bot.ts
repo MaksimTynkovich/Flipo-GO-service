@@ -24,13 +24,16 @@ export function depositBotMention(): string {
   return `@${DEPOSIT_BOT_USERNAME}`;
 }
 
-/** Direct link to open the mini app inside Telegram (fullscreen on mobile). */
+/** Direct link to open the mini app inside Telegram.
+ *  Do not force mode=fullscreen — respects BotFather/webapp compact setting.
+ *  Mobile still goes fullscreen via requestFullscreen() after open.
+ */
 export function miniAppTelegramUrl(startApp?: string): string {
   const base = `https://t.me/${APP_BOT_USERNAME}/${WEBAPP_SHORT_NAME}`;
-  const params = new URLSearchParams({ mode: "fullscreen" });
-  if (startApp?.trim()) {
-    params.set("startapp", startApp.trim());
+  if (!startApp?.trim()) {
+    return base;
   }
+  const params = new URLSearchParams({ startapp: startApp.trim() });
   return `${base}?${params.toString()}`;
 }
 
