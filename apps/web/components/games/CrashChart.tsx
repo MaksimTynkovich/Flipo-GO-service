@@ -435,6 +435,8 @@ export function CrashChart({
     path: Pt[];
     mult: number;
   } | null>(null);
+  /** Prevents restarting the fall when the same crashed state is re-delivered. */
+  const crashAnimRoundRef = useRef<string | null>(null);
   const starsRef = useRef<Star[]>([]);
   const prevCamRef = useRef<Cam>({ x: 0, y: 0 });
 
@@ -501,6 +503,7 @@ export function CrashChart({
       prevPosRef.current = null;
       prevCamRef.current = { x: 0, y: 0 };
       crashAnimRef.current = null;
+      crashAnimRoundRef.current = null;
       setMilestoneFx(null);
       if (milestoneTimerRef.current != null) {
         window.clearTimeout(milestoneTimerRef.current);
@@ -547,6 +550,13 @@ export function CrashChart({
       const crashMult = state.crash_point;
       setStaticMult(formatMultiplier(crashMult));
       onLiveRef.current?.(crashMult);
+
+      // WS + HTTP can re-deliver the same crashed payload — start fall once per round.
+      if (crashAnimRoundRef.current === state.round_id) {
+        return;
+      }
+      crashAnimRoundRef.current = state.round_id;
+
       const canvas = canvasRef.current;
       const w = canvas?.clientWidth || 360;
       const h = canvas?.clientHeight || 220;
@@ -602,6 +612,7 @@ export function CrashChart({
         particlesRef.current = [];
         smokeRef.current = [];
         crashAnimRef.current = null;
+        crashAnimRoundRef.current = null;
       }
     }
   }, [state, running, betting]);
