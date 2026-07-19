@@ -1101,6 +1101,18 @@ export type AdminBotSettings = {
   webapp_button_text: string;
 };
 
+export type MaintenanceStatus = {
+  enabled: boolean;
+  message: string;
+};
+
+export type AdminMaintenanceSettings = {
+  id?: number;
+  enabled: boolean;
+  message: string;
+  updated_at?: string;
+};
+
 export type AdminUser = {
   id: string;
   telegram_id: number;
@@ -1643,6 +1655,21 @@ export async function getAdminBotSettings() {
 
 export async function updateAdminBotSettings(settings: AdminBotSettings) {
   return api<{ ok: boolean }>("/api/v1/admin/telegram/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
+}
+
+export async function getMaintenanceStatus() {
+  return api<MaintenanceStatus>("/api/v1/maintenance");
+}
+
+export async function getAdminMaintenanceSettings() {
+  return api<AdminMaintenanceSettings>("/api/v1/admin/maintenance");
+}
+
+export async function updateAdminMaintenanceSettings(settings: AdminMaintenanceSettings) {
+  return api<{ ok: boolean }>("/api/v1/admin/maintenance", {
     method: "PATCH",
     body: JSON.stringify(settings),
   });

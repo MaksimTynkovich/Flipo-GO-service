@@ -13,6 +13,7 @@ import (
 
 	httpx "github.com/flipo/flipo/apps/api/internal/delivery/http"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/handlers"
+	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
@@ -339,27 +340,42 @@ func main() {
 		socialSim.ApplySettings(settings)
 	})
 
+	maintenanceState := middleware.NewMaintenanceState()
+	if settings, err := platformRepo.GetMaintenanceSettings(ctx); err == nil {
+		maintenanceState.Load(settings)
+	} else {
+		slog.Warn("failed to load maintenance settings", "error", err)
+	}
+	adminHandler.SetMaintenanceUpdater(func(settings domain.PlatformMaintenanceSettings) {
+		maintenanceState.Load(&settings)
+	})
+	go middleware.RefreshMaintenanceState(maintenanceState, func() (*domain.PlatformMaintenanceSettings, error) {
+		return platformRepo.GetMaintenanceSettings(context.Background())
+	}, 15*time.Second, ctx.Done())
+
 	router := httpx.NewRouter(httpx.Deps{
-		DB:               db,
-		Auth:             authSvc,
-		AuthHandler:      handlers.NewAuthHandler(authSvc, analyticsSvc),
-		InventoryHandler: handlers.NewInventoryHandler(invSvc, stakeSvc, analyticsSvc),
-		StakingHandler:   handlers.NewStakingHandler(stakeSvc, analyticsSvc),
-		GameHandler:      handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc, analyticsSvc, betFundingSvc),
-		MarketHandler:    handlers.NewMarketHandler(marketSvc, analyticsSvc),
-		ReferralHandler:  handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
-		PromoHandler:     handlers.NewPromoHandler(promoSvc, analyticsSvc),
-		WheelHandler:     handlers.NewWheelHandler(wheelSvc, riskSvc),
-		WalletHandler:    handlers.NewWalletHandler(walletSvc, analyticsSvc),
-		TelegramHandler:  handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
-		AdminHandler:     adminHandler,
-		AnalyticsHandler: handlers.NewAnalyticsHandler(authSvc, analyticsSvc),
-		PresenceHandler:  handlers.NewPresenceHandler(socialSim),
-		AdminTelegramIDs: cfg.AdminTelegramIDs,
-		Hub:              hub,
-		BotsDataDir:      cfg.BotsDataDir,
-		GiftImageHandler: handlers.NewGiftImageHandler(giftimage.NewProxy(cfg.GiftsCacheDir)),
-		CORSOrigins:      cfg.CORSOrigins,
+		DB:                 db,
+		Auth:               authSvc,
+		AuthHandler:        handlers.NewAuthHandler(authSvc, analyticsSvc),
+		InventoryHandler:   handlers.NewInventoryHandler(invSvc, stakeSvc, analyticsSvc),
+		StakingHandler:     handlers.NewStakingHandler(stakeSvc, analyticsSvc),
+		GameHandler:        handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc, analyticsSvc, betFundingSvc),
+		MarketHandler:      handlers.NewMarketHandler(marketSvc, analyticsSvc),
+		ReferralHandler:    handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
+		PromoHandler:       handlers.NewPromoHandler(promoSvc, analyticsSvc),
+		WheelHandler:       handlers.NewWheelHandler(wheelSvc, riskSvc),
+		WalletHandler:      handlers.NewWalletHandler(walletSvc, analyticsSvc),
+		TelegramHandler:    handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
+		AdminHandler:       adminHandler,
+		AnalyticsHandler:   handlers.NewAnalyticsHandler(authSvc, analyticsSvc),
+		PresenceHandler:    handlers.NewPresenceHandler(socialSim),
+		MaintenanceHandler: handlers.NewMaintenanceHandler(platformRepo),
+		MaintenanceState:   maintenanceState,
+		AdminTelegramIDs:   cfg.AdminTelegramIDs,
+		Hub:                hub,
+		BotsDataDir:        cfg.BotsDataDir,
+		GiftImageHandler:   handlers.NewGiftImageHandler(giftimage.NewProxy(cfg.GiftsCacheDir)),
+		CORSOrigins:        cfg.CORSOrigins,
 	})
 
 	srv := &http.Server{

@@ -293,6 +293,23 @@ func (s *Service) UpdateBotSettings(ctx context.Context, adminID uuid.UUID, sett
 	return s.audit(ctx, adminID, "bot_settings_updated", "telegram_bot_settings", "1", nil)
 }
 
+func (s *Service) GetMaintenanceSettings(ctx context.Context) (*domain.PlatformMaintenanceSettings, error) {
+	return s.platform.GetMaintenanceSettings(ctx)
+}
+
+func (s *Service) UpdateMaintenanceSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformMaintenanceSettings) error {
+	settings.Message = strings.TrimSpace(settings.Message)
+	if len(settings.Message) > 500 {
+		settings.Message = settings.Message[:500]
+	}
+	if err := s.platform.UpdateMaintenanceSettings(ctx, &settings); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "maintenance_settings_updated", "platform_maintenance_settings", "1", map[string]any{
+		"enabled": settings.Enabled,
+	})
+}
+
 func (s *Service) GetYieldSettings(ctx context.Context) (*domain.PlatformYieldSettings, error) {
 	return s.platform.GetYieldSettings(ctx)
 }

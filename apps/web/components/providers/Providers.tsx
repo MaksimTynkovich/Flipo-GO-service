@@ -2,6 +2,7 @@
 
 import { TelegramProvider } from "@/src/app/providers/TelegramProvider";
 import { TelegramAccessGate } from "./TelegramAccessGate";
+import { MaintenanceGate } from "./MaintenanceGate";
 import { AnalyticsProvider } from "./AnalyticsProvider";
 import { AuthProvider } from "./AuthProvider";
 import { ToastProvider } from "./ToastProvider";
@@ -13,9 +14,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AnalyticsProvider>
         <TelegramAccessGate>
           <AuthProvider>
-            <ToastProvider>
-              <UserRealtimeProvider>{children}</UserRealtimeProvider>
-            </ToastProvider>
+            <MaintenanceGate>
+              <ToastProvider>
+                <UserRealtimeProvider>{children}</UserRealtimeProvider>
+              </ToastProvider>
+            </MaintenanceGate>
           </AuthProvider>
         </TelegramAccessGate>
       </AnalyticsProvider>

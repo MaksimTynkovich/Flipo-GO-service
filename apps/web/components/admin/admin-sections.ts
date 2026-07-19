@@ -6,6 +6,7 @@ import GamesSection from "./sections/GamesSection";
 import MarketAdminSection from "./sections/MarketAdminSection";
 import MarketingSection from "./sections/MarketingSection";
 import StakingDropoffSection from "./sections/StakingDropoffSection";
+import SystemSection from "./sections/SystemSection";
 import TelegramSection from "./sections/TelegramSection";
 import UsersSection from "./sections/UsersSection";
 import OutcomeSection from "./sections/OutcomeSection";
@@ -20,6 +21,7 @@ export type AdminSectionId =
   | "finance"
   | "marketing"
   | "telegram"
+  | "system"
   | "outcome";
 
 export type AdminNavItem = {
@@ -39,6 +41,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "finance", href: "/admin/finance", label: "Финансы" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг" },
   { id: "telegram", href: "/admin/telegram", label: "Telegram" },
+  { id: "system", href: "/admin/system", label: "Система" },
 ];
 
 export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
@@ -51,6 +54,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   finance: FinanceSection,
   marketing: MarketingSection,
   telegram: TelegramSection,
+  system: SystemSection,
   outcome: OutcomeSection,
 };
 
@@ -65,6 +69,7 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/finance": "finance",
   "/admin/marketing": "marketing",
   "/admin/telegram": "telegram",
+  "/admin/system": "system",
 };
 
 export function resolveAdminSection(pathname: string): AdminSectionId {

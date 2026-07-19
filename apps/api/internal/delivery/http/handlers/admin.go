@@ -22,16 +22,17 @@ import (
 )
 
 type AdminHandler struct {
-	admin             *admin.Service
-	analytics         *analyticsuc.Service
-	fairness          *fairness.Service
-	outcome           *outcome.Service
-	treasury          *treasury.Service
-	telegram          *telegramadmin.Service
-	wheel             *wheel.Service
-	botSync           *market.BotSyncService
-	hotAddr           string
-	onSocialSimUpdate func(domain.SocialSimSettings)
+	admin               *admin.Service
+	analytics           *analyticsuc.Service
+	fairness            *fairness.Service
+	outcome             *outcome.Service
+	treasury            *treasury.Service
+	telegram            *telegramadmin.Service
+	wheel               *wheel.Service
+	botSync             *market.BotSyncService
+	hotAddr             string
+	onSocialSimUpdate   func(domain.SocialSimSettings)
+	onMaintenanceUpdate func(domain.PlatformMaintenanceSettings)
 }
 
 func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, outcomeSvc *outcome.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
@@ -48,6 +49,10 @@ func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service,
 
 func (h *AdminHandler) SetSocialSimUpdater(fn func(domain.SocialSimSettings)) {
 	h.onSocialSimUpdate = fn
+}
+
+func (h *AdminHandler) SetMaintenanceUpdater(fn func(domain.PlatformMaintenanceSettings)) {
+	h.onMaintenanceUpdate = fn
 }
 
 func (h *AdminHandler) SetBotGiftSync(sync *market.BotSyncService) {
@@ -745,6 +750,32 @@ func (h *AdminHandler) UpdateBotSettings(c *gin.Context) {
 	if err := h.admin.UpdateBotSettings(c.Request.Context(), adminID, settings); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) GetMaintenanceSettings(c *gin.Context) {
+	settings, err := h.admin.GetMaintenanceSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateMaintenanceSettings(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var settings domain.PlatformMaintenanceSettings
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.UpdateMaintenanceSettings(c.Request.Context(), adminID, settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if h.onMaintenanceUpdate != nil {
+		h.onMaintenanceUpdate(settings)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

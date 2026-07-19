@@ -91,6 +91,16 @@ type TelegramBotSettings struct {
 
 func (TelegramBotSettings) TableName() string { return "telegram_bot_settings" }
 
+// PlatformMaintenanceSettings — singleton kill-switch for site-wide maintenance mode.
+type PlatformMaintenanceSettings struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	Enabled   bool      `gorm:"not null;default:false" json:"enabled"`
+	Message   string    `gorm:"type:text;not null;default:''" json:"message"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (PlatformMaintenanceSettings) TableName() string { return "platform_maintenance_settings" }
+
 // PlatformYieldSettings - singleton row (id=1) for staking, referral and gift price adjustments.
 type PlatformYieldSettings struct {
 	ID                              int       `gorm:"primaryKey" json:"id"`

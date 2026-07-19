@@ -23,6 +23,7 @@ var (
 	ErrDailyWinCap       = errors.New("достигнут дневной лимит выигрыша")
 	ErrUserBanned        = errors.New("аккаунт заблокирован")
 	ErrGameDisabled      = errors.New("игра временно недоступна")
+	ErrMaintenance       = errors.New("техническое обслуживание")
 	ErrPromoInvalid         = errors.New("недействительный промокод")
 	ErrPromoExpired         = errors.New("промокод истёк")
 	ErrPromoExhausted       = errors.New("промокод исчерпан")

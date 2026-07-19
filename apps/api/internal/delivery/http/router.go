@@ -13,26 +13,28 @@ import (
 )
 
 type Deps struct {
-	DB               *gorm.DB
-	Auth             *auth.Service
-	AuthHandler      *handlers.AuthHandler
-	InventoryHandler *handlers.InventoryHandler
-	StakingHandler   *handlers.StakingHandler
-	GameHandler      *handlers.GameHandler
-	MarketHandler    *handlers.MarketHandler
-	ReferralHandler  *handlers.ReferralHandler
-	WalletHandler    *handlers.WalletHandler
-	TelegramHandler  *handlers.TelegramHandler
-	PromoHandler     *handlers.PromoHandler
-	WheelHandler     *handlers.WheelHandler
-	AdminHandler     *handlers.AdminHandler
-	AnalyticsHandler *handlers.AnalyticsHandler
-	PresenceHandler  *handlers.PresenceHandler
-	AdminTelegramIDs []int64
-	Hub              *websocket.Hub
-	BotsDataDir      string
-	GiftImageHandler *handlers.GiftImageHandler
-	CORSOrigins      []string
+	DB                  *gorm.DB
+	Auth                *auth.Service
+	AuthHandler         *handlers.AuthHandler
+	InventoryHandler    *handlers.InventoryHandler
+	StakingHandler      *handlers.StakingHandler
+	GameHandler         *handlers.GameHandler
+	MarketHandler       *handlers.MarketHandler
+	ReferralHandler     *handlers.ReferralHandler
+	WalletHandler       *handlers.WalletHandler
+	TelegramHandler     *handlers.TelegramHandler
+	PromoHandler        *handlers.PromoHandler
+	WheelHandler        *handlers.WheelHandler
+	AdminHandler        *handlers.AdminHandler
+	AnalyticsHandler    *handlers.AnalyticsHandler
+	PresenceHandler     *handlers.PresenceHandler
+	MaintenanceHandler  *handlers.MaintenanceHandler
+	MaintenanceState    *middleware.MaintenanceState
+	AdminTelegramIDs    []int64
+	Hub                 *websocket.Hub
+	BotsDataDir         string
+	GiftImageHandler    *handlers.GiftImageHandler
+	CORSOrigins         []string
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -41,6 +43,9 @@ func NewRouter(deps Deps) *gin.Engine {
 	r.Use(middleware.CORS(deps.CORSOrigins...))
 	r.Use(middleware.RequestMeta())
 	r.Use(middleware.AccessLog())
+	if deps.MaintenanceState != nil {
+		r.Use(middleware.MaintenanceGate(deps.MaintenanceState, deps.Auth))
+	}
 
 	// Curated bot roster (assets/bots) for the live-online overlay avatars.
 	if deps.BotsDataDir != "" {
@@ -71,6 +76,9 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	v1 := r.Group("/api/v1")
 	{
+		if deps.MaintenanceHandler != nil {
+			v1.GET("/maintenance", deps.MaintenanceHandler.Status)
+		}
 		v1.POST("/auth/telegram", deps.AuthHandler.TelegramAuth)
 		v1.POST("/auth/debug", deps.AuthHandler.DebugAuth)
 		v1.POST("/analytics/events", deps.AnalyticsHandler.Ingest)
@@ -186,6 +194,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.POST("/marketing/wheel/grant-spins", deps.AdminHandler.GrantWheelBonusSpins)
 			admin.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
 			admin.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
+			admin.GET("/maintenance", deps.AdminHandler.GetMaintenanceSettings)
+			admin.PATCH("/maintenance", deps.AdminHandler.UpdateMaintenanceSettings)
 			admin.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
 			admin.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
 			admin.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)
