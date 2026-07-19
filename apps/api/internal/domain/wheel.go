@@ -10,6 +10,9 @@ const (
 	WheelSpinSourceDaily = "daily"
 	WheelSpinSourceBonus = "bonus"
 	WheelSpinSourceAdmin = "admin"
+
+	// MaxReferralBonusSpinsPerDay caps spins a referrer can earn from invites (MSK day).
+	MaxReferralBonusSpinsPerDay = 10
 )
 
 type WheelSegment struct {
@@ -25,11 +28,13 @@ type WheelSegment struct {
 func (WheelSegment) TableName() string { return "wheel_segments" }
 
 type UserWheelState struct {
-	UserID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
-	BonusSpins        int        `gorm:"not null;default:0" json:"bonus_spins"`
-	LastDailySpinDate *time.Time `gorm:"type:date" json:"last_daily_spin_date,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	UserID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
+	BonusSpins               int        `gorm:"not null;default:0" json:"bonus_spins"`
+	LastDailySpinDate        *time.Time `gorm:"type:date" json:"last_daily_spin_date,omitempty"`
+	ReferralBonusGrantsToday int        `gorm:"not null;default:0" json:"referral_bonus_grants_today"`
+	ReferralBonusGrantsDate  *time.Time `gorm:"type:date" json:"referral_bonus_grants_date,omitempty"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
 }
 
 func (UserWheelState) TableName() string { return "user_wheel_state" }

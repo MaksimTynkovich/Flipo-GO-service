@@ -81,7 +81,20 @@ func (s *Service) AddReferralBonusSpin(ctx context.Context, referrerID uuid.UUID
 	if s.wheel == nil {
 		return nil
 	}
-	return s.wheel.AddBonusSpins(ctx, referrerID, 1)
+	_, err := s.wheel.TryAddReferralBonusSpin(
+		ctx,
+		referrerID,
+		mskCalendarDate(time.Now()),
+		domain.MaxReferralBonusSpinsPerDay,
+	)
+	return err
+}
+
+// mskCalendarDate returns the calendar date (00:00 UTC-encoded date components) in MSK.
+func mskCalendarDate(now time.Time) time.Time {
+	msk := time.FixedZone("MSK", 3*60*60)
+	local := now.In(msk)
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 type SegmentView struct {

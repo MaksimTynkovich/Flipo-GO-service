@@ -453,7 +453,7 @@ export function WheelView() {
                   <div className="wheel-empty">
                     <p className="wheel-empty__title">Спины закончились</p>
                     <p className="wheel-empty__desc">
-                      Приглашай друзей и получай спины за каждого
+                      Приглашай друзей: +1 спин за каждого, до 10 в сутки
                     </p>
                     <button
                       type="button"

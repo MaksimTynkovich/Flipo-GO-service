@@ -124,6 +124,8 @@ type WheelRepository interface {
 	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserWheelState, error)
 	SaveState(ctx context.Context, state *UserWheelState) error
 	AddBonusSpins(ctx context.Context, userID uuid.UUID, delta int) error
+	// TryAddReferralBonusSpin grants +1 bonus spin if referrer is under the MSK daily cap.
+	TryAddReferralBonusSpin(ctx context.Context, userID uuid.UUID, day time.Time, dailyLimit int) (granted bool, err error)
 	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	CreateSpin(ctx context.Context, spin *WheelSpin) error
 	ListRecentWins(ctx context.Context, limit int) ([]WheelRecentWin, error)

@@ -95,6 +95,40 @@ func (r *WheelRepo) AddBonusSpins(ctx context.Context, userID uuid.UUID, delta i
 		}).Error
 }
 
+// TryAddReferralBonusSpin atomically grants one referral bonus spin when under dailyLimit for the given calendar day.
+func (r *WheelRepo) TryAddReferralBonusSpin(ctx context.Context, userID uuid.UUID, day time.Time, dailyLimit int) (bool, error) {
+	if dailyLimit <= 0 {
+		return false, nil
+	}
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&domain.UserWheelState{UserID: userID}).Error; err != nil {
+		return false, err
+	}
+
+	dayDate := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
+	res := r.db.WithContext(ctx).Exec(`
+		UPDATE user_wheel_state
+		SET
+			bonus_spins = bonus_spins + 1,
+			referral_bonus_grants_today = CASE
+				WHEN referral_bonus_grants_date IS NOT DISTINCT FROM ?::date THEN referral_bonus_grants_today + 1
+				ELSE 1
+			END,
+			referral_bonus_grants_date = ?::date,
+			updated_at = NOW()
+		WHERE user_id = ?
+		  AND (
+			referral_bonus_grants_date IS DISTINCT FROM ?::date
+			OR referral_bonus_grants_today < ?
+		  )
+	`, dayDate, dayDate, userID, dayDate, dailyLimit)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
 func (r *WheelRepo) CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).
