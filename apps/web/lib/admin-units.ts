@@ -1,6 +1,6 @@
 export const NANOTON_PER_TON = 1_000_000_000;
 
-export function nanotonToTonInput(nanoton: number, decimals = 2): string {
+export function nanotonToTonInput(nanoton: number, decimals = 3): string {
   return (nanoton / NANOTON_PER_TON).toFixed(decimals);
 }
 

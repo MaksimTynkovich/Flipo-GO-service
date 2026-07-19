@@ -23,8 +23,8 @@ export function AdminTonField({
   onChangeNanoton,
   hint,
   min = 0,
-  step = 0.01,
-  decimals = 2,
+  step = 0.001,
+  decimals = 3,
 }: {
   label: string;
   valueNanoton: number;

@@ -653,7 +653,10 @@ export async function stakeItem(itemId: string) {
 
 export function formatTON(nanotons: number): string {
   const ton = nanotons / 1_000_000_000;
-  return ton.toFixed(2);
+  // 2 decimals by default; keep a third digit for sub-cent prizes (e.g. 0.005).
+  const fixed3 = ton.toFixed(3);
+  if (fixed3.endsWith("0")) return ton.toFixed(2);
+  return fixed3;
 }
 
 export type MarketListing = {
