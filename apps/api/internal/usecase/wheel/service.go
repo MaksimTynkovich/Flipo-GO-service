@@ -551,15 +551,11 @@ func (s *Service) AdminSetSpinOverride(ctx context.Context, adminID uuid.UUID, t
 		}
 		return nil, err
 	}
-	seg, err := s.wheel.GetSegmentByID(ctx, segmentID)
-	if err != nil {
+	if _, err := s.wheel.GetSegmentByID(ctx, segmentID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrNotFound
 		}
 		return nil, err
-	}
-	if !seg.Active {
-		return nil, fmt.Errorf("сегмент неактивен")
 	}
 	note = strings.TrimSpace(note)
 	if len(note) > 256 {

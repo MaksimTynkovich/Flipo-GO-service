@@ -593,13 +593,12 @@ export default function MarketingSection() {
               value={overrideSegmentId}
               onChange={(e) => setOverrideSegmentId(e.target.value)}
             >
-              {wheelSegments
-                .filter((seg) => seg.active)
-                .map((seg) => (
-                  <option key={seg.id} value={seg.id}>
-                    {seg.label} · {formatTON(seg.amount_nanoton)} TON
-                  </option>
-                ))}
+              {wheelSegments.map((seg) => (
+                <option key={seg.id} value={seg.id}>
+                  {seg.label} · {formatTON(seg.amount_nanoton)} TON
+                  {!seg.active ? " (выкл)" : ""}
+                </option>
+              ))}
             </select>
           </label>
           <label className="text-xs text-muted sm:col-span-2 lg:col-span-1">
