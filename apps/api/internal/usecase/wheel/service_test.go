@@ -43,7 +43,7 @@ func TestMSKCalendarDate(t *testing.T) {
 }
 
 func TestMaxReferralBonusSpinsPerDay(t *testing.T) {
-	if domain.MaxReferralBonusSpinsPerDay != 10 {
-		t.Fatalf("MaxReferralBonusSpinsPerDay = %d, want 10", domain.MaxReferralBonusSpinsPerDay)
+	if domain.MaxReferralBonusSpinsPerDay != 5 {
+		t.Fatalf("MaxReferralBonusSpinsPerDay = %d, want 5", domain.MaxReferralBonusSpinsPerDay)
 	}
 }

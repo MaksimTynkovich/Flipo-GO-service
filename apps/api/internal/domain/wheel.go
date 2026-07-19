@@ -12,7 +12,7 @@ const (
 	WheelSpinSourceAdmin = "admin"
 
 	// MaxReferralBonusSpinsPerDay caps spins a referrer can earn from invites (MSK day).
-	MaxReferralBonusSpinsPerDay = 10
+	MaxReferralBonusSpinsPerDay = 5
 )
 
 type WheelSegment struct {

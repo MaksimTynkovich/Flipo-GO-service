@@ -600,6 +600,8 @@ export type ProfileGiftsResponse = {
   total_monthly_yield_nanoton: number;
   monthly_rate_percent: number;
   stats: StakingStats;
+  channel_subscribed?: boolean;
+  required_channel?: string;
 };
 
 export async function getProfileGifts() {

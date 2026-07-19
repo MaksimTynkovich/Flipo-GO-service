@@ -28,18 +28,20 @@ type AdminStakeNotifier interface {
 }
 
 type Service struct {
-	staking            domain.StakingRepository
-	inventory          domain.InventoryRepository
-	users              domain.UserRepository
-	platform           domain.PlatformRepository
-	scanner            telegram.ProfileGiftScanner
-	valuator           *gifts.Valuator
-	notifier           Notifier
-	balanceNotifier    balance.BalanceNotifier
-	referralThreshold  int64
-	analytics          *analyticsuc.Service
-	referralRewards    ReferralRewardsProvider
-	admin              AdminStakeNotifier
+	staking           domain.StakingRepository
+	inventory         domain.InventoryRepository
+	users             domain.UserRepository
+	platform          domain.PlatformRepository
+	scanner           telegram.ProfileGiftScanner
+	valuator          *gifts.Valuator
+	notifier          Notifier
+	balanceNotifier   balance.BalanceNotifier
+	referralThreshold int64
+	analytics         *analyticsuc.Service
+	referralRewards   ReferralRewardsProvider
+	admin             AdminStakeNotifier
+	requiredChannel   string
+	channelChecker    ChannelChecker
 }
 
 // ReferralPerkProvider exposes invitee perks and first-stake activation.
@@ -122,6 +124,9 @@ func monthlyRateFraction(tier domain.StakingTier, basePercent, boostPercent floa
 }
 
 func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.StakingPosition, error) {
+	if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+		return nil, err
+	}
 	item, err := s.inventory.FindByID(ctx, itemID)
 	if err != nil {
 		return nil, err

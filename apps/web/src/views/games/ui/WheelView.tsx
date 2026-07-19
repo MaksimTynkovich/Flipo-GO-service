@@ -102,19 +102,6 @@ function StatValue({
 const CTA_BASE =
   "app-control wheel-cta flex h-14 w-full items-center justify-center gap-2 text-[15px] font-semibold tracking-tight";
 
-function formatWinAgo(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (sec < 60) return "только что";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} мин назад`;
-  const hrs = Math.floor(min / 60);
-  if (hrs < 24) return `${hrs} ч назад`;
-  const days = Math.floor(hrs / 24);
-  return `${days} дн назад`;
-}
-
 function winInitial(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "?";
@@ -453,7 +440,7 @@ export function WheelView() {
                   <div className="wheel-empty">
                     <p className="wheel-empty__title">Спины закончились</p>
                     <p className="wheel-empty__desc">
-                      Приглашай друзей: +1 спин за каждого, до 10 в сутки
+                      Приглашай друзей: +1 спин за каждого, до 5 в сутки
                     </p>
                     <button
                       type="button"
@@ -548,7 +535,6 @@ export function WheelView() {
                 const tier = prizeTierForAmount(win.prize_nanoton);
                 const rank = i + 1;
                 const name = win.display_name?.trim() || "Игрок";
-                const ago = formatWinAgo(win.created_at);
                 return (
                   <li
                     key={`${win.created_at}-${i}`}
@@ -568,7 +554,6 @@ export function WheelView() {
                     <WheelFeedAvatar name={name} photoUrl={win.photo_url} />
                     <span className="wheel-feed__meta">
                       <span className="wheel-feed__name">{name}</span>
-                      {ago ? <span className="wheel-feed__ago">{ago}</span> : null}
                     </span>
                     <span className={cn("wheel-feed__amount", `wheel-feed__amount--${tier}`)}>
                       {formatTON(win.prize_nanoton)}

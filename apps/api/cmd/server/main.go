@@ -225,6 +225,7 @@ func main() {
 	stakeSvc.SetBalanceNotifier(hub)
 	stakeSvc.SetReferralRewards(referralSvc)
 	stakeSvc.SetAdminNotifier(adminNotifier)
+	stakeSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 
 	var cacheIface interface {
 		Set(context.Context, string, []byte, time.Duration) error

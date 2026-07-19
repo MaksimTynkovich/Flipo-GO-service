@@ -135,7 +135,7 @@ export default function ProfileReferralsPage() {
           <InfoCard
             icon={<RotateCw className="h-4 w-4" />}
             title="Бесплатное вращение Лаки страйк"
-            hint="За друга, не более 10 в сутки"
+            hint="За друга, не более 5 в сутки"
             value={loading ? "…" : `×${stats?.referral_count ?? 0}`}
           />
         </div>

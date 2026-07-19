@@ -8,8 +8,10 @@ import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
 import { StakingOverview } from "@/components/profile/StakingOverview";
 import { StakingActionBar } from "@/components/profile/StakingActionBar";
 import { StakingQuestsBlock } from "@/components/profile/StakingQuestsBlock";
+import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
 import { Button } from "@/components/ui/button";
 import {
+  ApiRequestError,
   getProfileGifts,
   getStakingQuests,
   ProfileGift,
@@ -23,6 +25,8 @@ import {
 } from "@/lib/staking-ui";
 import { trackFlowViewed } from "@/lib/analytics";
 import { formatUserError } from "@/lib/user-errors";
+import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
+import { openTelegramLink } from "@/src/shared/lib/twa";
 import { cn } from "@/lib/utils";
 import { Gift } from "lucide-react";
 
@@ -58,6 +62,12 @@ export function StakingSection() {
   const [epochEndsAt, setEpochEndsAt] = useState<string | null>(null);
   const [quests, setQuests] = useState<StakingQuestsResponse | null>(null);
   const [questsLoading, setQuestsLoading] = useState(true);
+  const [channelSubscribed, setChannelSubscribed] = useState(true);
+  const [requiredChannel, setRequiredChannel] = useState(PROMO_REQUIRED_CHANNEL);
+  const [channelSheetOpen, setChannelSheetOpen] = useState(false);
+
+  const channel = requiredChannel || PROMO_REQUIRED_CHANNEL;
+  const channelUrl = promoChannelUrl(channel);
 
   async function load() {
     setLoading(true);
@@ -72,6 +82,8 @@ export function StakingSection() {
       setEpochEndsAt(data.epoch.ends_at);
       setQuests(questData);
       setSelected(new Set(data.gifts.filter((g) => !g.is_staked).map((g) => g.slug)));
+      setChannelSubscribed(data.channel_subscribed ?? true);
+      if (data.required_channel) setRequiredChannel(data.required_channel);
 
       if (data.stats.staked_count === 0 && data.gifts.some((g) => !g.is_staked)) {
         setTab("add");
@@ -114,8 +126,17 @@ export function StakingSection() {
     setSelected(new Set());
   }
 
+  function openChannel() {
+    if (!channelUrl) return;
+    openTelegramLink(channelUrl);
+  }
+
   async function handleStake() {
     if (selectedGifts.length === 0) return;
+    if (!channelSubscribed && channel) {
+      setChannelSheetOpen(true);
+      return;
+    }
     setStaking(true);
     try {
       for (const gift of selectedGifts) {
@@ -128,10 +149,16 @@ export function StakingSection() {
       await load();
       setTab("staked");
     } catch (e) {
-      showToast({
-        variant: "error",
-        title: formatUserError(e, "Не удалось застейкать подарок"),
-      });
+      if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
+        if (e.channel) setRequiredChannel(e.channel);
+        setChannelSubscribed(false);
+        setChannelSheetOpen(true);
+      } else {
+        showToast({
+          variant: "error",
+          title: formatUserError(e, "Не удалось застейкать подарок"),
+        });
+      }
       await load();
     } finally {
       setStaking(false);
@@ -323,6 +350,19 @@ export function StakingSection() {
           stats={stats}
           epochEndsAt={epochEndsAt}
           onClose={() => setInspected(null)}
+        />
+      ) : null}
+
+      {channelSheetOpen ? (
+        <WheelChannelSheet
+          channel={channel}
+          channelUrl={channelUrl}
+          description="Чтобы застейкать подарки, подпишитесь на канал"
+          onClose={() => {
+            setChannelSheetOpen(false);
+            void load();
+          }}
+          onOpenChannel={openChannel}
         />
       ) : null}
     </div>

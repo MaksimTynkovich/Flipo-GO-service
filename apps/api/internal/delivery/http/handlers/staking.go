@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
@@ -143,12 +144,34 @@ func (h *StakingHandler) ListPositions(c *gin.Context) {
 }
 
 func writeStakingError(c *gin.Context, err error) {
+	var channelErr *staking.ChannelNotSubscribedError
+	if errors.As(err, &channelErr) {
+		channel := ""
+		if channelErr != nil {
+			channel = channelErr.Channel
+		}
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error":   "Подпишитесь на канал, чтобы застейкать подарки",
+			"code":    "channel_not_subscribed",
+			"channel": channel,
+		})
+		return
+	}
+	if errors.Is(err, domain.ErrChannelNotSubscribed) {
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Подпишитесь на канал, чтобы застейкать подарки",
+			"code":  "channel_not_subscribed",
+		})
+		return
+	}
 	code, msg := stakingErrorDetails(err)
 	respondBadRequest(c, err, msg, code)
 }
 
 func stakingErrorDetails(err error) (code, msg string) {
 	switch {
+	case errors.Is(err, domain.ErrChannelNotSubscribed):
+		return "channel_not_subscribed", "Подпишитесь на канал, чтобы застейкать подарки"
 	case errors.Is(err, domain.ErrStakingPoolFull):
 		return "staking_pool_full", "Пул стейкинга заполнен. Попробуйте позже."
 	case errors.Is(err, domain.ErrStakingPersonalLimit):

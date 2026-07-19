@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   channel: string;
   channelUrl: string;
+  description?: string;
   onClose: () => void;
   onOpenChannel: () => void;
 };
@@ -17,6 +18,7 @@ type Props = {
 export function WheelChannelSheet({
   channel,
   channelUrl,
+  description = "Для прокрутки колеса нужна подписка на канал",
   onClose,
   onOpenChannel,
 }: Props) {
@@ -78,7 +80,7 @@ export function WheelChannelSheet({
               Подпишись на канал
             </h2>
             <p className="mt-2 max-w-[20rem] text-sm leading-snug text-muted">
-              Для прокрутки колеса нужна подписка на канал 
+              {description}
             </p>
 
             {mention ? (

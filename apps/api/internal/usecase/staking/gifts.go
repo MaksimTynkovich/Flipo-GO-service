@@ -65,6 +65,8 @@ type ProfileGiftsResponse struct {
 	TotalMonthlyYield  int64            `json:"total_monthly_yield_nanoton"`
 	MonthlyRatePercent float64          `json:"monthly_rate_percent"`
 	Stats              StakingStats     `json:"stats"`
+	ChannelSubscribed  bool             `json:"channel_subscribed"`
+	RequiredChannel    string           `json:"required_channel,omitempty"`
 }
 
 func monthlyRate(tier domain.StakingTier, basePercent, boostPercent float64) float64 {
@@ -143,6 +145,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		Gifts:              make([]ProfileGift, 0),
 		Epoch:              epochView(epoch),
 		MonthlyRatePercent: rate * 100,
+		RequiredChannel:    s.requiredChannel,
 		Stats: StakingStats{
 			BoostReferralCount:        referralCount,
 			BoostReferralTarget:       s.referralThreshold,
@@ -158,6 +161,9 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			ReferralLimitBonusNanoton: displayLimitBonus,
 			ReferralBoostPercent:      displayBoost,
 		},
+	}
+	if subscribed, subErr := s.isChannelSubscribed(ctx, userID); subErr == nil {
+		resp.ChannelSubscribed = subscribed
 	}
 
 	positions, _ := s.staking.ListActiveByUserEpoch(ctx, userID, epoch.ID)
@@ -322,6 +328,9 @@ func (s *Service) itemDisplayPrice(ctx context.Context, item domain.InventoryIte
 }
 
 func (s *Service) StakeBySlug(ctx context.Context, userID uuid.UUID, slug string) (*domain.StakingPosition, error) {
+	if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+		return nil, err
+	}
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
