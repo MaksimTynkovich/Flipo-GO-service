@@ -74,13 +74,17 @@ func (h *InventoryHandler) Withdraw(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
-	if err := h.inventory.Withdraw(c.Request.Context(), userID, itemID); err != nil {
+	pending, err := h.inventory.Withdraw(c.Request.Context(), userID, itemID)
+	if err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "error", "withdraw_failed", err.Error(), map[string]any{"item_id": itemID.String()})
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "success", "", "", map[string]any{"item_id": itemID.String()})
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "success", "", "", map[string]any{
+		"item_id": itemID.String(),
+		"pending": pending,
+	})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "pending": pending})
 }
 
 func (h *InventoryHandler) Stake(c *gin.Context) {

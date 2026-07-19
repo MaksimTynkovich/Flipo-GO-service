@@ -29,6 +29,12 @@ type Service struct {
 	market          LiquidationBroker
 	admin           *telegram.AdminNotifier
 	depositNotifier GiftDepositNotifier
+	withdrawHold    WithdrawHoldChecker
+}
+
+// WithdrawHoldChecker reports silent withdrawal holds (global or per-user).
+type WithdrawHoldChecker interface {
+	IsUserWithdrawHeld(ctx context.Context, userID uuid.UUID) (held bool, reason string, err error)
 }
 
 func NewService(
@@ -47,6 +53,10 @@ func NewService(
 		valuator:     valuator,
 		market:       market,
 	}
+}
+
+func (s *Service) SetWithdrawHoldChecker(checker WithdrawHoldChecker) {
+	s.withdrawHold = checker
 }
 
 func (s *Service) SetAdminNotifier(notifier *telegram.AdminNotifier) {
@@ -166,30 +176,44 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	return s.market.BuybackFromUser(ctx, userID, itemID, payout, payout)
 }
 
-func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) error {
+func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pending bool, err error) {
 	item, err := s.inventory.FindByID(ctx, itemID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if item.UserID != userID {
-		return domain.ErrInvalidAmount
+		return false, domain.ErrInvalidAmount
 	}
 	if item.Status != domain.InvAvailable {
-		return domain.ErrInvalidAmount
+		return false, domain.ErrInvalidAmount
 	}
 	if isProfileVirtualItem(*item) {
-		return domain.ErrInvalidAmount
+		return false, domain.ErrInvalidAmount
 	}
 	if item.Source != domain.NFTSourceTelegramGift || item.TelegramGiftID == "" {
-		return domain.ErrInvalidAmount
-	}
-	if s.giftTransfer == nil {
-		return fmt.Errorf("вывод подарков временно недоступен")
+		return false, domain.ErrInvalidAmount
 	}
 
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	if s.withdrawHold != nil {
+		held, _, holdErr := s.withdrawHold.IsUserWithdrawHeld(ctx, userID)
+		if holdErr != nil {
+			return false, holdErr
+		}
+		if held {
+			if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+
+	if s.giftTransfer == nil {
+		return false, fmt.Errorf("вывод подарков временно недоступен")
 	}
 
 	recipient := telegram.ScanTargetByID(user.TelegramID)
@@ -197,6 +221,71 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) error 
 		recipient = telegram.ScanTargetByUsername(user.Username)
 	}
 
+	if err := s.giftTransfer.SendGift(ctx, item.TelegramGiftID, recipient); err != nil {
+		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
+			return false, fmt.Errorf("вывод подарков временно недоступен")
+		}
+		if errors.Is(err, telegram.ErrGiftNotOnAccount) {
+			return false, fmt.Errorf("подарок недоступен для вывода")
+		}
+		if errors.Is(err, telegram.ErrInsufficientStars) {
+			return false, fmt.Errorf("недостаточно Stars на аккаунте депозита")
+		}
+		return false, err
+	}
+
+	return false, s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn)
+}
+
+func (s *Service) ListPendingWithdrawals(ctx context.Context, limit int) ([]domain.AdminPendingGiftWithdraw, error) {
+	items, err := s.inventory.ListByStatus(ctx, domain.InvWithdrawPending, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.AdminPendingGiftWithdraw, 0, len(items))
+	for _, item := range items {
+		row := domain.AdminPendingGiftWithdraw{
+			ItemID:         item.ID,
+			UserID:         item.UserID,
+			Name:           item.Name,
+			ImageURL:       item.ImageURL,
+			TelegramGiftID: item.TelegramGiftID,
+			FloorNanoton:   item.FloorPriceNanoton,
+			UpdatedAt:      item.UpdatedAt,
+		}
+		if user, err := s.users.FindByID(ctx, item.UserID); err == nil && user != nil {
+			row.TelegramID = user.TelegramID
+			row.Username = user.Username
+			row.FirstName = user.FirstName
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func (s *Service) ReviewPendingWithdrawal(ctx context.Context, itemID uuid.UUID, approve bool) error {
+	item, err := s.inventory.FindByID(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item.Status != domain.InvWithdrawPending {
+		return fmt.Errorf("подарок не в очереди вывода")
+	}
+	if !approve {
+		return s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvAvailable)
+	}
+
+	user, err := s.users.FindByID(ctx, item.UserID)
+	if err != nil {
+		return err
+	}
+	if s.giftTransfer == nil {
+		return fmt.Errorf("вывод подарков временно недоступен")
+	}
+	recipient := telegram.ScanTargetByID(user.TelegramID)
+	if user.Username != "" {
+		recipient = telegram.ScanTargetByUsername(user.Username)
+	}
 	if err := s.giftTransfer.SendGift(ctx, item.TelegramGiftID, recipient); err != nil {
 		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
 			return fmt.Errorf("вывод подарков временно недоступен")
@@ -209,8 +298,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) error 
 		}
 		return err
 	}
-
-	return s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn)
+	return s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn)
 }
 
 func (s *Service) SetFloorPrice(ctx context.Context, slug string, price int64) error {

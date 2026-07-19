@@ -71,7 +71,7 @@ export function walletStatusLabel(status: string): string {
     case "awaiting_payment":
       return "Ожидает оплату";
     case "pending_review":
-      return "На проверке";
+      return "В ожидании";
     case "queued":
       return "В очереди";
     case "broadcasting":

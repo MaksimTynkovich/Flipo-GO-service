@@ -233,6 +233,108 @@ func (s *Service) ReviewWithdrawal(ctx context.Context, adminID, transferID uuid
 	return s.audit(ctx, adminID, "withdrawal_rejected", "ton_transfer", transferID.String(), map[string]string{"note": note})
 }
 
+func (s *Service) SetUserBanned(ctx context.Context, adminID, userID uuid.UUID, banned bool, reason string) error {
+	if adminID == userID {
+		return errors.New("нельзя заблокировать свой аккаунт")
+	}
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.IsBanned == banned {
+		return nil
+	}
+	if err := s.users.UpdateBanned(ctx, userID, banned); err != nil {
+		return err
+	}
+	action := "user_unbanned"
+	if banned {
+		action = "user_banned"
+	}
+	return s.audit(ctx, adminID, action, "user", userID.String(), map[string]string{
+		"reason":      strings.TrimSpace(reason),
+		"telegram_id": strconv.FormatInt(user.TelegramID, 10),
+	})
+}
+
+func (s *Service) SetUserWithdrawalsDisabled(ctx context.Context, adminID, userID uuid.UUID, disabled bool, reason string) error {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.WithdrawalsDisabled == disabled {
+		return nil
+	}
+	if err := s.users.UpdateWithdrawalsDisabled(ctx, userID, disabled); err != nil {
+		return err
+	}
+	action := "user_withdrawals_enabled"
+	if disabled {
+		action = "user_withdrawals_disabled"
+	}
+	return s.audit(ctx, adminID, action, "user", userID.String(), map[string]string{
+		"reason":      strings.TrimSpace(reason),
+		"telegram_id": strconv.FormatInt(user.TelegramID, 10),
+	})
+}
+
+type SetUserBalanceResult struct {
+	PreviousBalance int64 `json:"previous_balance"`
+	BettingBalance  int64 `json:"betting_balance"`
+	Delta           int64 `json:"delta"`
+}
+
+const maxAdminSetBalanceNanoton = 1_000_000 * 1_000_000_000 // 1M TON
+
+func (s *Service) SetUserBalance(ctx context.Context, adminID, userID uuid.UUID, balanceNanoton int64, reason string) (*SetUserBalanceResult, error) {
+	if balanceNanoton < 0 {
+		return nil, errors.New("баланс не может быть отрицательным")
+	}
+	if balanceNanoton > maxAdminSetBalanceNanoton {
+		return nil, errors.New("баланс слишком большой")
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return nil, errors.New("укажите причину изменения баланса")
+	}
+
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	previous := user.BettingBalance
+	delta := balanceNanoton - previous
+	if delta == 0 {
+		return &SetUserBalanceResult{
+			PreviousBalance: previous,
+			BettingBalance:  previous,
+			Delta:           0,
+		}, nil
+	}
+
+	after, err := s.users.UpdateBalance(ctx, userID, delta, domain.LedgerAdminAdjust, "admin_balance", adminID)
+	if err != nil {
+		return nil, err
+	}
+	balance.NotifyUser(ctx, s.users, s.notifier, userID, delta, domain.LedgerAdminAdjust)
+
+	if err := s.audit(ctx, adminID, "user_balance_set", "user", userID.String(), map[string]any{
+		"reason":           reason,
+		"telegram_id":      user.TelegramID,
+		"previous_balance": previous,
+		"new_balance":      after,
+		"delta":            delta,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &SetUserBalanceResult{
+		PreviousBalance: previous,
+		BettingBalance:  after,
+		Delta:           delta,
+	}, nil
+}
+
 func (s *Service) ListGameConfigs(ctx context.Context) ([]domain.GameConfig, error) {
 	return s.platform.ListGameConfigs(ctx)
 }
@@ -308,6 +410,23 @@ func (s *Service) UpdateMaintenanceSettings(ctx context.Context, adminID uuid.UU
 	return s.audit(ctx, adminID, "maintenance_settings_updated", "platform_maintenance_settings", "1", map[string]any{
 		"enabled": settings.Enabled,
 	})
+}
+
+func (s *Service) GetWithdrawalSettings(ctx context.Context) (*domain.PlatformWithdrawalSettings, error) {
+	return s.platform.GetWithdrawalSettings(ctx)
+}
+
+func (s *Service) UpdateWithdrawalSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformWithdrawalSettings) error {
+	if err := s.platform.UpdateWithdrawalSettings(ctx, &settings); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "withdrawal_settings_updated", "platform_withdrawal_settings", "1", map[string]any{
+		"enabled": settings.Enabled,
+	})
+}
+
+func (s *Service) RecordAudit(ctx context.Context, adminID uuid.UUID, action, targetType, targetID string, meta any) error {
+	return s.audit(ctx, adminID, action, targetType, targetID, meta)
 }
 
 func (s *Service) GetYieldSettings(ctx context.Context) (*domain.PlatformYieldSettings, error) {

@@ -207,7 +207,9 @@ type AdminSegmentUpdate struct {
 }
 
 func (s *Service) Status(ctx context.Context, userID uuid.UUID, telegramID int64) (*StatusView, error) {
-	segments, err := s.wheel.ListActiveSegments(ctx)
+	// All segments for the reel / prizes UI (including inactive jackpots).
+	// Spin still samples only active segments via ListActiveSegments.
+	segments, err := s.wheel.ListAllSegments(ctx)
 	if err != nil {
 		return nil, err
 	}

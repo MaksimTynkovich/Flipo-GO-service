@@ -9,6 +9,7 @@ import {
 } from "@/components/admin/analytics-labels";
 import {
   AdminPage,
+  AdminButton,
   AdminChip,
   AdminEmpty,
   AdminMetric,
@@ -16,6 +17,7 @@ import {
   AdminRankList,
   AdminToolbar,
 } from "@/components/admin/admin-ui";
+import { AdminTonField } from "@/components/admin/AdminInputs";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
@@ -26,6 +28,9 @@ import {
   getAdminUserTransfers,
   getAdminRiskUsers,
   getAdminUsers,
+  setAdminUserBalance,
+  setAdminUserBanned,
+  setAdminUserWithdrawalsDisabled,
   type AdminUserAnalytics,
   type AdminUserAudience,
   type AdminUserBetItem,
@@ -39,6 +44,7 @@ import {
   type AnalyticsHourPoint,
   type WalletTransfer,
 } from "@/lib/api";
+import { formatUserError } from "@/lib/user-errors";
 import { cn } from "@/lib/utils";
 
 type UsersPayload = [AdminUserAudience, AdminUser[], AdminRiskUser[]];
@@ -117,6 +123,12 @@ export default function UsersSection() {
   const [showMoreStats, setShowMoreStats] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [banReason, setBanReason] = useState("");
+  const [banBusy, setBanBusy] = useState(false);
+  const [withdrawHoldBusy, setWithdrawHoldBusy] = useState(false);
+  const [balanceDraft, setBalanceDraft] = useState(0);
+  const [balanceReason, setBalanceReason] = useState("");
+  const [balanceBusy, setBalanceBusy] = useState(false);
 
   const riskIds = useMemo(() => new Set(riskUsers.map((user) => user.user_id)), [riskUsers]);
   const riskById = useMemo(() => {
@@ -182,6 +194,9 @@ export default function UsersSection() {
     setBets(null);
     setTransfers(null);
     setAnalytics(null);
+    setBanReason("");
+    setBalanceDraft(user.betting_balance ?? 0);
+    setBalanceReason("");
     setDetailLoading(true);
     try {
       await Promise.all([
@@ -236,6 +251,108 @@ export default function UsersSection() {
       showToast({ variant: "success", title: `${label} скопирован` });
     } catch {
       showToast({ variant: "error", title: "Не удалось скопировать" });
+    }
+  }
+
+  async function toggleBan(banned: boolean) {
+    if (!selected || banBusy) return;
+    setBanBusy(true);
+    try {
+      await setAdminUserBanned(selected.id, banned, banReason);
+      const next = { ...selected, is_banned: banned };
+      setSelected(next);
+      setUsers((prev) => prev.map((u) => (u.id === next.id ? { ...u, is_banned: banned } : u)));
+      setBanReason("");
+      showToast({
+        variant: "success",
+        title: banned ? "Игрок заблокирован" : "Игрок разблокирован",
+      });
+      await load().catch(() => {});
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: formatUserError(err, "Не удалось изменить блокировку"),
+      });
+    } finally {
+      setBanBusy(false);
+    }
+  }
+
+  async function toggleWithdrawHold(disabled: boolean) {
+    if (!selected || withdrawHoldBusy) return;
+    setWithdrawHoldBusy(true);
+    try {
+      await setAdminUserWithdrawalsDisabled(selected.id, disabled, banReason);
+      const next = { ...selected, withdrawals_disabled: disabled };
+      setSelected(next);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === next.id ? { ...u, withdrawals_disabled: disabled } : u)),
+      );
+      showToast({
+        variant: "success",
+        title: disabled ? "Выводы игрока отключены (тихо)" : "Выводы игрока включены",
+      });
+      await load().catch(() => {});
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: formatUserError(err, "Не удалось изменить холд выводов"),
+      });
+    } finally {
+      setWithdrawHoldBusy(false);
+    }
+  }
+
+  async function applyBalance() {
+    if (!selected || balanceBusy) return;
+    const nextBalance = Math.max(0, Math.round(balanceDraft));
+    const previous = selected.betting_balance ?? 0;
+    if (nextBalance === previous) {
+      showToast({ variant: "error", title: "Баланс не изменился" });
+      return;
+    }
+    const reason = balanceReason.trim();
+    if (!reason) {
+      showToast({ variant: "error", title: "Укажите причину изменения баланса" });
+      return;
+    }
+    const name = displayName(selected);
+    const delta = nextBalance - previous;
+    const deltaLabel = `${delta >= 0 ? "+" : ""}${formatTON(delta)} TON`;
+    const firstConfirm = window.confirm(
+      `Изменить баланс ${name}?\n\n` +
+        `Было: ${formatTON(previous)} TON\n` +
+        `Станет: ${formatTON(nextBalance)} TON (${deltaLabel})\n` +
+        `Причина: ${reason}`,
+    );
+    if (!firstConfirm) return;
+    const secondConfirm = window.confirm(
+      "Второе подтверждение: баланс будет изменён с записью в ledger и audit. Продолжить?",
+    );
+    if (!secondConfirm) return;
+
+    setBalanceBusy(true);
+    try {
+      const result = await setAdminUserBalance(selected.id, nextBalance, reason);
+      const next = { ...selected, betting_balance: result.betting_balance };
+      setSelected(next);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === next.id ? { ...u, betting_balance: result.betting_balance } : u)),
+      );
+      setBalanceDraft(result.betting_balance);
+      setBalanceReason("");
+      showToast({
+        variant: "success",
+        title: `Баланс обновлён: ${formatTON(result.betting_balance)} TON`,
+      });
+      await load().catch(() => {});
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: formatUserError(err, "Не удалось изменить баланс"),
+      });
+    } finally {
+      setBalanceBusy(false);
     }
   }
 
@@ -409,6 +526,7 @@ export default function UsersSection() {
                         <p className="mt-0.5 text-[11px] text-muted">
                           {formatShortWhen(user.last_login_at)}
                           {user.is_banned ? " · ban" : ""}
+                          {user.withdrawals_disabled ? " · no-withdraw" : ""}
                           {risky ? " · risk" : ""}
                           {user.staking_tier === "boost" ? " · boost" : ""}
                         </p>
@@ -472,12 +590,55 @@ export default function UsersSection() {
                 ) : null}
               </div>
 
+              <div className="mt-2.5 space-y-2 rounded-md border border-border/70 px-2.5 py-2">
+                <p className="text-[11px] text-muted">
+                  Новый баланс (абсолютное значение). Перед сохранением потребуется два подтверждения.
+                </p>
+                <AdminTonField
+                  label="Баланс, TON"
+                  valueNanoton={balanceDraft}
+                  onChangeNanoton={setBalanceDraft}
+                  hint={`Сейчас: ${formatTON(selected.betting_balance)} TON`}
+                />
+                <input
+                  value={balanceReason}
+                  onChange={(e) => setBalanceReason(e.target.value)}
+                  className="input-field"
+                  placeholder="Причина (обязательно)"
+                />
+                <AdminToolbar>
+                  <AdminButton
+                    variant="danger"
+                    disabled={
+                      balanceBusy || Math.round(balanceDraft) === (selected.betting_balance ?? 0)
+                    }
+                    onClick={() => {
+                      applyBalance().catch(() => {});
+                    }}
+                  >
+                    Изменить баланс
+                  </AdminButton>
+                  <AdminButton
+                    variant="secondary"
+                    disabled={balanceBusy}
+                    onClick={() => {
+                      setBalanceDraft(selected.betting_balance ?? 0);
+                      setBalanceReason("");
+                    }}
+                  >
+                    Сбросить
+                  </AdminButton>
+                </AdminToolbar>
+              </div>
+
               {(selected.is_banned ||
+                selected.withdrawals_disabled ||
                 (selected.risk_flags?.length ?? 0) > 0 ||
                 riskById.has(selected.id)) && (
                 <div className="mt-2 rounded-md bg-danger/10 px-2.5 py-2 text-xs text-danger">
                   {[
                     selected.is_banned ? "ban" : null,
+                    selected.withdrawals_disabled ? "withdrawals held" : null,
                     ...(selected.risk_flags || []),
                     riskById.has(selected.id) ? "в мониторинге" : null,
                   ]
@@ -485,6 +646,72 @@ export default function UsersSection() {
                     .join(" · ")}
                 </div>
               )}
+
+              <div className="mt-2.5 space-y-2 rounded-md border border-border/70 px-2.5 py-2">
+                <p className="text-[11px] text-muted">
+                  {selected.is_banned
+                    ? "Игрок заблокирован — вход и действия в приложении недоступны."
+                    : "Блокировка отключает вход и все действия в приложении."}
+                </p>
+                <input
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  className="input-field"
+                  placeholder="Причина (для аудита)"
+                />
+                <AdminToolbar>
+                  {selected.is_banned ? (
+                    <AdminButton
+                      variant="secondary"
+                      disabled={banBusy}
+                      onClick={() => {
+                        toggleBan(false).catch(() => {});
+                      }}
+                    >
+                      Разблокировать
+                    </AdminButton>
+                  ) : (
+                    <AdminButton
+                      variant="danger"
+                      disabled={banBusy}
+                      onClick={() => {
+                        toggleBan(true).catch(() => {});
+                      }}
+                    >
+                      Заблокировать
+                    </AdminButton>
+                  )}
+                </AdminToolbar>
+              </div>
+
+              <div className="mt-2.5 space-y-2 rounded-md border border-border/70 px-2.5 py-2">
+                <p className="text-[11px] text-muted">
+                  Тихий холд: выводы TON и подарков уходят «в ожидание», игрок не видит блокировку.
+                </p>
+                <AdminToolbar>
+                  {selected.withdrawals_disabled ? (
+                    <AdminButton
+                      variant="secondary"
+                      disabled={withdrawHoldBusy}
+                      onClick={() => {
+                        toggleWithdrawHold(false).catch(() => {});
+                      }}
+                    >
+                      Включить выводы
+                    </AdminButton>
+                  ) : (
+                    <AdminButton
+                      variant="danger"
+                      disabled={withdrawHoldBusy}
+                      onClick={() => {
+                        toggleWithdrawHold(true).catch(() => {});
+                      }}
+                    >
+                      Отключить выводы
+                    </AdminButton>
+                  )}
+                </AdminToolbar>
+              </div>
 
               <AdminToolbar className="mt-3">
                 {(

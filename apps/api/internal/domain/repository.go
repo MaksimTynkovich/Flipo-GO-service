@@ -13,6 +13,8 @@ type UserRepository interface {
 	Upsert(ctx context.Context, user *User) error
 	EnsureSocialBotUser(ctx context.Context, id uuid.UUID, telegramID int64, username, firstName, photoURL string) (*User, error)
 	UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error
+	UpdateBanned(ctx context.Context, userID uuid.UUID, banned bool) error
+	UpdateWithdrawalsDisabled(ctx context.Context, userID uuid.UUID, disabled bool) error
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (int64, error)
 	ReleasePromoBalance(ctx context.Context, userID uuid.UUID) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -32,6 +34,7 @@ type UserRepository interface {
 
 type InventoryRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID, status *InventoryStatus) ([]InventoryItem, error)
+	ListByStatus(ctx context.Context, status InventoryStatus, limit int) ([]InventoryItem, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*InventoryItem, error)
 	FindByTelegramGiftID(ctx context.Context, userID uuid.UUID, giftID string) (*InventoryItem, error)
 	FindByGiftSlug(ctx context.Context, slug string) (*InventoryItem, error)
@@ -185,6 +188,8 @@ type PlatformRepository interface {
 	UpdateBotSettings(ctx context.Context, settings *TelegramBotSettings) error
 	GetMaintenanceSettings(ctx context.Context) (*PlatformMaintenanceSettings, error)
 	UpdateMaintenanceSettings(ctx context.Context, settings *PlatformMaintenanceSettings) error
+	GetWithdrawalSettings(ctx context.Context) (*PlatformWithdrawalSettings, error)
+	UpdateWithdrawalSettings(ctx context.Context, settings *PlatformWithdrawalSettings) error
 	GetYieldSettings(ctx context.Context) (*PlatformYieldSettings, error)
 	UpdateYieldSettings(ctx context.Context, settings *PlatformYieldSettings) error
 	GetPromoCode(ctx context.Context, code string) (*PromoCode, error)

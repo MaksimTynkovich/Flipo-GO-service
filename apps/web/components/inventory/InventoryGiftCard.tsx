@@ -18,6 +18,7 @@ type Props = {
 
 const STATUS_LABEL: Record<string, string> = {
   locked: "На маркете",
+  withdraw_pending: "В ожидании",
 };
 
 export function InventoryGiftCard({ item, listingPrice, onClick }: Props) {

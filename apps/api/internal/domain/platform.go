@@ -101,6 +101,16 @@ type PlatformMaintenanceSettings struct {
 
 func (PlatformMaintenanceSettings) TableName() string { return "platform_maintenance_settings" }
 
+// PlatformWithdrawalSettings — silent hold for TON and gift withdrawals (singleton id=1).
+// When Enabled, new withdrawals look like "pending" to the player.
+type PlatformWithdrawalSettings struct {
+	ID        int       `gorm:"primaryKey" json:"id"`
+	Enabled   bool      `gorm:"not null;default:false" json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (PlatformWithdrawalSettings) TableName() string { return "platform_withdrawal_settings" }
+
 // PlatformYieldSettings - singleton row (id=1) for staking, referral and gift price adjustments.
 type PlatformYieldSettings struct {
 	ID                              int       `gorm:"primaryKey" json:"id"`
@@ -181,6 +191,20 @@ type AdminUserRow struct {
 	ReferrerUsername           string `json:"referrer_username,omitempty"`
 	ReferrerFirstName          string `json:"referrer_first_name,omitempty"`
 	ReferrerCode               string `json:"referrer_code,omitempty"`
+}
+
+// AdminPendingGiftWithdraw — gift held in withdraw_pending for silent hold review.
+type AdminPendingGiftWithdraw struct {
+	ItemID         uuid.UUID `json:"item_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	TelegramID     int64     `json:"telegram_id"`
+	Username       string    `json:"username"`
+	FirstName      string    `json:"first_name"`
+	Name           string    `json:"name"`
+	ImageURL       string    `json:"image_url"`
+	TelegramGiftID string    `json:"telegram_gift_id"`
+	FloorNanoton   int64     `json:"floor_price_nanoton"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // AdminUserBetItem — readable bet row for the admin user card.

@@ -248,12 +248,14 @@ export async function liquidateItem(id: string) {
 
 export async function withdrawGiftItem(id: string) {
   try {
-    const result = await api<{ ok: boolean }>(`/api/v1/inventory/${id}/withdraw`, { method: "POST" });
+    const result = await api<{ ok: boolean; pending?: boolean }>(`/api/v1/inventory/${id}/withdraw`, {
+      method: "POST",
+    });
     trackEvent({
       event_name: "inventory_withdrawn",
       event_category: "inventory",
       status: "success",
-      properties: { item_id: id },
+      properties: { item_id: id, pending: Boolean(result.pending) },
     });
     return result;
   } catch (error) {
@@ -1116,6 +1118,25 @@ export type AdminMaintenanceSettings = {
   updated_at?: string;
 };
 
+export type AdminWithdrawalSettings = {
+  id?: number;
+  enabled: boolean;
+  updated_at?: string;
+};
+
+export type AdminPendingGiftWithdraw = {
+  item_id: string;
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  name: string;
+  image_url?: string;
+  telegram_gift_id: string;
+  floor_price_nanoton: number;
+  updated_at: string;
+};
+
 export type AdminUser = {
   id: string;
   telegram_id: number;
@@ -1127,6 +1148,7 @@ export type AdminUser = {
   staking_tier?: string;
   ton_wallet?: string;
   is_banned: boolean;
+  withdrawals_disabled?: boolean;
   risk_flags: string[];
   last_login_at?: string;
   created_at?: string;
@@ -1551,6 +1573,39 @@ export async function getAdminUsers(query = "", sort: AdminUserSort = "last_logi
   return api<AdminUser[]>(`/api/v1/admin/users${qs ? `?${qs}` : ""}`);
 }
 
+export async function setAdminUserBanned(userId: string, banned: boolean, reason = "") {
+  return api<{ ok: boolean; banned: boolean }>(`/api/v1/admin/users/${userId}/ban`, {
+    method: "PATCH",
+    body: JSON.stringify({ banned, reason }),
+  });
+}
+
+export async function setAdminUserWithdrawalsDisabled(
+  userId: string,
+  disabled: boolean,
+  reason = "",
+) {
+  return api<{ ok: boolean; withdrawals_disabled: boolean }>(
+    `/api/v1/admin/users/${userId}/withdrawals`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ disabled, reason }),
+    },
+  );
+}
+
+export async function setAdminUserBalance(userId: string, balanceNanoton: number, reason: string) {
+  return api<{
+    ok: boolean;
+    previous_balance: number;
+    betting_balance: number;
+    delta: number;
+  }>(`/api/v1/admin/users/${userId}/balance`, {
+    method: "PATCH",
+    body: JSON.stringify({ balance_nanoton: balanceNanoton, reason }),
+  });
+}
+
 export async function getAdminUserAudience() {
   return api<AdminUserAudience>("/api/v1/admin/users/stats");
 }
@@ -1675,6 +1730,28 @@ export async function updateAdminMaintenanceSettings(settings: AdminMaintenanceS
   return api<{ ok: boolean }>("/api/v1/admin/maintenance", {
     method: "PATCH",
     body: JSON.stringify(settings),
+  });
+}
+
+export async function getAdminWithdrawalSettings() {
+  return api<AdminWithdrawalSettings>("/api/v1/admin/withdrawals/settings");
+}
+
+export async function updateAdminWithdrawalSettings(settings: Pick<AdminWithdrawalSettings, "enabled">) {
+  return api<{ ok: boolean }>("/api/v1/admin/withdrawals/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
+}
+
+export async function getAdminPendingGiftWithdrawals() {
+  return api<AdminPendingGiftWithdraw[]>("/api/v1/admin/withdrawals/gifts");
+}
+
+export async function reviewAdminGiftWithdrawal(id: string, approve: boolean, note = "") {
+  return api<{ ok: boolean }>(`/api/v1/admin/withdrawals/gifts/${id}/review`, {
+    method: "POST",
+    body: JSON.stringify({ approve, note }),
   });
 }
 

@@ -108,6 +108,20 @@ func (r *UserRepo) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet st
 	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("ton_wallet", wallet).Error
 }
 
+func (r *UserRepo) UpdateBanned(ctx context.Context, userID uuid.UUID, banned bool) error {
+	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"is_banned":  banned,
+		"updated_at": time.Now().UTC(),
+	}).Error
+}
+
+func (r *UserRepo) UpdateWithdrawalsDisabled(ctx context.Context, userID uuid.UUID, disabled bool) error {
+	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"withdrawals_disabled": disabled,
+		"updated_at":           time.Now().UTC(),
+	}).Error
+}
+
 func (r *UserRepo) GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var user domain.User
 	err := r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -294,6 +308,19 @@ func (r *InventoryRepo) ListByUser(ctx context.Context, userID uuid.UUID, status
 		q = q.Where("status = ?", *status)
 	}
 	err := q.Order("deposited_at DESC").Find(&items).Error
+	return items, err
+}
+
+func (r *InventoryRepo) ListByStatus(ctx context.Context, status domain.InventoryStatus, limit int) ([]domain.InventoryItem, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var items []domain.InventoryItem
+	err := r.db.WithContext(ctx).
+		Where("status = ?", status).
+		Order("updated_at ASC").
+		Limit(limit).
+		Find(&items).Error
 	return items, err
 }
 

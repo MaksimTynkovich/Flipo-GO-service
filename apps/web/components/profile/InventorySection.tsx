@@ -99,11 +99,17 @@ export function InventorySection() {
   async function handleWithdraw() {
     if (!selected) return;
     setWithdrawing(true);
+    setListError(null);
     try {
-      await withdrawGiftItem(selected.id);
+      const result = await withdrawGiftItem(selected.id);
       markModalCompleted("inventory_gift_detail");
-      closeSheet();
-      load();
+      if (result.pending) {
+        setSelected({ ...selected, status: "withdraw_pending" });
+        await load();
+      } else {
+        closeSheet();
+        load();
+      }
     } catch (e) {
       setListError(formatUserError(e, "Ошибка"));
     } finally {

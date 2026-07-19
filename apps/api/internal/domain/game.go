@@ -142,6 +142,7 @@ const (
 	LedgerRefund     LedgerType = "refund"
 	LedgerMarketBuy  LedgerType = "market_buy"
 	LedgerMarketSell LedgerType = "market_sell"
+	LedgerAdminAdjust LedgerType = "admin_adjust"
 )
 
 type BalanceLedger struct {

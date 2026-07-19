@@ -12,6 +12,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/admin"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
+	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
@@ -29,6 +30,7 @@ type AdminHandler struct {
 	treasury            *treasury.Service
 	telegram            *telegramadmin.Service
 	wheel               *wheel.Service
+	inventory           *inventory.Service
 	botSync             *market.BotSyncService
 	hotAddr             string
 	onSocialSimUpdate   func(domain.SocialSimSettings)
@@ -61,6 +63,10 @@ func (h *AdminHandler) SetBotGiftSync(sync *market.BotSyncService) {
 
 func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
 	h.wheel = wheelSvc
+}
+
+func (h *AdminHandler) SetInventoryService(invSvc *inventory.Service) {
+	h.inventory = invSvc
 }
 
 func (h *AdminHandler) WheelStats(c *gin.Context) {
@@ -377,6 +383,78 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, users)
+}
+
+func (h *AdminHandler) SetUserBanned(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
+		return
+	}
+	var req struct {
+		Banned bool   `json:"banned"`
+		Reason string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.SetUserBanned(c.Request.Context(), adminID, userID, req.Banned, req.Reason); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "banned": req.Banned})
+}
+
+func (h *AdminHandler) SetUserWithdrawalsDisabled(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
+		return
+	}
+	var req struct {
+		Disabled bool   `json:"disabled"`
+		Reason   string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.SetUserWithdrawalsDisabled(c.Request.Context(), adminID, userID, req.Disabled, req.Reason); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "withdrawals_disabled": req.Disabled})
+}
+
+func (h *AdminHandler) SetUserBalance(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
+		return
+	}
+	var req struct {
+		BalanceNanoton int64  `json:"balance_nanoton"`
+		Reason         string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	result, err := h.admin.SetUserBalance(c.Request.Context(), adminID, userID, req.BalanceNanoton, req.Reason)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ok":                true,
+		"previous_balance":  result.PreviousBalance,
+		"betting_balance":   result.BettingBalance,
+		"delta":             result.Delta,
+	})
 }
 
 func (h *AdminHandler) UserAudience(c *gin.Context) {
@@ -777,6 +855,78 @@ func (h *AdminHandler) UpdateMaintenanceSettings(c *gin.Context) {
 	if h.onMaintenanceUpdate != nil {
 		h.onMaintenanceUpdate(settings)
 	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) GetWithdrawalSettings(c *gin.Context) {
+	settings, err := h.admin.GetWithdrawalSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateWithdrawalSettings(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var settings domain.PlatformWithdrawalSettings
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.admin.UpdateWithdrawalSettings(c.Request.Context(), adminID, settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) ListPendingGiftWithdrawals(c *gin.Context) {
+	if h.inventory == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "инвентарь недоступен"})
+		return
+	}
+	items, err := h.inventory.ListPendingWithdrawals(c.Request.Context(), 50)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.AdminPendingGiftWithdraw{}
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) ReviewGiftWithdrawal(c *gin.Context) {
+	if h.inventory == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "инвентарь недоступен"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	itemID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID предмета"})
+		return
+	}
+	var req struct {
+		Approve bool   `json:"approve"`
+		Note    string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.inventory.ReviewPendingWithdrawal(c.Request.Context(), itemID, req.Approve); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	action := "gift_withdrawal_rejected"
+	if req.Approve {
+		action = "gift_withdrawal_approved"
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), adminID, action, "inventory_item", itemID.String(), map[string]string{
+		"note": strings.TrimSpace(req.Note),
+	})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

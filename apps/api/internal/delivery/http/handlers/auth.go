@@ -62,6 +62,13 @@ func (h *AuthHandler) TelegramAuth(c *gin.Context) {
 			ErrorMessage:  err.Error(),
 			StartParam:    req.ReferralCode,
 		})
+		if errors.Is(err, domain.ErrUserBanned) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Аккаунт заблокирован.",
+				"code":  "user_banned",
+			})
+			return
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
@@ -88,6 +95,13 @@ func (h *AuthHandler) DebugAuth(c *gin.Context) {
 			ErrorCode:     "debug_auth_failed",
 			ErrorMessage:  err.Error(),
 		})
+		if errors.Is(err, domain.ErrUserBanned) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Аккаунт заблокирован.",
+				"code":  "user_banned",
+			})
+			return
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}

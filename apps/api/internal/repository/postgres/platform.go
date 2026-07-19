@@ -153,6 +153,25 @@ func (r *PlatformRepo) UpdateMaintenanceSettings(ctx context.Context, settings *
 	return r.db.WithContext(ctx).Save(settings).Error
 }
 
+func (r *PlatformRepo) GetWithdrawalSettings(ctx context.Context) (*domain.PlatformWithdrawalSettings, error) {
+	var settings domain.PlatformWithdrawalSettings
+	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		defaults := domain.PlatformWithdrawalSettings{ID: 1, Enabled: false, UpdatedAt: time.Now().UTC()}
+		if createErr := r.db.WithContext(ctx).Create(&defaults).Error; createErr != nil {
+			return nil, createErr
+		}
+		return &defaults, nil
+	}
+	return &settings, err
+}
+
+func (r *PlatformRepo) UpdateWithdrawalSettings(ctx context.Context, settings *domain.PlatformWithdrawalSettings) error {
+	settings.ID = 1
+	settings.UpdatedAt = time.Now().UTC()
+	return r.db.WithContext(ctx).Save(settings).Error
+}
+
 func (r *PlatformRepo) GetYieldSettings(ctx context.Context) (*domain.PlatformYieldSettings, error) {
 	var settings domain.PlatformYieldSettings
 	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
@@ -228,6 +247,17 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 			ID:        1,
 			Enabled:   false,
 			Message:   "",
+			UpdatedAt: time.Now().UTC(),
+		}).Error; err != nil {
+			return err
+		}
+	}
+
+	var withdrawalHold domain.PlatformWithdrawalSettings
+	if err := r.db.WithContext(ctx).First(&withdrawalHold, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := r.db.WithContext(ctx).Create(&domain.PlatformWithdrawalSettings{
+			ID:        1,
+			Enabled:   false,
 			UpdatedAt: time.Now().UTC(),
 		}).Error; err != nil {
 			return err

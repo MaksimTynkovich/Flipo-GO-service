@@ -24,6 +24,8 @@ const (
 	InvLocked     InventoryStatus = "locked"
 	InvInBet      InventoryStatus = "in_bet"
 	InvWithdrawn  InventoryStatus = "withdrawn"
+	// InvWithdrawPending — soft-hold: gift withdraw queued without telling the user it's blocked.
+	InvWithdrawPending InventoryStatus = "withdraw_pending"
 	// InvDissolved — виртуальная запись профильного стейка; не продаётся и не показывается в инвентаре.
 	InvDissolved InventoryStatus = "dissolved"
 )

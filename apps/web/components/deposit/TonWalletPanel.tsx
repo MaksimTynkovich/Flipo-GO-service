@@ -336,7 +336,7 @@ export function TonWalletPanel() {
       if (result.transfer.status === "pending_review") {
         setMessage({
           type: "info",
-          text: `Заявка на вывод создана и отправлена на проверку. На кошелёк придёт ${formatTON(receiveNanoton)} после одобрения.`,
+          text: `Вывод создан и находится в ожидании. На кошелёк придёт ${formatTON(receiveNanoton)}.`,
         });
       } else if (result.transfer.status === "failed") {
         setMessage({

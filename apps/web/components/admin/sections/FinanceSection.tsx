@@ -8,41 +8,61 @@ import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/ad
 import {
   formatTON,
   getAdminLedger,
+  getAdminPendingGiftWithdrawals,
   getAdminTransfers,
   getAdminTreasuryStatus,
+  reviewAdminGiftWithdrawal,
   reviewAdminTransfer,
   type AdminLedgerEntry,
+  type AdminPendingGiftWithdraw,
   type AdminTreasuryStatus,
   type WalletTransfer,
 } from "@/lib/api";
+
+type FinancePayload = [
+  WalletTransfer[],
+  AdminLedgerEntry[],
+  AdminTreasuryStatus,
+  AdminPendingGiftWithdraw[],
+];
 
 export default function FinanceSection() {
   const { showToast } = useToast();
   const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
   const [ledger, setLedger] = useState<AdminLedgerEntry[]>([]);
   const [treasury, setTreasury] = useState<AdminTreasuryStatus | null>(null);
+  const [giftQueue, setGiftQueue] = useState<AdminPendingGiftWithdraw[]>([]);
   const [note, setNote] = useState("approved by admin");
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
-    const [transferData, ledgerData, treasuryData] = await loadCached("admin:finance", () =>
-      Promise.all([getAdminTransfers(), getAdminLedger(), getAdminTreasuryStatus()]),
+    const [transferData, ledgerData, treasuryData, giftData] = await loadCached(
+      "admin:finance:v2",
+      () =>
+        Promise.all([
+          getAdminTransfers(),
+          getAdminLedger(),
+          getAdminTreasuryStatus(),
+          getAdminPendingGiftWithdrawals(),
+        ]),
     );
     setTransfers(transferData);
     setLedger(ledgerData);
     setTreasury(treasuryData);
-    primeCache("admin:finance", [transferData, ledgerData, treasuryData]);
+    setGiftQueue(giftData);
+    primeCache("admin:finance:v2", [transferData, ledgerData, treasuryData, giftData]);
     setLoading(false);
   }
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cached = readCached<[WalletTransfer[], AdminLedgerEntry[], AdminTreasuryStatus]>("admin:finance");
+      const cached = readCached<FinancePayload>("admin:finance:v2");
       if (cached) {
         setTransfers(cached[0]);
         setLedger(cached[1]);
         setTreasury(cached[2]);
+        setGiftQueue(cached[3]);
       }
       load().catch(() => {});
     });
@@ -75,7 +95,7 @@ export default function FinanceSection() {
       ) : null}
 
       <section className="panel space-y-3">
-        <p className="text-base font-semibold">Очередь ручной проверки ({reviewQueue.length})</p>
+        <p className="text-base font-semibold">Очередь ручной проверки TON ({reviewQueue.length})</p>
         <input value={note} onChange={(e) => setNote(e.target.value)} className="input-field" placeholder="Комментарий" />
         {reviewQueue.length === 0 ? (
           <p className="text-sm text-muted">Нет выводов на review.</p>
@@ -117,6 +137,53 @@ export default function FinanceSection() {
         )}
       </section>
 
+      <section className="panel space-y-3">
+        <p className="text-base font-semibold">Очередь вывода подарков ({giftQueue.length})</p>
+        <p className="text-xs text-muted">
+          Подарки на silent hold. Approve — отправить в Telegram, Reject — вернуть в инвентарь.
+        </p>
+        {giftQueue.length === 0 ? (
+          <p className="text-sm text-muted">Нет подарков в ожидании.</p>
+        ) : (
+          giftQueue.map((item) => (
+            <div key={item.item_id} className="rounded-xl border border-border p-3 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold">{item.name}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {item.first_name || item.username || `TG ${item.telegram_id}`}
+                    {item.username ? ` · @${item.username}` : ""}
+                    {` · ${formatTON(item.floor_price_nanoton)} TON`}
+                  </p>
+                  <p className="mt-1 break-all text-[11px] text-muted">{item.telegram_gift_id}</p>
+                </div>
+                <AdminToolbar className="shrink-0">
+                  <AdminButton
+                    onClick={async () => {
+                      await reviewAdminGiftWithdrawal(item.item_id, true, note);
+                      showToast({ variant: "success", title: "Подарок отправлен" });
+                      await load();
+                    }}
+                  >
+                    Approve
+                  </AdminButton>
+                  <AdminButton
+                    variant="secondary"
+                    onClick={async () => {
+                      await reviewAdminGiftWithdrawal(item.item_id, false, note);
+                      showToast({ variant: "success", title: "Вывод подарка отклонён" });
+                      await load();
+                    }}
+                  >
+                    Reject
+                  </AdminButton>
+                </AdminToolbar>
+              </div>
+            </div>
+          ))
+        )}
+      </section>
+
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div className="panel space-y-2">
           <p className="text-base font-semibold">Последние транзакции</p>
@@ -132,9 +199,14 @@ export default function FinanceSection() {
         <div className="panel space-y-2">
           <p className="text-base font-semibold">Ledger</p>
           {ledger.slice(0, 12).map((entry) => (
-            <div key={entry.id} className="flex justify-between rounded-xl bg-surface-raised/50 px-3 py-2 text-xs">
-              <span>{entry.type}</span>
-              <span className="font-semibold">{formatTON(entry.amount_nanoton)} TON</span>
+            <div key={entry.id} className="rounded-xl bg-surface-raised/50 px-3 py-2 text-xs">
+              <div className="flex justify-between">
+                <span>{entry.type}</span>
+                <span className="font-semibold">
+                  {entry.amount_nanoton >= 0 ? "+" : ""}
+                  {formatTON(entry.amount_nanoton)}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -146,10 +218,10 @@ export default function FinanceSection() {
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="panel space-y-1 p-3">
-      <div className="flex items-center gap-2">
-        <p className="text-xs text-muted">{label}</p>
+      <p className="inline-flex items-center gap-1.5 text-xs text-muted">
+        {label}
         {hint ? <AdminInfoHint label={label} hint={hint} /> : null}
-      </div>
+      </p>
       <p className="break-all text-sm font-semibold">{value}</p>
     </div>
   );

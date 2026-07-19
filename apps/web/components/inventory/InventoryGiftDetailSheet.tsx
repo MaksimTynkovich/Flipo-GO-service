@@ -170,6 +170,10 @@ export function InventoryGiftDetailSheet({
             </div>
           )}
 
+          {item.status === "withdraw_pending" && (
+            <p className="mb-3 text-center text-sm text-muted">Вывод в ожидании</p>
+          )}
+
           {item.status === "available" && (
             <div className="mb-1 flex items-start justify-between gap-3">
               <Button

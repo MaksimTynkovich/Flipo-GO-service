@@ -188,10 +188,22 @@ func (s *Service) EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netN
 		score += 30
 	}
 
-	needsReview := netNanoton >= settings.AutoReviewWithdrawNanoton || score >= 50
+	held, holdReason, err := s.IsWithdrawHeld(ctx, user)
+	if err != nil {
+		return WithdrawalRisk{}, err
+	}
+	if held {
+		flags = append(flags, holdReason)
+		score += 100
+	}
+
+	needsReview := netNanoton >= settings.AutoReviewWithdrawNanoton || score >= 50 || held
 	var reason *string
 	if needsReview {
 		msg := fmt.Sprintf("auto review: score=%d net=%d", score, netNanoton)
+		if held {
+			msg = holdReason
+		}
 		reason = &msg
 	}
 
@@ -201,6 +213,33 @@ func (s *Service) EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netN
 		ReviewReason: reason,
 		NeedsReview:  needsReview,
 	}, nil
+}
+
+// IsWithdrawHeld reports whether TON/gift withdrawals should be soft-held for this user.
+func (s *Service) IsWithdrawHeld(ctx context.Context, user *domain.User) (bool, string, error) {
+	if user == nil {
+		return false, "", nil
+	}
+	if user.WithdrawalsDisabled {
+		return true, "withdrawals_disabled", nil
+	}
+	settings, err := s.platform.GetWithdrawalSettings(ctx)
+	if err != nil {
+		return false, "", err
+	}
+	if settings != nil && settings.Enabled {
+		return true, "global_withdrawals_disabled", nil
+	}
+	return false, "", nil
+}
+
+// IsUserWithdrawHeld loads the user and checks the silent withdrawal hold.
+func (s *Service) IsUserWithdrawHeld(ctx context.Context, userID uuid.UUID) (bool, string, error) {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return false, "", err
+	}
+	return s.IsWithdrawHeld(ctx, user)
 }
 
 func dedupe(items []string) []string {

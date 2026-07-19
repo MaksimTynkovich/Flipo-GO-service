@@ -119,6 +119,9 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 		return "", nil, findErr
 	}
 	if existing != nil {
+		if existing.IsBanned {
+			return "", nil, domain.ErrUserBanned
+		}
 		user.ID = existing.ID
 		user.BettingBalance = existing.BettingBalance
 		user.StakingTier = existing.StakingTier
@@ -215,6 +218,9 @@ func (s *Service) AuthenticateDebug(ctx context.Context) (string, *domain.User, 
 
 	existing, err := s.users.FindByTelegramID(ctx, s.debugTelegramID)
 	if err == nil && existing != nil {
+		if existing.IsBanned {
+			return "", nil, domain.ErrUserBanned
+		}
 		user.ID = existing.ID
 		user.BettingBalance = existing.BettingBalance
 		user.StakingTier = existing.StakingTier

@@ -167,6 +167,15 @@ func ServeUserWS(hub *Hub, authSvc *auth.Service, w http.ResponseWriter, r *http
 		http.Error(w, "Недействительный токен", http.StatusUnauthorized)
 		return
 	}
+	user, err := authSvc.GetUser(r.Context(), claims.UserID)
+	if err != nil || user == nil {
+		http.Error(w, "Недействительный токен", http.StatusUnauthorized)
+		return
+	}
+	if user.IsBanned && !authSvc.IsAdmin(user.TelegramID) {
+		http.Error(w, "Аккаунт заблокирован", http.StatusForbidden)
+		return
+	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {

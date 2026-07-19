@@ -206,6 +206,7 @@ func main() {
 	marketSvc := market.NewService(marketRepo, invRepo, userRepo, cfg.PlatformFeeBps)
 	marketSvc.SetValuator(giftValuator)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftTransfer, giftValuator, marketSvc)
+	invSvc.SetWithdrawHoldChecker(riskSvc)
 
 	hub := websocket.NewHub()
 	balanceSvc.SetNotifier(hub)
@@ -335,6 +336,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
 	adminHandler.SetBotGiftSync(botSyncSvc)
 	adminHandler.SetWheelService(wheelSvc)
+	adminHandler.SetInventoryService(invSvc)
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
 		socialSim.ApplySettings(settings)
