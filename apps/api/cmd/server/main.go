@@ -30,6 +30,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
+	casesuc "github.com/flipo/flipo/apps/api/internal/usecase/cases"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
@@ -207,6 +208,10 @@ func main() {
 	marketSvc.SetValuator(giftValuator)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftTransfer, giftValuator, marketSvc)
 	invSvc.SetWithdrawHoldChecker(riskSvc)
+	caseRepo := postgres.NewCaseRepo(db)
+	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
+	caseSvc.SetValuator(giftValuator)
+	caseSvc.SetBotResolver(marketRepo)
 
 	hub := websocket.NewHub()
 	balanceSvc.SetNotifier(hub)
@@ -337,6 +342,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
 	adminHandler.SetBotGiftSync(botSyncSvc)
 	adminHandler.SetWheelService(wheelSvc)
+	adminHandler.SetCasesService(caseSvc)
 	adminHandler.SetInventoryService(invSvc)
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
@@ -367,6 +373,7 @@ func main() {
 		ReferralHandler:    handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:       handlers.NewPromoHandler(promoSvc, analyticsSvc),
 		WheelHandler:       handlers.NewWheelHandler(wheelSvc, riskSvc),
+		CasesHandler:       handlers.NewCasesHandler(caseSvc),
 		WalletHandler:      handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		TelegramHandler:    handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
 		AdminHandler:       adminHandler,

@@ -75,6 +75,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.UserWheelState{},
 		&domain.WheelSpin{},
 		&domain.WheelSpinOverride{},
+		&domain.Case{},
+		&domain.CaseLootEntry{},
+		&domain.CaseOpen{},
+		&domain.UserCaseState{},
 	); err != nil {
 		return err
 	}
@@ -102,7 +106,36 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateDailyWheel(db); err != nil {
 		return err
 	}
-	return migrateInventoryGiftHistory(db)
+	if err := migrateInventoryGiftHistory(db); err != nil {
+		return err
+	}
+	if err := migrateCasesColumnFix(db); err != nil {
+		return err
+	}
+	return migrateCases(db)
+}
+
+func migrateCasesColumnFix(db *gorm.DB) error {
+	// GORM initially named TargetRTPBPS as target_rtpbps; normalize to target_rtp_bps.
+	statements := []string{
+		`DO $$ BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'cases' AND column_name = 'target_rtpbps'
+			) AND NOT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_name = 'cases' AND column_name = 'target_rtp_bps'
+			) THEN
+				ALTER TABLE cases RENAME COLUMN target_rtpbps TO target_rtp_bps;
+			END IF;
+		END $$`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("migrate cases column fix: %w", err)
+		}
+	}
+	return nil
 }
 
 func migrateInventoryGiftHistory(db *gorm.DB) error {

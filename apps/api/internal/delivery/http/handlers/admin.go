@@ -11,6 +11,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/admin"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	casesuc "github.com/flipo/flipo/apps/api/internal/usecase/cases"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
@@ -30,6 +31,7 @@ type AdminHandler struct {
 	treasury            *treasury.Service
 	telegram            *telegramadmin.Service
 	wheel               *wheel.Service
+	cases               *casesuc.Service
 	inventory           *inventory.Service
 	botSync             *market.BotSyncService
 	hotAddr             string
@@ -63,6 +65,10 @@ func (h *AdminHandler) SetBotGiftSync(sync *market.BotSyncService) {
 
 func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
 	h.wheel = wheelSvc
+}
+
+func (h *AdminHandler) SetCasesService(casesSvc *casesuc.Service) {
+	h.cases = casesSvc
 }
 
 func (h *AdminHandler) SetInventoryService(invSvc *inventory.Service) {
@@ -931,6 +937,101 @@ func (h *AdminHandler) ReviewGiftWithdrawal(c *gin.Context) {
 	_ = h.admin.RecordAudit(c.Request.Context(), adminID, action, "inventory_item", itemID.String(), map[string]string{
 		"note": strings.TrimSpace(req.Note),
 	})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) FulfillGiftWithdrawal(c *gin.Context) {
+	if h.inventory == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "инвентарь недоступен"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	itemID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID предмета"})
+		return
+	}
+	var req struct {
+		TelegramGiftID string `json:"telegram_gift_id" binding:"required"`
+		Note           string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.inventory.FulfillPendingWithdrawal(c.Request.Context(), itemID, req.TelegramGiftID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), adminID, "gift_withdrawal_fulfilled", "inventory_item", itemID.String(), map[string]string{
+		"telegram_gift_id": strings.TrimSpace(req.TelegramGiftID),
+		"note":             strings.TrimSpace(req.Note),
+	})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) ListCases(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+	items, err := h.cases.AdminList(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) UpsertCase(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var req domain.Case
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Slug = strings.ToLower(strings.TrimSpace(req.Slug))
+	if req.Slug == "" || req.Title == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "нужны slug и title"})
+		return
+	}
+	if req.Kind == "" {
+		req.Kind = domain.CaseKindCatalog
+	}
+	if req.TargetRTPBPS <= 0 {
+		req.TargetRTPBPS = 9000
+	}
+	if err := h.cases.AdminUpsertCase(c.Request.Context(), &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "id": req.ID})
+}
+
+func (h *AdminHandler) ReplaceCaseLoot(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	var req struct {
+		Entries []domain.CaseLootEntry `json:"entries"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.cases.AdminReplaceLoot(c.Request.Context(), caseID, req.Entries); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

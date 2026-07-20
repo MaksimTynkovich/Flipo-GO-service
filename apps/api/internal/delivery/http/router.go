@@ -25,6 +25,7 @@ type Deps struct {
 	TelegramHandler     *handlers.TelegramHandler
 	PromoHandler        *handlers.PromoHandler
 	WheelHandler        *handlers.WheelHandler
+	CasesHandler        *handlers.CasesHandler
 	AdminHandler        *handlers.AdminHandler
 	AnalyticsHandler    *handlers.AnalyticsHandler
 	PresenceHandler     *handlers.PresenceHandler
@@ -122,6 +123,11 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/wheel/status", deps.WheelHandler.Status)
 			authed.POST("/wheel/spin", deps.WheelHandler.Spin)
 
+			authed.GET("/cases", deps.CasesHandler.Catalog)
+			authed.GET("/cases/opens", deps.CasesHandler.Opens)
+			authed.GET("/cases/:id", deps.CasesHandler.Get)
+			authed.POST("/cases/:id/open", deps.CasesHandler.Open)
+
 			authed.POST("/wallet/deposit/intent", deps.WalletHandler.CreateDepositIntent)
 			authed.POST("/wallet/deposit/:id/confirm", deps.WalletHandler.ConfirmDeposit)
 			authed.POST("/wallet/withdraw", deps.WalletHandler.RequestWithdrawal)
@@ -203,6 +209,10 @@ func NewRouter(deps Deps) *gin.Engine {
 			admin.PATCH("/withdrawals/settings", deps.AdminHandler.UpdateWithdrawalSettings)
 			admin.GET("/withdrawals/gifts", deps.AdminHandler.ListPendingGiftWithdrawals)
 			admin.POST("/withdrawals/gifts/:id/review", deps.AdminHandler.ReviewGiftWithdrawal)
+			admin.POST("/withdrawals/gifts/:id/fulfill", deps.AdminHandler.FulfillGiftWithdrawal)
+			admin.GET("/cases", deps.AdminHandler.ListCases)
+			admin.PUT("/cases", deps.AdminHandler.UpsertCase)
+			admin.PUT("/cases/:id/loot", deps.AdminHandler.ReplaceCaseLoot)
 			admin.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
 			admin.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
 			admin.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)

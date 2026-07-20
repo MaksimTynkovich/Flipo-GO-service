@@ -50,8 +50,27 @@ type InventoryRepository interface {
 	ReleaseFromBet(ctx context.Context, itemID uuid.UUID) error
 	TransferFromBet(ctx context.Context, itemID, newUserID uuid.UUID) error
 	TransferOwnership(ctx context.Context, itemID, newUserID uuid.UUID, fromStatus InventoryStatus) error
+	// TakeHouseGiftForCollection transfers one bot-owned gift of the collection to the user (available).
+	TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug string) (*InventoryItem, error)
+	BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment string) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
 	SetFloorPrice(ctx context.Context, slug string, price int64) error
+}
+
+type CaseRepository interface {
+	ListActive(ctx context.Context) ([]Case, error)
+	ListAll(ctx context.Context) ([]Case, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*Case, error)
+	FindBySlug(ctx context.Context, slug string) (*Case, error)
+	CreateCase(ctx context.Context, c *Case) error
+	UpdateCase(ctx context.Context, c *Case) error
+	ListLootByCase(ctx context.Context, caseID uuid.UUID) ([]CaseLootEntry, error)
+	ReplaceLoot(ctx context.Context, caseID uuid.UUID, entries []CaseLootEntry) error
+	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserCaseState, error)
+	SaveState(ctx context.Context, state *UserCaseState) error
+	CreateOpen(ctx context.Context, open *CaseOpen) error
+	FindOpenByIdempotency(ctx context.Context, key string) (*CaseOpen, error)
+	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
 }
 
 type MarketRepository interface {

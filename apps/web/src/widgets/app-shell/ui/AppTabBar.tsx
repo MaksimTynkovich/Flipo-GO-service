@@ -15,7 +15,7 @@ export function AppTabBar() {
       aria-label="Основная навигация"
       className="app-tabbar absolute bottom-0 left-0 right-0 z-50 bg-background pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] hairline-top"
     >
-      <div className="app-container grid h-[3.25rem] grid-cols-4 items-stretch">
+      <div className="app-container grid h-[3.25rem] grid-cols-5 items-stretch">
         {MAIN_TABS.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname);
 

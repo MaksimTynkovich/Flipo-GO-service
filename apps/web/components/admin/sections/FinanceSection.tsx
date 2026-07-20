@@ -7,6 +7,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
   formatTON,
+  fulfillAdminGiftWithdrawal,
   getAdminLedger,
   getAdminPendingGiftWithdrawals,
   getAdminTransfers,
@@ -140,7 +141,8 @@ export default function FinanceSection() {
       <section className="panel space-y-3">
         <p className="text-base font-semibold">Очередь вывода подарков ({giftQueue.length})</p>
         <p className="text-xs text-muted">
-          Подарки на silent hold. Approve — отправить в Telegram, Reject — вернуть в инвентарь.
+          Silent hold и закупка для case-claim. Needs purchase — укажите slug подарка на боте и Fulfill.
+          Approve — отправить (если gift уже привязан). Reject — вернуть в инвентарь.
         </p>
         {giftQueue.length === 0 ? (
           <p className="text-sm text-muted">Нет подарков в ожидании.</p>
@@ -150,23 +152,57 @@ export default function FinanceSection() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold">{item.name}</p>
+                  {item.needs_purchase ? (
+                    <p className="mt-1 text-xs font-medium text-amber-400">Нужна закупка</p>
+                  ) : null}
                   <p className="mt-1 text-xs text-muted">
                     {item.first_name || item.username || `TG ${item.telegram_id}`}
                     {item.username ? ` · @${item.username}` : ""}
+                    {item.collection_slug ? ` · ${item.collection_slug}` : ""}
                     {` · ${formatTON(item.floor_price_nanoton)} TON`}
                   </p>
-                  <p className="mt-1 break-all text-[11px] text-muted">{item.telegram_gift_id}</p>
+                  <p className="mt-1 break-all text-[11px] text-muted">
+                    {item.telegram_gift_id || "slug не привязан"}
+                  </p>
+                  {item.needs_purchase ? (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+                        placeholder="telegram gift slug (plushpepe-123)"
+                        id={`fulfill-${item.item_id}`}
+                      />
+                      <AdminButton
+                        onClick={async () => {
+                          const input = document.getElementById(
+                            `fulfill-${item.item_id}`,
+                          ) as HTMLInputElement | null;
+                          const slug = input?.value?.trim() || "";
+                          if (!slug) {
+                            showToast({ variant: "error", title: "Укажите slug подарка" });
+                            return;
+                          }
+                          await fulfillAdminGiftWithdrawal(item.item_id, slug, note);
+                          showToast({ variant: "success", title: "Подарок выдан" });
+                          await load();
+                        }}
+                      >
+                        Fulfill
+                      </AdminButton>
+                    </div>
+                  ) : null}
                 </div>
                 <AdminToolbar className="shrink-0">
-                  <AdminButton
-                    onClick={async () => {
-                      await reviewAdminGiftWithdrawal(item.item_id, true, note);
-                      showToast({ variant: "success", title: "Подарок отправлен" });
-                      await load();
-                    }}
-                  >
-                    Approve
-                  </AdminButton>
+                  {!item.needs_purchase ? (
+                    <AdminButton
+                      onClick={async () => {
+                        await reviewAdminGiftWithdrawal(item.item_id, true, note);
+                        showToast({ variant: "success", title: "Подарок отправлен" });
+                        await load();
+                      }}
+                    >
+                      Approve
+                    </AdminButton>
+                  ) : null}
                   <AdminButton
                     variant="secondary"
                     onClick={async () => {

@@ -1,8 +1,9 @@
 import type { LucideIcon } from "lucide-react";
-import { CircleDot, Gamepad2, Gift, Rocket, ShoppingBag, User, Users } from "lucide-react";
+import { Briefcase, CircleDot, Gamepad2, Gift, Rocket, ShoppingBag, User, Users } from "lucide-react";
 
 export const APP_ROUTES = {
-  home: "/games",
+  home: "/cases",
+  cases: "/cases",
   games: "/games",
   crash: "/games/crash",
   roulette: "/games/roulette",
@@ -29,6 +30,7 @@ export type ScreenContext = {
 };
 
 const TAB_ROOTS = [
+  APP_ROUTES.cases,
   APP_ROUTES.games,
   APP_ROUTES.market,
   APP_ROUTES.inventory,
@@ -75,6 +77,7 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
 
 export type AppScreenItem = {
   id:
+    | "cases"
     | "games"
     | "market"
     | "inventory"
@@ -88,6 +91,13 @@ export type AppScreenItem = {
 };
 
 export const APP_SCREENS: AppScreenItem[] = [
+  {
+    id: "cases",
+    href: APP_ROUTES.cases,
+    label: "Кейсы",
+    level: "tab",
+    description: "Каталог кейсов с подарками Telegram.",
+  },
   {
     id: "games",
     href: APP_ROUTES.games,
@@ -133,7 +143,7 @@ export const APP_SCREENS: AppScreenItem[] = [
 ];
 
 export type MainTabItem = {
-  id: "games" | "market" | "inventory" | "profile";
+  id: "cases" | "games" | "market" | "inventory" | "profile";
   href: string;
   label: string;
   icon: LucideIcon;
@@ -141,6 +151,14 @@ export type MainTabItem = {
 };
 
 export const MAIN_TABS: MainTabItem[] = [
+  {
+    id: "cases",
+    href: APP_ROUTES.cases,
+    label: "Кейсы",
+    icon: Briefcase,
+    match: (pathname) =>
+      pathname === APP_ROUTES.cases || pathname.startsWith(`${APP_ROUTES.cases}/`),
+  },
   {
     id: "games",
     href: APP_ROUTES.games,
@@ -235,6 +253,15 @@ export function getScreenContext(pathname: string): ScreenContext {
   if (isTabRoot(pathname)) {
     const tab = MAIN_TABS.find((item) => item.href === pathname);
     return { level: "tab", title: tab?.label ?? "" };
+  }
+
+  if (pathname.startsWith(`${APP_ROUTES.cases}/`)) {
+    return {
+      level: "stack",
+      title: "Кейс",
+      backHref: APP_ROUTES.cases,
+      backLabel: "Кейсы",
+    };
   }
 
   const exact = STACK_SCREENS[pathname];

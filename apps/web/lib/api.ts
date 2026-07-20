@@ -248,9 +248,10 @@ export async function liquidateItem(id: string) {
 
 export async function withdrawGiftItem(id: string) {
   try {
-    const result = await api<{ ok: boolean; pending?: boolean }>(`/api/v1/inventory/${id}/withdraw`, {
-      method: "POST",
-    });
+    const result = await api<{ ok: boolean; pending?: boolean; message?: string }>(
+      `/api/v1/inventory/${id}/withdraw`,
+      { method: "POST" },
+    );
     trackEvent({
       event_name: "inventory_withdrawn",
       event_category: "inventory",
@@ -1135,7 +1136,9 @@ export type AdminPendingGiftWithdraw = {
   name: string;
   image_url?: string;
   telegram_gift_id: string;
+  collection_slug?: string;
   floor_price_nanoton: number;
+  needs_purchase?: boolean;
   updated_at: string;
 };
 
@@ -1763,6 +1766,13 @@ export async function reviewAdminGiftWithdrawal(id: string, approve: boolean, no
   });
 }
 
+export async function fulfillAdminGiftWithdrawal(id: string, telegramGiftId: string, note = "") {
+  return api<{ ok: boolean }>(`/api/v1/admin/withdrawals/gifts/${id}/fulfill`, {
+    method: "POST",
+    body: JSON.stringify({ telegram_gift_id: telegramGiftId, note }),
+  });
+}
+
 export async function getWalletTransfers() {
   return api<WalletTransfer[]>("/api/v1/wallet/transfers");
 }
@@ -1928,6 +1938,123 @@ export async function getWheelStatus() {
 
 export async function spinWheel() {
   return api<WheelSpinResult>("/api/v1/wheel/spin", { method: "POST" });
+}
+
+export type CaseLootPreview = {
+  id: string;
+  collection_slug: string;
+  display_name: string;
+  image_url: string;
+  rarity_label?: string;
+  sort_order: number;
+};
+
+export type CaseView = {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle?: string;
+  image_url?: string;
+  accent_color?: string;
+  price_nanoton: number;
+  kind: "catalog" | "featured" | "daily" | string;
+  sort_order: number;
+  loot?: CaseLootPreview[];
+  daily_available?: boolean;
+};
+
+export type CasesCatalog = {
+  featured: CaseView[];
+  daily?: CaseView | null;
+  catalog: CaseView[];
+};
+
+export type CaseOpenResult = {
+  open_id: string;
+  case_id: string;
+  source: string;
+  item: InventoryItem;
+  loot_entry: CaseLootPreview;
+  backed: boolean;
+};
+
+export async function getCasesCatalog() {
+  return api<CasesCatalog>("/api/v1/cases");
+}
+
+export async function getCase(idOrSlug: string) {
+  return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}`);
+}
+
+export async function openCase(idOrSlug: string, idempotencyKey?: string) {
+  const key = idempotencyKey || (typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `case-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  return api<CaseOpenResult>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/open`, {
+    method: "POST",
+    body: JSON.stringify({ idempotency_key: key }),
+  });
+}
+
+export async function getCaseOpens() {
+  return api<CaseOpenResult[]>("/api/v1/cases/opens");
+}
+
+export type AdminCaseLootEntry = {
+  id?: string;
+  collection_slug: string;
+  display_name: string;
+  image_url?: string;
+  rarity_label?: string;
+  sort_order: number;
+  weight: number;
+};
+
+export type AdminCase = {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle?: string;
+  image_url?: string;
+  accent_color?: string;
+  price_nanoton: number;
+  kind: string;
+  sort_order: number;
+  active: boolean;
+  target_rtp_bps: number;
+  loot: AdminCaseLootEntry[];
+};
+
+export type AdminCaseUpsert = {
+  id?: string;
+  slug: string;
+  title: string;
+  subtitle?: string;
+  image_url?: string;
+  accent_color?: string;
+  price_nanoton: number;
+  kind: string;
+  sort_order: number;
+  active: boolean;
+  target_rtp_bps: number;
+};
+
+export async function getAdminCases() {
+  return api<AdminCase[]>("/api/v1/admin/cases");
+}
+
+export async function upsertAdminCase(body: AdminCaseUpsert) {
+  return api<{ ok: boolean; id: string }>("/api/v1/admin/cases", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function replaceAdminCaseLoot(caseId: string, entries: AdminCaseLootEntry[]) {
+  return api<{ ok: boolean }>(`/api/v1/admin/cases/${encodeURIComponent(caseId)}/loot`, {
+    method: "PUT",
+    body: JSON.stringify({ entries }),
+  });
 }
 
 export async function getAdminWheelStats() {

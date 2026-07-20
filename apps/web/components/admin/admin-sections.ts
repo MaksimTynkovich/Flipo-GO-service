@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import AnalyticsSection from "./sections/AnalyticsSection";
+import CasesSection from "./sections/CasesSection";
 import DashboardSection from "./sections/DashboardSection";
 import FinanceSection from "./sections/FinanceSection";
 import GamesSection from "./sections/GamesSection";
@@ -17,6 +18,7 @@ export type AdminSectionId =
   | "staking-dropoff"
   | "users"
   | "games"
+  | "cases"
   | "market"
   | "finance"
   | "marketing"
@@ -36,6 +38,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "staking-dropoff", href: "/admin/staking-dropoff", label: "Отток стейкинга" },
   { id: "users", href: "/admin/users", label: "Пользователи" },
   { id: "games", href: "/admin/games", label: "Игры" },
+  { id: "cases", href: "/admin/cases", label: "Кейсы" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы" },
   { id: "market", href: "/admin/market", label: "Маркет" },
   { id: "finance", href: "/admin/finance", label: "Финансы" },
@@ -50,6 +53,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   "staking-dropoff": StakingDropoffSection,
   users: UsersSection,
   games: GamesSection,
+  cases: CasesSection,
   market: MarketAdminSection,
   finance: FinanceSection,
   marketing: MarketingSection,
@@ -64,6 +68,7 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/staking-dropoff": "staking-dropoff",
   "/admin/users": "users",
   "/admin/games": "games",
+  "/admin/cases": "cases",
   "/admin/outcome": "outcome",
   "/admin/market": "market",
   "/admin/finance": "finance",

@@ -257,6 +257,23 @@ func (n *AdminNotifier) NotifyGiftInventory(ctx context.Context, actor AdminActo
 	n.notifyAll(ctx, text)
 }
 
+func (n *AdminNotifier) NotifyGiftWithdrawPending(ctx context.Context, actor AdminActor, giftName, collectionSlug string) {
+	if !n.Enabled() {
+		return
+	}
+	name := strings.TrimSpace(giftName)
+	if name == "" {
+		name = "подарок"
+	}
+	coll := strings.TrimSpace(collectionSlug)
+	text := fmt.Sprintf("🛒 Нужна закупка подарка для вывода\n%s\nПодарок: %s", FormatActor(actor), name)
+	if coll != "" {
+		text += fmt.Sprintf("\nКоллекция: %s", coll)
+	}
+	text += "\nАдминка → выводы подарков"
+	n.notifyAll(ctx, text)
+}
+
 func (n *AdminNotifier) notify(_ context.Context, actor AdminActor, text string) {
 	if !n.Enabled() || actor.TelegramID == 0 || n.IsAdmin(actor.TelegramID) {
 		return

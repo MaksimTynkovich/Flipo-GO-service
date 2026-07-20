@@ -194,7 +194,7 @@ type AdminUserRow struct {
 	ReferrerCode               string `json:"referrer_code,omitempty"`
 }
 
-// AdminPendingGiftWithdraw — gift held in withdraw_pending for silent hold review.
+// AdminPendingGiftWithdraw — gift held in withdraw_pending for silent hold review or case claim purchase.
 type AdminPendingGiftWithdraw struct {
 	ItemID         uuid.UUID `json:"item_id"`
 	UserID         uuid.UUID `json:"user_id"`
@@ -204,7 +204,9 @@ type AdminPendingGiftWithdraw struct {
 	Name           string    `json:"name"`
 	ImageURL       string    `json:"image_url"`
 	TelegramGiftID string    `json:"telegram_gift_id"`
+	CollectionSlug string    `json:"collection_slug"`
 	FloorNanoton   int64     `json:"floor_price_nanoton"`
+	NeedsPurchase  bool      `json:"needs_purchase"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 

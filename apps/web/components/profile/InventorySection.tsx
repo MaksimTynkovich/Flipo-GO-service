@@ -105,6 +105,9 @@ export function InventorySection() {
       markModalCompleted("inventory_gift_detail");
       if (result.pending) {
         setSelected({ ...selected, status: "withdraw_pending" });
+        if (result.message) {
+          setListError(null);
+        }
         await load();
       } else {
         closeSheet();
