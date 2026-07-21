@@ -1,20 +1,46 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { candyTileBackgroundForLoot } from "@/components/cases/case-ui";
 import type { CaseLootPreview } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 
-const ITEM_W = 60;
+/** How many prize tiles must fit fully in the roulette viewport. */
+const VISIBLE_COUNT = 5;
 const ITEM_GAP = 6;
-const STRIDE = ITEM_W + ITEM_GAP;
+/** Horizontal inset around the clipped 5-tile window. */
+const EDGE_PAD = 4;
 /** Full cycles before the landing zone — more distance reads as a longer spin. */
 const LOOPS = 10;
 const IDLE_LOOPS = 3;
 /** Items kept after the winner so the right side of the viewport never goes empty. */
 const PAD_AFTER = 8;
 const SPIN_MS = 8000;
+const FALLBACK_ITEM_W = 56;
+
+type RevealLayout = {
+  itemW: number;
+  /** Exact pixel width of the visible 5-tile window (no fractional leftover). */
+  stripW: number;
+};
+
+function layoutForViewport(viewportWidth: number): RevealLayout {
+  if (viewportWidth <= 0) {
+    const itemW = FALLBACK_ITEM_W;
+    return {
+      itemW,
+      stripW: itemW * VISIBLE_COUNT + ITEM_GAP * (VISIBLE_COUNT - 1),
+    };
+  }
+
+  const gaps = (VISIBLE_COUNT - 1) * ITEM_GAP;
+  const available = Math.max(0, viewportWidth - EDGE_PAD * 2);
+  const itemW = Math.max(36, Math.floor((available - gaps) / VISIBLE_COUNT));
+  const stripW = itemW * VISIBLE_COUNT + gaps;
+
+  return { itemW, stripW };
+}
 
 type CaseOpenRevealProps = {
   loot: CaseLootPreview[];
@@ -95,27 +121,48 @@ export function CaseOpenReveal({
   onCompleteRef.current = onComplete;
   const [spinning, setSpinning] = useState(false);
   const [landed, setLanded] = useState(false);
+  const [layout, setLayout] = useState<RevealLayout>(() => layoutForViewport(0));
   const completedRef = useRef(false);
 
   const isSpin = mode === "spin" && Boolean(winnerId);
+  const { itemW, stripW } = layout;
+  const stride = itemW + ITEM_GAP;
 
   const { items, targetIndex } = useMemo(() => {
     if (isSpin && winnerId) {
       return buildSpinStrip(loot, winnerId);
     }
-    return { items: buildIdleStrip(loot), targetIndex: Math.min(1, Math.max(0, loot.length - 1)) };
+    // Center the strip on an early tile so idle shows 2 + focus + 2.
+    return {
+      items: buildIdleStrip(loot),
+      targetIndex: Math.min(2, Math.max(0, loot.length - 1)),
+    };
   }, [loot, winnerId, isSpin]);
 
   const glow = accent || "#3390ec";
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const measure = () => {
+      setLayout(layoutForViewport(viewport.clientWidth));
+    };
+
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(viewport);
+    return () => ro?.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
     const track = trackRef.current;
-    if (!viewport || !track || items.length === 0) return;
+    if (!track || items.length === 0 || stripW <= 0) return;
 
     completedRef.current = false;
-    const center = viewport.clientWidth / 2;
-    const targetX = targetIndex * STRIDE + ITEM_W / 2;
+    // Clip window is exactly stripW; center the target tile inside it.
+    const center = stripW / 2;
+    const targetX = targetIndex * stride + itemW / 2;
     const finalOffset = Math.max(0, targetX - center);
 
     const paint = (x: number) => {
@@ -181,7 +228,7 @@ export function CaseOpenReveal({
       cancelled = true;
       window.cancelAnimationFrame(raf);
     };
-  }, [items, targetIndex, isSpin]);
+  }, [items, targetIndex, isSpin, itemW, stripW, stride]);
 
   if (items.length === 0) {
     return (
@@ -201,50 +248,59 @@ export function CaseOpenReveal({
         landed && "case-reveal--landed",
         !isSpin && "case-reveal--idle",
       )}
-      style={{ ["--case-glow" as string]: glow }}
+      style={
+        {
+          ["--case-glow"]: glow,
+          ["--case-item"]: `${itemW}px`,
+          ["--case-gap"]: `${ITEM_GAP}px`,
+          ["--case-strip"]: `${stripW}px`,
+          ["--case-edge-pad"]: `${EDGE_PAD}px`,
+        } as CSSProperties
+      }
       role="status"
       aria-live={isSpin ? "polite" : "off"}
       aria-label={isSpin ? "Открытие кейса" : "Призы в рулетке"}
     >
       <div className="case-reveal__frame">
-        <div className="case-reveal__fade case-reveal__fade--left" aria-hidden />
-        <div className="case-reveal__fade case-reveal__fade--right" aria-hidden />
         <div className="case-reveal__pointer" aria-hidden />
 
         <div ref={viewportRef} className="case-reveal__viewport">
-          <div
-            ref={trackRef}
-            className={cn("case-reveal__track", spinning && "case-reveal__track--spinning")}
-          >
-            {items.map((item, idx) => {
-              const isWinner = landed && idx === targetIndex;
-              const nearCenter = !isSpin && Math.abs(idx - targetIndex) <= 1;
-              const isFocus = nearCenter && idx === targetIndex;
-              return (
-                <div
-                  key={`${item.id}-${idx}`}
-                  className={cn(
-                    "case-reveal__item",
-                    isWinner && "case-reveal__item--winner",
-                    isFocus && "case-reveal__item--focus",
-                    nearCenter && !isFocus && "case-reveal__item--near",
-                  )}
-                  style={{
-                    width: ITEM_W,
-                    height: ITEM_W,
-                    background: candyTileBackgroundForLoot(item),
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={giftImageUrl(item.collection_slug, item.image_url)}
-                    alt=""
-                    className="case-reveal__img"
-                    draggable={false}
-                  />
-                </div>
-              );
-            })}
+          <div className="case-reveal__clip" style={{ width: stripW }}>
+            <div
+              ref={trackRef}
+              className={cn("case-reveal__track", spinning && "case-reveal__track--spinning")}
+            >
+              {items.map((item, idx) => {
+                const isWinner = landed && idx === targetIndex;
+                const nearCenter = !isSpin && Math.abs(idx - targetIndex) <= 1;
+                const isFocus = nearCenter && idx === targetIndex;
+                return (
+                  <div
+                    key={`${item.id}-${idx}`}
+                    className={cn(
+                      "case-reveal__item",
+                      isWinner && "case-reveal__item--winner",
+                      isFocus && "case-reveal__item--focus",
+                      nearCenter && !isFocus && "case-reveal__item--near",
+                    )}
+                    style={{
+                      width: itemW,
+                      height: itemW,
+                      flex: `0 0 ${itemW}px`,
+                      background: candyTileBackgroundForLoot(item),
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={giftImageUrl(item.collection_slug, item.image_url)}
+                      alt=""
+                      className="case-reveal__img"
+                      draggable={false}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
