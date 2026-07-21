@@ -27,7 +27,6 @@ type Case struct {
 	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Slug            string    `gorm:"size:64;not null;uniqueIndex" json:"slug"`
 	Title           string    `gorm:"size:128;not null" json:"title"`
-	Subtitle        string    `gorm:"size:256" json:"subtitle"`
 	ImageURL        string    `gorm:"size:512" json:"image_url"`
 	AccentColor     string    `gorm:"size:32" json:"accent_color"`
 	PriceNanoton    int64     `gorm:"not null" json:"price_nanoton"`

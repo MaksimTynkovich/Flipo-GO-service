@@ -1950,7 +1950,6 @@ export type CaseView = {
   id: string;
   slug: string;
   title: string;
-  subtitle?: string;
   image_url?: string;
   accent_color?: string;
   price_nanoton: number;
@@ -2014,7 +2013,6 @@ export type AdminCase = {
   id: string;
   slug: string;
   title: string;
-  subtitle?: string;
   image_url?: string;
   accent_color?: string;
   price_nanoton: number;
@@ -2030,7 +2028,6 @@ export type AdminCaseUpsert = {
   id?: string;
   slug: string;
   title: string;
-  subtitle?: string;
   image_url?: string;
   accent_color?: string;
   price_nanoton: number;

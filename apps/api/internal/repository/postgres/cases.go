@@ -65,7 +65,6 @@ func (r *CaseRepo) UpdateCase(ctx context.Context, c *domain.Case) error {
 	c.UpdatedAt = time.Now().UTC()
 	res := r.db.WithContext(ctx).Model(&domain.Case{}).Where("id = ?", c.ID).Updates(map[string]any{
 		"title":           c.Title,
-		"subtitle":        c.Subtitle,
 		"image_url":       c.ImageURL,
 		"accent_color":    c.AccentColor,
 		"price_nanoton":   c.PriceNanoton,

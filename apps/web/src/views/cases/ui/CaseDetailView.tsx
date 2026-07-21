@@ -272,28 +272,6 @@ export function CaseDetailView() {
 
               <div className="case-detail-hero__head">
                 <h1 className="case-detail-hero__title">{heading}</h1>
-                <p className="case-detail-hero__subtitle">
-                  {caseItem.subtitle || "Telegram подарки"}
-                </p>
-                {isFree ? (
-                  <span
-                    className={cn(
-                      "case-detail-hero__price case-detail-hero__price--free",
-                      dailyBlocked && "case-detail-hero__price--muted",
-                    )}
-                  >
-                    {dailyBlocked
-                      ? "Завтра"
-                      : caseItem.require_channel
-                        ? "Бесплатно · подписка"
-                        : "Бесплатно"}
-                  </span>
-                ) : (
-                  <span className="case-detail-hero__price">
-                    <TonIcon variant="brand" className="h-3.5 w-3.5" aria-hidden />
-                    {formatCasePrice(caseItem.price_nanoton)} TON
-                  </span>
-                )}
               </div>
             </div>
 

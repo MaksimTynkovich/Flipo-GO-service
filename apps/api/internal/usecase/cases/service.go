@@ -81,7 +81,6 @@ type CaseView struct {
 	ID                uuid.UUID     `json:"id"`
 	Slug              string        `json:"slug"`
 	Title             string        `json:"title"`
-	Subtitle          string        `json:"subtitle"`
 	ImageURL          string        `json:"image_url"`
 	AccentColor       string        `json:"accent_color"`
 	PriceNanoton      int64         `json:"price_nanoton"`
@@ -110,7 +109,6 @@ type AdminCaseView struct {
 	ID             uuid.UUID        `json:"id"`
 	Slug           string           `json:"slug"`
 	Title          string           `json:"title"`
-	Subtitle       string           `json:"subtitle"`
 	ImageURL       string           `json:"image_url"`
 	AccentColor    string           `json:"accent_color"`
 	PriceNanoton   int64            `json:"price_nanoton"`
@@ -354,7 +352,6 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 			ID:             row.ID,
 			Slug:           row.Slug,
 			Title:          row.Title,
-			Subtitle:       row.Subtitle,
 			ImageURL:       row.ImageURL,
 			AccentColor:    row.AccentColor,
 			PriceNanoton:   row.PriceNanoton,
@@ -539,7 +536,6 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 		ID:             c.ID,
 		Slug:           c.Slug,
 		Title:          c.Title,
-		Subtitle:       c.Subtitle,
 		ImageURL:       c.ImageURL,
 		AccentColor:    c.AccentColor,
 		PriceNanoton:   c.PriceNanoton,

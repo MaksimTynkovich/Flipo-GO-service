@@ -47,7 +47,6 @@ function emptyCaseDraft(): CaseDraft {
   return {
     slug: "",
     title: "",
-    subtitle: "",
     image_url: "",
     accent_color: "#3b82f6",
     price_nanoton: 500_000_000,
@@ -64,7 +63,6 @@ function caseToDraft(c: AdminCase): CaseDraft {
     id: c.id,
     slug: c.slug,
     title: c.title,
-    subtitle: c.subtitle || "",
     image_url: c.image_url || "",
     accent_color: c.accent_color || "#3b82f6",
     price_nanoton: c.price_nanoton,
@@ -206,7 +204,6 @@ export default function CasesSection() {
         ...(draft.id ? { id: draft.id } : {}),
         slug,
         title,
-        subtitle: draft.subtitle?.trim() || "",
         image_url: draft.image_url?.trim() || "",
         accent_color: draft.accent_color?.trim() || "",
         price_nanoton: draft.price_nanoton,
@@ -352,13 +349,6 @@ export default function CasesSection() {
                   className="input-field"
                   value={draft.title}
                   onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-                />
-              </AdminField>
-              <AdminField label="Подзаголовок">
-                <input
-                  className="input-field"
-                  value={draft.subtitle || ""}
-                  onChange={(e) => setDraft((d) => ({ ...d, subtitle: e.target.value }))}
                 />
               </AdminField>
               <AdminField label="Тип">

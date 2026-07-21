@@ -58,9 +58,6 @@ function FeaturedCard({ caseItem }: { caseItem: CaseView }) {
         <h3 className="text-[17px] font-bold leading-none tracking-tight text-white">
           {caseItem.title}
         </h3>
-        {caseItem.subtitle ? (
-          <p className="mt-1.5 text-[11px] leading-snug text-white/55">{caseItem.subtitle}</p>
-        ) : null}
       </div>
 
       <div className="relative z-[1] mt-auto">

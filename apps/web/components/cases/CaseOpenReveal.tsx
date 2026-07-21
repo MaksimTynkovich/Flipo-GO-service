@@ -9,8 +9,6 @@ import { cn } from "@/lib/utils";
 /** How many prize tiles must fit fully in the roulette viewport. */
 const VISIBLE_COUNT = 5;
 const ITEM_GAP = 6;
-/** Horizontal inset around the clipped 5-tile window. */
-const EDGE_PAD = 4;
 /** Full cycles before the landing zone — more distance reads as a longer spin. */
 const LOOPS = 10;
 const IDLE_LOOPS = 3;
@@ -21,7 +19,7 @@ const FALLBACK_ITEM_W = 56;
 
 type RevealLayout = {
   itemW: number;
-  /** Exact pixel width of the visible 5-tile window (no fractional leftover). */
+  /** Full viewport width — 5 tiles fill edge to edge under the fades. */
   stripW: number;
 };
 
@@ -35,11 +33,10 @@ function layoutForViewport(viewportWidth: number): RevealLayout {
   }
 
   const gaps = (VISIBLE_COUNT - 1) * ITEM_GAP;
-  const available = Math.max(0, viewportWidth - EDGE_PAD * 2);
-  const itemW = Math.max(36, Math.floor((available - gaps) / VISIBLE_COUNT));
-  const stripW = itemW * VISIBLE_COUNT + gaps;
+  // Exact division so 5 tiles + gaps span the full viewport — no side gutters.
+  const itemW = Math.max(36, (viewportWidth - gaps) / VISIBLE_COUNT);
 
-  return { itemW, stripW };
+  return { itemW, stripW: viewportWidth };
 }
 
 type CaseOpenRevealProps = {
@@ -254,7 +251,6 @@ export function CaseOpenReveal({
           ["--case-item"]: `${itemW}px`,
           ["--case-gap"]: `${ITEM_GAP}px`,
           ["--case-strip"]: `${stripW}px`,
-          ["--case-edge-pad"]: `${EDGE_PAD}px`,
         } as CSSProperties
       }
       role="status"
@@ -262,10 +258,12 @@ export function CaseOpenReveal({
       aria-label={isSpin ? "Открытие кейса" : "Призы в рулетке"}
     >
       <div className="case-reveal__frame">
+        <div className="case-reveal__fade case-reveal__fade--left" aria-hidden />
+        <div className="case-reveal__fade case-reveal__fade--right" aria-hidden />
         <div className="case-reveal__pointer" aria-hidden />
 
         <div ref={viewportRef} className="case-reveal__viewport">
-          <div className="case-reveal__clip" style={{ width: stripW }}>
+          <div className="case-reveal__clip">
             <div
               ref={trackRef}
               className={cn("case-reveal__track", spinning && "case-reveal__track--spinning")}
