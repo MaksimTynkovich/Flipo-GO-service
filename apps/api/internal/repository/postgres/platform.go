@@ -100,23 +100,19 @@ func (r *PlatformRepo) UpsertPromoCode(ctx context.Context, promo *domain.PromoC
 }
 
 func (r *PlatformRepo) DeletePromoCode(ctx context.Context, code string) error {
-	var count int64
-	if err := r.db.WithContext(ctx).Model(&domain.PromoRedemption{}).
-		Where("promo_code = ?", code).
-		Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return domain.ErrPromoInUse
-	}
-	res := r.db.WithContext(ctx).Delete(&domain.PromoCode{}, "code = ?", code)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return domain.ErrNotFound
-	}
-	return nil
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&domain.PromoRedemption{}, "promo_code = ?", code).Error; err != nil {
+			return err
+		}
+		res := tx.Delete(&domain.PromoCode{}, "code = ?", code)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domain.ErrNotFound
+		}
+		return nil
+	})
 }
 
 func (r *PlatformRepo) GetBotSettings(ctx context.Context) (*domain.TelegramBotSettings, error) {
