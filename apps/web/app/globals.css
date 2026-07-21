@@ -6893,16 +6893,16 @@ body::-webkit-scrollbar,
 .case-detail-hero__art {
   pointer-events: none;
   position: absolute;
-  top: -0.15rem;
-  right: -0.15rem;
-  width: 58%;
+  top: 0;
+  right: 0;
+  width: 46%;
   height: 100%;
   overflow: visible;
 }
 
 .case-detail-hero__art-glow {
   position: absolute;
-  inset: 8% 4% 12% 10%;
+  inset: 10% 6% 14% 8%;
   background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1), transparent 68%);
 }
 
@@ -6911,9 +6911,9 @@ body::-webkit-scrollbar,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 4.15rem;
-  height: 4.15rem;
-  border-radius: 1rem;
+  width: 4.35rem;
+  height: 4.35rem;
+  border-radius: 1.05rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow:
     0 10px 24px rgba(0, 0, 0, 0.45),
@@ -6928,29 +6928,32 @@ body::-webkit-scrollbar,
   -webkit-user-drag: none;
 }
 
+/* Front card — slight clockwise tilt, anchors the fan */
 .case-detail-hero__gift--0 {
-  left: 6%;
-  top: 38%;
+  left: 10%;
+  top: 24%;
   z-index: 3;
-  transform: rotate(-16deg);
-}
-
-.case-detail-hero__gift--1 {
-  left: 28%;
-  top: 6%;
-  z-index: 2;
-  width: 3.85rem;
-  height: 3.85rem;
   transform: rotate(8deg);
 }
 
+/* Middle — peeks from under the right edge */
+.case-detail-hero__gift--1 {
+  left: 34%;
+  top: 32%;
+  z-index: 2;
+  width: 4.15rem;
+  height: 4.15rem;
+  transform: rotate(-9deg);
+}
+
+/* Back — peeks above/behind top-right */
 .case-detail-hero__gift--2 {
-  right: 2%;
-  top: 22%;
+  left: 40%;
+  top: 2%;
   z-index: 1;
-  width: 3.7rem;
-  height: 3.7rem;
-  transform: rotate(18deg);
+  width: 4rem;
+  height: 4rem;
+  transform: rotate(15deg);
 }
 
 .case-detail-hero__cover {
