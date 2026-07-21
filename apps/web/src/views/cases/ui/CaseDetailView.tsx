@@ -9,7 +9,6 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { CaseOpenReveal } from "@/components/cases/CaseOpenReveal";
 import { CaseWinModal } from "@/components/cases/CaseWinModal";
 import {
-  CaseDetailHeroArt,
   FeaturedPattern,
   candyTileBackgroundForLoot,
   caseHeroStyle,
@@ -229,14 +228,8 @@ export function CaseDetailView() {
     <PageShell>
       {loading && !caseItem ? (
         <div className="space-y-4">
+          <div className="h-5 w-40 animate-pulse rounded-md bg-white/10" aria-hidden />
           <div className="case-detail-hero case-detail-hero--skeleton" aria-hidden>
-            <div className="case-detail-hero__top">
-              <div className="case-detail-hero__head">
-                <div className="h-5 w-40 animate-pulse rounded-md bg-white/10" />
-                <div className="mt-2 h-3 w-28 animate-pulse rounded-md bg-white/10 opacity-80" />
-                <div className="mt-3 h-7 w-20 animate-pulse rounded-full bg-white/10" />
-              </div>
-            </div>
             <div className="case-reveal__viewport case-reveal__viewport--skeleton animate-pulse" />
           </div>
           <div className="h-[3.25rem] animate-pulse rounded-[1.15rem] bg-surface" />
@@ -259,6 +252,8 @@ export function CaseDetailView() {
 
       {caseItem && theme && (phase === "idle" || phase === "revealing") ? (
         <div className="case-detail space-y-4">
+          <h1 className="case-detail__title">{heading}</h1>
+
           <section className="case-detail-hero" style={caseHeroStyle(theme)}>
             <FeaturedPattern
               variant={theme.patternVariant}
@@ -266,14 +261,6 @@ export function CaseDetailView() {
               slug={theme.catalogSlug}
               color={theme.patternColor}
             />
-
-            <div className="case-detail-hero__top">
-              <CaseDetailHeroArt loot={loot} imageUrl={caseItem.image_url} />
-
-              <div className="case-detail-hero__head">
-                <h1 className="case-detail-hero__title">{heading}</h1>
-              </div>
-            </div>
 
             <CaseOpenReveal
               embedded

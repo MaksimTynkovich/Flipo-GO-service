@@ -2,7 +2,6 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import type { CaseLootPreview, CaseView } from "@/lib/api";
-import { giftImageUrl } from "@/lib/gifts";
 
 /** Loot rarity grades — same set as admin CasesSection. */
 export const LOOT_RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
@@ -54,8 +53,8 @@ export type CaseHeroTheme = FeaturedTheme & {
 
 export const FEATURED = {
   premium: {
-    from: "#0f2238",
-    mid: "#0b1a2c",
+    from: "#0b1119",
+    mid: "#040910",
     to: "#060d16",
     border: "rgba(74,137,220,0.35)",
     glow: "rgba(59,130,246,0.1)",
@@ -119,11 +118,10 @@ export function getCaseTheme(caseItem: Pick<CaseView, "kind" | "slug" | "accent_
 
 export function caseHeroStyle(theme: CaseHeroTheme): CSSProperties {
   return {
-    borderColor: theme.border,
     boxShadow: `0 0 0 1px ${theme.glow}, inset 0 1px 0 rgba(255,255,255,0.06)`,
     background: `
-      radial-gradient(ellipse 70% 60% at 82% 38%, ${theme.glow} 0%, transparent 62%),
-      linear-gradient(180deg, ${theme.from} 0%, ${theme.mid} 48%, ${theme.to} 100%)
+      radial-gradient(70% 60% at 82% 38%, ${theme.glow} 0%, transparent 62%),
+      linear-gradient(${theme.from} 0%, ${theme.mid} 48%, ${theme.to} 100%)
     `,
   };
 }
@@ -214,52 +212,6 @@ export function FeaturedGiftCluster({ className }: { className?: string }) {
       <GiftPlaceholder className="absolute bottom-[14%] left-[22%] h-[36%] w-[34%] -rotate-[6deg]" tone="default" />
     </div>
   );
-}
-
-/** Decorative gift stack for case detail hero — 3 overlapping loot tiles. */
-export function CaseDetailHeroArt({
-  loot,
-  imageUrl,
-}: {
-  loot?: CaseLootPreview[];
-  imageUrl?: string;
-}) {
-  const tiles = (loot ?? []).filter((e) => e.image_url || e.collection_slug).slice(0, 3);
-
-  if (tiles.length >= 2) {
-    return (
-      <div className="case-detail-hero__art" aria-hidden>
-        <div className="case-detail-hero__art-glow" />
-        {tiles.map((entry, i) => (
-          <div
-            key={entry.id}
-            className={`case-detail-hero__gift case-detail-hero__gift--${i}`}
-            style={{ background: candyTileBackgroundForLoot(entry) }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={giftImageUrl(entry.collection_slug, entry.image_url)}
-              alt=""
-              draggable={false}
-            />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const cover = imageUrl?.trim();
-  if (cover) {
-    return (
-      <div className="case-detail-hero__art case-detail-hero__cover" aria-hidden>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_68%)]" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" draggable={false} />
-      </div>
-    );
-  }
-
-  return <FeaturedGiftCluster className="case-detail-hero__art" />;
 }
 
 export function CatalogPattern({ slug, color, patternId }: { slug: string; color: string; patternId: string }) {
