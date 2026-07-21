@@ -75,6 +75,15 @@ func (h *CasesHandler) Opens(c *gin.Context) {
 }
 
 func writeCasesError(c *gin.Context, err error) {
+	var channelErr *casesuc.ChannelNotSubscribedError
+	if errors.As(err, &channelErr) {
+		httperr.Respond(c, http.StatusForbidden, err, gin.H{
+			"error":   "Подпишитесь на канал, чтобы открыть кейс",
+			"code":    "channel_not_subscribed",
+			"channel": channelErr.Channel,
+		})
+		return
+	}
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		httperr.Respond(c, http.StatusNotFound, err, gin.H{"error": "Кейс не найден", "code": "not_found"})
@@ -86,6 +95,11 @@ func writeCasesError(c *gin.Context, err error) {
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "У кейса нет призов", "code": "case_no_loot"})
 	case errors.Is(err, domain.ErrInsufficientFunds):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Недостаточно средств", "code": "insufficient_funds"})
+	case errors.Is(err, domain.ErrChannelNotSubscribed):
+		httperr.Respond(c, http.StatusForbidden, err, gin.H{
+			"error": "Подпишитесь на канал, чтобы открыть кейс",
+			"code":  "channel_not_subscribed",
+		})
 	case errors.Is(err, domain.ErrInvalidAmount):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Некорректный запрос", "code": "invalid_amount"})
 	default:

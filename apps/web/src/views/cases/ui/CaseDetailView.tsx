@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Package } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { CaseOpenReveal } from "@/components/cases/CaseOpenReveal";
 import { CaseWinModal } from "@/components/cases/CaseWinModal";
+import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
 import {
+  ApiRequestError,
   formatTON,
   getCase,
   getMe,
@@ -17,11 +20,15 @@ import {
   type CaseView,
 } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
+import { mainBalanceNanoton } from "@/lib/balance";
+import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
+import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Gift } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "revealing" | "won";
 
@@ -31,12 +38,38 @@ function formatCasePrice(nanoton: number): string {
   return ton.toFixed(1).replace(/\.0$/, "");
 }
 
+function LootCard({ entry }: { entry: CaseLootPreview }) {
+  const floor = entry.floor_price_nanoton ?? 0;
+  return (
+    <div className="case-loot-card">
+      <div className="case-loot-card__frame">
+        {floor > 0 ? (
+          <span className="case-loot-card__price">
+            {formatTON(floor)}
+            <TonIcon variant="brand" className="h-3 w-3 shrink-0" />
+          </span>
+        ) : null}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={giftImageUrl(entry.collection_slug, entry.image_url)}
+          alt={entry.display_name}
+          className="case-loot-card__img"
+          draggable={false}
+        />
+      </div>
+      <p className="case-loot-card__name">{entry.display_name}</p>
+      {entry.rarity_label ? (
+        <span className="case-loot-card__rarity">{entry.rarity_label}</span>
+      ) : null}
+    </div>
+  );
+}
+
 export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
-  const { setUser } = useAuth();
+  const { user, setUser } = useAuth();
   const haptics = useTelegramHaptics();
-  const patternId = useId().replace(/:/g, "");
   const idOrSlug = String(params?.id || "");
 
   const [caseItem, setCaseItem] = useState<CaseView | null>(null);
@@ -46,6 +79,7 @@ export function CaseDetailView() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [result, setResult] = useState<CaseOpenResult | null>(null);
   const [revealLoot, setRevealLoot] = useState<CaseLootPreview[]>([]);
+  const [channelSheetOpen, setChannelSheetOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!idOrSlug) return;
@@ -64,23 +98,35 @@ export function CaseDetailView() {
     void load();
   }, [load]);
 
-  const accent = caseItem?.accent_color || "#3b82f6";
+  const accent = caseItem?.accent_color || "#3390ec";
   const loot = caseItem?.loot || [];
   const dailyBlocked =
     caseItem?.kind === "daily" && caseItem.daily_available === false;
-  const canOpen = Boolean(caseItem) && !dailyBlocked && !opening && phase === "idle";
+  const isFree =
+    Boolean(caseItem) &&
+    (caseItem!.kind === "daily" || caseItem!.price_nanoton <= 0);
+  const needsChannel =
+    Boolean(caseItem?.require_channel) && caseItem?.channel_subscribed === false;
+  const channel = caseItem?.required_channel || PROMO_REQUIRED_CHANNEL;
+  const channelUrl = promoChannelUrl(channel);
+  const balance = user ? mainBalanceNanoton(user) : 0;
+  const needsTopUp =
+    Boolean(caseItem) &&
+    !isFree &&
+    caseItem!.price_nanoton > 0 &&
+    balance < caseItem!.price_nanoton;
 
-  async function handleOpen() {
-    if (!caseItem || opening || phase !== "idle") return;
+  async function runOpen(fresh: CaseView) {
     setOpening(true);
     setError(null);
     haptics.impactOccurred("medium");
     try {
-      const res = await openCase(caseItem.slug);
-      const pool = caseItem.loot?.length ? caseItem.loot : [res.loot_entry];
+      const res = await openCase(fresh.slug);
+      const pool = fresh.loot?.length ? fresh.loot : [res.loot_entry];
       setRevealLoot(pool);
       setResult(res);
       setPhase("revealing");
+      setChannelSheetOpen(false);
       haptics.impactOccurred("heavy");
       try {
         setUser(await getMe());
@@ -89,17 +135,58 @@ export function CaseDetailView() {
       }
       void load();
     } catch (e) {
-      setError(formatUserError(e, "Не удалось открыть кейс"));
-      haptics.notificationOccurred("error");
+      if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
+        setChannelSheetOpen(true);
+        setError(null);
+        void load();
+      } else if (e instanceof ApiRequestError && e.code === "insufficient_funds") {
+        setError(null);
+        router.push(APP_ROUTES.deposit);
+      } else {
+        setError(formatUserError(e, "Не удалось открыть кейс"));
+        haptics.notificationOccurred("error");
+      }
     } finally {
       setOpening(false);
+    }
+  }
+
+  async function handleOpen() {
+    if (!caseItem || opening || phase !== "idle") return;
+
+    if (needsTopUp) {
+      router.push(APP_ROUTES.deposit);
+      return;
+    }
+
+    if (caseItem.require_channel && caseItem.channel_subscribed === false) {
+      setChannelSheetOpen(true);
+      return;
+    }
+
+    await runOpen(caseItem);
+  }
+
+  async function recheckChannelAndOpen() {
+    setChannelSheetOpen(false);
+    try {
+      const fresh = await getCase(idOrSlug);
+      setCaseItem(fresh);
+      if (fresh.require_channel && fresh.channel_subscribed === false) {
+        setChannelSheetOpen(true);
+        setError("Подписка не найдена — подпишитесь и нажмите снова");
+        return;
+      }
+      await runOpen(fresh);
+    } catch (e) {
+      setError(formatUserError(e, "Не удалось проверить подписку"));
     }
   }
 
   const handleRevealComplete = useCallback(() => {
     setPhase("won");
     haptics.notificationOccurred("success");
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- haptic API is fire-and-forget
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- haptic API is fire-and-forget
   }, []);
 
   function handleAgain() {
@@ -108,136 +195,117 @@ export function CaseDetailView() {
     setPhase("idle");
   }
 
+  function ctaLabel(): string {
+    if (opening || phase === "revealing") return "Открываем…";
+    if (dailyBlocked) return "Завтра";
+    if (needsTopUp) return "Пополнить баланс";
+    if (needsChannel) return "Подписаться и открыть";
+    if (caseItem && caseItem.price_nanoton > 0) {
+      return `Открыть · ${formatCasePrice(caseItem.price_nanoton)} TON`;
+    }
+    return "Открыть бесплатно";
+  }
+
+  const heading =
+    caseItem && !caseItem.title.toLowerCase().includes("кейс")
+      ? `${caseItem.title} Кейс`
+      : caseItem?.title || "";
+
   return (
     <PageShell>
       {loading && !caseItem ? (
-        <div className="h-52 animate-pulse rounded-[22px] bg-surface" />
+        <div className="space-y-4">
+          <div className="h-8 w-48 animate-pulse rounded-lg bg-surface" />
+          <div className="h-[7.5rem] animate-pulse rounded-[1.35rem] bg-surface" />
+          <div className="h-[3.25rem] animate-pulse rounded-[1.15rem] bg-surface" />
+          <div className="grid grid-cols-2 gap-2.5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="aspect-[4/5] animate-pulse rounded-2xl bg-surface" />
+            ))}
+          </div>
+        </div>
       ) : null}
 
       {error && phase === "idle" ? (
         <p className="mb-3 text-sm text-red-400">{error}</p>
       ) : null}
 
-      {caseItem && phase === "idle" ? (
-        <div className="space-y-5">
-          <div
-            className="case-detail-hero relative overflow-hidden rounded-[22px] p-5"
-            style={{
-              ["--case-glow" as string]: accent,
-              background: `linear-gradient(165deg, ${accent}55 0%, #0c121c 55%, #080b10 100%)`,
-              boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 35%, transparent), 0 18px 40px rgba(0,0,0,0.45)`,
-            }}
-          >
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.12]"
-              aria-hidden
-            >
-              <defs>
-                <pattern
-                  id={`case-detail-${patternId}`}
-                  width="28"
-                  height="28"
-                  patternUnits="userSpaceOnUse"
-                >
-                  <circle cx="4" cy="4" r="1.2" fill="white" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill={`url(#case-detail-${patternId})`} />
-            </svg>
+      {caseItem && (phase === "idle" || phase === "revealing") ? (
+        <div className="case-detail space-y-4">
+          <h1 className="case-detail__title">{heading}</h1>
 
-            <div className="relative z-[1]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
-                {caseItem.kind === "daily"
-                  ? "Ежедневный"
-                  : caseItem.kind === "featured"
-                    ? "Премиум"
-                    : "Кейс"}
-              </p>
-              <h1 className="mt-1 text-[1.65rem] font-bold leading-tight tracking-tight text-white">
-                {caseItem.title}
-              </h1>
-              {caseItem.subtitle ? (
-                <p className="mt-1.5 text-sm text-white/65">{caseItem.subtitle}</p>
-              ) : null}
-
-              <div className="mt-4">
-                {caseItem.kind === "daily" || caseItem.price_nanoton <= 0 ? (
-                  <span className="inline-flex h-8 items-center rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 text-[13px] font-semibold text-emerald-300">
-                    {dailyBlocked ? "Уже открыт сегодня" : "Бесплатно сегодня"}
-                  </span>
-                ) : (
-                  <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-3 text-[13px] font-semibold tabular-nums text-white backdrop-blur-md">
-                    <TonIcon variant="brand" className="h-4 w-4" />
-                    {formatCasePrice(caseItem.price_nanoton)} TON
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h2 className="mb-3 text-sm font-semibold text-white/55">Возможные призы</h2>
-            <div className="grid grid-cols-3 gap-2.5">
-              {loot.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex flex-col items-center rounded-2xl bg-[#0e141c] p-2.5 ring-1 ring-inset ring-white/[0.06]"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={giftImageUrl(entry.collection_slug, entry.image_url)}
-                    alt={entry.display_name}
-                    className="h-14 w-14 object-contain"
-                  />
-                  <p className="mt-1.5 line-clamp-2 text-center text-[11px] font-medium leading-snug text-white/85">
-                    {entry.display_name}
-                  </p>
-                  {entry.rarity_label ? (
-                    <span className="mt-1 text-[10px] text-white/40">{entry.rarity_label}</span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="case-detail-cta app-control"
-            disabled={!canOpen}
-            onClick={() => void handleOpen()}
-          >
-            {opening
-              ? "Открываем…"
-              : dailyBlocked
-                ? "Завтра"
-                : caseItem.price_nanoton > 0
-                  ? `Открыть · ${formatTON(caseItem.price_nanoton)} TON`
-                  : "Открыть бесплатно"}
-          </button>
-
-          <Link
-            href={APP_ROUTES.cases}
-            className="block text-center text-xs text-white/40 transition-colors hover:text-white/70"
-          >
-            К каталогу
-          </Link>
-        </div>
-      ) : null}
-
-      {caseItem && phase === "revealing" && result ? (
-        <div className="space-y-4">
-          <div className="text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
-              {caseItem.title}
-            </p>
-            <h1 className="mt-1 text-xl font-bold text-white">Открытие</h1>
-          </div>
           <CaseOpenReveal
-            loot={revealLoot.length > 0 ? revealLoot : [result.loot_entry]}
-            winnerId={result.loot_entry.id}
+            loot={
+              phase === "revealing" && revealLoot.length > 0
+                ? revealLoot
+                : loot
+            }
+            winnerId={phase === "revealing" ? result?.loot_entry.id : null}
+            mode={phase === "revealing" ? "spin" : "idle"}
             accent={accent}
             onComplete={handleRevealComplete}
           />
+
+          <button
+            type="button"
+            className={cn(
+              "case-detail-cta app-control",
+              needsTopUp && phase === "idle" && "case-detail-cta--topup",
+            )}
+            disabled={dailyBlocked || opening || phase === "revealing"}
+            onClick={() => void handleOpen()}
+          >
+            {needsTopUp && phase === "idle" ? (
+              <span className="inline-flex items-center gap-2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M19 7V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1" />
+                  <path d="M3 11v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6" />
+                  <path d="M16 14h.01" />
+                </svg>
+                {ctaLabel()}
+              </span>
+            ) : (
+              ctaLabel()
+            )}
+          </button>
+
+          <section className="case-detail__collections">
+            <div className="case-detail__collections-head">
+              <Package className="h-4 w-4 text-accent" strokeWidth={2.2} aria-hidden />
+              <h2>Коллекции в этом кейсе</h2>
+            </div>
+            {loot.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-surface py-10 text-muted">
+                <Gift className="h-7 w-7 opacity-40" />
+                <p className="text-sm">Призы скоро появятся</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                {loot.map((entry) => (
+                  <LootCard key={entry.id} entry={entry} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          {phase === "idle" ? (
+            <Link
+              href={APP_ROUTES.cases}
+              className="block pb-1 text-center text-xs text-white/40 transition-colors hover:text-white/70"
+            >
+              К каталогу
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
@@ -247,6 +315,24 @@ export function CaseDetailView() {
           accent={accent}
           onAgain={handleAgain}
           onInventory={() => router.push(APP_ROUTES.inventory)}
+        />
+      ) : null}
+
+      {channelSheetOpen ? (
+        <WheelChannelSheet
+          channel={channel}
+          channelUrl={channelUrl}
+          description="Чтобы открыть этот кейс, подпишитесь на наш канал"
+          onClose={() => {
+            setChannelSheetOpen(false);
+            void load();
+          }}
+          onOpenChannel={() => {
+            if (channelUrl) openTelegramLink(channelUrl);
+            window.setTimeout(() => {
+              void recheckChannelAndOpen();
+            }, 1200);
+          }}
         />
       ) : null}
 

@@ -26,9 +26,15 @@ export function resolveAsset(url?: string | null): string | undefined {
 }
 export const DEBUG_AUTH = process.env.NEXT_PUBLIC_DEBUG_AUTH === "true";
 export const AUTH_SESSION_REFRESHED = "flipo:auth-session-refreshed";
+export const ADMIN_AUTH_SESSION_REFRESHED = "flipo:admin-auth-session-refreshed";
 
 const TOKEN_KEY = "flipo_token";
-const AUTH_PATHS = new Set(["/api/v1/auth/telegram", "/api/v1/auth/debug"]);
+const ADMIN_TOKEN_KEY = "flipo_admin_token";
+const AUTH_PATHS = new Set([
+  "/api/v1/auth/telegram",
+  "/api/v1/auth/debug",
+  "/api/v1/admin/auth/login",
+]);
 
 export class ApiRequestError extends Error {
   code?: string;
@@ -72,6 +78,9 @@ export type InventoryItem = {
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
+  if (window.location.pathname.startsWith("/admin")) {
+    return localStorage.getItem(ADMIN_TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  }
   return localStorage.getItem(TOKEN_KEY);
 }
 
@@ -85,6 +94,19 @@ function clearToken() {
 
 export function getAuthToken(): string | null {
   return getToken();
+}
+
+export function getAdminAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
+export function setAdminAuthToken(token: string) {
+  localStorage.setItem(ADMIN_TOKEN_KEY, token);
+}
+
+export function clearAdminAuthToken() {
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
 }
 
 let reauthPromise: Promise<User | null> | null = null;
@@ -151,9 +173,17 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
   const res = await rawFetch(path, options);
 
   if (res.status === 401 && !retried && !AUTH_PATHS.has(path)) {
-    const user = await silentReauth();
-    if (user) {
-      return api<T>(path, options, true);
+    const isAdminPath =
+      path.startsWith("/api/v1/admin") ||
+      (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+    if (isAdminPath) {
+      clearAdminAuthToken();
+      window.dispatchEvent(new CustomEvent(ADMIN_AUTH_SESSION_REFRESHED, { detail: { user: null } }));
+    } else {
+      const user = await silentReauth();
+      if (user) {
+        return api<T>(path, options, true);
+      }
     }
   }
 
@@ -199,6 +229,13 @@ export async function authDebug() {
   return api<{ token: string; user: User }>("/api/v1/auth/debug", {
     method: "POST",
     body: JSON.stringify({}),
+  });
+}
+
+export async function authAdminPanel(password: string) {
+  return api<{ token: string; user: User }>("/api/v1/admin/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ password }),
   });
 }
 
@@ -1643,47 +1680,6 @@ export async function getAdminAnalyticsOverview(
   return api<AdminAnalyticsOverview>(`/api/v1/admin/analytics/overview?${params.toString()}`);
 }
 
-export type AdminStakingDropoffGift = {
-  slug: string;
-  name: string;
-  collection_slug?: string;
-  price_nanoton: number;
-  is_staked: boolean;
-  daily_yield_nanoton?: number;
-};
-
-export type AdminStakingDropoffUser = {
-  user_id: string;
-  telegram_id: number;
-  username: string;
-  first_name: string;
-  entered_at: string;
-  first_staking_at?: string;
-  last_staking_at?: string;
-  valued_at: string;
-  profile_gift_count: number;
-  unstaked_profile_count: number;
-  profile_valuation_nanoton: number;
-  unstaked_profile_valuation_nanoton: number;
-  gifts: AdminStakingDropoffGift[];
-};
-
-export type AdminStakingDropoff = {
-  viewers_with_profile_gifts: number;
-  dropoff_count: number;
-  dropoff_rate_pct: number;
-  total_unstaked_valuation_nanoton: number;
-  users: AdminStakingDropoffUser[];
-};
-
-export async function getAdminStakingDropoff(days = 7, limit = 50) {
-  const params = new URLSearchParams({
-    days: String(days),
-    limit: String(limit),
-  });
-  return api<AdminStakingDropoff>(`/api/v1/admin/analytics/staking-dropoff?${params.toString()}`);
-}
-
 export async function getAdminUserAnalytics(userId: string, limit = 60, sessionId?: string) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (sessionId) params.set("session_id", sessionId);
@@ -1947,6 +1943,7 @@ export type CaseLootPreview = {
   image_url: string;
   rarity_label?: string;
   sort_order: number;
+  floor_price_nanoton?: number;
 };
 
 export type CaseView = {
@@ -1959,6 +1956,9 @@ export type CaseView = {
   price_nanoton: number;
   kind: "catalog" | "featured" | "daily" | string;
   sort_order: number;
+  require_channel?: boolean;
+  required_channel?: string;
+  channel_subscribed?: boolean;
   loot?: CaseLootPreview[];
   daily_available?: boolean;
 };
@@ -2021,6 +2021,7 @@ export type AdminCase = {
   kind: string;
   sort_order: number;
   active: boolean;
+  require_channel: boolean;
   target_rtp_bps: number;
   loot: AdminCaseLootEntry[];
 };
@@ -2036,6 +2037,7 @@ export type AdminCaseUpsert = {
   kind: string;
   sort_order: number;
   active: boolean;
+  require_channel: boolean;
   target_rtp_bps: number;
 };
 

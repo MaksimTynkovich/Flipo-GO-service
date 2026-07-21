@@ -39,10 +39,11 @@ function emptyCaseDraft(): CaseDraft {
     subtitle: "",
     image_url: "",
     accent_color: "#3b82f6",
-    price_nanoton: 0,
+    price_nanoton: 500_000_000,
     kind: "catalog",
     sort_order: 0,
     active: true,
+    require_channel: false,
     target_rtp_bps: 9000,
   };
 }
@@ -59,6 +60,7 @@ function caseToDraft(c: AdminCase): CaseDraft {
     kind: c.kind || "catalog",
     sort_order: c.sort_order,
     active: c.active,
+    require_channel: Boolean(c.require_channel),
     target_rtp_bps: c.target_rtp_bps || 9000,
   };
 }
@@ -154,6 +156,15 @@ export default function CasesSection() {
       showToast({ title: "Нужны slug и title", variant: "error" });
       return;
     }
+    const requireChannel =
+      draft.require_channel || (draft.kind !== "daily" && draft.price_nanoton <= 0);
+    if (draft.kind !== "daily" && draft.price_nanoton <= 0 && !requireChannel) {
+      showToast({
+        title: "Бесплатный кейс требует подписку на канал",
+        variant: "error",
+      });
+      return;
+    }
     setSavingCase(true);
     try {
       const body: AdminCaseUpsert = {
@@ -167,6 +178,7 @@ export default function CasesSection() {
         kind: draft.kind || "catalog",
         sort_order: draft.sort_order,
         active: draft.active,
+        require_channel: requireChannel,
         target_rtp_bps: draft.target_rtp_bps > 0 ? draft.target_rtp_bps : 9000,
       };
       const res = await upsertAdminCase(body);
@@ -326,7 +338,15 @@ export default function CasesSection() {
               <AdminTonField
                 label="Цена (TON)"
                 valueNanoton={draft.price_nanoton}
-                onChangeNanoton={(v) => setDraft((d) => ({ ...d, price_nanoton: v }))}
+                onChangeNanoton={(v) =>
+                  setDraft((d) => ({
+                    ...d,
+                    price_nanoton: v,
+                    require_channel:
+                      d.kind !== "daily" && v <= 0 ? true : d.require_channel,
+                  }))
+                }
+                hint="0 = бесплатный кейс (нужна подписка на канал)"
               />
               <AdminField label="Порядок">
                 <input
@@ -374,6 +394,25 @@ export default function CasesSection() {
                   onChange={(e) => setDraft((d) => ({ ...d, active: e.target.checked }))}
                 />
                 Активен в каталоге
+              </label>
+              <label className="flex items-start gap-2 pt-5 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={
+                    draft.require_channel ||
+                    (draft.kind !== "daily" && draft.price_nanoton <= 0)
+                  }
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, require_channel: e.target.checked }))
+                  }
+                />
+                <span>
+                  Нужна подписка на канал
+                  <span className="mt-0.5 block text-[11px] text-muted/80">
+                    Для бесплатных (цена 0) обязательно. Канал = PROMO_REQUIRED_CHANNEL.
+                  </span>
+                </span>
               </label>
             </div>
             <div className="flex flex-wrap gap-2 pt-1">

@@ -72,6 +72,7 @@ func (r *CaseRepo) UpdateCase(ctx context.Context, c *domain.Case) error {
 		"kind":            c.Kind,
 		"sort_order":      c.SortOrder,
 		"active":          c.Active,
+		"require_channel": c.RequireChannel,
 		"target_rtp_bps":  c.TargetRTPBPS,
 		"updated_at":      c.UpdatedAt,
 	})

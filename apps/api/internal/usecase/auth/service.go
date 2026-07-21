@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"time"
 
@@ -16,10 +17,13 @@ import (
 )
 
 type Claims struct {
-	UserID     uuid.UUID `json:"user_id"`
-	TelegramID int64     `json:"telegram_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	TelegramID  int64     `json:"telegram_id"`
+	AdminPanel  bool      `json:"admin_panel,omitempty"`
 	jwt.RegisteredClaims
 }
+
+const adminPanelTokenTTL = 12 * time.Hour
 
 type AdminEventNotifier interface {
 	NotifyReferralJoined(ctx context.Context, actor, referrer telegram.AdminActor)
@@ -32,6 +36,8 @@ type Service struct {
 	jwtSecret           []byte
 	jwtExpiry           time.Duration
 	adminTelegramIDs    map[int64]struct{}
+	adminTelegramOrder  []int64
+	adminPanelPassword  string
 	debugAuthEnabled    bool
 	debugTelegramID     int64
 	debugUsername       string
@@ -70,9 +76,16 @@ func WithAdminTelegramIDs(ids []int64) ServiceOption {
 		if s.adminTelegramIDs == nil {
 			s.adminTelegramIDs = make(map[int64]struct{}, len(ids))
 		}
+		s.adminTelegramOrder = append([]int64(nil), ids...)
 		for _, id := range ids {
 			s.adminTelegramIDs[id] = struct{}{}
 		}
+	}
+}
+
+func WithAdminPanelPassword(password string) ServiceOption {
+	return func(s *Service) {
+		s.adminPanelPassword = password
 	}
 }
 
@@ -251,16 +264,78 @@ func (s *Service) AuthenticateDebug(ctx context.Context) (string, *domain.User, 
 }
 
 func (s *Service) issueToken(user *domain.User) (string, error) {
+	return s.issueTokenWithOpts(user, false, s.jwtExpiry)
+}
+
+func (s *Service) issueTokenWithOpts(user *domain.User, adminPanel bool, ttl time.Duration) (string, error) {
 	claims := Claims{
 		UserID:     user.ID,
 		TelegramID: user.TelegramID,
+		AdminPanel: adminPanel,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.jwtExpiry)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.jwtSecret)
+}
+
+func (s *Service) AdminPanelPasswordConfigured() bool {
+	return s.adminPanelPassword != ""
+}
+
+// AuthenticateAdminPanel issues a JWT for browser /admin login (no Telegram initData).
+// Actor is the first ADMIN_TELEGRAM_IDS user that already exists in the DB.
+func (s *Service) AuthenticateAdminPanel(ctx context.Context, password string) (string, *domain.User, error) {
+	if s.adminPanelPassword == "" {
+		return "", nil, domain.ErrAdminPasswordNotSet
+	}
+	if subtle.ConstantTimeCompare([]byte(password), []byte(s.adminPanelPassword)) != 1 {
+		return "", nil, domain.ErrAdminPasswordInvalid
+	}
+	if len(s.adminTelegramOrder) == 0 {
+		return "", nil, domain.ErrAdminActorMissing
+	}
+
+	var user *domain.User
+	for _, telegramID := range s.adminTelegramOrder {
+		found, err := s.users.FindByTelegramID(ctx, telegramID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return "", nil, err
+		}
+		if found != nil {
+			if found.IsBanned {
+				return "", nil, domain.ErrUserBanned
+			}
+			user = found
+			break
+		}
+	}
+	if user == nil {
+		return "", nil, domain.ErrAdminActorMissing
+	}
+
+	token, err := s.issueTokenWithOpts(user, true, adminPanelTokenTTL)
+	if err != nil {
+		return "", nil, err
+	}
+	s.analytics.Track(ctx, analyticsuc.EventInput{
+		UserID:        &user.ID,
+		TelegramID:    &user.TelegramID,
+		Source:        "api",
+		EventName:     "auth_admin_panel_succeeded",
+		EventCategory: "auth",
+		Status:        "success",
+		StakingTier:   string(user.StakingTier),
+		Properties: map[string]any{
+			"source": "admin_panel",
+		},
+	})
+	return token, user, nil
 }
 
 func (s *Service) ParseToken(tokenStr string) (*Claims, error) {

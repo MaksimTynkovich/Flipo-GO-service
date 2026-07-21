@@ -55,6 +55,8 @@ type Config struct {
 	// false keeps credentials in .env but never opens an MTProto session.
 	TelegramMTProtoEnabled bool
 	AdminTelegramIDs       []int64
+	// AdminPanelPassword unlocks browser login at /admin (no Telegram initData).
+	AdminPanelPassword string
 	// AdminNotifyEnabled gates Bot API DM alerts to ADMIN_TELEGRAM_IDS.
 	AdminNotifyEnabled bool
 	PromoRequiredChannel         string
@@ -118,6 +120,7 @@ func Load() *Config {
 		TelegramSessionPath:          getEnv("TELEGRAM_SESSION_PATH", "data/telegram/session.json"),
 		TelegramMTProtoEnabled:       getEnvBool("TELEGRAM_MTPROTO_ENABLED", true),
 		AdminTelegramIDs:             parseInt64List(getEnv("ADMIN_TELEGRAM_IDS", "")),
+		AdminPanelPassword:           getEnv("ADMIN_PANEL_PASSWORD", ""),
 		AdminNotifyEnabled:           getEnvBool("ADMIN_NOTIFY_ENABLED", true),
 		PromoRequiredChannel:         firstNonEmpty(getEnv("PROMO_REQUIRED_CHANNEL", ""), getEnv("NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL", "")),
 		BotsDataDir:                  getEnv("BOTS_DATA_DIR", "assets/bots"),

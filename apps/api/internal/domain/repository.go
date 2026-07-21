@@ -248,7 +248,6 @@ type AnalyticsRepository interface {
 	RecordEvents(ctx context.Context, events []AnalyticsEventCreate) error
 	GetOverview(ctx context.Context, since time.Time, filter AnalyticsOverviewFilter) (*AnalyticsOverview, error)
 	GetUserDrilldown(ctx context.Context, userID uuid.UUID, limit int, sessionID string) (*AnalyticsUserDrilldown, error)
-	GetStakingDropoff(ctx context.Context, since time.Time, limit int) (*AnalyticsStakingDropoff, error)
 }
 
 type PvPRepository interface {

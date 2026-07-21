@@ -329,21 +329,6 @@ func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
 	c.JSON(http.StatusOK, overview)
 }
 
-func (h *AdminHandler) AnalyticsStakingDropoff(c *gin.Context) {
-	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
-	if days <= 0 {
-		days = 7
-	}
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	since := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
-	out, err := h.analytics.StakingDropoff(c.Request.Context(), since, limit)
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, out)
-}
-
 func (h *AdminHandler) AnalyticsUserDrilldown(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {

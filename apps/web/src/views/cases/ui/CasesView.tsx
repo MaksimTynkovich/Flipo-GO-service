@@ -45,7 +45,14 @@ function formatCasePrice(nanoton: number): string {
   return ton.toFixed(1).replace(/\.0$/, "");
 }
 
-function PriceBadge({ nanoton }: { nanoton: number }) {
+function PriceBadge({ nanoton, requireChannel }: { nanoton: number; requireChannel?: boolean }) {
+  if (nanoton <= 0) {
+    return (
+      <span className="inline-flex h-[26px] items-center rounded-full border border-emerald-400/35 bg-emerald-500/20 px-2 text-[11px] font-semibold text-emerald-200 backdrop-blur-md">
+        {requireChannel ? "Free · подписка" : "Бесплатно"}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex h-[26px] items-center gap-1 rounded-full border border-white/15 bg-black/65 px-2 text-[11px] font-semibold tabular-nums text-white backdrop-blur-md">
       <TonIcon variant="brand" className="h-3.5 w-3.5" />
@@ -127,7 +134,8 @@ function FeaturedGiftCluster() {
 function FeaturedCard({ caseItem }: { caseItem: CaseView }) {
   const uid = useId().replace(/:/g, "");
   const href = `${APP_ROUTES.cases}/${caseItem.slug}`;
-  const isDaily = caseItem.kind === "daily" || caseItem.price_nanoton <= 0;
+  const isDaily = caseItem.kind === "daily";
+  const isFree = isDaily || caseItem.price_nanoton <= 0;
   const available = caseItem.daily_available !== false;
   const theme = isDaily ? FEATURED.daily : FEATURED.premium;
 
@@ -160,13 +168,19 @@ function FeaturedCard({ caseItem }: { caseItem: CaseView }) {
       </div>
 
       <div className="relative z-[1] mt-auto">
-        {isDaily ? (
+        {isFree ? (
           <span
             className={`inline-flex h-8 items-center justify-center rounded-full px-3.5 text-[12.5px] font-bold ${
-              available ? "bg-[#5DBE65] text-white" : "bg-white/10 text-white/45"
+              isDaily && !available
+                ? "bg-white/10 text-white/45"
+                : "bg-[#5DBE65] text-white"
             }`}
           >
-            {available ? "Бесплатно" : "Завтра"}
+            {isDaily && !available
+              ? "Завтра"
+              : caseItem.require_channel
+                ? "Бесплатно · подписка"
+                : "Бесплатно"}
           </span>
         ) : (
           <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#4A89DC] px-3 text-[12.5px] font-bold text-white">
@@ -241,6 +255,7 @@ function CatalogCard({ caseItem }: { caseItem: CaseView }) {
       glow: caseItem.accent_color || "#64748b",
       border: "rgba(58,69,86,0.9)",
     } as Accent);
+  const cover = caseItem.image_url?.trim();
 
   return (
     <Link
@@ -254,23 +269,39 @@ function CatalogCard({ caseItem }: { caseItem: CaseView }) {
       <div
         className="relative aspect-[1/1.02] w-full overflow-hidden"
         style={{
-          background: `
+          background: cover
+            ? "#0a0e14"
+            : `
             radial-gradient(ellipse 75% 60% at 50% 40%, ${accent.glow}55 0%, transparent 65%),
             linear-gradient(180deg, ${accent.from} 0%, ${accent.to} 100%)
           `,
         }}
       >
-        <CatalogPattern slug={caseItem.slug} color={accent.glow} patternId={`cat-pat-${uid}`} />
-
-        <div className="absolute inset-0 flex items-center justify-center p-6">
-          <div
-            className="aspect-square w-[66%] rounded-[20px] bg-gradient-to-br from-white/32 via-white/12 to-white/[0.04] shadow-[0_12px_32px_rgba(0,0,0,0.45)] ring-1 ring-inset ring-white/25"
-            aria-hidden
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={cover}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+            draggable={false}
           />
-        </div>
+        ) : (
+          <>
+            <CatalogPattern slug={caseItem.slug} color={accent.glow} patternId={`cat-pat-${uid}`} />
+            <div className="absolute inset-0 flex items-center justify-center p-6">
+              <div
+                className="aspect-square w-[66%] rounded-[20px] bg-gradient-to-br from-white/32 via-white/12 to-white/[0.04] shadow-[0_12px_32px_rgba(0,0,0,0.45)] ring-1 ring-inset ring-white/25"
+                aria-hidden
+              />
+            </div>
+          </>
+        )}
 
         <div className="absolute bottom-2.5 right-2.5 z-[1]">
-          <PriceBadge nanoton={caseItem.price_nanoton} />
+          <PriceBadge
+            nanoton={caseItem.price_nanoton}
+            requireChannel={caseItem.require_channel}
+          />
         </div>
       </div>
 

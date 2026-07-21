@@ -75,7 +75,7 @@ export default function TelegramSection() {
   const formSettings = settings ?? DEFAULT_SETTINGS;
 
   return (
-    <AdminPage title="Telegram-бот" description="WebApp, рассылки и защита от спама.">
+    <AdminPage title="Telegram-бот" description="Настройки бота, массовые рассылки и история отправок.">
       <AdminPanel title="Настройки бота" description="Параметры бота и массовых рассылок.">
         {settingsLoading && !settings ? (
           <div className="space-y-3">
@@ -89,9 +89,7 @@ export default function TelegramSection() {
               <input
                 type="checkbox"
                 checked={formSettings.broadcast_enabled}
-                onChange={(e) =>
-                  setSettings({ ...formSettings, broadcast_enabled: e.target.checked })
-                }
+                onChange={(e) => setSettings({ ...formSettings, broadcast_enabled: e.target.checked })}
               />
               Массовые рассылки включены
             </label>
@@ -126,14 +124,12 @@ export default function TelegramSection() {
 
             <AdminField
               label="Текст кнопки"
-              hint="Подпись на кнопке открытия приложения в рассылке и в /start. Если пусто — «🚀 Открыть приложение."
+              hint="Подпись на кнопке открытия приложения в рассылке и в /start. Если пусто — «🚀 Открыть приложение»."
             >
               <input
                 className="input-field"
                 value={formSettings.webapp_button_text}
-                onChange={(e) =>
-                  setSettings({ ...formSettings, webapp_button_text: e.target.value })
-                }
+                onChange={(e) => setSettings({ ...formSettings, webapp_button_text: e.target.value })}
                 placeholder="🚀 Открыть приложение"
                 maxLength={64}
               />

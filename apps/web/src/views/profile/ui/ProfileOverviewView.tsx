@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ChevronRight,
   Gift,
-  Shield,
   Sparkles,
   Ticket,
   Users,
@@ -187,18 +186,6 @@ export function ProfileOverviewView() {
           subtitle={`${REFERRAL_MONTHLY_SHARE_PERCENT}% со стейкинга друзей`}
           onClick={() => haptics.impactOccurred("medium")}
         />
-        {user?.is_admin ? (
-          <>
-            <div className="mx-4 hairline-top" />
-            <ProfileMenuLink
-              href={APP_ROUTES.admin}
-              icon={<Shield className="h-4 w-4" />}
-              title="Система"
-              subtitle="Админ-панель"
-              onClick={() => haptics.impactOccurred("medium")}
-            />
-          </>
-        ) : null}
       </section>
 
       <section className="panel overflow-hidden p-0">

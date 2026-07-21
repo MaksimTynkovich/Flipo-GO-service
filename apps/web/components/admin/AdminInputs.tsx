@@ -35,10 +35,10 @@ export function AdminTonField({
   decimals?: number;
 }) {
   return (
-    <label className="text-xs text-muted">
+    <label className="text-xs text-[var(--admin-muted,#8b98a8)]">
       <FieldLabel label={label} hint={hint} />
       <input
-        className="input-field mt-1"
+        className="admin-input mt-1"
         type="number"
         min={min}
         step={step}
@@ -65,10 +65,10 @@ export function AdminPercentField({
   step?: number;
 }) {
   return (
-    <label className="text-xs text-muted">
+    <label className="text-xs text-[var(--admin-muted,#8b98a8)]">
       <FieldLabel label={label} hint={hint} />
       <input
-        className="input-field mt-1"
+        className="admin-input mt-1"
         type="number"
         min={min}
         step={step}
@@ -95,10 +95,10 @@ export function AdminIntField({
   step?: number;
 }) {
   return (
-    <label className="text-xs text-muted">
+    <label className="text-xs text-[var(--admin-muted,#8b98a8)]">
       <FieldLabel label={label} hint={hint} />
       <input
-        className="input-field mt-1"
+        className="admin-input mt-1"
         type="number"
         min={min}
         step={step}
@@ -125,10 +125,10 @@ export function AdminFloatField({
   step?: number;
 }) {
   return (
-    <label className="text-xs text-muted">
+    <label className="text-xs text-[var(--admin-muted,#8b98a8)]">
       <FieldLabel label={label} hint={hint} />
       <input
-        className="input-field mt-1"
+        className="admin-input mt-1"
         type="number"
         min={min}
         step={step}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -156,6 +157,7 @@ func main() {
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),
+		auth.WithAdminPanelPassword(cfg.AdminPanelPassword),
 		auth.WithAnalytics(analyticsSvc),
 		auth.WithAdminEvents(adminNotifier),
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
@@ -212,6 +214,7 @@ func main() {
 	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
 	caseSvc.SetValuator(giftValuator)
 	caseSvc.SetBotResolver(marketRepo)
+	caseSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 
 	hub := websocket.NewHub()
 	balanceSvc.SetNotifier(hub)
@@ -453,6 +456,9 @@ func validateProductionConfig(cfg *config.Config) error {
 	}
 	if len(cfg.AdminTelegramIDs) == 0 {
 		return fmt.Errorf("ADMIN_TELEGRAM_IDS is required when ENV=production")
+	}
+	if strings.TrimSpace(cfg.AdminPanelPassword) == "" {
+		return fmt.Errorf("ADMIN_PANEL_PASSWORD is required when ENV=production")
 	}
 	if cfg.TelegramWebhookURL == "" {
 		return fmt.Errorf("TELEGRAM_WEBHOOK_URL is required when ENV=production")

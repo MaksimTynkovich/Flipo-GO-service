@@ -2,6 +2,8 @@
 
 import { AdminSectionHost } from "@/components/admin/AdminSectionHost";
 import { ADMIN_NAV, resolveAdminSection } from "@/components/admin/admin-sections";
+import { AdminButton } from "@/components/admin/admin-ui";
+import { useAdminAuth } from "@/components/providers/AdminAuthProvider";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
@@ -14,7 +16,7 @@ function AdminNav({
   onNavigate: (href: string) => void;
 }) {
   return (
-    <nav className="-mx-1 flex gap-0.5 overflow-x-auto px-1 pb-0.5 lg:flex-col lg:overflow-visible lg:pb-0">
+    <nav className="admin-sidebar__nav">
       {ADMIN_NAV.map((item) => {
         const isActive = activeSection === item.id;
         return (
@@ -22,12 +24,7 @@ function AdminNav({
             key={item.href}
             type="button"
             onClick={() => onNavigate(item.href)}
-            className={cn(
-              "shrink-0 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors lg:w-full",
-              isActive
-                ? "bg-surface-raised font-medium text-foreground"
-                : "text-muted hover:text-foreground",
-            )}
+            className={cn("admin-nav-item", isActive && "admin-nav-item--active")}
           >
             {item.label}
           </button>
@@ -40,6 +37,7 @@ function AdminNav({
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, logout } = useAdminAuth();
   const routeSection = resolveAdminSection(pathname);
   const [activeSection, setActiveSection] = useState(routeSection);
 
@@ -59,14 +57,44 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     });
   }
 
+  const activeLabel = ADMIN_NAV.find((item) => item.id === activeSection)?.label ?? "Дашборд";
+  const todayLabel = new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-      <aside className="w-full shrink-0 lg:sticky lg:top-[calc(var(--app-header-offset)+0.5rem)] lg:w-44">
+    <div className="admin-shell">
+      <aside className="admin-sidebar">
+        <div className="admin-sidebar__brand">
+          <p className="admin-sidebar__brand-mark">Flipo</p>
+          <p className="admin-sidebar__brand-sub">Admin</p>
+        </div>
+
         <AdminNav activeSection={activeSection} onNavigate={navigate} />
+
+        <div className="admin-sidebar__footer">
+          <p className="admin-sidebar__user truncate">
+            {user?.first_name || user?.username || "Admin"}
+          </p>
+          <AdminButton variant="secondary" onClick={logout} className="w-full !h-9 text-xs">
+            Выйти
+          </AdminButton>
+        </div>
       </aside>
-      <div className="min-w-0 flex-1 space-y-3">
-        <AdminSectionHost active={activeSection} />
-        {children}
+
+      <div className="admin-workspace">
+        <header className="admin-workspace__header">
+          <div>
+            <h1 className="admin-workspace__title">{activeLabel}</h1>
+            <p className="admin-workspace__date">{todayLabel}</p>
+          </div>
+        </header>
+        <main className="admin-workspace__main">
+          <AdminSectionHost active={activeSection} />
+          {children}
+        </main>
       </div>
     </div>
   );

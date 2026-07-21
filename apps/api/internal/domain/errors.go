@@ -42,4 +42,7 @@ var (
 	ErrCaseUnavailable        = errors.New("кейс недоступен")
 	ErrCaseDailyUsed          = errors.New("ежедневный кейс уже открыт")
 	ErrCaseNoLoot             = errors.New("у кейса нет призов")
+	ErrAdminPasswordNotSet    = errors.New("пароль админки не настроен")
+	ErrAdminPasswordInvalid   = errors.New("неверный пароль")
+	ErrAdminActorMissing      = errors.New("сначала зайдите в Mini App под admin Telegram ID")
 )

@@ -24,13 +24,31 @@ type BotUserResolver interface {
 	EnsureBotUser(ctx context.Context) (*domain.User, error)
 }
 
+type ChannelChecker interface {
+	IsChannelMember(ctx context.Context, channel string, telegramUserID int64) (bool, error)
+}
+
+type ChannelNotSubscribedError struct {
+	Channel string
+}
+
+func (e *ChannelNotSubscribedError) Error() string {
+	return domain.ErrChannelNotSubscribed.Error()
+}
+
+func (e *ChannelNotSubscribedError) Is(target error) bool {
+	return target == domain.ErrChannelNotSubscribed
+}
+
 type Service struct {
-	cases     domain.CaseRepository
-	inventory domain.InventoryRepository
-	users     domain.UserRepository
-	balance   *balance.Service
-	valuator  *gifts.Valuator
-	bot       BotUserResolver
+	cases            domain.CaseRepository
+	inventory        domain.InventoryRepository
+	users            domain.UserRepository
+	balance          *balance.Service
+	valuator         *gifts.Valuator
+	bot              BotUserResolver
+	requiredChannel  string
+	channelChecker   ChannelChecker
 }
 
 func NewService(
@@ -44,28 +62,36 @@ func NewService(
 
 func (s *Service) SetValuator(v *gifts.Valuator) { s.valuator = v }
 func (s *Service) SetBotResolver(bot BotUserResolver) { s.bot = bot }
+func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
+	s.requiredChannel = strings.TrimSpace(channel)
+	s.channelChecker = checker
+}
 
 type LootPreview struct {
-	ID             uuid.UUID `json:"id"`
-	CollectionSlug string    `json:"collection_slug"`
-	DisplayName    string    `json:"display_name"`
-	ImageURL       string    `json:"image_url"`
-	RarityLabel    string    `json:"rarity_label"`
-	SortOrder      int       `json:"sort_order"`
+	ID               uuid.UUID `json:"id"`
+	CollectionSlug   string    `json:"collection_slug"`
+	DisplayName      string    `json:"display_name"`
+	ImageURL         string    `json:"image_url"`
+	RarityLabel      string    `json:"rarity_label"`
+	SortOrder        int       `json:"sort_order"`
+	FloorPriceNanoton int64    `json:"floor_price_nanoton,omitempty"`
 }
 
 type CaseView struct {
-	ID           uuid.UUID     `json:"id"`
-	Slug         string        `json:"slug"`
-	Title        string        `json:"title"`
-	Subtitle     string        `json:"subtitle"`
-	ImageURL     string        `json:"image_url"`
-	AccentColor  string        `json:"accent_color"`
-	PriceNanoton int64         `json:"price_nanoton"`
-	Kind         string        `json:"kind"`
-	SortOrder    int           `json:"sort_order"`
-	Loot         []LootPreview `json:"loot,omitempty"`
-	DailyAvailable *bool       `json:"daily_available,omitempty"`
+	ID                uuid.UUID     `json:"id"`
+	Slug              string        `json:"slug"`
+	Title             string        `json:"title"`
+	Subtitle          string        `json:"subtitle"`
+	ImageURL          string        `json:"image_url"`
+	AccentColor       string        `json:"accent_color"`
+	PriceNanoton      int64         `json:"price_nanoton"`
+	Kind              string        `json:"kind"`
+	SortOrder         int           `json:"sort_order"`
+	RequireChannel    bool          `json:"require_channel"`
+	RequiredChannel   string        `json:"required_channel,omitempty"`
+	ChannelSubscribed *bool         `json:"channel_subscribed,omitempty"`
+	Loot              []LootPreview `json:"loot,omitempty"`
+	DailyAvailable    *bool         `json:"daily_available,omitempty"`
 }
 
 // AdminLootEntry — loot row for admin CRUD (includes weight).
@@ -81,18 +107,19 @@ type AdminLootEntry struct {
 
 // AdminCaseView — full case for admin list/edit.
 type AdminCaseView struct {
-	ID           uuid.UUID        `json:"id"`
-	Slug         string           `json:"slug"`
-	Title        string           `json:"title"`
-	Subtitle     string           `json:"subtitle"`
-	ImageURL     string           `json:"image_url"`
-	AccentColor  string           `json:"accent_color"`
-	PriceNanoton int64            `json:"price_nanoton"`
-	Kind         string           `json:"kind"`
-	SortOrder    int              `json:"sort_order"`
-	Active       bool             `json:"active"`
-	TargetRTPBPS int              `json:"target_rtp_bps"`
-	Loot         []AdminLootEntry `json:"loot"`
+	ID             uuid.UUID        `json:"id"`
+	Slug           string           `json:"slug"`
+	Title          string           `json:"title"`
+	Subtitle       string           `json:"subtitle"`
+	ImageURL       string           `json:"image_url"`
+	AccentColor    string           `json:"accent_color"`
+	PriceNanoton   int64            `json:"price_nanoton"`
+	Kind           string           `json:"kind"`
+	SortOrder      int              `json:"sort_order"`
+	Active         bool             `json:"active"`
+	RequireChannel bool             `json:"require_channel"`
+	TargetRTPBPS   int              `json:"target_rtp_bps"`
+	Loot           []AdminLootEntry `json:"loot"`
 }
 
 type CatalogView struct {
@@ -123,8 +150,32 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, 
 	if userID != uuid.Nil {
 		dailyAvail, _ = s.dailyAvailable(ctx, userID)
 	}
+	var channelCached *bool
+	channelStatus := func() *bool {
+		if channelCached != nil {
+			return channelCached
+		}
+		if userID == uuid.Nil {
+			return nil
+		}
+		ok, err := s.isChannelSubscribed(ctx, userID)
+		if err != nil {
+			ok = false
+		}
+		channelCached = &ok
+		return channelCached
+	}
 	for _, row := range rows {
 		view := s.toCaseView(ctx, row, true)
+		if view.RequireChannel {
+			if s.requiredChannel != "" {
+				view.RequiredChannel = s.requiredChannel
+			}
+			if sub := channelStatus(); sub != nil {
+				v := *sub
+				view.ChannelSubscribed = &v
+			}
+		}
 		switch row.Kind {
 		case domain.CaseKindFeatured:
 			out.Featured = append(out.Featured, view)
@@ -153,6 +204,7 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID) (*
 		avail, _ := s.dailyAvailable(ctx, userID)
 		view.DailyAvailable = &avail
 	}
+	s.attachChannelStatus(ctx, &view, userID)
 	return &view, nil
 }
 
@@ -196,7 +248,18 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 			return nil, domain.ErrCaseDailyUsed
 		}
 	} else if price <= 0 {
-		return nil, domain.ErrInvalidAmount
+		// Free catalog/featured cases must require channel subscription.
+		if !c.RequireChannel {
+			return nil, domain.ErrInvalidAmount
+		}
+		source = domain.CaseOpenSourceFree
+		price = 0
+	}
+
+	if c.RequireChannel {
+		if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+			return nil, err
+		}
 	}
 
 	entry, roll, err := pickWeighted(loot)
@@ -288,18 +351,19 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 	out := make([]AdminCaseView, 0, len(rows))
 	for _, row := range rows {
 		view := AdminCaseView{
-			ID:           row.ID,
-			Slug:         row.Slug,
-			Title:        row.Title,
-			Subtitle:     row.Subtitle,
-			ImageURL:     row.ImageURL,
-			AccentColor:  row.AccentColor,
-			PriceNanoton: row.PriceNanoton,
-			Kind:         row.Kind,
-			SortOrder:    row.SortOrder,
-			Active:       row.Active,
-			TargetRTPBPS: row.TargetRTPBPS,
-			Loot:         []AdminLootEntry{},
+			ID:             row.ID,
+			Slug:           row.Slug,
+			Title:          row.Title,
+			Subtitle:       row.Subtitle,
+			ImageURL:       row.ImageURL,
+			AccentColor:    row.AccentColor,
+			PriceNanoton:   row.PriceNanoton,
+			Kind:           row.Kind,
+			SortOrder:      row.SortOrder,
+			Active:         row.Active,
+			RequireChannel: row.RequireChannel,
+			TargetRTPBPS:   row.TargetRTPBPS,
+			Loot:           []AdminLootEntry{},
 		}
 		if loot, err := s.cases.ListLootByCase(ctx, row.ID); err == nil {
 			view.Loot = make([]AdminLootEntry, 0, len(loot))
@@ -325,6 +389,12 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 }
 
 func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
+	if c.Kind == "" {
+		c.Kind = domain.CaseKindCatalog
+	}
+	if c.Kind != domain.CaseKindDaily && c.PriceNanoton <= 0 && !c.RequireChannel {
+		return fmt.Errorf("бесплатный кейс требует подписку на канал (require_channel)")
+	}
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 		return s.cases.CreateCase(ctx, c)
@@ -466,25 +536,85 @@ func (s *Service) dailyAvailable(ctx context.Context, userID uuid.UUID) (bool, e
 
 func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) CaseView {
 	view := CaseView{
-		ID:           c.ID,
-		Slug:         c.Slug,
-		Title:        c.Title,
-		Subtitle:     c.Subtitle,
-		ImageURL:     c.ImageURL,
-		AccentColor:  c.AccentColor,
-		PriceNanoton: c.PriceNanoton,
-		Kind:         c.Kind,
-		SortOrder:    c.SortOrder,
+		ID:             c.ID,
+		Slug:           c.Slug,
+		Title:          c.Title,
+		Subtitle:       c.Subtitle,
+		ImageURL:       c.ImageURL,
+		AccentColor:    c.AccentColor,
+		PriceNanoton:   c.PriceNanoton,
+		Kind:           c.Kind,
+		SortOrder:      c.SortOrder,
+		RequireChannel: c.RequireChannel,
+	}
+	if c.RequireChannel && s.requiredChannel != "" {
+		view.RequiredChannel = s.requiredChannel
 	}
 	if withLoot {
 		if loot, err := s.cases.ListLootByCase(ctx, c.ID); err == nil {
 			view.Loot = make([]LootPreview, 0, len(loot))
 			for _, e := range loot {
-				view.Loot = append(view.Loot, toLootPreview(e))
+				preview := toLootPreview(e)
+				preview.FloorPriceNanoton = s.quoteCollectionFloor(ctx, e.CollectionSlug)
+				view.Loot = append(view.Loot, preview)
 			}
 		}
 	}
 	return view
+}
+
+func (s *Service) attachChannelStatus(ctx context.Context, view *CaseView, userID uuid.UUID) {
+	if view == nil || !view.RequireChannel {
+		return
+	}
+	if s.requiredChannel != "" {
+		view.RequiredChannel = s.requiredChannel
+	}
+	if userID == uuid.Nil {
+		return
+	}
+	ok, err := s.isChannelSubscribed(ctx, userID)
+	if err != nil {
+		ok = false
+	}
+	view.ChannelSubscribed = &ok
+}
+
+func (s *Service) ensureChannelSubscribed(ctx context.Context, userID uuid.UUID) error {
+	if s.requiredChannel == "" || s.channelChecker == nil {
+		// Misconfigured: cannot verify — fail closed for gated cases.
+		return &ChannelNotSubscribedError{Channel: s.requiredChannel}
+	}
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.TelegramID <= 0 {
+		return &ChannelNotSubscribedError{Channel: s.requiredChannel}
+	}
+	member, err := s.channelChecker.IsChannelMember(ctx, s.requiredChannel, user.TelegramID)
+	if err != nil {
+		return &ChannelNotSubscribedError{Channel: s.requiredChannel}
+	}
+	if !member {
+		return &ChannelNotSubscribedError{Channel: s.requiredChannel}
+	}
+	return nil
+}
+
+func (s *Service) isChannelSubscribed(ctx context.Context, userID uuid.UUID) (bool, error) {
+	if s.requiredChannel == "" || s.channelChecker == nil {
+		return false, nil
+	}
+	err := s.ensureChannelSubscribed(ctx, userID)
+	if err == nil {
+		return true, nil
+	}
+	var channelErr *ChannelNotSubscribedError
+	if errors.As(err, &channelErr) || errors.Is(err, domain.ErrChannelNotSubscribed) {
+		return false, nil
+	}
+	return false, err
 }
 
 func (s *Service) openResultFromExisting(ctx context.Context, open *domain.CaseOpen) (*OpenResult, error) {

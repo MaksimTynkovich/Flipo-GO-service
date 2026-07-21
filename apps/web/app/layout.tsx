@@ -217,6 +217,7 @@ const bootWatchdog = `
     } catch (_) {}
   };
   const showRecovery = () => {
+    if (location.pathname.indexOf("/admin") === 0) return;
     if (document.getElementById("flipo-boot-recovery")) return;
     const el = document.createElement("div");
     el.id = "flipo-boot-recovery";
@@ -294,6 +295,10 @@ const bootWatchdog = `
     },
   };
   window.__flipoBoot.timer = setTimeout(() => {
+    if (location.pathname.indexOf("/admin") === 0) {
+      window.__flipoBoot.ready = true;
+      return;
+    }
     window.__flipoBoot.reportHang("boot still not ready after " + BOOT_HANG_MS + "ms");
   }, BOOT_HANG_MS);
 })();

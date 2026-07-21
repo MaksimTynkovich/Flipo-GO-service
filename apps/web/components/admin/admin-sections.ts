@@ -6,7 +6,6 @@ import FinanceSection from "./sections/FinanceSection";
 import GamesSection from "./sections/GamesSection";
 import MarketAdminSection from "./sections/MarketAdminSection";
 import MarketingSection from "./sections/MarketingSection";
-import StakingDropoffSection from "./sections/StakingDropoffSection";
 import SystemSection from "./sections/SystemSection";
 import TelegramSection from "./sections/TelegramSection";
 import UsersSection from "./sections/UsersSection";
@@ -15,15 +14,14 @@ import OutcomeSection from "./sections/OutcomeSection";
 export type AdminSectionId =
   | "dashboard"
   | "analytics"
-  | "staking-dropoff"
   | "users"
   | "games"
   | "cases"
   | "market"
   | "finance"
   | "marketing"
+  | "settings"
   | "telegram"
-  | "system"
   | "outcome";
 
 export type AdminNavItem = {
@@ -35,37 +33,34 @@ export type AdminNavItem = {
 export const ADMIN_NAV: AdminNavItem[] = [
   { id: "dashboard", href: "/admin", label: "Дашборд" },
   { id: "analytics", href: "/admin/analytics", label: "Аналитика" },
-  { id: "staking-dropoff", href: "/admin/staking-dropoff", label: "Отток стейкинга" },
   { id: "users", href: "/admin/users", label: "Пользователи" },
   { id: "games", href: "/admin/games", label: "Игры" },
   { id: "cases", href: "/admin/cases", label: "Кейсы" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы" },
   { id: "market", href: "/admin/market", label: "Маркет" },
-  { id: "finance", href: "/admin/finance", label: "Финансы" },
+  { id: "finance", href: "/admin/finance", label: "Операции" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг" },
+  { id: "settings", href: "/admin/system", label: "Система" },
   { id: "telegram", href: "/admin/telegram", label: "Telegram" },
-  { id: "system", href: "/admin/system", label: "Система" },
 ];
 
 export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   dashboard: DashboardSection,
   analytics: AnalyticsSection,
-  "staking-dropoff": StakingDropoffSection,
   users: UsersSection,
   games: GamesSection,
   cases: CasesSection,
   market: MarketAdminSection,
   finance: FinanceSection,
   marketing: MarketingSection,
+  settings: SystemSection,
   telegram: TelegramSection,
-  system: SystemSection,
   outcome: OutcomeSection,
 };
 
 const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin": "dashboard",
   "/admin/analytics": "analytics",
-  "/admin/staking-dropoff": "staking-dropoff",
   "/admin/users": "users",
   "/admin/games": "games",
   "/admin/cases": "cases",
@@ -73,8 +68,9 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/market": "market",
   "/admin/finance": "finance",
   "/admin/marketing": "marketing",
+  "/admin/settings": "settings",
   "/admin/telegram": "telegram",
-  "/admin/system": "system",
+  "/admin/system": "settings",
 };
 
 export function resolveAdminSection(pathname: string): AdminSectionId {

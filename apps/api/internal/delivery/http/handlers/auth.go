@@ -112,6 +112,58 @@ func (h *AuthHandler) DebugAuth(c *gin.Context) {
 	})
 }
 
+func (h *AuthHandler) AdminPanelLogin(c *gin.Context) {
+	var req struct {
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_payload"})
+		return
+	}
+
+	token, user, err := h.auth.AuthenticateAdminPanel(c.Request.Context(), req.Password)
+	if err != nil {
+		h.analytics.Track(c.Request.Context(), analyticsuc.EventInput{
+			Source:        "api",
+			EventName:     "auth_admin_panel_failed",
+			EventCategory: "auth",
+			Status:        "error",
+			ErrorCode:     "admin_panel_auth_failed",
+			ErrorMessage:  err.Error(),
+		})
+		switch {
+		case errors.Is(err, domain.ErrAdminPasswordNotSet):
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "Пароль админки не настроен",
+				"code":  "admin_password_not_set",
+			})
+		case errors.Is(err, domain.ErrAdminActorMissing):
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "Сначала зайдите в Mini App под admin Telegram ID",
+				"code":  "admin_actor_missing",
+			})
+		case errors.Is(err, domain.ErrUserBanned):
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Аккаунт заблокирован.",
+				"code":  "user_banned",
+			})
+		case errors.Is(err, domain.ErrAdminPasswordInvalid):
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Неверный пароль",
+				"code":  "admin_password_invalid",
+			})
+		default:
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"user":  toUserView(h.auth, user),
+	})
+}
+
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	user, err := h.auth.GetUser(c.Request.Context(), userID)

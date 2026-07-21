@@ -15,6 +15,7 @@ const (
 
 	CaseOpenSourcePaid  = "paid"
 	CaseOpenSourceDaily = "daily"
+	CaseOpenSourceFree  = "free"
 
 	CaseClaimTxRefPrefix = "case:"
 
@@ -33,6 +34,7 @@ type Case struct {
 	Kind            string    `gorm:"size:16;not null;index" json:"kind"`
 	SortOrder       int       `gorm:"not null;default:0" json:"sort_order"`
 	Active          bool      `gorm:"not null;default:true;index" json:"active"`
+	RequireChannel  bool      `gorm:"not null;default:false" json:"require_channel"`
 	TargetRTPBPS    int       `gorm:"column:target_rtp_bps;not null;default:9000" json:"target_rtp_bps"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
