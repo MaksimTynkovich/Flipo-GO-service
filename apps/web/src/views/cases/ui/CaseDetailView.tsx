@@ -41,12 +41,12 @@ function formatCasePrice(nanoton: number): string {
 function LootCard({ entry }: { entry: CaseLootPreview }) {
   const floor = entry.floor_price_nanoton ?? 0;
   return (
-    <div className="case-loot-card">
+    <article className="case-loot-card">
       <div className="case-loot-card__frame">
         {floor > 0 ? (
           <span className="case-loot-card__price">
             {formatTON(floor)}
-            <TonIcon variant="brand" className="h-3 w-3 shrink-0" />
+            <TonIcon variant="brand" className="case-loot-card__price-icon" aria-hidden />
           </span>
         ) : null}
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -57,11 +57,13 @@ function LootCard({ entry }: { entry: CaseLootPreview }) {
           draggable={false}
         />
       </div>
-      <p className="case-loot-card__name">{entry.display_name}</p>
-      {entry.rarity_label ? (
-        <span className="case-loot-card__rarity">{entry.rarity_label}</span>
-      ) : null}
-    </div>
+      <div className="case-loot-card__meta">
+        <p className="case-loot-card__name">{entry.display_name}</p>
+        {entry.rarity_label ? (
+          <span className="case-loot-card__rarity">{entry.rarity_label}</span>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -216,11 +218,16 @@ export function CaseDetailView() {
       {loading && !caseItem ? (
         <div className="space-y-4">
           <div className="h-8 w-48 animate-pulse rounded-lg bg-surface" />
-          <div className="h-[7.5rem] animate-pulse rounded-[1.35rem] bg-surface" />
+          <div className="h-[5.75rem] animate-pulse rounded-[1.35rem] bg-surface" />
           <div className="h-[3.25rem] animate-pulse rounded-[1.15rem] bg-surface" />
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="case-detail__loot-grid">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="aspect-[4/5] animate-pulse rounded-2xl bg-surface" />
+              <div key={i} className="case-loot-card case-loot-card--skeleton" aria-hidden>
+                <div className="case-loot-card__frame case-loot-card__frame--skeleton" />
+                <div className="case-loot-card__meta">
+                  <div className="case-loot-card__skel case-loot-card__skel--name" />
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -290,7 +297,7 @@ export function CaseDetailView() {
                 <p className="text-sm">Призы скоро появятся</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="case-detail__loot-grid">
                 {loot.map((entry) => (
                   <LootCard key={entry.id} entry={entry} />
                 ))}

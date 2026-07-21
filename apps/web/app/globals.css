@@ -6831,7 +6831,7 @@ body::-webkit-scrollbar,
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.85rem;
 }
 
 .case-detail__collections-head h2 {
@@ -6842,15 +6842,22 @@ body::-webkit-scrollbar,
   color: #fff;
 }
 
+.case-detail__loot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
 .case-loot-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 0.5rem 0.7rem;
+  gap: 0.5rem;
+  padding: 0.5rem;
   border-radius: 1rem;
-  background: #121820;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, #1a2029 0%, #131820 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 6px 16px rgba(0, 0, 0, 0.22);
 }
 
 .case-loot-card__frame {
@@ -6860,62 +6867,102 @@ body::-webkit-scrollbar,
   aspect-ratio: 1;
   align-items: center;
   justify-content: center;
-  border-radius: 0.85rem;
+  overflow: hidden;
+  border-radius: 0.75rem;
   background:
-    radial-gradient(ellipse 70% 65% at 50% 45%, rgba(255, 255, 255, 0.06), transparent 70%),
+    radial-gradient(ellipse 75% 70% at 50% 42%, rgba(255, 255, 255, 0.05), transparent 72%),
     #0a0e14;
-  box-shadow: inset 0 0 0 1.5px rgba(212, 175, 55, 0.55);
+  border: 1.5px solid rgba(212, 175, 55, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 14px rgba(212, 175, 55, 0.07);
 }
 
 .case-loot-card__price {
   position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
+  top: 0.35rem;
+  right: 0.35rem;
   z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
-  height: 1.35rem;
-  padding: 0 0.4rem;
+  gap: 0.15rem;
+  height: 1.25rem;
+  padding: 0 0.38rem;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.88);
   color: #fff;
-  font-size: 0.65rem;
-  font-weight: 650;
+  font-size: 0.62rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  backdrop-filter: blur(8px);
+  letter-spacing: -0.01em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.case-loot-card__price-icon {
+  width: 0.65rem;
+  height: 0.65rem;
+  flex-shrink: 0;
 }
 
 .case-loot-card__img {
-  width: 68%;
-  height: 68%;
+  width: 74%;
+  height: 74%;
   object-fit: contain;
-  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.48));
   user-select: none;
   -webkit-user-drag: none;
 }
 
+.case-loot-card__meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
+  padding-inline: 0.1rem;
+}
+
 .case-loot-card__name {
   margin: 0;
-  max-width: 100%;
-  padding-inline: 0.15rem;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .case-loot-card__rarity {
-  margin-top: -0.15rem;
-  padding: 0.12rem 0.45rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: color-mix(in srgb, var(--accent) 85%, white);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.case-loot-card--skeleton {
+  pointer-events: none;
+}
+
+.case-loot-card__frame--skeleton,
+.case-loot-card__skel {
+  animation: gift-card-skel-pulse 1.6s ease-in-out infinite;
+}
+
+.case-loot-card__frame--skeleton {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: none;
+}
+
+.case-loot-card__skel--name {
+  width: 68%;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .case-detail-cta {
@@ -6988,14 +7035,14 @@ body::-webkit-scrollbar,
 
 .case-reveal__frame--empty {
   display: flex;
-  height: 7.5rem;
+  height: 5.75rem;
   align-items: center;
   justify-content: center;
 }
 
 .case-reveal__viewport {
   position: relative;
-  height: 7.25rem;
+  height: 5.75rem;
   overflow: hidden;
 }
 
@@ -7014,12 +7061,12 @@ body::-webkit-scrollbar,
 .case-reveal__item {
   flex: 0 0 auto;
   display: flex;
-  height: 5.5rem;
+  aspect-ratio: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 0.35rem;
-  border-radius: 0.8rem;
+  border-radius: 0.85rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   opacity: 0.72;
   transform: scale(0.92);

@@ -230,6 +230,7 @@ export function CaseOpenReveal({
                   )}
                   style={{
                     width: ITEM_W,
+                    height: ITEM_W,
                     background: tileBackground(item.collection_slug, idx),
                   }}
                 >
