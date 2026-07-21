@@ -54,11 +54,11 @@ export type CaseHeroTheme = FeaturedTheme & {
 
 export const FEATURED = {
   premium: {
-    from: "#1a3558",
-    mid: "#122844",
-    to: "#0c1626",
-    border: "rgba(74,137,220,0.45)",
-    glow: "rgba(59,130,246,0.22)",
+    from: "#0f2238",
+    mid: "#0b1a2c",
+    to: "#060d16",
+    border: "rgba(74,137,220,0.35)",
+    glow: "rgba(59,130,246,0.1)",
   },
   daily: {
     from: "#184a32",
@@ -122,8 +122,8 @@ export function caseHeroStyle(theme: CaseHeroTheme): CSSProperties {
     borderColor: theme.border,
     boxShadow: `0 0 0 1px ${theme.glow}, inset 0 1px 0 rgba(255,255,255,0.06)`,
     background: `
-      radial-gradient(ellipse 85% 75% at 78% 42%, ${theme.glow} 0%, transparent 58%),
-      linear-gradient(155deg, ${theme.from} 0%, ${theme.mid} 50%, ${theme.to} 100%)
+      radial-gradient(ellipse 70% 60% at 82% 38%, ${theme.glow} 0%, transparent 62%),
+      linear-gradient(180deg, ${theme.from} 0%, ${theme.mid} 48%, ${theme.to} 100%)
     `,
   };
 }
@@ -156,17 +156,26 @@ export function FeaturedPattern({
       </svg>
     );
   }
+  // Telegram paper-plane outline (send icon), scattered watermark.
   return (
-    <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.11]" aria-hidden>
+    <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.16]" aria-hidden>
       <defs>
-        <pattern id={patternId} width="34" height="34" patternUnits="userSpaceOnUse">
-          <path
-            d="M9 17l17-6.5-6.5 17-2.6-7L9 17z"
-            fill="none"
-            stroke="#93c5fd"
-            strokeWidth="1.15"
-            strokeLinejoin="round"
-          />
+        <pattern id={patternId} width="132" height="132" patternUnits="userSpaceOnUse">
+          <g fill="none" stroke="#8eb8ef" strokeWidth="1.15" strokeLinejoin="round" strokeLinecap="round">
+            {[
+              "translate(6 28) rotate(35) scale(1.08)",
+              "translate(68 4) rotate(-35) scale(0.95)",
+              "translate(96 58) rotate(12) scale(0.82)",
+              "translate(38 78) rotate(-12) scale(1.12)",
+              "translate(18 108) rotate(42) scale(0.78)",
+            ].map((t) => (
+              <g key={t} transform={t}>
+                {/* Lucide Send — recognisable Telegram paper-plane */}
+                <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.04a2 2 0 0 1 1.112 1.11z" />
+                <path d="M21.854 2.147 10.75 13.25" />
+              </g>
+            ))}
+          </g>
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill={`url(#${patternId})`} />
