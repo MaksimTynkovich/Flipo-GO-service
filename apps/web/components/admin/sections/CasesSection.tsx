@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { GiftPickerModal } from "@/components/admin/GiftPickerModal";
 import {
   AdminButton,
   AdminChip,
@@ -12,6 +13,12 @@ import {
 } from "@/components/admin/admin-ui";
 import { AdminPercentField, AdminTonField } from "@/components/admin/AdminInputs";
 import { useToast } from "@/components/providers/ToastProvider";
+import {
+  changesGiftModelImageUrl,
+  modelNameFromChangesImageUrl,
+  type ChangesGiftModel,
+} from "@/lib/changes-gifts";
+import { giftImageUrl } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
 import {
   getAdminCases,
@@ -21,7 +28,6 @@ import {
   type AdminCaseLootEntry,
   type AdminCaseUpsert,
 } from "@/lib/api";
-import { giftImageUrl } from "@/lib/gifts";
 
 const KINDS = [
   { value: "catalog", label: "Каталог" },
@@ -29,8 +35,13 @@ const KINDS = [
   { value: "daily", label: "Daily" },
 ] as const;
 
+const RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
+
 type CaseDraft = AdminCaseUpsert & { id?: string };
-type LootDraft = AdminCaseLootEntry & { _key: string };
+type LootDraft = AdminCaseLootEntry & {
+  _key: string;
+  _modelName?: string;
+};
 
 function emptyCaseDraft(): CaseDraft {
   return {
@@ -65,9 +76,17 @@ function caseToDraft(c: AdminCase): CaseDraft {
   };
 }
 
+function inferModelName(entry: AdminCaseLootEntry): string | undefined {
+  const fromUrl = modelNameFromChangesImageUrl(entry.image_url);
+  if (fromUrl) return fromUrl;
+  if (entry.display_name?.trim()) return entry.display_name.trim();
+  return undefined;
+}
+
 function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
   return (entries || []).map((e, i) => ({
     _key: e.id || `new-${i}-${e.collection_slug}`,
+    _modelName: inferModelName(e),
     id: e.id,
     collection_slug: e.collection_slug,
     display_name: e.display_name,
@@ -78,12 +97,19 @@ function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
   }));
 }
 
-function emptyLootRow(sortOrder: number): LootDraft {
+function lootPreviewUrl(row: LootDraft): string {
+  if (row.image_url?.includes("cdn.changes.tg")) return row.image_url;
+  if (row._modelName) return changesGiftModelImageUrl(row._modelName);
+  return giftImageUrl(row.collection_slug || "unknown", row.image_url);
+}
+
+function giftToLootRow(gift: ChangesGiftModel, sortOrder: number): LootDraft {
   return {
-    _key: `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    collection_slug: "",
-    display_name: "",
-    image_url: "",
+    _key: `new-${Date.now()}-${gift.collectionSlug}`,
+    _modelName: gift.modelName,
+    collection_slug: gift.collectionSlug,
+    display_name: gift.displayName,
+    image_url: gift.previewUrl,
     rarity_label: "",
     sort_order: sortOrder,
     weight: 1,
@@ -107,6 +133,8 @@ export default function CasesSection() {
   const [loot, setLoot] = useState<LootDraft[]>([]);
   const [savingCase, setSavingCase] = useState(false);
   const [savingLoot, setSavingLoot] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -136,16 +164,23 @@ export default function CasesSection() {
     setSelectedId(c.id);
     setDraft(caseToDraft(c));
     setLoot(lootToDraft(c.loot));
+    setExpandedKey(null);
   }
 
   function startNew() {
     setSelectedId("new");
     setDraft(emptyCaseDraft());
     setLoot([]);
+    setExpandedKey(null);
   }
 
   const weightTotal = useMemo(
     () => loot.reduce((sum, row) => sum + (row.weight > 0 ? row.weight : 0), 0),
+    [loot],
+  );
+
+  const lootSlugs = useMemo(
+    () => new Set(loot.map((row) => row.collection_slug)),
     [loot],
   );
 
@@ -206,11 +241,11 @@ export default function CasesSection() {
       const row = loot[i];
       const slug = row.collection_slug.trim().toLowerCase();
       if (!slug) {
-        showToast({ title: `Строка ${i + 1}: укажите collection_slug`, variant: "error" });
+        showToast({ title: `Приз ${i + 1}: нет collection_slug`, variant: "error" });
         return;
       }
       if (row.weight <= 0) {
-        showToast({ title: `Строка ${i + 1}: weight должен быть > 0`, variant: "error" });
+        showToast({ title: `Приз ${i + 1}: weight должен быть > 0`, variant: "error" });
         return;
       }
       cleaned.push({
@@ -253,6 +288,10 @@ export default function CasesSection() {
     });
   }
 
+  function addGift(gift: ChangesGiftModel) {
+    setLoot((prev) => [...prev, giftToLootRow(gift, prev.length)]);
+  }
+
   const selected = selectedId && selectedId !== "new"
     ? cases.find((c) => c.id === selectedId)
     : null;
@@ -260,7 +299,7 @@ export default function CasesSection() {
   return (
     <AdminPage
       title="Кейсы"
-      description="CRUD кейсов и таблицы лута. Веса определяют шанс выпадения; RTP — ориентир для балансировки."
+      description="Метаданные кейса и визуальное наполнение лута. Подарки выбираются из каталога cdn.changes.tg."
     >
       <AdminToolbar>
         <AdminButton variant="secondary" disabled={loading} onClick={() => void load()}>
@@ -423,125 +462,171 @@ export default function CasesSection() {
           </AdminPanel>
 
           <AdminPanel
-            title="Лут"
+            title="Содержимое кейса"
             description={
               draft.id
-                ? `Σ weight = ${weightTotal}. Сохранение полностью заменяет таблицу.`
-                : "Сначала создайте кейс, затем добавьте лут."
+                ? `${loot.length} приз(ов) · Σ weight = ${weightTotal}. Сохранение полностью заменяет лут.`
+                : "Сначала создайте кейс, затем добавьте подарки."
             }
           >
             {!draft.id ? (
               <AdminEmpty>Лут недоступен до сохранения кейса.</AdminEmpty>
             ) : (
               <>
-                <div className="space-y-2">
-                  {loot.length === 0 ? (
-                    <AdminEmpty>Пусто — добавьте хотя бы один приз.</AdminEmpty>
-                  ) : (
-                    loot.map((row, idx) => (
-                      <div
-                        key={row._key}
-                        className="grid grid-cols-1 gap-2 rounded-xl bg-surface-raised/45 p-2.5 sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_5rem_5.5rem_auto]"
-                      >
-                        <div className="flex items-center justify-center sm:pt-5">
+                {loot.length === 0 ? (
+                  <AdminEmpty>
+                    Пусто — нажмите «Добавить подарок» и выберите модель из каталога.
+                  </AdminEmpty>
+                ) : (
+                  <div className="space-y-2">
+                    {loot.map((row, idx) => {
+                      const expanded = expandedKey === row._key;
+                      return (
+                        <div key={row._key} className="admin-loot-card">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={giftImageUrl(row.collection_slug || "unknown", row.image_url)}
+                            src={lootPreviewUrl(row)}
                             alt=""
-                            className="h-9 w-9 object-contain opacity-90"
+                            className="admin-loot-card__img"
                           />
-                        </div>
-                        <AdminField label="collection_slug">
-                          <input
-                            className="input-field"
-                            value={row.collection_slug}
-                            onChange={(e) =>
-                              updateLoot(row._key, {
-                                collection_slug: e.target.value.toLowerCase().replace(/\s+/g, "-"),
-                              })
-                            }
-                            placeholder="plush-pepe"
-                          />
-                        </AdminField>
-                        <AdminField label="display_name">
-                          <input
-                            className="input-field"
-                            value={row.display_name}
-                            onChange={(e) => updateLoot(row._key, { display_name: e.target.value })}
-                            placeholder="Plush Pepe"
-                          />
-                        </AdminField>
-                        <AdminField label="weight">
-                          <input
-                            className="input-field"
-                            type="number"
-                            min={1}
-                            value={row.weight}
-                            onChange={(e) =>
-                              updateLoot(row._key, {
-                                weight: Math.max(1, Number.parseInt(e.target.value, 10) || 1),
-                              })
-                            }
-                          />
-                        </AdminField>
-                        <AdminField label="шанс">
-                          <div className="input-field flex items-center tabular-nums text-muted">
-                            {chanceLabel(row.weight, weightTotal)}
+                          <div className="min-w-0 space-y-2">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="admin-loot-card__title">
+                                  {row.display_name || row._modelName || row.collection_slug}
+                                </p>
+                                <p className="admin-loot-card__slug">{row.collection_slug}</p>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                <AdminButton
+                                  variant="secondary"
+                                  className="!h-8 !px-2"
+                                  disabled={idx === 0}
+                                  onClick={() => moveLoot(row._key, -1)}
+                                >
+                                  ↑
+                                </AdminButton>
+                                <AdminButton
+                                  variant="secondary"
+                                  className="!h-8 !px-2"
+                                  disabled={idx === loot.length - 1}
+                                  onClick={() => moveLoot(row._key, 1)}
+                                >
+                                  ↓
+                                </AdminButton>
+                                <AdminButton
+                                  variant="secondary"
+                                  className="!h-8 !px-2.5 text-xs"
+                                  onClick={() =>
+                                    setExpandedKey(expanded ? null : row._key)
+                                  }
+                                >
+                                  {expanded ? "Скрыть" : "Ещё"}
+                                </AdminButton>
+                                <AdminButton
+                                  variant="danger"
+                                  className="!h-8 !px-2"
+                                  onClick={() =>
+                                    setLoot((prev) => prev.filter((r) => r._key !== row._key))
+                                  }
+                                >
+                                  ×
+                                </AdminButton>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              <AdminField label="weight">
+                                <input
+                                  className="input-field"
+                                  type="number"
+                                  min={1}
+                                  value={row.weight}
+                                  onChange={(e) =>
+                                    updateLoot(row._key, {
+                                      weight: Math.max(1, Number.parseInt(e.target.value, 10) || 1),
+                                    })
+                                  }
+                                />
+                              </AdminField>
+                              <AdminField label="шанс">
+                                <div className="input-field flex items-center tabular-nums text-muted">
+                                  {chanceLabel(row.weight, weightTotal)}
+                                </div>
+                              </AdminField>
+                              <AdminField label="редкость" className="col-span-2 sm:col-span-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {RARITY_OPTIONS.map((r) => (
+                                    <button
+                                      key={r}
+                                      type="button"
+                                      className={
+                                        row.rarity_label === r
+                                          ? "rounded-lg bg-[var(--admin-accent-subtle)] px-2 py-1 text-xs text-[var(--admin-fg)]"
+                                          : "rounded-lg bg-black/20 px-2 py-1 text-xs text-[var(--admin-muted)] hover:text-[var(--admin-fg)]"
+                                      }
+                                      onClick={() => updateLoot(row._key, { rarity_label: r })}
+                                    >
+                                      {r}
+                                    </button>
+                                  ))}
+                                  <input
+                                    className="input-field min-w-[5rem] flex-1"
+                                    value={row.rarity_label || ""}
+                                    onChange={(e) =>
+                                      updateLoot(row._key, { rarity_label: e.target.value })
+                                    }
+                                    placeholder="своя"
+                                  />
+                                </div>
+                              </AdminField>
+                            </div>
+
+                            {expanded ? (
+                              <div className="grid grid-cols-1 gap-2 border-t border-white/5 pt-2 sm:grid-cols-2">
+                                <AdminField label="display_name">
+                                  <input
+                                    className="input-field"
+                                    value={row.display_name}
+                                    onChange={(e) =>
+                                      updateLoot(row._key, { display_name: e.target.value })
+                                    }
+                                  />
+                                </AdminField>
+                                <AdminField label="collection_slug" hint="обычно авто из модели">
+                                  <input
+                                    className="input-field"
+                                    value={row.collection_slug}
+                                    onChange={(e) =>
+                                      updateLoot(row._key, {
+                                        collection_slug: e.target.value
+                                          .toLowerCase()
+                                          .replace(/[^a-z0-9-]/g, ""),
+                                      })
+                                    }
+                                  />
+                                </AdminField>
+                                <AdminField label="image_url" className="sm:col-span-2" hint="CDN URL, заполняется автоматически">
+                                  <input
+                                    className="input-field font-mono text-xs"
+                                    value={row.image_url || ""}
+                                    onChange={(e) =>
+                                      updateLoot(row._key, { image_url: e.target.value })
+                                    }
+                                  />
+                                </AdminField>
+                              </div>
+                            ) : null}
                           </div>
-                        </AdminField>
-                        <div className="flex flex-wrap items-end gap-1 sm:pt-5">
-                          <AdminButton
-                            variant="secondary"
-                            className="!h-8 !px-2"
-                            disabled={idx === 0}
-                            onClick={() => moveLoot(row._key, -1)}
-                          >
-                            ↑
-                          </AdminButton>
-                          <AdminButton
-                            variant="secondary"
-                            className="!h-8 !px-2"
-                            disabled={idx === loot.length - 1}
-                            onClick={() => moveLoot(row._key, 1)}
-                          >
-                            ↓
-                          </AdminButton>
-                          <AdminButton
-                            variant="danger"
-                            className="!h-8 !px-2"
-                            onClick={() => setLoot((prev) => prev.filter((r) => r._key !== row._key))}
-                          >
-                            ×
-                          </AdminButton>
                         </div>
-                        <div className="grid grid-cols-1 gap-2 sm:col-span-5 sm:grid-cols-2">
-                          <AdminField label="rarity_label">
-                            <input
-                              className="input-field"
-                              value={row.rarity_label || ""}
-                              onChange={(e) => updateLoot(row._key, { rarity_label: e.target.value })}
-                              placeholder="common / rare / …"
-                            />
-                          </AdminField>
-                          <AdminField label="image_url">
-                            <input
-                              className="input-field"
-                              value={row.image_url || ""}
-                              onChange={(e) => updateLoot(row._key, { image_url: e.target.value })}
-                              placeholder="пусто = Fragment preview"
-                            />
-                          </AdminField>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <AdminButton
-                    variant="secondary"
-                    onClick={() => setLoot((prev) => [...prev, emptyLootRow(prev.length)])}
-                  >
-                    + Приз
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <AdminButton variant="secondary" onClick={() => setPickerOpen(true)}>
+                    + Добавить подарок
                   </AdminButton>
                   <AdminButton disabled={savingLoot || loot.length === 0} onClick={() => void saveLoot()}>
                     {savingLoot ? "…" : "Сохранить лут"}
@@ -552,6 +637,13 @@ export default function CasesSection() {
           </AdminPanel>
         </>
       ) : null}
+
+      <GiftPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={addGift}
+        excludeSlugs={lootSlugs}
+      />
     </AdminPage>
   );
 }
