@@ -1,12 +1,13 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { candyTileBackgroundForLoot } from "@/components/cases/case-ui";
 import type { CaseLootPreview } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 
-const ITEM_W = 68;
-const ITEM_GAP = 8;
+const ITEM_W = 60;
+const ITEM_GAP = 6;
 const STRIDE = ITEM_W + ITEM_GAP;
 /** Full cycles before the landing zone — more distance reads as a longer spin. */
 const LOOPS = 10;
@@ -22,6 +23,8 @@ type CaseOpenRevealProps = {
   accent?: string;
   /** Idle preview (no spin) vs active open animation. */
   mode?: "idle" | "spin";
+  /** Render inside case hero card — no outer frame chrome. */
+  embedded?: boolean;
   onComplete?: () => void;
 };
 
@@ -78,17 +81,12 @@ function easeOutQuartic(t: number): number {
   return 1 - inv * inv * inv * inv;
 }
 
-function tileBackground(slug: string, index: number): string {
-  const hues = [210, 160, 45, 280, 190, 25];
-  const hue = hues[Math.abs(index + slug.length) % hues.length];
-  return `linear-gradient(160deg, hsl(${hue} 55% 32%) 0%, hsl(${hue} 40% 14%) 100%)`;
-}
-
 export function CaseOpenReveal({
   loot,
   winnerId,
   accent,
   mode = "idle",
+  embedded = false,
   onComplete,
 }: CaseOpenRevealProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -187,7 +185,7 @@ export function CaseOpenReveal({
 
   if (items.length === 0) {
     return (
-      <div className="case-reveal case-reveal--empty">
+      <div className={cn("case-reveal case-reveal--empty", embedded && "case-reveal--embedded")}>
         <div className="case-reveal__frame case-reveal__frame--empty">
           <p className="text-sm text-white/40">Нет призов</p>
         </div>
@@ -199,6 +197,7 @@ export function CaseOpenReveal({
     <div
       className={cn(
         "case-reveal",
+        embedded && "case-reveal--embedded",
         landed && "case-reveal--landed",
         !isSpin && "case-reveal--idle",
       )}
@@ -220,18 +219,20 @@ export function CaseOpenReveal({
             {items.map((item, idx) => {
               const isWinner = landed && idx === targetIndex;
               const nearCenter = !isSpin && Math.abs(idx - targetIndex) <= 1;
+              const isFocus = nearCenter && idx === targetIndex;
               return (
                 <div
                   key={`${item.id}-${idx}`}
                   className={cn(
                     "case-reveal__item",
                     isWinner && "case-reveal__item--winner",
-                    nearCenter && "case-reveal__item--focus",
+                    isFocus && "case-reveal__item--focus",
+                    nearCenter && !isFocus && "case-reveal__item--near",
                   )}
                   style={{
                     width: ITEM_W,
                     height: ITEM_W,
-                    background: tileBackground(item.collection_slug, idx),
+                    background: candyTileBackgroundForLoot(item),
                   }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -1,13 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Package } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { CaseOpenReveal } from "@/components/cases/CaseOpenReveal";
 import { CaseWinModal } from "@/components/cases/CaseWinModal";
+import {
+  CaseDetailHeroArt,
+  FeaturedPattern,
+  candyTileBackgroundForLoot,
+  caseHeroStyle,
+  formatCasePrice,
+  getCaseTheme,
+  parseLootRarity,
+} from "@/components/cases/case-ui";
 import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
 import {
   ApiRequestError,
@@ -32,17 +41,16 @@ import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "revealing" | "won";
 
-function formatCasePrice(nanoton: number): string {
-  const ton = nanoton / 1e9;
-  if (Number.isInteger(ton)) return String(ton);
-  return ton.toFixed(1).replace(/\.0$/, "");
-}
-
 function LootCard({ entry }: { entry: CaseLootPreview }) {
   const floor = entry.floor_price_nanoton ?? 0;
+  const rarity = parseLootRarity(entry.rarity_label);
+
   return (
     <article className="case-loot-card">
-      <div className="case-loot-card__frame">
+      <div
+        className="case-loot-card__frame"
+        style={{ background: candyTileBackgroundForLoot(entry) }}
+      >
         {floor > 0 ? (
           <span className="case-loot-card__price">
             {formatTON(floor)}
@@ -60,7 +68,9 @@ function LootCard({ entry }: { entry: CaseLootPreview }) {
       <div className="case-loot-card__meta">
         <p className="case-loot-card__name">{entry.display_name}</p>
         {entry.rarity_label ? (
-          <span className="case-loot-card__rarity">{entry.rarity_label}</span>
+          <span className={cn("case-loot-card__rarity", `case-loot-card__rarity--${rarity}`)}>
+            {entry.rarity_label}
+          </span>
         ) : null}
       </div>
     </article>
@@ -72,6 +82,7 @@ export function CaseDetailView() {
   const router = useRouter();
   const { user, setUser } = useAuth();
   const haptics = useTelegramHaptics();
+  const patternUid = useId().replace(/:/g, "");
   const idOrSlug = String(params?.id || "");
 
   const [caseItem, setCaseItem] = useState<CaseView | null>(null);
@@ -102,6 +113,7 @@ export function CaseDetailView() {
 
   const accent = caseItem?.accent_color || "#3390ec";
   const loot = caseItem?.loot || [];
+  const theme = caseItem ? getCaseTheme(caseItem) : null;
   const dailyBlocked =
     caseItem?.kind === "daily" && caseItem.daily_available === false;
   const isFree =
@@ -217,8 +229,16 @@ export function CaseDetailView() {
     <PageShell>
       {loading && !caseItem ? (
         <div className="space-y-4">
-          <div className="h-8 w-48 animate-pulse rounded-lg bg-surface" />
-          <div className="h-[5.75rem] animate-pulse rounded-[1.35rem] bg-surface" />
+          <div className="case-detail-hero case-detail-hero--skeleton" aria-hidden>
+            <div className="case-detail-hero__top">
+              <div className="case-detail-hero__head">
+                <div className="h-5 w-40 animate-pulse rounded-md bg-white/10" />
+                <div className="mt-2 h-3 w-28 animate-pulse rounded-md bg-white/10 opacity-80" />
+                <div className="mt-3 h-7 w-20 animate-pulse rounded-full bg-white/10" />
+              </div>
+            </div>
+            <div className="case-reveal__viewport case-reveal__viewport--skeleton animate-pulse" />
+          </div>
           <div className="h-[3.25rem] animate-pulse rounded-[1.15rem] bg-surface" />
           <div className="case-detail__loot-grid">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -237,21 +257,59 @@ export function CaseDetailView() {
         <p className="mb-3 text-sm text-red-400">{error}</p>
       ) : null}
 
-      {caseItem && (phase === "idle" || phase === "revealing") ? (
+      {caseItem && theme && (phase === "idle" || phase === "revealing") ? (
         <div className="case-detail space-y-4">
-          <h1 className="case-detail__title">{heading}</h1>
+          <section className="case-detail-hero" style={caseHeroStyle(theme)}>
+            <FeaturedPattern
+              variant={theme.patternVariant}
+              patternId={`detail-pat-${patternUid}`}
+              slug={theme.catalogSlug}
+              color={theme.patternColor}
+            />
 
-          <CaseOpenReveal
-            loot={
-              phase === "revealing" && revealLoot.length > 0
-                ? revealLoot
-                : loot
-            }
-            winnerId={phase === "revealing" ? result?.loot_entry.id : null}
-            mode={phase === "revealing" ? "spin" : "idle"}
-            accent={accent}
-            onComplete={handleRevealComplete}
-          />
+            <div className="case-detail-hero__top">
+              <CaseDetailHeroArt loot={loot} imageUrl={caseItem.image_url} />
+
+              <div className="case-detail-hero__head">
+                <h1 className="case-detail-hero__title">{heading}</h1>
+                <p className="case-detail-hero__subtitle">
+                  {caseItem.subtitle || "Telegram подарки"}
+                </p>
+                {isFree ? (
+                  <span
+                    className={cn(
+                      "case-detail-hero__price case-detail-hero__price--free",
+                      dailyBlocked && "case-detail-hero__price--muted",
+                    )}
+                  >
+                    {dailyBlocked
+                      ? "Завтра"
+                      : caseItem.require_channel
+                        ? "Бесплатно · подписка"
+                        : "Бесплатно"}
+                  </span>
+                ) : (
+                  <span className="case-detail-hero__price">
+                    <TonIcon variant="brand" className="h-3.5 w-3.5" aria-hidden />
+                    {formatCasePrice(caseItem.price_nanoton)} TON
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <CaseOpenReveal
+              embedded
+              loot={
+                phase === "revealing" && revealLoot.length > 0
+                  ? revealLoot
+                  : loot
+              }
+              winnerId={phase === "revealing" ? result?.loot_entry.id : null}
+              mode={phase === "revealing" ? "spin" : "idle"}
+              accent={accent}
+              onComplete={handleRevealComplete}
+            />
+          </section>
 
           <button
             type="button"
