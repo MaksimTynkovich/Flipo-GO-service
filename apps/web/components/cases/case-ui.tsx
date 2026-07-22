@@ -3,6 +3,63 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { CaseLootPreview, CaseView } from "@/lib/api";
 
+/** Admin-pickable loot tile colors (priority over rarity background). */
+export const LOOT_TILE_COLOR_OPTIONS = [
+  "#f77091",
+  "#ff9ebb",
+  "#ff6b8b",
+  "#ffb7b2",
+  "#ff8e72",
+  "#fdffb6",
+  "#cff4d2",
+  "#a8f0d3",
+  "#70d6ff",
+  "#54bbf0",
+  "#a0c4ff",
+  "#bdb2ff",
+  "#9d8df1",
+  "#3d348b",
+  "#1a2642",
+  "#111a2e",
+] as const;
+
+export type LootTileColor = (typeof LOOT_TILE_COLOR_OPTIONS)[number];
+
+export function normalizeLootTileColor(value?: string): string {
+  const v = value?.trim().toLowerCase() ?? "";
+  if (!v) return "";
+  return (LOOT_TILE_COLOR_OPTIONS as readonly string[]).includes(v) ? v : "";
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [
+    Number.parseInt(h.slice(0, 2), 16),
+    Number.parseInt(h.slice(2, 4), 16),
+    Number.parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (n: number) =>
+    Math.round(Math.max(0, Math.min(255, n)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${clamp(r)}${clamp(g)}${clamp(b)}`;
+}
+
+function mixRgb(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/** Soft Candy gradient from a solid admin-picked color. */
+export function candyGradientFromHex(hex: string): string {
+  const rgb = hexToRgb(hex);
+  const top = mixRgb(rgb, [255, 255, 255], 0.16);
+  const bottom = mixRgb(rgb, [0, 0, 0], 0.2);
+  return `linear-gradient(150deg, ${rgbToHex(...top)} 0%, ${rgbToHex(...bottom)} 100%)`;
+}
+
 /** Loot rarity grades — same set as admin CasesSection. */
 export const LOOT_RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
 export type LootRarity = (typeof LOOT_RARITY_OPTIONS)[number];
@@ -25,8 +82,10 @@ export function parseLootRarity(label?: string): LootRarity {
 }
 
 export function candyTileBackgroundForLoot(
-  entry: Pick<CaseLootPreview, "rarity_label">,
+  entry: Pick<CaseLootPreview, "rarity_label" | "tile_background_color">,
 ): string {
+  const custom = normalizeLootTileColor(entry.tile_background_color);
+  if (custom) return candyGradientFromHex(custom);
   return RARITY_CANDY_BACKGROUND[parseLootRarity(entry.rarity_label)];
 }
 

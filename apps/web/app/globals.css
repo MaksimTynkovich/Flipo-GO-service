@@ -514,7 +514,28 @@ html.admin-mode body {
   color: var(--admin-muted, #8b98a8);
 }
 
-.admin-loot-card {
+.admin-case-preview-frame {
+  --background: #0c141c;
+  --foreground: #f2f5f7;
+  --surface: #141c27;
+  --accent: #3390ec;
+  --muted: #7a8b9a;
+  max-width: 24.5rem;
+  margin-inline: auto;
+  padding: 1rem 0.85rem 1.1rem;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 55%),
+    var(--background);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.admin-case-preview-frame .case-detail-cta:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.85rem;
@@ -524,9 +545,22 @@ html.admin-mode body {
   border: 1px solid var(--admin-border, rgba(255, 255, 255, 0.06));
 }
 
-.admin-loot-card__img {
+.admin-loot-card__thumb {
+  display: flex;
   width: 4.25rem;
   height: 4.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.admin-loot-card__img {
+  width: 72%;
+  height: 72%;
   object-fit: contain;
 }
 

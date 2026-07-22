@@ -48,8 +48,9 @@ type CaseLootEntry struct {
 	Weight            int       `gorm:"not null" json:"weight"`
 	DisplayName       string    `gorm:"size:128;not null" json:"display_name"`
 	ImageURL          string    `gorm:"size:512" json:"image_url"`
-	RarityLabel       string    `gorm:"size:64" json:"rarity_label"`
-	SortOrder         int       `gorm:"not null;default:0" json:"sort_order"`
+	RarityLabel           string    `gorm:"size:64" json:"rarity_label"`
+	TileBackgroundColor   string    `gorm:"size:16" json:"tile_background_color"`
+	SortOrder             int       `gorm:"not null;default:0" json:"sort_order"`
 	FloorPriceNanoton int64     `gorm:"not null;default:0" json:"floor_price_nanoton"`
 	CreatedAt         time.Time `json:"created_at"`
 }
@@ -105,4 +106,32 @@ func IsUnbackedCaseClaim(item InventoryItem) bool {
 		return true
 	}
 	return CaseClaimFulfillment(item.Metadata) == CaseFulfillmentUnbacked
+}
+
+// Allowed loot tile background colors (admin picker). Empty string = use rarity default.
+var AllowedLootTileColors = []string{
+	"#f77091", "#ff9ebb", "#ff6b8b", "#ffb7b2", "#ff8e72", "#fdffb6",
+	"#cff4d2", "#a8f0d3", "#70d6ff", "#54bbf0", "#a0c4ff", "#bdb2ff",
+	"#9d8df1", "#3d348b", "#1a2642", "#111a2e",
+}
+
+var allowedLootTileColorSet map[string]struct{}
+
+func init() {
+	allowedLootTileColorSet = make(map[string]struct{}, len(AllowedLootTileColors))
+	for _, c := range AllowedLootTileColors {
+		allowedLootTileColorSet[c] = struct{}{}
+	}
+}
+
+// NormalizeLootTileBackgroundColor returns a whitelisted hex or "".
+func NormalizeLootTileBackgroundColor(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if s == "" {
+		return ""
+	}
+	if _, ok := allowedLootTileColorSet[s]; ok {
+		return s
+	}
+	return ""
 }

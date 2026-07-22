@@ -21,6 +21,16 @@ import {
 import { giftImageUrl } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
 import {
+  candyTileBackgroundForLoot,
+  LOOT_TILE_COLOR_OPTIONS,
+  normalizeLootTileColor,
+} from "@/components/cases/case-ui";
+import { CaseDetailPlayerPreview } from "@/components/cases/CaseDetailPlayerPreview";
+import {
+  lootDraftsToPreview,
+  previewCtaLabel,
+} from "@/components/cases/case-detail-preview-utils";
+import {
   getAdminCases,
   replaceAdminCaseLoot,
   upsertAdminCase,
@@ -90,6 +100,7 @@ function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
     display_name: e.display_name,
     image_url: e.image_url || "",
     rarity_label: e.rarity_label || "",
+    tile_background_color: e.tile_background_color || "",
     sort_order: e.sort_order ?? i,
     weight: e.weight > 0 ? e.weight : 1,
     floor_price_nanoton: e.floor_price_nanoton ?? 0,
@@ -110,6 +121,7 @@ function giftToLootRow(gift: ChangesGiftModel, sortOrder: number): LootDraft {
     display_name: gift.displayName,
     image_url: gift.previewUrl,
     rarity_label: "",
+    tile_background_color: "",
     sort_order: sortOrder,
     weight: 1,
     floor_price_nanoton: 0,
@@ -253,6 +265,7 @@ export default function CasesSection() {
         display_name: row.display_name.trim() || slug,
         image_url: row.image_url?.trim() || "",
         rarity_label: row.rarity_label?.trim() || "",
+        tile_background_color: normalizeLootTileColor(row.tile_background_color),
         sort_order: i,
         weight: Math.round(row.weight),
         floor_price_nanoton: Math.max(0, Math.round(row.floor_price_nanoton ?? 0)),
@@ -296,6 +309,20 @@ export default function CasesSection() {
     ? cases.find((c) => c.id === selectedId)
     : null;
 
+  const previewLoot = useMemo(() => lootDraftsToPreview(loot), [loot]);
+
+  const previewCase = useMemo(
+    () => ({
+      title: draft.title || "Кейс",
+      slug: draft.slug || "preview",
+      kind: draft.kind,
+      accent_color: draft.accent_color,
+      price_nanoton: draft.price_nanoton,
+      require_channel: draft.require_channel,
+    }),
+    [draft],
+  );
+
   return (
     <AdminPage
       title="Кейсы"
@@ -327,7 +354,8 @@ export default function CasesSection() {
       )}
 
       {selectedId ? (
-        <>
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_min(24.5rem,100%)]">
+          <div className="min-w-0 space-y-4">
           <AdminPanel
             title={selectedId === "new" ? "Новый кейс" : `Кейс · ${selected?.slug || draft.slug}`}
             description="Slug после создания не меняется. Цена 0 — бесплатный / daily."
@@ -476,12 +504,17 @@ export default function CasesSection() {
                       const expanded = expandedKey === row._key;
                       return (
                         <div key={row._key} className="admin-loot-card">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={lootPreviewUrl(row)}
-                            alt=""
-                            className="admin-loot-card__img"
-                          />
+                          <div
+                            className="admin-loot-card__thumb"
+                            style={{ background: candyTileBackgroundForLoot(row) }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={lootPreviewUrl(row)}
+                              alt=""
+                              className="admin-loot-card__img"
+                            />
+                          </div>
                           <div className="min-w-0 space-y-2">
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -581,6 +614,47 @@ export default function CasesSection() {
                                   />
                                 </div>
                               </AdminField>
+                              <AdminField label="фон плитки" className="col-span-2 sm:col-span-3">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    title="По редкости"
+                                    className={
+                                      !normalizeLootTileColor(row.tile_background_color)
+                                        ? "rounded-lg border border-[var(--admin-accent)] bg-[var(--admin-accent-subtle)] px-2 py-1 text-[10px] text-[var(--admin-fg)]"
+                                        : "rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-[var(--admin-muted)] hover:text-[var(--admin-fg)]"
+                                    }
+                                    onClick={() =>
+                                      updateLoot(row._key, { tile_background_color: "" })
+                                    }
+                                  >
+                                    авто
+                                  </button>
+                                  {LOOT_TILE_COLOR_OPTIONS.map((color) => {
+                                    const selected =
+                                      normalizeLootTileColor(row.tile_background_color) === color;
+                                    return (
+                                      <button
+                                        key={color}
+                                        type="button"
+                                        title={color}
+                                        aria-label={color}
+                                        className={
+                                          selected
+                                            ? "h-7 w-7 rounded-lg ring-2 ring-[var(--admin-accent)] ring-offset-1 ring-offset-[var(--admin-panel)]"
+                                            : "h-7 w-7 rounded-lg ring-1 ring-white/15 hover:ring-white/35"
+                                        }
+                                        style={{ backgroundColor: color }}
+                                        onClick={() =>
+                                          updateLoot(row._key, {
+                                            tile_background_color: selected ? "" : color,
+                                          })
+                                        }
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </AdminField>
                             </div>
 
                             {expanded ? (
@@ -636,7 +710,22 @@ export default function CasesSection() {
               </>
             )}
           </AdminPanel>
-        </>
+          </div>
+
+          <AdminPanel
+            title="Предпросмотр"
+            description="Как игроки видят экран кейса. Обновляется по черновику — сохранять не обязательно."
+            className="xl:sticky xl:top-4"
+          >
+            <CaseDetailPlayerPreview
+              framed
+              caseItem={previewCase}
+              loot={previewLoot}
+              ctaLabel={previewCtaLabel(draft)}
+              ctaDisabled
+            />
+          </AdminPanel>
+        </div>
       ) : null}
 
       <GiftPickerModal

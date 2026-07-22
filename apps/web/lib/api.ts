@@ -1942,6 +1942,8 @@ export type CaseLootPreview = {
   display_name: string;
   image_url: string;
   rarity_label?: string;
+  /** Admin-picked tile color; overrides rarity gradient when set. */
+  tile_background_color?: string;
   sort_order: number;
   floor_price_nanoton?: number;
 };
@@ -2005,6 +2007,8 @@ export type AdminCaseLootEntry = {
   display_name: string;
   image_url?: string;
   rarity_label?: string;
+  /** Admin-picked tile color; overrides rarity gradient when set. */
+  tile_background_color?: string;
   sort_order: number;
   weight: number;
   floor_price_nanoton?: number;

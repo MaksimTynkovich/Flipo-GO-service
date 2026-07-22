@@ -1,25 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Package } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
-import { TonIcon } from "@/components/icons/TonIcon";
-import { CaseOpenReveal } from "@/components/cases/CaseOpenReveal";
+import { CaseDetailPlayerPreview } from "@/components/cases/CaseDetailPlayerPreview";
 import { CaseWinModal } from "@/components/cases/CaseWinModal";
-import {
-  FeaturedPattern,
-  candyTileBackgroundForLoot,
-  caseHeroStyle,
-  formatCasePrice,
-  getCaseTheme,
-  parseLootRarity,
-} from "@/components/cases/case-ui";
+import { formatCasePrice } from "@/components/cases/case-ui";
 import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
 import {
   ApiRequestError,
-  formatTON,
   getCase,
   getMe,
   openCase,
@@ -27,7 +17,6 @@ import {
   type CaseOpenResult,
   type CaseView,
 } from "@/lib/api";
-import { giftImageUrl } from "@/lib/gifts";
 import { mainBalanceNanoton } from "@/lib/balance";
 import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
@@ -36,47 +25,14 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Gift } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "revealing" | "won";
-
-function LootCard({ entry }: { entry: CaseLootPreview }) {
-  const floor = entry.floor_price_nanoton ?? 0;
-  const rarity = parseLootRarity(entry.rarity_label);
-
-  return (
-    <article className="case-loot-card">
-      <div
-        className="case-loot-card__frame"
-        style={{ background: candyTileBackgroundForLoot(entry) }}
-      >
-        {floor > 0 ? (
-          <span className="case-loot-card__price">
-            {formatTON(floor)}
-            <TonIcon variant="brand" className="case-loot-card__price-icon" aria-hidden />
-          </span>
-        ) : null}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={giftImageUrl(entry.collection_slug, entry.image_url)}
-          alt={entry.display_name}
-          className="case-loot-card__img"
-          draggable={false}
-        />
-      </div>
-      <div className="case-loot-card__meta">
-        <p className="case-loot-card__name">{entry.display_name}</p>
-      </div>
-    </article>
-  );
-}
 
 export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
   const { user, setUser } = useAuth();
   const haptics = useTelegramHaptics();
-  const patternUid = useId().replace(/:/g, "");
   const idOrSlug = String(params?.id || "");
 
   const [caseItem, setCaseItem] = useState<CaseView | null>(null);
@@ -107,7 +63,6 @@ export function CaseDetailView() {
 
   const accent = caseItem?.accent_color || "#3390ec";
   const loot = caseItem?.loot || [];
-  const theme = caseItem ? getCaseTheme(caseItem) : null;
   const dailyBlocked =
     caseItem?.kind === "daily" && caseItem.daily_available === false;
   const isFree =
@@ -214,11 +169,6 @@ export function CaseDetailView() {
     return "Открыть бесплатно";
   }
 
-  const heading =
-    caseItem && !caseItem.title.toLowerCase().includes("кейс")
-      ? `${caseItem.title} Кейс`
-      : caseItem?.title || "";
-
   return (
     <PageShell>
       {loading && !caseItem ? (
@@ -245,93 +195,20 @@ export function CaseDetailView() {
         <p className="mb-3 text-sm text-red-400">{error}</p>
       ) : null}
 
-      {caseItem && theme && (phase === "idle" || phase === "revealing") ? (
-        <div className="case-detail space-y-4">
-          <h1 className="case-detail__title">{heading}</h1>
-
-          <section className="case-detail-hero" style={caseHeroStyle(theme)}>
-            <FeaturedPattern
-              variant={theme.patternVariant}
-              patternId={`detail-pat-${patternUid}`}
-              slug={theme.catalogSlug}
-              color={theme.patternColor}
-            />
-
-            <CaseOpenReveal
-              embedded
-              loot={
-                phase === "revealing" && revealLoot.length > 0
-                  ? revealLoot
-                  : loot
-              }
-              winnerId={phase === "revealing" ? result?.loot_entry.id : null}
-              mode={phase === "revealing" ? "spin" : "idle"}
-              accent={accent}
-              onComplete={handleRevealComplete}
-            />
-          </section>
-
-          <button
-            type="button"
-            className={cn(
-              "case-detail-cta app-control",
-              needsTopUp && phase === "idle" && "case-detail-cta--topup",
-            )}
-            disabled={dailyBlocked || opening || phase === "revealing"}
-            onClick={() => void handleOpen()}
-          >
-            {needsTopUp && phase === "idle" ? (
-              <span className="inline-flex items-center gap-2">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M19 7V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1" />
-                  <path d="M3 11v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6" />
-                  <path d="M16 14h.01" />
-                </svg>
-                {ctaLabel()}
-              </span>
-            ) : (
-              ctaLabel()
-            )}
-          </button>
-
-          <section className="case-detail__collections">
-            <div className="case-detail__collections-head">
-              <Package className="h-4 w-4 text-accent" strokeWidth={2.2} aria-hidden />
-              <h2>Коллекции в этом кейсе</h2>
-            </div>
-            {loot.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-surface py-10 text-muted">
-                <Gift className="h-7 w-7 opacity-40" />
-                <p className="text-sm">Призы скоро появятся</p>
-              </div>
-            ) : (
-              <div className="case-detail__loot-grid">
-                {loot.map((entry) => (
-                  <LootCard key={entry.id} entry={entry} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          {phase === "idle" ? (
-            <Link
-              href={APP_ROUTES.cases}
-              className="block pb-1 text-center text-xs text-white/40 transition-colors hover:text-white/70"
-            >
-              К каталогу
-            </Link>
-          ) : null}
-        </div>
+      {caseItem && (phase === "idle" || phase === "revealing") ? (
+        <CaseDetailPlayerPreview
+          caseItem={caseItem}
+          loot={loot}
+          ctaLabel={ctaLabel()}
+          ctaDisabled={dailyBlocked || opening || phase === "revealing"}
+          ctaTopUp={needsTopUp && phase === "idle"}
+          onCtaClick={() => void handleOpen()}
+          showCatalogLink={phase === "idle"}
+          revealMode={phase === "revealing" ? "spin" : "idle"}
+          revealLoot={revealLoot}
+          winnerId={phase === "revealing" ? result?.loot_entry.id : null}
+          onRevealComplete={handleRevealComplete}
+        />
       ) : null}
 
       {phase === "won" && result ? (
