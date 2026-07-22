@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS case_loot_entries (
     image_url VARCHAR(512) NOT NULL DEFAULT '',
     rarity_label VARCHAR(64) NOT NULL DEFAULT '',
     sort_order INT NOT NULL DEFAULT 0,
+    floor_price_nanoton BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_case_loot_entries_case_id ON case_loot_entries(case_id);

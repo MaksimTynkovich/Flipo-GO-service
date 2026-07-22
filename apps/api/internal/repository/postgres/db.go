@@ -129,6 +129,7 @@ func migrateCasesColumnFix(db *gorm.DB) error {
 				ALTER TABLE cases RENAME COLUMN target_rtpbps TO target_rtp_bps;
 			END IF;
 		END $$`,
+		`ALTER TABLE case_loot_entries ADD COLUMN IF NOT EXISTS floor_price_nanoton BIGINT NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range statements {
 		if err := db.Exec(stmt).Error; err != nil {

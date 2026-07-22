@@ -92,6 +92,7 @@ function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
     rarity_label: e.rarity_label || "",
     sort_order: e.sort_order ?? i,
     weight: e.weight > 0 ? e.weight : 1,
+    floor_price_nanoton: e.floor_price_nanoton ?? 0,
   }));
 }
 
@@ -111,6 +112,7 @@ function giftToLootRow(gift: ChangesGiftModel, sortOrder: number): LootDraft {
     rarity_label: "",
     sort_order: sortOrder,
     weight: 1,
+    floor_price_nanoton: 0,
   };
 }
 
@@ -253,6 +255,7 @@ export default function CasesSection() {
         rarity_label: row.rarity_label?.trim() || "",
         sort_order: i,
         weight: Math.round(row.weight),
+        floor_price_nanoton: Math.max(0, Math.round(row.floor_price_nanoton ?? 0)),
       });
     }
     setSavingLoot(true);
@@ -525,7 +528,7 @@ export default function CasesSection() {
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                               <AdminField label="weight">
                                 <input
                                   className="input-field"
@@ -544,7 +547,15 @@ export default function CasesSection() {
                                   {chanceLabel(row.weight, weightTotal)}
                                 </div>
                               </AdminField>
-                              <AdminField label="редкость" className="col-span-2 sm:col-span-2">
+                              <AdminTonField
+                                label="цена (TON)"
+                                valueNanoton={row.floor_price_nanoton ?? 0}
+                                onChangeNanoton={(v) =>
+                                  updateLoot(row._key, { floor_price_nanoton: Math.max(0, v) })
+                                }
+                                hint="Показывается в списке призов кейса. 0 — подтянуть рыночный floor."
+                              />
+                              <AdminField label="редкость" className="col-span-2 sm:col-span-3">
                                 <div className="flex flex-wrap gap-1">
                                   {RARITY_OPTIONS.map((r) => (
                                     <button

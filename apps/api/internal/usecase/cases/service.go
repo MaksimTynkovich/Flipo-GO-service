@@ -95,13 +95,14 @@ type CaseView struct {
 
 // AdminLootEntry — loot row for admin CRUD (includes weight).
 type AdminLootEntry struct {
-	ID             uuid.UUID `json:"id"`
-	CollectionSlug string    `json:"collection_slug"`
-	DisplayName    string    `json:"display_name"`
-	ImageURL       string    `json:"image_url"`
-	RarityLabel    string    `json:"rarity_label"`
-	SortOrder      int       `json:"sort_order"`
-	Weight         int       `json:"weight"`
+	ID                uuid.UUID `json:"id"`
+	CollectionSlug    string    `json:"collection_slug"`
+	DisplayName       string    `json:"display_name"`
+	ImageURL          string    `json:"image_url"`
+	RarityLabel       string    `json:"rarity_label"`
+	SortOrder         int       `json:"sort_order"`
+	Weight            int       `json:"weight"`
+	FloorPriceNanoton int64     `json:"floor_price_nanoton"`
 }
 
 // AdminCaseView — full case for admin list/edit.
@@ -370,13 +371,14 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 					img = giftimage.FragmentURL(e.CollectionSlug)
 				}
 				view.Loot = append(view.Loot, AdminLootEntry{
-					ID:             e.ID,
-					CollectionSlug: e.CollectionSlug,
-					DisplayName:    e.DisplayName,
-					ImageURL:       img,
-					RarityLabel:    e.RarityLabel,
-					SortOrder:      e.SortOrder,
-					Weight:         e.Weight,
+					ID:                e.ID,
+					CollectionSlug:    e.CollectionSlug,
+					DisplayName:       e.DisplayName,
+					ImageURL:          img,
+					RarityLabel:       e.RarityLabel,
+					SortOrder:         e.SortOrder,
+					Weight:            e.Weight,
+					FloorPriceNanoton: e.FloorPriceNanoton,
 				})
 			}
 		}
@@ -407,6 +409,9 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 		if entries[i].Weight <= 0 {
 			return domain.ErrInvalidAmount
 		}
+		if entries[i].FloorPriceNanoton < 0 {
+			return domain.ErrInvalidAmount
+		}
 		entries[i].CollectionSlug = strings.ToLower(strings.TrimSpace(entries[i].CollectionSlug))
 		if entries[i].CollectionSlug == "" {
 			return domain.ErrInvalidAmount
@@ -425,7 +430,10 @@ func (s *Service) grantPrize(
 	c domain.Case,
 	entry domain.CaseLootEntry,
 ) (*domain.InventoryItem, bool, error) {
-	floor := s.quoteCollectionFloor(ctx, entry.CollectionSlug)
+	floor := entry.FloorPriceNanoton
+	if floor <= 0 {
+		floor = s.quoteCollectionFloor(ctx, entry.CollectionSlug)
+	}
 	txRef := domain.CaseClaimTxRefPrefix + openID.String()
 	imageURL := entry.ImageURL
 	if imageURL == "" {
@@ -551,7 +559,9 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 			view.Loot = make([]LootPreview, 0, len(loot))
 			for _, e := range loot {
 				preview := toLootPreview(e)
-				preview.FloorPriceNanoton = s.quoteCollectionFloor(ctx, e.CollectionSlug)
+				if preview.FloorPriceNanoton <= 0 {
+					preview.FloorPriceNanoton = s.quoteCollectionFloor(ctx, e.CollectionSlug)
+				}
 				view.Loot = append(view.Loot, preview)
 			}
 		}
@@ -644,12 +654,13 @@ func toLootPreview(e domain.CaseLootEntry) LootPreview {
 		img = giftimage.FragmentURL(e.CollectionSlug)
 	}
 	return LootPreview{
-		ID:             e.ID,
-		CollectionSlug: e.CollectionSlug,
-		DisplayName:    e.DisplayName,
-		ImageURL:       img,
-		RarityLabel:    e.RarityLabel,
-		SortOrder:      e.SortOrder,
+		ID:                e.ID,
+		CollectionSlug:    e.CollectionSlug,
+		DisplayName:       e.DisplayName,
+		ImageURL:          img,
+		RarityLabel:       e.RarityLabel,
+		SortOrder:         e.SortOrder,
+		FloorPriceNanoton: e.FloorPriceNanoton,
 	}
 }
 

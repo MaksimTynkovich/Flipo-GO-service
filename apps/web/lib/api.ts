@@ -2007,6 +2007,7 @@ export type AdminCaseLootEntry = {
   rarity_label?: string;
   sort_order: number;
   weight: number;
+  floor_price_nanoton?: number;
 };
 
 export type AdminCase = {

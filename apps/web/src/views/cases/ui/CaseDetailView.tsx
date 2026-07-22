@@ -66,11 +66,6 @@ function LootCard({ entry }: { entry: CaseLootPreview }) {
       </div>
       <div className="case-loot-card__meta">
         <p className="case-loot-card__name">{entry.display_name}</p>
-        {entry.rarity_label ? (
-          <span className={cn("case-loot-card__rarity", `case-loot-card__rarity--${rarity}`)}>
-            {entry.rarity_label}
-          </span>
-        ) : null}
       </div>
     </article>
   );

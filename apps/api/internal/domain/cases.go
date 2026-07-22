@@ -42,15 +42,16 @@ type Case struct {
 func (Case) TableName() string { return "cases" }
 
 type CaseLootEntry struct {
-	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	CaseID          uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
-	CollectionSlug  string    `gorm:"size:128;not null" json:"collection_slug"`
-	Weight          int       `gorm:"not null" json:"weight"`
-	DisplayName     string    `gorm:"size:128;not null" json:"display_name"`
-	ImageURL        string    `gorm:"size:512" json:"image_url"`
-	RarityLabel     string    `gorm:"size:64" json:"rarity_label"`
-	SortOrder       int       `gorm:"not null;default:0" json:"sort_order"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID                uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	CaseID            uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
+	CollectionSlug    string    `gorm:"size:128;not null" json:"collection_slug"`
+	Weight            int       `gorm:"not null" json:"weight"`
+	DisplayName       string    `gorm:"size:128;not null" json:"display_name"`
+	ImageURL          string    `gorm:"size:512" json:"image_url"`
+	RarityLabel       string    `gorm:"size:64" json:"rarity_label"`
+	SortOrder         int       `gorm:"not null;default:0" json:"sort_order"`
+	FloorPriceNanoton int64     `gorm:"not null;default:0" json:"floor_price_nanoton"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 func (CaseLootEntry) TableName() string { return "case_loot_entries" }
