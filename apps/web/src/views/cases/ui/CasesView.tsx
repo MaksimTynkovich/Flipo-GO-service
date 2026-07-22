@@ -40,16 +40,16 @@ function FeaturedCard({ caseItem }: { caseItem: CaseView }) {
   const isDaily = caseItem.kind === "daily";
   const isFree = isDaily || caseItem.price_nanoton <= 0;
   const available = caseItem.daily_available !== false;
-  const theme = isDaily ? FEATURED.daily : FEATURED.premium;
+  const theme = FEATURED.premium;
 
   return (
     <Link
       href={href}
       className="relative flex min-h-[172px] flex-col overflow-hidden rounded-[18px] border p-3.5"
-      style={caseHeroStyle({ ...theme, patternVariant: isDaily ? "daily" : "premium" })}
+      style={caseHeroStyle({ ...theme, patternVariant: "premium" })}
     >
       <FeaturedPattern
-        variant={isDaily ? "daily" : "premium"}
+        variant="premium"
         patternId={`feat-pat-${uid}`}
       />
       <FeaturedGiftCluster />

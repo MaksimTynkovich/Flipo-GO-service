@@ -155,24 +155,9 @@ export function getCatalogAccent(caseItem: Pick<CaseView, "slug" | "accent_color
   );
 }
 
-export function getCaseTheme(caseItem: Pick<CaseView, "kind" | "slug" | "accent_color">): CaseHeroTheme {
-  if (caseItem.kind === "daily") {
-    return { ...FEATURED.daily, patternVariant: "daily" };
-  }
-  if (caseItem.kind === "featured") {
-    return { ...FEATURED.premium, patternVariant: "premium" };
-  }
-  const accent = getCatalogAccent(caseItem);
-  return {
-    from: accent.from,
-    mid: accent.from,
-    to: accent.to,
-    border: accent.border,
-    glow: `${accent.glow}33`,
-    patternVariant: "catalog",
-    catalogSlug: caseItem.slug,
-    patternColor: accent.glow,
-  };
+/** Unified hero look for all cases (detail + admin preview) — same as Premium. */
+export function getCaseTheme(_caseItem?: Pick<CaseView, "kind" | "slug" | "accent_color">): CaseHeroTheme {
+  return { ...FEATURED.premium, patternVariant: "premium" };
 }
 
 export function caseHeroStyle(theme: CaseHeroTheme): CSSProperties {
