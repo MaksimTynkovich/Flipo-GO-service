@@ -977,6 +977,39 @@ func (h *AdminHandler) ListCases(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+func (h *AdminHandler) GetCaseCatalogSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	settings, err := h.cases.AdminGetCatalogSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var req struct {
+		BannersEnabled bool `json:"banners_enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	settings, err := h.cases.AdminUpdateCatalogSettings(c.Request.Context(), req.BannersEnabled)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
 func (h *AdminHandler) UpsertCase(c *gin.Context) {
 	if h.cases == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})

@@ -124,9 +124,10 @@ type AdminCaseView struct {
 }
 
 type CatalogView struct {
-	Featured []CaseView `json:"featured"`
-	Daily    *CaseView  `json:"daily,omitempty"`
-	Catalog  []CaseView `json:"catalog"`
+	Featured       []CaseView `json:"featured"`
+	Daily          *CaseView  `json:"daily,omitempty"`
+	Catalog        []CaseView `json:"catalog"`
+	BannersEnabled bool       `json:"banners_enabled"`
 }
 
 type OpenResult struct {
@@ -146,6 +147,9 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, 
 	out := &CatalogView{
 		Featured: make([]CaseView, 0),
 		Catalog:  make([]CaseView, 0),
+	}
+	if settings, err := s.cases.GetCatalogSettings(ctx); err == nil && settings != nil {
+		out.BannersEnabled = settings.BannersEnabled
 	}
 	var dailyAvail bool
 	if userID != uuid.Nil {
@@ -402,6 +406,21 @@ func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
 		return s.cases.CreateCase(ctx, c)
 	}
 	return s.cases.UpdateCase(ctx, c)
+}
+
+func (s *Service) AdminGetCatalogSettings(ctx context.Context) (*domain.CaseCatalogSettings, error) {
+	return s.cases.GetCatalogSettings(ctx)
+}
+
+func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, bannersEnabled bool) (*domain.CaseCatalogSettings, error) {
+	settings := &domain.CaseCatalogSettings{
+		ID:             1,
+		BannersEnabled: bannersEnabled,
+	}
+	if err := s.cases.UpdateCatalogSettings(ctx, settings); err != nil {
+		return nil, err
+	}
+	return s.cases.GetCatalogSettings(ctx)
 }
 
 func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entries []domain.CaseLootEntry) error {

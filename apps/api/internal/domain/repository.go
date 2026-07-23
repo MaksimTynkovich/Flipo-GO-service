@@ -71,6 +71,8 @@ type CaseRepository interface {
 	CreateOpen(ctx context.Context, open *CaseOpen) error
 	FindOpenByIdempotency(ctx context.Context, key string) (*CaseOpen, error)
 	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
+	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
+	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
 }
 
 type MarketRepository interface {

@@ -1972,6 +1972,8 @@ export type CasesCatalog = {
   featured: CaseView[];
   daily?: CaseView | null;
   catalog: CaseView[];
+  /** Top featured/daily banner row. Off by default until banners are ready. */
+  banners_enabled?: boolean;
 };
 
 export type CaseOpenResult = {
@@ -2049,6 +2051,23 @@ export type AdminCaseUpsert = {
 
 export async function getAdminCases() {
   return api<AdminCase[]>("/api/v1/admin/cases");
+}
+
+export type AdminCaseCatalogSettings = {
+  id: number;
+  banners_enabled: boolean;
+  updated_at?: string;
+};
+
+export async function getAdminCaseCatalogSettings() {
+  return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings");
+}
+
+export async function updateAdminCaseCatalogSettings(body: { banners_enabled: boolean }) {
+  return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 export async function upsertAdminCase(body: AdminCaseUpsert) {

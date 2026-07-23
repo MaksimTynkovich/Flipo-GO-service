@@ -222,6 +222,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/cases", deps.AdminHandler.ListCases)
 			adminAuthed.PUT("/cases", deps.AdminHandler.UpsertCase)
 			adminAuthed.POST("/cases/upload", deps.AdminHandler.UploadCaseImage)
+			adminAuthed.GET("/cases/settings", deps.AdminHandler.GetCaseCatalogSettings)
+			adminAuthed.PATCH("/cases/settings", deps.AdminHandler.UpdateCaseCatalogSettings)
 			adminAuthed.PUT("/cases/:id/loot", deps.AdminHandler.ReplaceCaseLoot)
 			adminAuthed.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
 			adminAuthed.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)

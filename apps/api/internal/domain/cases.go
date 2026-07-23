@@ -81,6 +81,15 @@ type UserCaseState struct {
 
 func (UserCaseState) TableName() string { return "user_case_state" }
 
+// CaseCatalogSettings — singleton (id=1) for catalog UI knobs.
+type CaseCatalogSettings struct {
+	ID             int       `gorm:"primaryKey" json:"id"`
+	BannersEnabled bool      `gorm:"not null;default:false" json:"banners_enabled"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+func (CaseCatalogSettings) TableName() string { return "case_catalog_settings" }
+
 // IsCaseClaimItem — inventory row created by opening a case.
 func IsCaseClaimItem(item InventoryItem) bool {
 	return strings.HasPrefix(item.TelegramTxRef, CaseClaimTxRefPrefix)

@@ -161,6 +161,31 @@ func (r *CaseRepo) ListOpensByUser(ctx context.Context, userID uuid.UUID, limit 
 	return rows, err
 }
 
+func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogSettings, error) {
+	var row domain.CaseCatalogSettings
+	err := r.db.WithContext(ctx).First(&row, "id = ?", 1).Error
+	if err == nil {
+		return &row, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	row = domain.CaseCatalogSettings{ID: 1, BannersEnabled: false, UpdatedAt: time.Now().UTC()}
+	if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
+		return nil, createErr
+	}
+	return &row, nil
+}
+
+func (r *CaseRepo) UpdateCatalogSettings(ctx context.Context, settings *domain.CaseCatalogSettings) error {
+	settings.ID = 1
+	settings.UpdatedAt = time.Now().UTC()
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"banners_enabled", "updated_at"}),
+	}).Create(settings).Error
+}
+
 var _ domain.CaseRepository = (*CaseRepo)(nil)
 
 func (r *InventoryRepo) TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug string) (*domain.InventoryItem, error) {

@@ -32,9 +32,11 @@ import {
   previewCtaLabel,
 } from "@/components/cases/case-detail-preview-utils";
 import {
+  getAdminCaseCatalogSettings,
   getAdminCases,
   replaceAdminCaseLoot,
   resolveAsset,
+  updateAdminCaseCatalogSettings,
   uploadAdminCaseImage,
   upsertAdminCase,
   type AdminCase,
@@ -150,14 +152,20 @@ export default function CasesSection() {
   const [savingCase, setSavingCase] = useState(false);
   const [savingLoot, setSavingLoot] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [bannersEnabled, setBannersEnabled] = useState(false);
+  const [savingBanners, setSavingBanners] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getAdminCases();
+      const [data, settings] = await Promise.all([
+        getAdminCases(),
+        getAdminCaseCatalogSettings().catch(() => null),
+      ]);
       setCases(data);
+      if (settings) setBannersEnabled(Boolean(settings.banners_enabled));
       return data;
     } catch (e) {
       showToast({ title: formatUserError(e, "Не удалось загрузить кейсы"), variant: "error" });
@@ -189,6 +197,22 @@ export default function CasesSection() {
     setDraft(emptyCaseDraft());
     setLoot([]);
     setExpandedKey(null);
+  }
+
+  async function toggleBanners(next: boolean) {
+    setSavingBanners(true);
+    try {
+      const settings = await updateAdminCaseCatalogSettings({ banners_enabled: next });
+      setBannersEnabled(Boolean(settings.banners_enabled));
+      showToast({
+        title: settings.banners_enabled ? "Баннеры включены" : "Баннеры скрыты",
+        variant: "success",
+      });
+    } catch (e) {
+      showToast({ title: formatUserError(e, "Не удалось сохранить настройку"), variant: "error" });
+    } finally {
+      setSavingBanners(false);
+    }
   }
 
   const weightTotal = useMemo(
@@ -445,7 +469,25 @@ export default function CasesSection() {
           Обновить
         </AdminButton>
         <AdminButton onClick={startNew}>Новый кейс</AdminButton>
+        <AdminButton
+          variant="secondary"
+          disabled={savingBanners || loading}
+          onClick={() => void toggleBanners(!bannersEnabled)}
+        >
+          {savingBanners
+            ? "…"
+            : bannersEnabled
+              ? "Скрыть баннеры"
+              : "Показать баннеры"}
+        </AdminButton>
       </AdminToolbar>
+      <p className="text-[11px] text-muted">
+        Баннеры featured/daily на странице кейсов:{" "}
+        <span className="text-foreground/80">
+          {bannersEnabled ? "показаны" : "скрыты"}
+        </span>
+        . Полноценную реализацию баннеров сделаем позже.
+      </p>
 
       {loading && cases.length === 0 ? (
         <div className="h-24 animate-pulse rounded-xl bg-surface-raised/50" />
