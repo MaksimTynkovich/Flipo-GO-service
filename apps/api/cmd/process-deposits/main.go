@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/notifications"
@@ -45,12 +46,12 @@ func main() {
 		platformRepo,
 		giftTraitRepo,
 	)
-	botAPI := telegram.NewBotAPI(cfg.BotToken)
-	adminIDs := cfg.AdminTelegramIDs
+	adminNotifRepo := postgres.NewAdminNotificationRepo(db)
+	var notifStore domain.AdminNotificationRepository = adminNotifRepo
 	if !cfg.AdminNotifyEnabled {
-		adminIDs = nil
+		notifStore = nil
 	}
-	adminNotifier := telegram.NewAdminNotifier(botAPI, adminIDs)
+	adminNotifier := telegram.NewAdminNotifier(notifStore, cfg.AdminTelegramIDs)
 	depositNotifier := notifications.NewGiftDepositNotifier(
 		telegram.NewBotNotifier(cfg.BotToken),
 		nil,

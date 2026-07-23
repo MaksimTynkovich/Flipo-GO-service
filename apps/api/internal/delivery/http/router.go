@@ -232,6 +232,11 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
 			adminAuthed.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)
 			adminAuthed.GET("/audit", deps.AdminHandler.AuditLogs)
+			adminAuthed.GET("/online", deps.AdminHandler.OnlineNow)
+			adminAuthed.GET("/notifications", deps.AdminHandler.ListNotifications)
+			adminAuthed.GET("/notifications/unread-count", deps.AdminHandler.UnreadNotificationCount)
+			adminAuthed.POST("/notifications/:id/read", deps.AdminHandler.MarkNotificationRead)
+			adminAuthed.POST("/notifications/read-all", deps.AdminHandler.MarkAllNotificationsRead)
 		}
 	}
 

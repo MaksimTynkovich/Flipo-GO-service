@@ -1403,6 +1403,69 @@ export async function getAdminAuditLogs() {
   return api<AdminAuditLog[]>("/api/v1/admin/audit");
 }
 
+export async function getAdminOnlineNow() {
+  return api<{ online: number }>("/api/v1/admin/online");
+}
+
+export type AdminNotificationCategory =
+  | "all"
+  | "finance"
+  | "gifts"
+  | "cases"
+  | "referral"
+  | "game"
+  | "promo"
+  | "system";
+
+export type AdminNotification = {
+  id: string;
+  kind: string;
+  category: string;
+  severity: "info" | "warning" | "critical" | string;
+  title: string;
+  summary: string;
+  body: string;
+  actor_telegram_id: number;
+  actor_username: string;
+  actor_first_name: string;
+  actor_last_name: string;
+  amount_nanoton?: number | null;
+  meta?: Record<string, unknown> | null;
+  read_at?: string | null;
+  created_at: string;
+};
+
+export async function getAdminNotifications(opts?: {
+  category?: string;
+  unreadOnly?: boolean;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.category && opts.category !== "all") params.set("category", opts.category);
+  if (opts?.unreadOnly) params.set("unread", "1");
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const q = params.toString();
+  return api<AdminNotification[]>(`/api/v1/admin/notifications${q ? `?${q}` : ""}`);
+}
+
+export async function getAdminNotificationUnreadCount(category?: string) {
+  const params = new URLSearchParams();
+  if (category && category !== "all") params.set("category", category);
+  const q = params.toString();
+  return api<{ count: number }>(`/api/v1/admin/notifications/unread-count${q ? `?${q}` : ""}`);
+}
+
+export async function markAdminNotificationRead(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/notifications/${id}/read`, { method: "POST" });
+}
+
+export async function markAllAdminNotificationsRead(category?: string) {
+  return api<{ ok: boolean; marked: number }>("/api/v1/admin/notifications/read-all", {
+    method: "POST",
+    body: JSON.stringify({ category: category && category !== "all" ? category : "" }),
+  });
+}
+
 export type GameModeKey = "wheel" | "crash" | "roulette" | "pvp";
 
 export type GameModeAccess = {

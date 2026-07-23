@@ -254,6 +254,14 @@ type AdminRepository interface {
 	UserTransfersSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserTransfersSummary, error)
 }
 
+type AdminNotificationRepository interface {
+	CreateAdminNotification(ctx context.Context, n *AdminNotification) error
+	ListAdminNotifications(ctx context.Context, filter AdminNotificationFilter) ([]AdminNotification, error)
+	CountUnreadAdminNotifications(ctx context.Context, category string) (int64, error)
+	MarkAdminNotificationRead(ctx context.Context, id uuid.UUID) error
+	MarkAllAdminNotificationsRead(ctx context.Context, category string) (int64, error)
+}
+
 type AnalyticsRepository interface {
 	RecordEvents(ctx context.Context, events []AnalyticsEventCreate) error
 	GetOverview(ctx context.Context, since time.Time, filter AnalyticsOverviewFilter) (*AnalyticsOverview, error)

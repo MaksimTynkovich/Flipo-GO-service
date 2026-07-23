@@ -11,15 +11,18 @@ import { startTransition, useEffect, useState } from "react";
 function AdminNav({
   activeSection,
   onNavigate,
+  unreadCount,
 }: {
   activeSection: ReturnType<typeof resolveAdminSection>;
   onNavigate: (href: string) => void;
+  unreadCount: number;
 }) {
   return (
     <nav className="admin-sidebar__nav">
       {ADMIN_NAV.map((item) => {
         const isActive = activeSection === item.id;
         const disabled = Boolean(item.disabled);
+        const showBadge = item.id === "notifications" && unreadCount > 0;
         return (
           <button
             key={item.href}
@@ -35,7 +38,10 @@ function AdminNav({
               disabled && "admin-nav-item--disabled",
             )}
           >
-            {item.label}
+            <span className="admin-nav-item__label">{item.label}</span>
+            {showBadge ? (
+              <span className="admin-nav-item__badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+            ) : null}
           </button>
         );
       })}
@@ -49,6 +55,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { user, logout } = useAdminAuth();
   const routeSection = resolveAdminSection(pathname);
   const [activeSection, setActiveSection] = useState(routeSection);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [online, setOnline] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveSection(routeSection);
@@ -57,6 +65,50 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     ADMIN_NAV.filter((item) => !item.disabled).forEach((item) => router.prefetch(item.href));
   }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshUnread() {
+      try {
+        const { getAdminNotificationUnreadCount } = await import("@/lib/api");
+        const res = await getAdminNotificationUnreadCount();
+        if (!cancelled) setUnreadCount(res.count);
+      } catch {
+        /* ignore */
+      }
+    }
+    refreshUnread();
+    const timer = window.setInterval(refreshUnread, 30_000);
+    function onUnread(e: Event) {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail === "number") setUnreadCount(detail);
+    }
+    window.addEventListener("admin-notifications-unread", onUnread);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("admin-notifications-unread", onUnread);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshOnline() {
+      try {
+        const { getAdminOnlineNow } = await import("@/lib/api");
+        const res = await getAdminOnlineNow();
+        if (!cancelled) setOnline(res.online);
+      } catch {
+        /* ignore */
+      }
+    }
+    refreshOnline();
+    const timer = window.setInterval(refreshOnline, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   function navigate(href: string) {
     const item = ADMIN_NAV.find((entry) => entry.href === href);
@@ -80,9 +132,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="admin-sidebar">
         <div className="admin-sidebar__brand">
           <p className="admin-sidebar__brand-mark">Flipo</p>
+          <p className="admin-sidebar__online" title="Реальные пользователи в приложении (без админов)">
+            <span className="admin-sidebar__online-dot" aria-hidden />
+            <span className="admin-sidebar__online-label">Онлайн</span>
+            <span className="admin-sidebar__online-value">{online == null ? "—" : online}</span>
+          </p>
         </div>
 
-        <AdminNav activeSection={activeSection} onNavigate={navigate} />
+        <AdminNav activeSection={activeSection} onNavigate={navigate} unreadCount={unreadCount} />
 
         <div className="admin-sidebar__footer">
           <p className="admin-sidebar__user truncate">

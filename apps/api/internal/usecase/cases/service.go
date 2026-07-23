@@ -13,6 +13,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/giftimage"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/google/uuid"
@@ -41,14 +42,19 @@ func (e *ChannelNotSubscribedError) Is(target error) bool {
 }
 
 type Service struct {
-	cases            domain.CaseRepository
-	inventory        domain.InventoryRepository
-	users            domain.UserRepository
-	balance          *balance.Service
-	valuator         *gifts.Valuator
-	bot              BotUserResolver
-	requiredChannel  string
-	channelChecker   ChannelChecker
+	cases           domain.CaseRepository
+	inventory       domain.InventoryRepository
+	users           domain.UserRepository
+	balance         *balance.Service
+	valuator        *gifts.Valuator
+	bot             BotUserResolver
+	requiredChannel string
+	channelChecker  ChannelChecker
+	admin           AdminCaseNotifier
+}
+
+type AdminCaseNotifier interface {
+	NotifyCaseOpen(ctx context.Context, actor telegram.AdminActor, caseTitle, prizeName, source string, priceNanoton, prizeFloorNanoton int64, backed bool)
 }
 
 func NewService(
@@ -62,6 +68,7 @@ func NewService(
 
 func (s *Service) SetValuator(v *gifts.Valuator) { s.valuator = v }
 func (s *Service) SetBotResolver(bot BotUserResolver) { s.bot = bot }
+func (s *Service) SetAdminNotifier(notifier AdminCaseNotifier) { s.admin = notifier }
 func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
 	s.requiredChannel = strings.TrimSpace(channel)
 	s.channelChecker = checker
@@ -345,14 +352,35 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 	}
 
 	view := inventory.BuildItemView(ctx, s.valuator, *item)
-	return &OpenResult{
+	result := &OpenResult{
 		OpenID:    openID,
 		CaseID:    c.ID,
 		Source:    source,
 		Item:      view,
 		LootEntry: toLootPreview(entry),
 		Backed:    backed,
-	}, nil
+	}
+	if s.admin != nil {
+		actor := telegram.AdminActor{}
+		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+			actor = telegram.AdminActor{
+				TelegramID: user.TelegramID,
+				Username:   user.Username,
+				FirstName:  user.FirstName,
+				LastName:   user.LastName,
+			}
+		}
+		prizeName := view.Name
+		if prizeName == "" {
+			prizeName = entry.DisplayName
+		}
+		floor := view.ValuationNanoton
+		if floor <= 0 {
+			floor = view.FloorPriceNanoton
+		}
+		s.admin.NotifyCaseOpen(ctx, actor, c.Title, prizeName, string(source), price, floor, backed)
+	}
+	return result, nil
 }
 
 func (s *Service) validateCasePromo(ctx context.Context, userID, caseID uuid.UUID, code string) (*domain.CasePromoCode, error) {

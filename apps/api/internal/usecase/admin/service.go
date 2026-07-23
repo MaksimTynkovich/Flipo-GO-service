@@ -15,14 +15,15 @@ import (
 )
 
 type Service struct {
-	admin      domain.AdminRepository
-	platform   domain.PlatformRepository
-	games      domain.GameRepository
-	market     domain.MarketRepository
-	users      domain.UserRepository
-	transfers  domain.TonTransferRepository
-	giftPrices domain.GiftTraitPriceRepository
-	notifier   balance.BalanceNotifier
+	admin         domain.AdminRepository
+	notifications domain.AdminNotificationRepository
+	platform      domain.PlatformRepository
+	games         domain.GameRepository
+	market        domain.MarketRepository
+	users         domain.UserRepository
+	transfers     domain.TonTransferRepository
+	giftPrices    domain.GiftTraitPriceRepository
+	notifier      balance.BalanceNotifier
 }
 
 func NewService(
@@ -43,6 +44,10 @@ func NewService(
 		transfers:  transfers,
 		giftPrices: giftPrices,
 	}
+}
+
+func (s *Service) SetNotificationRepo(repo domain.AdminNotificationRepository) {
+	s.notifications = repo
 }
 
 func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
@@ -75,6 +80,38 @@ func (s *Service) RiskUsers(ctx context.Context) ([]domain.AdminRiskUser, error)
 
 func (s *Service) AuditLogs(ctx context.Context) ([]domain.AdminAuditLog, error) {
 	return s.admin.ListAuditLogs(ctx, 30)
+}
+
+func (s *Service) ListNotifications(ctx context.Context, category string, unreadOnly bool, limit int) ([]domain.AdminNotification, error) {
+	if s.notifications == nil {
+		return []domain.AdminNotification{}, nil
+	}
+	return s.notifications.ListAdminNotifications(ctx, domain.AdminNotificationFilter{
+		Category:   category,
+		UnreadOnly: unreadOnly,
+		Limit:      limit,
+	})
+}
+
+func (s *Service) UnreadNotificationCount(ctx context.Context, category string) (int64, error) {
+	if s.notifications == nil {
+		return 0, nil
+	}
+	return s.notifications.CountUnreadAdminNotifications(ctx, category)
+}
+
+func (s *Service) MarkNotificationRead(ctx context.Context, id uuid.UUID) error {
+	if s.notifications == nil {
+		return nil
+	}
+	return s.notifications.MarkAdminNotificationRead(ctx, id)
+}
+
+func (s *Service) MarkAllNotificationsRead(ctx context.Context, category string) (int64, error) {
+	if s.notifications == nil {
+		return 0, nil
+	}
+	return s.notifications.MarkAllAdminNotificationsRead(ctx, category)
 }
 
 func (s *Service) ListUsers(ctx context.Context, query, sort string, minReferrals int) ([]domain.AdminUserRow, error) {

@@ -42,6 +42,7 @@ type AdminHandler struct {
 	casesUploadDir      string
 	onSocialSimUpdate   func(domain.SocialSimSettings)
 	onMaintenanceUpdate func(domain.PlatformMaintenanceSettings)
+	onlineCounter       func() int
 }
 
 func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, outcomeSvc *outcome.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
@@ -82,6 +83,18 @@ func (h *AdminHandler) SetCasesUploadDir(dir string) {
 
 func (h *AdminHandler) SetInventoryService(invSvc *inventory.Service) {
 	h.inventory = invSvc
+}
+
+func (h *AdminHandler) SetOnlineCounter(fn func() int) {
+	h.onlineCounter = fn
+}
+
+func (h *AdminHandler) OnlineNow(c *gin.Context) {
+	online := 0
+	if h.onlineCounter != nil {
+		online = h.onlineCounter()
+	}
+	c.JSON(http.StatusOK, gin.H{"online": online})
 }
 
 func (h *AdminHandler) WheelStats(c *gin.Context) {
@@ -318,6 +331,61 @@ func (h *AdminHandler) AuditLogs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, logs)
+}
+
+func (h *AdminHandler) ListNotifications(c *gin.Context) {
+	category := strings.TrimSpace(c.Query("category"))
+	unreadOnly := c.Query("unread") == "1" || strings.EqualFold(c.Query("unread"), "true")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	items, err := h.admin.ListNotifications(c.Request.Context(), category, unreadOnly, limit)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.AdminNotification{}
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) UnreadNotificationCount(c *gin.Context) {
+	category := strings.TrimSpace(c.Query("category"))
+	count, err := h.admin.UnreadNotificationCount(c.Request.Context(), category)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+func (h *AdminHandler) MarkNotificationRead(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.admin.MarkNotificationRead(c.Request.Context(), id); err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) MarkAllNotificationsRead(c *gin.Context) {
+	var body struct {
+		Category string `json:"category"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	category := strings.TrimSpace(body.Category)
+	if category == "" {
+		category = strings.TrimSpace(c.Query("category"))
+	}
+	n, err := h.admin.MarkAllNotificationsRead(c.Request.Context(), category)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "marked": n})
 }
 
 func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {

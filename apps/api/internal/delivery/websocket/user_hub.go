@@ -12,11 +12,12 @@ import (
 )
 
 type UserClient struct {
-	Hub    *Hub
-	Conn   *websocket.Conn
-	Send   chan []byte
-	UserID uuid.UUID
-	once   sync.Once
+	Hub        *Hub
+	Conn       *websocket.Conn
+	Send       chan []byte
+	UserID     uuid.UUID
+	TelegramID int64
+	once       sync.Once
 }
 
 type userEnvelope struct {
@@ -92,6 +93,32 @@ func (h *Hub) UnregisterUser(client *UserClient) {
 		}
 	}
 	client.closeSend()
+}
+
+// OnlineUserCount returns unique authenticated user-WS sessions, optionally skipping admins.
+func (h *Hub) OnlineUserCount(skipAdmin func(telegramID int64) bool) int {
+	if h == nil {
+		return 0
+	}
+	h.initUserHub()
+	h.userMu.RLock()
+	defer h.userMu.RUnlock()
+	count := 0
+	for _, set := range h.userClients {
+		if len(set) == 0 {
+			continue
+		}
+		var telegramID int64
+		for c := range set {
+			telegramID = c.TelegramID
+			break
+		}
+		if skipAdmin != nil && skipAdmin(telegramID) {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 func (h *Hub) BalanceUpdated(userID uuid.UUID, balanceNanoton, promoBalanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
@@ -183,10 +210,11 @@ func ServeUserWS(hub *Hub, authSvc *auth.Service, w http.ResponseWriter, r *http
 	}
 
 	client := &UserClient{
-		Hub:    hub,
-		Conn:   conn,
-		Send:   make(chan []byte, 64),
-		UserID: claims.UserID,
+		Hub:        hub,
+		Conn:       conn,
+		Send:       make(chan []byte, 64),
+		UserID:     claims.UserID,
+		TelegramID: user.TelegramID,
 	}
 	hub.RegisterUser(client)
 	go client.WritePump()

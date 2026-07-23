@@ -2,12 +2,14 @@ package crash
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
 	"sync/atomic"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/google/uuid"
@@ -71,6 +73,7 @@ type TickNotifier interface {
 
 type Service struct {
 	games     domain.GameRepository
+	users     domain.UserRepository
 	balance   *balance.Service
 	funding   *betfunding.Service
 	inventory domain.InventoryRepository
@@ -78,13 +81,26 @@ type Service struct {
 	tickMs    int
 	notifier  TickNotifier
 	overlay   BetOverlay
+	admin     AdminGameNotifier
 	memState  atomic.Pointer[RoundState]
 	persistCh chan []byte
 	betHook   func(context.Context, uuid.UUID, int64)
 }
 
+type AdminGameNotifier interface {
+	NotifyGameResult(ctx context.Context, actor telegram.AdminActor, game, outcome, selection string, stakeNanoton, payoutNanoton int64, multiplier, crashPoint *float64, resultLabel string)
+}
+
 func (s *Service) SetQualifyingBetHook(hook func(context.Context, uuid.UUID, int64)) {
 	s.betHook = hook
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminGameNotifier) {
+	s.admin = notifier
+}
+
+func (s *Service) SetUsers(users domain.UserRepository) {
+	s.users = users
 }
 
 func NewService(
@@ -319,7 +335,7 @@ func autoCashoutFromSelection(raw datatypes.JSON) *float64 {
 	return &v
 }
 
-func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
+func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID, crashPoint float64) error {
 	bets, err := s.games.ListPendingBetsByRound(ctx, roundID)
 	if err != nil {
 		return err
@@ -328,7 +344,131 @@ func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID) error {
 		_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
 		_ = s.funding.SettleLoss(ctx, bet)
 	}
+	s.notifyCrashRoundAggregated(ctx, roundID, crashPoint)
 	return s.PublishBets(ctx, roundID)
+}
+
+// notifyCrashRoundAggregated sends one admin notification per user for the round,
+// matching the UI which sums multiple crash bets into a single row.
+func (s *Service) notifyCrashRoundAggregated(ctx context.Context, roundID uuid.UUID, crashPoint float64) {
+	if s.admin == nil {
+		return
+	}
+	bets, err := s.games.ListBetsByRound(ctx, roundID)
+	if err != nil || len(bets) == 0 {
+		return
+	}
+
+	byUser := make(map[uuid.UUID][]domain.GameBet)
+	for _, bet := range bets {
+		switch bet.Status {
+		case domain.BetCashedOut, domain.BetLost:
+			byUser[bet.UserID] = append(byUser[bet.UserID], bet)
+		}
+	}
+
+	cp := crashPoint
+	for userID, list := range byUser {
+		var totalStake, cashedStake, lostStake, totalPayout int64
+		var weightedMult float64
+		var weight int64
+		for _, bet := range list {
+			totalStake += bet.AmountNanoton
+			switch bet.Status {
+			case domain.BetCashedOut:
+				cashedStake += bet.AmountNanoton
+				totalPayout += bet.PayoutNanoton
+				if bet.CashoutMultiplier != nil && *bet.CashoutMultiplier > 0 {
+					weightedMult += *bet.CashoutMultiplier * float64(bet.AmountNanoton)
+					weight += bet.AmountNanoton
+				}
+			case domain.BetLost:
+				lostStake += bet.AmountNanoton
+			}
+		}
+		if totalStake <= 0 {
+			continue
+		}
+
+		betsLabel := crashBetsCountLabel(len(list))
+		actor := s.actorForUser(ctx, userID)
+
+		switch {
+		case lostStake == totalStake:
+			s.admin.NotifyGameResult(
+				ctx, actor, "crash", "lose", betsLabel,
+				totalStake, 0, nil, &cp,
+				fmt.Sprintf("краш ×%.2f", crashPoint),
+			)
+		case cashedStake == totalStake:
+			var multPtr *float64
+			if weight > 0 {
+				m := weightedMult / float64(weight)
+				multPtr = &m
+			}
+			s.admin.NotifyGameResult(
+				ctx, actor, "crash", "cashout", betsLabel,
+				totalStake, totalPayout, multPtr, nil,
+				"",
+			)
+		default:
+			var multPtr *float64
+			if weight > 0 {
+				m := weightedMult / float64(weight)
+				multPtr = &m
+			}
+			detail := fmt.Sprintf(
+				"%s · кэшаут %s TON · сгорело %s TON · краш ×%.2f",
+				betsLabel,
+				formatCrashTON(cashedStake),
+				formatCrashTON(lostStake),
+				crashPoint,
+			)
+			s.admin.NotifyGameResult(
+				ctx, actor, "crash", "cashout", betsLabel,
+				totalStake, totalPayout, multPtr, &cp,
+				detail,
+			)
+		}
+	}
+}
+
+func crashBetsCountLabel(n int) string {
+	if n <= 1 {
+		return "crash"
+	}
+	mod100 := n % 100
+	mod10 := n % 10
+	switch {
+	case mod100 >= 11 && mod100 <= 14:
+		return fmt.Sprintf("%d ставок", n)
+	case mod10 == 1:
+		return fmt.Sprintf("%d ставка", n)
+	case mod10 >= 2 && mod10 <= 4:
+		return fmt.Sprintf("%d ставки", n)
+	default:
+		return fmt.Sprintf("%d ставок", n)
+	}
+}
+
+func formatCrashTON(nanoton int64) string {
+	return fmt.Sprintf("%.2f", float64(nanoton)/1e9)
+}
+
+func (s *Service) actorForUser(ctx context.Context, userID uuid.UUID) telegram.AdminActor {
+	if s.users == nil {
+		return telegram.AdminActor{}
+	}
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil || user == nil {
+		return telegram.AdminActor{}
+	}
+	return telegram.AdminActor{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		FirstName:  user.FirstName,
+		LastName:   user.LastName,
+	}
 }
 
 // PublishState updates in-memory state and WS clients immediately; Redis is best-effort async.

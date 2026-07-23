@@ -210,11 +210,12 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 			return false, "", err
 		}
 		if s.admin != nil {
-			s.admin.NotifyGiftWithdrawPending(ctx, telegram.AdminActor{
+			s.admin.NotifyGiftWithdraw(ctx, telegram.AdminActor{
 				TelegramID: user.TelegramID,
 				Username:   user.Username,
 				FirstName:  user.FirstName,
-			}, item.Name, item.CollectionSlug)
+				LastName:   user.LastName,
+			}, item.Name, item.CollectionSlug, "needs_purchase", item.FloorPriceNanoton)
 		}
 		return true, "Ожидайте, бот закупает подарок", nil
 	}
@@ -231,6 +232,14 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 		if held {
 			if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
 				return false, "", err
+			}
+			if s.admin != nil {
+				s.admin.NotifyGiftWithdraw(ctx, telegram.AdminActor{
+					TelegramID: user.TelegramID,
+					Username:   user.Username,
+					FirstName:  user.FirstName,
+					LastName:   user.LastName,
+				}, item.Name, item.CollectionSlug, "held", item.FloorPriceNanoton)
 			}
 			return true, "", nil
 		}
@@ -258,7 +267,18 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 		return false, "", err
 	}
 
-	return false, "", s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn)
+	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn); err != nil {
+		return false, "", err
+	}
+	if s.admin != nil {
+		s.admin.NotifyGiftWithdraw(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, item.Name, item.CollectionSlug, "sent", item.FloorPriceNanoton)
+	}
+	return false, "", nil
 }
 
 func (s *Service) ListPendingWithdrawals(ctx context.Context, limit int) ([]domain.AdminPendingGiftWithdraw, error) {

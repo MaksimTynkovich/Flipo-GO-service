@@ -7,6 +7,7 @@ import GamesSection from "./sections/GamesSection";
 import MarketAdminSection from "./sections/MarketAdminSection";
 import MarketDisabledSection from "./sections/MarketDisabledSection";
 import MarketingSection from "./sections/MarketingSection";
+import NotificationsSection from "./sections/NotificationsSection";
 import SystemSection from "./sections/SystemSection";
 import TelegramSection from "./sections/TelegramSection";
 import UsersSection from "./sections/UsersSection";
@@ -15,6 +16,7 @@ import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export type AdminSectionId =
   | "dashboard"
+  | "notifications"
   | "analytics"
   | "users"
   | "games"
@@ -35,6 +37,7 @@ export type AdminNavItem = {
 
 export const ADMIN_NAV: AdminNavItem[] = [
   { id: "dashboard", href: "/admin", label: "Дашборд" },
+  { id: "notifications", href: "/admin/notifications", label: "Уведомления" },
   { id: "analytics", href: "/admin/analytics", label: "Аналитика" },
   { id: "users", href: "/admin/users", label: "Пользователи" },
   { id: "games", href: "/admin/games", label: "Игры" },
@@ -49,6 +52,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
 
 export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   dashboard: DashboardSection,
+  notifications: NotificationsSection,
   analytics: AnalyticsSection,
   users: UsersSection,
   games: GamesSection,
@@ -63,6 +67,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
 
 const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin": "dashboard",
+  "/admin/notifications": "notifications",
   "/admin/analytics": "analytics",
   "/admin/users": "users",
   "/admin/games": "games",

@@ -268,7 +268,7 @@ func (e *Engine) finishRound(ctx context.Context, round *domain.GameRound, crash
 	finishCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	if err := e.svc.SettleCrashed(finishCtx, roundID); err != nil {
+	if err := e.svc.SettleCrashed(finishCtx, roundID, crashPoint); err != nil {
 		slog.Error("crash settle failed", "error", err, "round_id", roundID)
 	}
 

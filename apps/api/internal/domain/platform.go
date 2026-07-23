@@ -65,6 +65,34 @@ type AdminAuditLog struct {
 
 func (AdminAuditLog) TableName() string { return "admin_audit_logs" }
 
+// AdminNotification — in-app ops feed (replaces Telegram admin DMs).
+type AdminNotification struct {
+	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Kind            string         `gorm:"size:64;not null;index" json:"kind"`
+	Category        string         `gorm:"size:32;not null;index" json:"category"`
+	Severity        string         `gorm:"size:16;not null;default:info" json:"severity"`
+	Title           string         `gorm:"size:128;not null" json:"title"`
+	Summary         string         `gorm:"size:512;not null" json:"summary"`
+	Body            string         `gorm:"type:text;not null" json:"body"`
+	ActorTelegramID int64          `gorm:"not null;default:0;index" json:"actor_telegram_id"`
+	ActorUsername   string         `gorm:"size:64;not null;default:''" json:"actor_username"`
+	ActorFirstName  string         `gorm:"size:128;not null;default:''" json:"actor_first_name"`
+	ActorLastName   string         `gorm:"size:128;not null;default:''" json:"actor_last_name"`
+	AmountNanoton   *int64         `json:"amount_nanoton,omitempty"`
+	Meta            datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"meta,omitempty"`
+	ReadAt          *time.Time     `json:"read_at,omitempty"`
+	CreatedAt       time.Time      `gorm:"index" json:"created_at"`
+}
+
+func (AdminNotification) TableName() string { return "admin_notifications" }
+
+// AdminNotificationFilter — list/count options for the admin feed.
+type AdminNotificationFilter struct {
+	Category   string
+	UnreadOnly bool
+	Limit      int
+}
+
 // PromoCode — marketing bonus codes with wager requirement.
 type PromoCode struct {
 	Code              string     `gorm:"size:32;primaryKey" json:"code"`

@@ -148,11 +148,13 @@ func main() {
 	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo, giftTraitRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
-	adminIDs := cfg.AdminTelegramIDs
+	adminNotifRepo := postgres.NewAdminNotificationRepo(db)
+	adminSvc.SetNotificationRepo(adminNotifRepo)
+	var notifStore domain.AdminNotificationRepository = adminNotifRepo
 	if !cfg.AdminNotifyEnabled {
-		adminIDs = nil
+		notifStore = nil
 	}
-	adminNotifier := telegram.NewAdminNotifier(botAPI, adminIDs)
+	adminNotifier := telegram.NewAdminNotifier(notifStore, cfg.AdminTelegramIDs)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL, cfg.ChannelURL)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
@@ -215,6 +217,7 @@ func main() {
 	caseSvc.SetValuator(giftValuator)
 	caseSvc.SetBotResolver(marketRepo)
 	caseSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
+	caseSvc.SetAdminNotifier(adminNotifier)
 
 	hub := websocket.NewHub()
 	balanceSvc.SetNotifier(hub)
@@ -258,6 +261,11 @@ func main() {
 	pvpSvc.SetValuator(giftValuator)
 	pvpSvc.SetOutcome(outcomeSvc)
 	pvpSvc.SetTickNotifier(hub)
+	crashSvc.SetUsers(userRepo)
+	rouletteSvc.SetUsers(userRepo)
+	crashSvc.SetAdminNotifier(adminNotifier)
+	rouletteSvc.SetAdminNotifier(adminNotifier)
+	pvpSvc.SetAdminNotifier(adminNotifier)
 	betHook := func(ctx context.Context, userID uuid.UUID, amount int64) {
 		referralSvc.OnQualifyingBet(ctx, userID, amount)
 	}
@@ -348,6 +356,9 @@ func main() {
 	adminHandler.SetCasesService(caseSvc)
 	adminHandler.SetCasesUploadDir(cfg.CasesUploadDir)
 	adminHandler.SetInventoryService(invSvc)
+	adminHandler.SetOnlineCounter(func() int {
+		return hub.OnlineUserCount(authSvc.IsAdmin)
+	})
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
 		socialSim.ApplySettings(settings)
