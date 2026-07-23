@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 :root {
-  /* Cool fintech dark — surfaces may be overridden by Telegram theme sync */
+  /* Cool fintech dark — fixed palette (Telegram light theme is ignored) */
+  color-scheme: dark;
   --background: #0c141c;
   --foreground: #f2f5f7;
   --surface: #141c27;

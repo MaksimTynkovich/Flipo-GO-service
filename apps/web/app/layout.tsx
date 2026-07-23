@@ -4,7 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers/Providers";
 import { AppLayout } from "@/src/widgets/app-shell/ui/AppLayout";
-import { BRAND_BG } from "@/src/shared/config/brand";
+import { BRAND_BG, BRAND_SURFACE } from "@/src/shared/config/brand";
 import { cn } from "@/lib/utils";
 
 const sans = Manrope({
@@ -32,33 +32,19 @@ export const viewport: Viewport = {
 
 const tgThemeBootstrap = `
 (() => {
-  const fallback = "${BRAND_BG}";
-  const isTooDark = (hex) => {
-    if (!hex) return true;
-    const value = hex.replace("#", "");
-    const channels =
-      value.length === 3
-        ? value.split("").map((c) => parseInt(c + c, 16))
-        : [value.slice(0, 2), value.slice(2, 4), value.slice(4, 6)].map((c) => parseInt(c, 16));
-    const luminance =
-      channels.reduce((sum, channel) => {
-        const normalized = channel / 255;
-        const linear =
-          normalized <= 0.03928
-            ? normalized / 12.92
-            : ((normalized + 0.055) / 1.055) ** 2.4;
-        return sum + linear;
-      }, 0) / 3;
-    return luminance < 0.1;
-  };
+  // Always dark — do not follow Telegram light themeParams.
+  const bg = "${BRAND_BG}";
+  const surface = "${BRAND_SURFACE}";
 
   const apply = () => {
-    const params = window.Telegram?.WebApp?.themeParams;
-    const bg = isTooDark(params?.bg_color) ? fallback : params?.bg_color || fallback;
-    document.documentElement.style.setProperty("--background", bg);
-    document.documentElement.style.backgroundColor = bg;
-    document.body.style.backgroundColor = bg;
+    const root = document.documentElement;
+    root.style.setProperty("--background", bg);
+    root.style.setProperty("--surface", surface);
+    root.style.backgroundColor = bg;
+    root.style.colorScheme = "dark";
+    if (document.body) document.body.style.backgroundColor = bg;
     window.Telegram?.WebApp?.setBackgroundColor?.(bg);
+    window.Telegram?.WebApp?.setHeaderColor?.(surface);
   };
 
   apply();
