@@ -80,10 +80,10 @@ export function CaseCard({
         aria-hidden
       />
 
-      <div className="absolute inset-x-0 bottom-0 z-[1] flex flex-col gap-1.5 p-2.5">
+      <div className="absolute inset-x-0 bottom-0 z-[1] flex items-end justify-between gap-1.5 p-2.5">
         <h3
           className={cn(
-            "line-clamp-2 font-semibold leading-tight tracking-tight text-white",
+            "min-w-0 flex-1 line-clamp-2 font-semibold leading-tight tracking-tight text-white",
             layout === "wide" ? "text-[14px]" : "text-[12px]",
           )}
         >
@@ -91,7 +91,7 @@ export function CaseCard({
         </h3>
         <span
           className={cn(
-            "inline-flex h-6 w-fit max-w-full items-center gap-1 truncate rounded-full px-2 text-[10px] font-semibold tabular-nums backdrop-blur-md",
+            "inline-flex h-6 shrink-0 max-w-[55%] items-center gap-1 truncate rounded-full px-2 text-[10px] font-semibold tabular-nums backdrop-blur-md",
             price.muted
               ? "bg-white/10 text-white/45"
               : price.free
