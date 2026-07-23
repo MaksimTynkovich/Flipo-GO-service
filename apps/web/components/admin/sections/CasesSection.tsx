@@ -27,6 +27,7 @@ import {
   normalizeLootTileColor,
 } from "@/components/cases/case-ui";
 import { CaseDetailPlayerPreview } from "@/components/cases/CaseDetailPlayerPreview";
+import { CasesPageAdminPreview } from "@/components/cases/CasesPageAdminPreview";
 import {
   lootDraftsToPreview,
   previewCtaLabel,
@@ -43,7 +44,7 @@ import {
   type AdminCaseLootEntry,
   type AdminCaseUpsert,
 } from "@/lib/api";
-import { ArrowDown, ArrowUp, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 
 const KINDS = [
   { value: "catalog", label: "Каталог" },
@@ -154,6 +155,7 @@ export default function CasesSection() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [bannersEnabled, setBannersEnabled] = useState(false);
   const [savingBanners, setSavingBanners] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
@@ -334,82 +336,45 @@ export default function CasesSection() {
     setLoot((prev) => [...prev, giftToLootRow(gift, prev.length)]);
   }
 
-  const sortedCases = useMemo(
-    () =>
-      [...cases].sort((a, b) => {
-        if (a.kind !== b.kind) {
-          const rank = (k: string) =>
-            k === "featured" ? 0 : k === "daily" ? 1 : 2;
-          return rank(a.kind) - rank(b.kind);
-        }
-        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-        return a.title.localeCompare(b.title);
-      }),
-    [cases],
-  );
-
-  async function moveCase(caseId: string, dir: -1 | 1) {
-    const idx = sortedCases.findIndex((c) => c.id === caseId);
-    if (idx < 0) return;
-    const current = sortedCases[idx];
-
-    let neighbor: AdminCase | undefined;
-    if (dir < 0) {
-      for (let i = idx - 1; i >= 0; i -= 1) {
-        if (sortedCases[i].kind === current.kind) {
-          neighbor = sortedCases[i];
-          break;
-        }
-      }
-    } else {
-      for (let i = idx + 1; i < sortedCases.length; i += 1) {
-        if (sortedCases[i].kind === current.kind) {
-          neighbor = sortedCases[i];
-          break;
-        }
-      }
+  async function reorderCasesByIds(orderedIds: string[]) {
+    const byId = new Map(cases.map((c) => [c.id, c]));
+    const nextLocal = cases.map((c) => {
+      const idx = orderedIds.indexOf(c.id);
+      if (idx < 0) return c;
+      return { ...c, sort_order: idx };
+    });
+    setCases(nextLocal);
+    if (draft.id) {
+      const idx = orderedIds.indexOf(draft.id);
+      if (idx >= 0) setDraft((d) => ({ ...d, sort_order: idx }));
     }
-    if (!neighbor) return;
 
-    const aOrder = current.sort_order;
-    const bOrder = neighbor.sort_order;
-    const nextA = aOrder === bOrder ? idx + dir : bOrder;
-    const nextB = aOrder === bOrder ? idx : aOrder;
-
+    setSavingOrder(true);
     try {
-      await Promise.all([
-        upsertAdminCase({
-          id: current.id,
-          slug: current.slug,
-          title: current.title,
-          image_url: current.image_url || "",
-          accent_color: current.accent_color || "",
-          price_nanoton: current.price_nanoton,
-          kind: current.kind,
-          sort_order: nextA,
-          active: current.active,
-          require_channel: current.require_channel,
-          target_rtp_bps: current.target_rtp_bps,
+      await Promise.all(
+        orderedIds.map((id, i) => {
+          const c = byId.get(id);
+          if (!c) return Promise.resolve();
+          return upsertAdminCase({
+            id: c.id,
+            slug: c.slug,
+            title: c.title,
+            image_url: c.image_url || "",
+            accent_color: c.accent_color || "#3b82f6",
+            price_nanoton: c.price_nanoton,
+            kind: c.kind,
+            sort_order: i,
+            active: c.active,
+            require_channel: c.require_channel,
+            target_rtp_bps: c.target_rtp_bps,
+          });
         }),
-        upsertAdminCase({
-          id: neighbor.id,
-          slug: neighbor.slug,
-          title: neighbor.title,
-          image_url: neighbor.image_url || "",
-          accent_color: neighbor.accent_color || "",
-          price_nanoton: neighbor.price_nanoton,
-          kind: neighbor.kind,
-          sort_order: nextB,
-          active: neighbor.active,
-          require_channel: neighbor.require_channel,
-          target_rtp_bps: neighbor.target_rtp_bps,
-        }),
-      ]);
-      const data = await load();
-      const found = data.find((c) => c.id === caseId);
-      if (found) selectCase(found);
+      );
     } catch (e) {
-      showToast({ title: formatUserError(e, "Не удалось поменять порядок"), variant: "error" });
+      showToast({ title: formatUserError(e, "Не удалось сохранить порядок"), variant: "error" });
+      await load();
+    } finally {
+      setSavingOrder(false);
     }
   }
 
@@ -494,54 +459,36 @@ export default function CasesSection() {
       ) : cases.length === 0 && selectedId !== "new" ? (
         <AdminEmpty>Кейсов пока нет — создайте первый.</AdminEmpty>
       ) : (
-        <div className="space-y-2">
-          <p className="text-[11px] text-muted">
-            Порядок внутри секции (Featured / Daily / Каталог) — стрелки или поле «Порядок».
-            Тип кейса задаёт блок на экране.
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {sortedCases.map((c, idx) => {
-              const canUp = sortedCases
-                .slice(0, idx)
-                .some((other) => other.kind === c.kind);
-              const canDown = sortedCases
-                .slice(idx + 1)
-                .some((other) => other.kind === c.kind);
-              return (
-                <div key={c.id} className="inline-flex items-center gap-0.5">
-                  <AdminChip active={selectedId === c.id} onClick={() => selectCase(c)}>
-                    <span className="tabular-nums text-muted/70">{c.sort_order}</span>
-                    {" · "}
-                    {c.title}
-                    <span className="text-muted/60"> · {c.kind}</span>
-                    {!c.active ? " · выкл" : ""}
+        <AdminPanel
+          title="Витрина"
+          description="Как игроки видят /cases. Перетаскивай кейсы слева — превью справа обновляется сразу."
+        >
+          <CasesPageAdminPreview
+            cases={cases}
+            bannersEnabled={bannersEnabled}
+            selectedId={typeof selectedId === "string" ? selectedId : null}
+            draftOverlay={draft.id ? draft : null}
+            savingOrder={savingOrder}
+            onSelect={selectCase}
+            onReorder={(ids) => void reorderCasesByIds(ids)}
+          />
+          {cases.some((c) => !c.active) || selectedId === "new" ? (
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-white/[0.06] pt-3">
+              {cases
+                .filter((c) => !c.active)
+                .map((c) => (
+                  <AdminChip
+                    key={c.id}
+                    active={selectedId === c.id}
+                    onClick={() => selectCase(c)}
+                  >
+                    {c.title} · выкл
                   </AdminChip>
-                  <button
-                    type="button"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-muted hover:bg-white/5 disabled:opacity-30"
-                    disabled={!canUp}
-                    title="Выше в секции"
-                    onClick={() => void moveCase(c.id, -1)}
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-muted hover:bg-white/5 disabled:opacity-30"
-                    disabled={!canDown}
-                    title="Ниже в секции"
-                    onClick={() => void moveCase(c.id, 1)}
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-            {selectedId === "new" ? (
-              <AdminChip active>Новый</AdminChip>
-            ) : null}
-          </div>
-        </div>
+                ))}
+              {selectedId === "new" ? <AdminChip active>Новый</AdminChip> : null}
+            </div>
+          ) : null}
+        </AdminPanel>
       )}
 
       {selectedId ? (
@@ -968,8 +915,8 @@ export default function CasesSection() {
           </div>
 
           <AdminPanel
-            title="Предпросмотр"
-            description="Как игроки видят экран кейса. Обновляется по черновику — сохранять не обязательно."
+            title="Экран кейса"
+            description="Детальная страница выбранного кейса. Обновляется по черновику."
             className="xl:sticky xl:top-4"
           >
             <CaseDetailPlayerPreview
