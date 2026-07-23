@@ -3,7 +3,9 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
@@ -32,6 +34,13 @@ func (h *InventoryHandler) List(c *gin.Context) {
 }
 
 func (h *InventoryHandler) Deposit(c *gin.Context) {
+	if err := domain.EnsureGiftDepositEnabled(); err != nil {
+		httperr.Respond(c, http.StatusServiceUnavailable, err, gin.H{
+			"error": "Депозит подарками временно недоступен.",
+			"code":  "gift_deposit_disabled",
+		})
+		return
+	}
 	userID := middleware.GetUserID(c)
 	var req struct {
 		TxRef string `json:"tx_ref" binding:"required"`

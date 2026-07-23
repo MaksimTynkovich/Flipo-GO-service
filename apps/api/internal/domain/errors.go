@@ -25,6 +25,7 @@ var (
 	ErrGameDisabled      = errors.New("игра временно недоступна")
 	ErrBetsPaused        = errors.New("ставки временно не принимаются")
 	ErrMarketDisabled    = errors.New("маркет временно недоступен")
+	ErrGiftDepositDisabled = errors.New("депозит подарками временно недоступен")
 	ErrMaintenance       = errors.New("техническое обслуживание")
 	ErrPromoInvalid         = errors.New("недействительный промокод")
 	ErrPromoExpired         = errors.New("промокод истёк")

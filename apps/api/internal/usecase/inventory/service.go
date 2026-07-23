@@ -119,6 +119,9 @@ func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.In
 }
 
 func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*ItemView, error) {
+	if err := domain.EnsureGiftDepositEnabled(); err != nil {
+		return nil, err
+	}
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err

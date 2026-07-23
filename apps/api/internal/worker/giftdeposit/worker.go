@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	inventoryuc "github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 )
@@ -26,6 +27,10 @@ func NewWorker(cfg telegram.MTProtoConfig, processor *inventoryuc.AutoDepositSer
 }
 
 func (w *Worker) Start(ctx context.Context) {
+	if !domain.GiftDepositEnabled {
+		slog.Warn("gift deposit worker disabled: GiftDepositEnabled=false")
+		return
+	}
 	if !w.cfg.Enabled() {
 		slog.Warn("gift deposit worker disabled: MTProto not configured")
 		return

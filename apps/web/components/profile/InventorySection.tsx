@@ -25,7 +25,7 @@ import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { formatUserError } from "@/lib/user-errors";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Button } from "@/components/ui/button";
-import { MARKET_ENABLED } from "@/src/shared/config/features";
+import { GIFT_DEPOSIT_ENABLED, MARKET_ENABLED } from "@/src/shared/config/features";
 
 export function InventorySection() {
   const { setUser } = useAuth();
@@ -142,9 +142,9 @@ export function InventorySection() {
 
   return (
     <>
-      <InventoryDepositGuide />
+      {GIFT_DEPOSIT_ENABLED ? <InventoryDepositGuide /> : null}
 
-      <section className="mt-5 space-y-2">
+      <section className={GIFT_DEPOSIT_ENABLED ? "mt-5 space-y-2" : "space-y-2"}>
         <div className="flex items-center justify-between px-0.5">
           <p className="section-label">Мои подарки</p>
           {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}

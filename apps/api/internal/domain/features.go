@@ -10,3 +10,14 @@ func EnsureMarketEnabled() error {
 	}
 	return ErrMarketDisabled
 }
+
+// GiftDepositEnabled gates manual + auto gift deposits into inventory.
+// Keep false while gift deposits are temporarily paused.
+const GiftDepositEnabled = false
+
+func EnsureGiftDepositEnabled() error {
+	if GiftDepositEnabled {
+		return nil
+	}
+	return ErrGiftDepositDisabled
+}
