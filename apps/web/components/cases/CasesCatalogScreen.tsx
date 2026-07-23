@@ -75,32 +75,33 @@ export function CaseCard({
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, rgba(8,12,18,0.12) 0%, rgba(8,12,18,0.04) 40%, rgba(8,12,18,0.82) 100%)",
+            "linear-gradient(180deg, rgba(4,8,14,0.05) 0%, rgba(4,8,14,0.08) 42%, rgba(4,8,14,0.72) 72%, rgba(4,8,14,0.96) 100%)",
         }}
         aria-hidden
       />
 
-      <div className="absolute inset-x-0 bottom-0 z-[1] flex items-end justify-between gap-1.5 p-2.5">
+      <div className="absolute inset-x-0 bottom-0 z-[1] flex items-end justify-between gap-2 p-2.5">
         <h3
           className={cn(
-            "min-w-0 flex-1 line-clamp-2 font-semibold leading-tight tracking-tight text-white",
-            layout === "wide" ? "text-[14px]" : "text-[12px]",
+            "min-w-0 flex-1 line-clamp-2 font-bold leading-[1.15] tracking-[-0.02em] text-white",
+            "drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
+            layout === "wide" ? "text-[16px]" : "text-[14px]",
           )}
         >
           {caseItem.title}
         </h3>
         <span
           className={cn(
-            "inline-flex h-6 shrink-0 max-w-[55%] items-center gap-1 truncate rounded-full px-2 text-[10px] font-semibold tabular-nums backdrop-blur-md",
+            "inline-flex h-7 shrink-0 max-w-[55%] items-center gap-1 truncate rounded-[8px] px-2.5 text-[11px] font-bold tabular-nums shadow-[0_2px_8px_rgba(0,0,0,0.45)]",
             price.muted
-              ? "bg-white/10 text-white/45"
+              ? "bg-black/70 text-white/70 ring-white/10"
               : price.free
-                ? "bg-white/12 text-emerald-200"
-                : "bg-black/55 text-white",
+                ? "bg-emerald-500/25 text-emerald-100 ring-emerald-400/35"
+                : "bg-black/80 text-white ring-white/20",
           )}
         >
           {!price.free && !price.muted ? (
-            <TonIcon variant="brand" className="h-3 w-3 shrink-0" />
+            <TonIcon variant="brand" className="h-3.5 w-3.5 shrink-0" />
           ) : null}
           <span className="truncate">{price.text}</span>
         </span>
