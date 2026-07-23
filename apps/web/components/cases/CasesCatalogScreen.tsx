@@ -38,7 +38,6 @@ export function CaseCard({
 }) {
   const href = `${APP_ROUTES.cases}/${caseItem.slug}`;
   const cover = resolveAsset(caseItem.image_url?.trim()) || "";
-  const accent = caseItem.accent_color?.trim() || "#3b82f6";
   const price = priceLabel(caseItem);
 
   const className = cn(
@@ -60,13 +59,7 @@ export function CaseCard({
         />
       ) : (
         <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(ellipse 70% 55% at 50% 38%, ${accent}55 0%, transparent 68%),
-              linear-gradient(180deg, #152033 0%, #0d121a 100%)
-            `,
-          }}
+          className="pointer-events-none absolute inset-0 bg-[#101820]"
           aria-hidden
         />
       )}
