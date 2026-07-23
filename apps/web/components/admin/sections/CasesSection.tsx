@@ -461,7 +461,6 @@ export default function CasesSection() {
       ) : (
         <AdminPanel
           title="Витрина"
-          description="Как игроки видят /cases. Перетаскивай кейсы слева — превью справа обновляется сразу."
         >
           <CasesPageAdminPreview
             cases={cases}

@@ -105,21 +105,14 @@ export function CasesPageAdminPreview({
   }
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-      <div className="min-w-0 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] text-muted">
-            Порядок в списке = порядок в превью (сетка 2 колонки).
-            {savingOrder ? " Сохранение…" : ""}
-          </p>
-        </div>
-
+    <div className="admin-cases-vitrine">
+      <div className="admin-cases-vitrine__list">
         {ordered.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 px-3 py-8 text-center text-sm text-muted">
             Нет активных кейсов для витрины
           </p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="admin-cases-vitrine__list-scroll space-y-1.5 pr-0.5">
             {ordered.map((c, idx) => {
               const cover = resolveAsset(c.image_url?.trim()) || "";
               const isDrag = dragId === c.id;
@@ -217,24 +210,21 @@ export function CasesPageAdminPreview({
       </div>
 
       <div
-        className="admin-case-preview-frame !max-w-none w-full xl:sticky xl:top-4"
+        className="admin-case-preview-frame admin-cases-vitrine__preview"
         aria-label="Предпросмотр страницы кейсов"
       >
-        <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-white/35">
-          Страница · /cases
-          {bannersEnabled ? " · баннеры вкл. на сайте" : ""}
-        </p>
-        {/* flatOrder: 1:1 with the list on the left (reorder = preview order) */}
-        <CasesCatalogScreen
-          cases={previewCases}
-          flatOrder
-          interactive={false}
-          selectedId={selectedId}
-          onCaseClick={(item) => {
-            const found = cases.find((c) => c.id === item.id);
-            if (found) onSelect(found);
-          }}
-        />
+        <div className="admin-cases-vitrine__preview-scroll">
+          <CasesCatalogScreen
+            cases={previewCases}
+            flatOrder
+            interactive={false}
+            selectedId={selectedId}
+            onCaseClick={(item) => {
+              const found = cases.find((c) => c.id === item.id);
+              if (found) onSelect(found);
+            }}
+          />
+        </div>
       </div>
     </div>
   );

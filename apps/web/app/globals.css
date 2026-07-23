@@ -535,6 +535,60 @@ html.admin-mode body {
   max-width: none;
 }
 
+/* Cases admin vitrine: fixed height + internal scroll (list + preview). */
+.admin-cases-vitrine {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 1rem;
+  height: min(70vh, 36rem);
+  max-height: min(70vh, 36rem);
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .admin-cases-vitrine {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.admin-cases-vitrine__list {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.admin-cases-vitrine__list-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.admin-cases-vitrine__preview {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  max-width: none !important;
+  width: 70%;
+  height: 100%;
+  max-height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-cases-vitrine__preview-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .admin-case-preview-frame .case-detail-cta:disabled {
   opacity: 0.72;
   cursor: default;
