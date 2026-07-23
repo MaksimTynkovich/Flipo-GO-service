@@ -213,7 +213,7 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID) (*
 	return &view, nil
 }
 
-func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempotencyKey string) (*OpenResult, error) {
+func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempotencyKey, promoCode string) (*OpenResult, error) {
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" {
 		return nil, domain.ErrInvalidAmount
@@ -240,9 +240,20 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		return nil, domain.ErrCaseNoLoot
 	}
 
+	promoCode = strings.ToUpper(strings.TrimSpace(promoCode))
+	var promo *domain.CasePromoCode
+
 	source := domain.CaseOpenSourcePaid
 	price := c.PriceNanoton
-	if c.Kind == domain.CaseKindDaily {
+	switch {
+	case c.Kind == domain.CaseKindPromo:
+		source = domain.CaseOpenSourcePromo
+		price = 0
+		promo, err = s.validateCasePromo(ctx, userID, c.ID, promoCode)
+		if err != nil {
+			return nil, err
+		}
+	case c.Kind == domain.CaseKindDaily:
 		source = domain.CaseOpenSourceDaily
 		price = 0
 		ok, err := s.dailyAvailable(ctx, userID)
@@ -252,7 +263,7 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		if !ok {
 			return nil, domain.ErrCaseDailyUsed
 		}
-	} else if price <= 0 {
+	case price <= 0:
 		// Free catalog/featured cases must require channel subscription.
 		if !c.RequireChannel {
 			return nil, domain.ErrInvalidAmount
@@ -319,6 +330,20 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		}
 	}
 
+	if promo != nil {
+		if err := s.cases.CreateCasePromoRedemption(ctx, &domain.CasePromoRedemption{
+			UserID:     userID,
+			Code:       promo.Code,
+			CaseID:     c.ID,
+			CaseOpenID: openID,
+		}); err != nil {
+			return nil, err
+		}
+		if err := s.cases.IncrementCasePromoUsed(ctx, promo.Code); err != nil {
+			return nil, err
+		}
+	}
+
 	view := inventory.BuildItemView(ctx, s.valuator, *item)
 	return &OpenResult{
 		OpenID:    openID,
@@ -328,6 +353,36 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		LootEntry: toLootPreview(entry),
 		Backed:    backed,
 	}, nil
+}
+
+func (s *Service) validateCasePromo(ctx context.Context, userID, caseID uuid.UUID, code string) (*domain.CasePromoCode, error) {
+	if code == "" {
+		return nil, domain.ErrPromoInvalid
+	}
+	redeemed, err := s.cases.HasRedeemedCasePromoCode(ctx, userID, code)
+	if err != nil {
+		return nil, err
+	}
+	if redeemed {
+		return nil, domain.ErrPromoAlreadyRedeemed
+	}
+	promo, err := s.cases.GetCasePromoCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if promo.CaseID != caseID {
+		return nil, domain.ErrPromoInvalid
+	}
+	if !promo.Active {
+		return nil, domain.ErrPromoInvalid
+	}
+	if promo.ExpiresAt != nil && time.Now().UTC().After(*promo.ExpiresAt) {
+		return nil, domain.ErrPromoExpired
+	}
+	if promo.MaxUses > 0 && promo.UsedCount >= promo.MaxUses {
+		return nil, domain.ErrPromoExhausted
+	}
+	return promo, nil
 }
 
 func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, limit int) ([]OpenResult, error) {
@@ -401,7 +456,10 @@ func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
 	if strings.TrimSpace(c.AccentColor) == "" {
 		c.AccentColor = "#3b82f6"
 	}
-	if c.Kind != domain.CaseKindDaily && c.PriceNanoton <= 0 && !c.RequireChannel {
+	if c.Kind == domain.CaseKindPromo {
+		c.PriceNanoton = 0
+	}
+	if c.Kind != domain.CaseKindDaily && c.Kind != domain.CaseKindPromo && c.PriceNanoton <= 0 && !c.RequireChannel {
 		return fmt.Errorf("бесплатный кейс требует подписку на канал (require_channel)")
 	}
 	if c.ID == uuid.Nil {
@@ -409,6 +467,51 @@ func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
 		return s.cases.CreateCase(ctx, c)
 	}
 	return s.cases.UpdateCase(ctx, c)
+}
+
+func (s *Service) AdminListCasePromoCodes(ctx context.Context, caseID *uuid.UUID) ([]domain.CasePromoCode, error) {
+	return s.cases.ListCasePromoCodes(ctx, caseID)
+}
+
+func (s *Service) AdminUpsertCasePromoCode(ctx context.Context, promo *domain.CasePromoCode) error {
+	promo.Code = strings.ToUpper(strings.TrimSpace(promo.Code))
+	if promo.Code == "" {
+		return domain.ErrPromoInvalid
+	}
+	if promo.CaseID == uuid.Nil {
+		return domain.ErrInvalidAmount
+	}
+	c, err := s.cases.FindByID(ctx, promo.CaseID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.ErrNotFound
+		}
+		return err
+	}
+	if c.Kind != domain.CaseKindPromo {
+		return fmt.Errorf("промокод можно привязать только к кейсу типа promo")
+	}
+	if promo.MaxUses < 0 {
+		promo.MaxUses = 0
+	}
+	if existing, err := s.cases.GetCasePromoCode(ctx, promo.Code); err == nil && existing != nil {
+		if existing.CaseID != promo.CaseID {
+			return fmt.Errorf("промокод уже привязан к другому кейсу")
+		}
+		promo.UsedCount = existing.UsedCount
+		promo.CreatedAt = existing.CreatedAt
+	} else if err != nil && !errors.Is(err, domain.ErrPromoInvalid) {
+		return err
+	}
+	return s.cases.UpsertCasePromoCode(ctx, promo)
+}
+
+func (s *Service) AdminDeleteCasePromoCode(ctx context.Context, code string) error {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return domain.ErrPromoInvalid
+	}
+	return s.cases.DeleteCasePromoCode(ctx, code)
 }
 
 func (s *Service) AdminGetCatalogSettings(ctx context.Context) (*domain.CaseCatalogSettings, error) {

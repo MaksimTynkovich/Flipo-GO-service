@@ -1995,13 +1995,21 @@ export async function getCase(idOrSlug: string) {
   return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}`);
 }
 
-export async function openCase(idOrSlug: string, idempotencyKey?: string) {
-  const key = idempotencyKey || (typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `case-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+export async function openCase(
+  idOrSlug: string,
+  opts?: { idempotencyKey?: string; promoCode?: string },
+) {
+  const key =
+    opts?.idempotencyKey ||
+    (typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `case-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const body: { idempotency_key: string; promo_code?: string } = { idempotency_key: key };
+  const promo = opts?.promoCode?.trim();
+  if (promo) body.promo_code = promo.toUpperCase();
   return api<CaseOpenResult>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/open`, {
     method: "POST",
-    body: JSON.stringify({ idempotency_key: key }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -2092,6 +2100,40 @@ export async function replaceAdminCaseLoot(caseId: string, entries: AdminCaseLoo
   return api<{ ok: boolean }>(`/api/v1/admin/cases/${encodeURIComponent(caseId)}/loot`, {
     method: "PUT",
     body: JSON.stringify({ entries }),
+  });
+}
+
+export type AdminCasePromoCode = {
+  code: string;
+  case_id: string;
+  max_uses: number;
+  used_count: number;
+  active: boolean;
+  expires_at?: string;
+  created_at?: string;
+};
+
+export async function getAdminCasePromoCodes(caseId?: string) {
+  const q = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+  return api<AdminCasePromoCode[]>(`/api/v1/admin/cases/promos${q}`);
+}
+
+export async function upsertAdminCasePromoCode(promo: {
+  code: string;
+  case_id: string;
+  max_uses: number;
+  active: boolean;
+  expires_at?: string | null;
+}) {
+  return api<{ ok: boolean }>("/api/v1/admin/cases/promos", {
+    method: "PUT",
+    body: JSON.stringify(promo),
+  });
+}
+
+export async function deleteAdminCasePromoCode(code: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/cases/promos/${encodeURIComponent(code)}`, {
+    method: "DELETE",
   });
 }
 

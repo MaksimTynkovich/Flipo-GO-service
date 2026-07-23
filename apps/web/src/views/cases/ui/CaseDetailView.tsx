@@ -22,16 +22,25 @@ import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useToast } from "@/components/providers/ToastProvider";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Gift } from "lucide-react";
 
 type Phase = "idle" | "revealing" | "won";
 
+const PROMO_OPEN_ERROR_CODES = new Set([
+  "promo_invalid",
+  "promo_expired",
+  "promo_exhausted",
+  "promo_already_redeemed",
+]);
+
 export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
   const { user, setUser } = useAuth();
+  const { showToast } = useToast();
   const haptics = useTelegramHaptics();
   const idOrSlug = String(params?.id || "");
 
@@ -43,6 +52,7 @@ export function CaseDetailView() {
   const [result, setResult] = useState<CaseOpenResult | null>(null);
   const [revealLoot, setRevealLoot] = useState<CaseLootPreview[]>([]);
   const [channelSheetOpen, setChannelSheetOpen] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
 
   const load = useCallback(async () => {
     if (!idOrSlug) return;
@@ -63,11 +73,14 @@ export function CaseDetailView() {
 
   const accent = caseItem?.accent_color || "#3390ec";
   const loot = caseItem?.loot || [];
+  const isPromo = caseItem?.kind === "promo";
   const dailyBlocked =
     caseItem?.kind === "daily" && caseItem.daily_available === false;
   const isFree =
     Boolean(caseItem) &&
-    (caseItem!.kind === "daily" || caseItem!.price_nanoton <= 0);
+    (caseItem!.kind === "daily" ||
+      caseItem!.kind === "promo" ||
+      caseItem!.price_nanoton <= 0);
   const needsChannel =
     Boolean(caseItem?.require_channel) && caseItem?.channel_subscribed === false;
   const channel = caseItem?.required_channel || PROMO_REQUIRED_CHANNEL;
@@ -76,15 +89,23 @@ export function CaseDetailView() {
   const needsTopUp =
     Boolean(caseItem) &&
     !isFree &&
+    !isPromo &&
     caseItem!.price_nanoton > 0 &&
     balance < caseItem!.price_nanoton;
+
+  function notifyPromoError(message: string) {
+    showToast({ variant: "error", title: message });
+    haptics.notificationOccurred("error");
+  }
 
   async function runOpen(fresh: CaseView) {
     setOpening(true);
     setError(null);
     haptics.impactOccurred("medium");
     try {
-      const res = await openCase(fresh.slug);
+      const res = await openCase(fresh.slug, {
+        promoCode: fresh.kind === "promo" ? promoCode : undefined,
+      });
       const pool = fresh.loot?.length ? fresh.loot : [res.loot_entry];
       setRevealLoot(pool);
       setResult(res);
@@ -105,6 +126,11 @@ export function CaseDetailView() {
       } else if (e instanceof ApiRequestError && e.code === "insufficient_funds") {
         setError(null);
         router.push(APP_ROUTES.deposit);
+      } else if (
+        fresh.kind === "promo" ||
+        (e instanceof ApiRequestError && PROMO_OPEN_ERROR_CODES.has(e.code || ""))
+      ) {
+        notifyPromoError(formatUserError(e, "Не удалось открыть кейс"));
       } else {
         setError(formatUserError(e, "Не удалось открыть кейс"));
         haptics.notificationOccurred("error");
@@ -119,6 +145,11 @@ export function CaseDetailView() {
 
     if (needsTopUp) {
       router.push(APP_ROUTES.deposit);
+      return;
+    }
+
+    if (caseItem.kind === "promo" && !promoCode.trim()) {
+      notifyPromoError("Введите промокод");
       return;
     }
 
@@ -163,6 +194,7 @@ export function CaseDetailView() {
     if (dailyBlocked) return "Завтра";
     if (needsTopUp) return "Пополнить баланс";
     if (needsChannel) return "Подписаться и открыть";
+    if (isPromo) return "Открыть по промокоду";
     if (caseItem && caseItem.price_nanoton > 0) {
       return `Открыть · ${formatCasePrice(caseItem.price_nanoton)} TON`;
     }
@@ -200,10 +232,18 @@ export function CaseDetailView() {
           caseItem={caseItem}
           loot={loot}
           ctaLabel={ctaLabel()}
-          ctaDisabled={dailyBlocked || opening || phase === "revealing"}
+          ctaDisabled={
+            dailyBlocked ||
+            opening ||
+            phase === "revealing" ||
+            (isPromo && !promoCode.trim())
+          }
           ctaTopUp={needsTopUp && phase === "idle"}
           onCtaClick={() => void handleOpen()}
           showCatalogLink={phase === "idle"}
+          showPromoCodeInput={isPromo && phase === "idle"}
+          promoCode={promoCode}
+          onPromoCodeChange={setPromoCode}
           revealMode={phase === "revealing" ? "spin" : "idle"}
           revealLoot={revealLoot}
           winnerId={phase === "revealing" ? result?.loot_entry.id : null}

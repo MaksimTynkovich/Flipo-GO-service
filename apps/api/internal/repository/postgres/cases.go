@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -184,6 +185,82 @@ func (r *CaseRepo) UpdateCatalogSettings(ctx context.Context, settings *domain.C
 		Columns:   []clause.Column{{Name: "id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"banners_enabled", "updated_at"}),
 	}).Create(settings).Error
+}
+
+func (r *CaseRepo) ListCasePromoCodes(ctx context.Context, caseID *uuid.UUID) ([]domain.CasePromoCode, error) {
+	var rows []domain.CasePromoCode
+	q := r.db.WithContext(ctx).Order("created_at DESC")
+	if caseID != nil && *caseID != uuid.Nil {
+		q = q.Where("case_id = ?", *caseID)
+	}
+	return rows, q.Find(&rows).Error
+}
+
+func (r *CaseRepo) GetCasePromoCode(ctx context.Context, code string) (*domain.CasePromoCode, error) {
+	var row domain.CasePromoCode
+	err := r.db.WithContext(ctx).First(&row, "code = ?", code).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, domain.ErrPromoInvalid
+	}
+	return &row, err
+}
+
+func (r *CaseRepo) UpsertCasePromoCode(ctx context.Context, promo *domain.CasePromoCode) error {
+	if promo.CreatedAt.IsZero() {
+		promo.CreatedAt = time.Now().UTC()
+	}
+	return r.db.WithContext(ctx).Save(promo).Error
+}
+
+func (r *CaseRepo) DeleteCasePromoCode(ctx context.Context, code string) error {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&domain.CasePromoRedemption{}).
+		Where("code = ?", code).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return domain.ErrPromoInUse
+	}
+	res := r.db.WithContext(ctx).Delete(&domain.CasePromoCode{}, "code = ?", code)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (r *CaseRepo) HasRedeemedCasePromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.CasePromoRedemption{}).
+		Where("user_id = ? AND code = ?", userID, code).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *CaseRepo) CreateCasePromoRedemption(ctx context.Context, redemption *domain.CasePromoRedemption) error {
+	if redemption.ID == uuid.Nil {
+		redemption.ID = uuid.New()
+	}
+	if redemption.CreatedAt.IsZero() {
+		redemption.CreatedAt = time.Now().UTC()
+	}
+	return r.db.WithContext(ctx).Create(redemption).Error
+}
+
+func (r *CaseRepo) IncrementCasePromoUsed(ctx context.Context, code string) error {
+	res := r.db.WithContext(ctx).Model(&domain.CasePromoCode{}).
+		Where("code = ? AND (max_uses = 0 OR used_count < max_uses)", code).
+		UpdateColumn("used_count", gorm.Expr("used_count + 1"))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrPromoExhausted
+	}
+	return nil
 }
 
 var _ domain.CaseRepository = (*CaseRepo)(nil)

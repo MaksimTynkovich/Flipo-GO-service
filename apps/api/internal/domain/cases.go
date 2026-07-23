@@ -12,10 +12,12 @@ const (
 	CaseKindCatalog  = "catalog"
 	CaseKindFeatured = "featured"
 	CaseKindDaily    = "daily"
+	CaseKindPromo    = "promo"
 
 	CaseOpenSourcePaid  = "paid"
 	CaseOpenSourceDaily = "daily"
 	CaseOpenSourceFree  = "free"
+	CaseOpenSourcePromo = "promo"
 
 	CaseClaimTxRefPrefix = "case:"
 
@@ -89,6 +91,31 @@ type CaseCatalogSettings struct {
 }
 
 func (CaseCatalogSettings) TableName() string { return "case_catalog_settings" }
+
+// CasePromoCode — unlocks a promo-kind case when redeemed.
+type CasePromoCode struct {
+	Code      string     `gorm:"size:32;primaryKey" json:"code"`
+	CaseID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"case_id"`
+	MaxUses   int        `gorm:"not null;default:0" json:"max_uses"`
+	UsedCount int        `gorm:"not null;default:0" json:"used_count"`
+	Active    bool       `gorm:"not null;default:true" json:"active"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+func (CasePromoCode) TableName() string { return "case_promo_codes" }
+
+// CasePromoRedemption — one successful open per user per case promo code.
+type CasePromoRedemption struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID     uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_case_promo_user_code" json:"user_id"`
+	Code       string    `gorm:"size:32;not null;uniqueIndex:idx_case_promo_user_code;index" json:"code"`
+	CaseID     uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
+	CaseOpenID uuid.UUID `gorm:"type:uuid;not null" json:"case_open_id"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func (CasePromoRedemption) TableName() string { return "case_promo_redemptions" }
 
 // IsCaseClaimItem — inventory row created by opening a case.
 func IsCaseClaimItem(item InventoryItem) bool {

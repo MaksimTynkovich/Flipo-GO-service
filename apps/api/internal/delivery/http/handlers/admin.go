@@ -1065,6 +1065,79 @@ func (h *AdminHandler) ReplaceCaseLoot(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *AdminHandler) ListCasePromoCodes(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var caseID *uuid.UUID
+	if raw := strings.TrimSpace(c.Query("case_id")); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный case_id"})
+			return
+		}
+		caseID = &id
+	}
+	items, err := h.cases.AdminListCasePromoCodes(c.Request.Context(), caseID)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.CasePromoCode{}
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) UpsertCasePromoCode(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var promo domain.CasePromoCode
+	if err := c.ShouldBindJSON(&promo); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.cases.AdminUpsertCasePromoCode(c.Request.Context(), &promo); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrPromoInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Введите промокод"})
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Кейс не найден"})
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) DeleteCasePromoCode(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	code := strings.ToUpper(strings.TrimSpace(c.Param("code")))
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Укажите код"})
+		return
+	}
+	if err := h.cases.AdminDeleteCasePromoCode(c.Request.Context(), code); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Промокод не найден"})
+		case errors.Is(err, domain.ErrPromoInUse):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Есть активации — удаление недоступно"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 const maxCaseImageBytes = 5 << 20 // 5 MiB
 
 func (h *AdminHandler) UploadCaseImage(c *gin.Context) {

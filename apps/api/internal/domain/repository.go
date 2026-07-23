@@ -73,6 +73,14 @@ type CaseRepository interface {
 	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
 	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
+
+	ListCasePromoCodes(ctx context.Context, caseID *uuid.UUID) ([]CasePromoCode, error)
+	GetCasePromoCode(ctx context.Context, code string) (*CasePromoCode, error)
+	UpsertCasePromoCode(ctx context.Context, promo *CasePromoCode) error
+	DeleteCasePromoCode(ctx context.Context, code string) error
+	HasRedeemedCasePromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
+	CreateCasePromoRedemption(ctx context.Context, redemption *CasePromoRedemption) error
+	IncrementCasePromoUsed(ctx context.Context, code string) error
 }
 
 type MarketRepository interface {

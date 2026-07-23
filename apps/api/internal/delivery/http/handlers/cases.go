@@ -45,6 +45,7 @@ func (h *CasesHandler) Open(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
 		IdempotencyKey string `json:"idempotency_key"`
+		PromoCode      string `json:"promo_code"`
 	}
 	_ = c.ShouldBindJSON(&req)
 	if strings.TrimSpace(req.IdempotencyKey) == "" {
@@ -53,7 +54,7 @@ func (h *CasesHandler) Open(c *gin.Context) {
 	if strings.TrimSpace(req.IdempotencyKey) == "" {
 		req.IdempotencyKey = uuid.NewString()
 	}
-	result, err := h.cases.Open(c.Request.Context(), userID, c.Param("id"), req.IdempotencyKey)
+	result, err := h.cases.Open(c.Request.Context(), userID, c.Param("id"), req.IdempotencyKey, req.PromoCode)
 	if err != nil {
 		writeCasesError(c, err)
 		return
@@ -102,6 +103,14 @@ func writeCasesError(c *gin.Context, err error) {
 		})
 	case errors.Is(err, domain.ErrInvalidAmount):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Некорректный запрос", "code": "invalid_amount"})
+	case errors.Is(err, domain.ErrPromoInvalid):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Промокод недействителен", "code": "promo_invalid"})
+	case errors.Is(err, domain.ErrPromoExpired):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Промокод истёк", "code": "promo_expired"})
+	case errors.Is(err, domain.ErrPromoExhausted):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Промокод исчерпан", "code": "promo_exhausted"})
+	case errors.Is(err, domain.ErrPromoAlreadyRedeemed):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Промокод уже использован", "code": "promo_already_redeemed"})
 	default:
 		respondInternal(c, err)
 	}

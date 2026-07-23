@@ -21,6 +21,7 @@ function adminToView(c: AdminCase): CaseView {
 }
 
 function kindLabel(kind: string, bannersEnabled: boolean): string {
+  if (kind === "promo") return "Промокод";
   if (!bannersEnabled) {
     // Without banners everything sits in the catalog grid.
     return kind === "daily" ? "Daily" : "Каталог";

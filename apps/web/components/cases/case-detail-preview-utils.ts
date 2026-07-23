@@ -32,6 +32,7 @@ export function lootDraftsToPreview(rows: LootDraftLike[]): CaseLootPreview[] {
 }
 
 export function previewCtaLabel(draft: CaseDraftLike): string {
+  if (draft.kind === "promo") return "Открыть по промокоду";
   const isFree = draft.kind === "daily" || draft.price_nanoton <= 0;
   if (isFree) {
     return draft.require_channel ? "Бесплатно · подписка" : "Открыть бесплатно";

@@ -10,9 +10,13 @@ import { cn } from "@/lib/utils";
 
 function priceLabel(caseItem: CaseView): { text: string; free: boolean; muted?: boolean } {
   const isDaily = caseItem.kind === "daily";
-  const isFree = isDaily || caseItem.price_nanoton <= 0;
+  const isPromo = caseItem.kind === "promo";
+  const isFree = isDaily || isPromo || caseItem.price_nanoton <= 0;
   if (isDaily && caseItem.daily_available === false) {
     return { text: "Завтра", free: true, muted: true };
+  }
+  if (isPromo) {
+    return { text: "Промокод", free: true };
   }
   if (isFree) {
     return {

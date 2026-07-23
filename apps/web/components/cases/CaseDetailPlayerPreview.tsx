@@ -70,6 +70,10 @@ export type CaseDetailPlayerPreviewProps = {
   revealLoot?: CaseLootPreview[];
   winnerId?: string | null;
   onRevealComplete?: () => void;
+  /** Promo-case unlock input (player). */
+  promoCode?: string;
+  onPromoCodeChange?: (value: string) => void;
+  showPromoCodeInput?: boolean;
   className?: string;
 };
 
@@ -86,6 +90,9 @@ export function CaseDetailPlayerPreview({
   revealLoot,
   winnerId = null,
   onRevealComplete,
+  promoCode = "",
+  onPromoCodeChange,
+  showPromoCodeInput = false,
   className,
 }: CaseDetailPlayerPreviewProps) {
   const patternUid = useId().replace(/:/g, "");
@@ -116,6 +123,25 @@ export function CaseDetailPlayerPreview({
           onComplete={onRevealComplete}
         />
       </section>
+
+      {showPromoCodeInput ? (
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-white/55">Промокод</span>
+          <input
+            className="input-field w-full uppercase tracking-wide"
+            placeholder="Введите код"
+            value={promoCode}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            disabled={revealMode !== "idle"}
+            onChange={(e) => onPromoCodeChange?.(e.target.value.toUpperCase())}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !ctaDisabled) onCtaClick?.();
+            }}
+          />
+        </label>
+      ) : null}
 
       <button
         type="button"

@@ -11,7 +11,7 @@ import {
   AdminPanel,
   AdminToolbar,
 } from "@/components/admin/admin-ui";
-import { AdminPercentField, AdminTonField } from "@/components/admin/AdminInputs";
+import { AdminPercentField, AdminTonField, AdminIntField } from "@/components/admin/AdminInputs";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   changesGiftModelImageUrl,
@@ -33,15 +33,19 @@ import {
   previewCtaLabel,
 } from "@/components/cases/case-detail-preview-utils";
 import {
+  deleteAdminCasePromoCode,
   getAdminCaseCatalogSettings,
+  getAdminCasePromoCodes,
   getAdminCases,
   replaceAdminCaseLoot,
   resolveAsset,
   updateAdminCaseCatalogSettings,
   uploadAdminCaseImage,
   upsertAdminCase,
+  upsertAdminCasePromoCode,
   type AdminCase,
   type AdminCaseLootEntry,
+  type AdminCasePromoCode,
   type AdminCaseUpsert,
 } from "@/lib/api";
 import { Upload } from "lucide-react";
@@ -50,7 +54,15 @@ const KINDS = [
   { value: "catalog", label: "Каталог" },
   { value: "featured", label: "Баннер (Featured)" },
   { value: "daily", label: "Баннер (Daily)" },
+  { value: "promo", label: "Промокод" },
 ] as const;
+
+const EMPTY_CASE_PROMO: Omit<AdminCasePromoCode, "used_count" | "created_at"> = {
+  code: "",
+  case_id: "",
+  max_uses: 0,
+  active: true,
+};
 
 const RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
 
@@ -158,6 +170,11 @@ export default function CasesSection() {
   const [savingOrder, setSavingOrder] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [casePromos, setCasePromos] = useState<AdminCasePromoCode[]>([]);
+  const [casePromosLoading, setCasePromosLoading] = useState(false);
+  const [casePromoDraft, setCasePromoDraft] = useState(EMPTY_CASE_PROMO);
+  const [savingCasePromo, setSavingCasePromo] = useState(false);
+  const [deletingCasePromo, setDeletingCasePromo] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -192,6 +209,7 @@ export default function CasesSection() {
     setDraft(caseToDraft(c));
     setLoot(lootToDraft(c.loot));
     setExpandedKey(null);
+    setCasePromoDraft({ ...EMPTY_CASE_PROMO, case_id: c.id });
   }
 
   function startNew() {
@@ -199,7 +217,35 @@ export default function CasesSection() {
     setDraft(emptyCaseDraft());
     setLoot([]);
     setExpandedKey(null);
+    setCasePromos([]);
+    setCasePromoDraft(EMPTY_CASE_PROMO);
   }
+
+  const loadCasePromos = useCallback(
+    async (caseId: string) => {
+      setCasePromosLoading(true);
+      try {
+        setCasePromos(await getAdminCasePromoCodes(caseId));
+      } catch (e) {
+        showToast({
+          title: formatUserError(e, "Не удалось загрузить промокоды кейса"),
+          variant: "error",
+        });
+        setCasePromos([]);
+      } finally {
+        setCasePromosLoading(false);
+      }
+    },
+    [showToast],
+  );
+
+  useEffect(() => {
+    if (draft.id && draft.kind === "promo") {
+      void loadCasePromos(draft.id);
+    } else {
+      setCasePromos([]);
+    }
+  }, [draft.id, draft.kind, loadCasePromos]);
 
   async function toggleBanners(next: boolean) {
     setSavingBanners(true);
@@ -234,9 +280,12 @@ export default function CasesSection() {
       showToast({ title: "Нужны slug и title", variant: "error" });
       return;
     }
+    const isPromo = draft.kind === "promo";
+    const priceNanoton = isPromo ? 0 : draft.price_nanoton;
     const requireChannel =
-      draft.require_channel || (draft.kind !== "daily" && draft.price_nanoton <= 0);
-    if (draft.kind !== "daily" && draft.price_nanoton <= 0 && !requireChannel) {
+      draft.require_channel ||
+      (!isPromo && draft.kind !== "daily" && priceNanoton <= 0);
+    if (!isPromo && draft.kind !== "daily" && priceNanoton <= 0 && !requireChannel) {
       showToast({
         title: "Бесплатный кейс требует подписку на канал",
         variant: "error",
@@ -251,7 +300,7 @@ export default function CasesSection() {
         title,
         image_url: draft.image_url?.trim() || "",
         accent_color: draft.accent_color?.trim() || "#3b82f6",
-        price_nanoton: draft.price_nanoton,
+        price_nanoton: priceNanoton,
         kind: draft.kind || "catalog",
         sort_order: draft.sort_order,
         active: draft.active,
@@ -270,6 +319,47 @@ export default function CasesSection() {
       showToast({ title: formatUserError(e, "Не удалось сохранить кейс"), variant: "error" });
     } finally {
       setSavingCase(false);
+    }
+  }
+
+  async function saveCasePromo() {
+    if (!draft.id) {
+      showToast({ title: "Сначала сохраните кейс", variant: "error" });
+      return;
+    }
+    const code = casePromoDraft.code.trim().toUpperCase();
+    if (!code) {
+      showToast({ title: "Введите промокод", variant: "error" });
+      return;
+    }
+    setSavingCasePromo(true);
+    try {
+      await upsertAdminCasePromoCode({
+        code,
+        case_id: draft.id,
+        max_uses: Math.max(0, casePromoDraft.max_uses),
+        active: casePromoDraft.active,
+      });
+      showToast({ title: "Промокод сохранён", variant: "success" });
+      setCasePromoDraft({ ...EMPTY_CASE_PROMO, case_id: draft.id });
+      await loadCasePromos(draft.id);
+    } catch (e) {
+      showToast({ title: formatUserError(e, "Не удалось сохранить промокод"), variant: "error" });
+    } finally {
+      setSavingCasePromo(false);
+    }
+  }
+
+  async function removeCasePromo(code: string) {
+    setDeletingCasePromo(code);
+    try {
+      await deleteAdminCasePromoCode(code);
+      showToast({ title: "Промокод удалён", variant: "success" });
+      if (draft.id) await loadCasePromos(draft.id);
+    } catch (e) {
+      showToast({ title: formatUserError(e, "Не удалось удалить промокод"), variant: "error" });
+    } finally {
+      setDeletingCasePromo(null);
     }
   }
 
@@ -522,15 +612,24 @@ export default function CasesSection() {
               <AdminField
                 label="Тип"
                 hint={
-                  bannersEnabled
-                    ? "Баннер (Featured/Daily) — верхний ряд; Каталог — сетка ниже."
-                    : "Баннеры скрыты: Featured/Daily попадают в общую сетку каталога вместе с остальными."
+                  draft.kind === "promo"
+                    ? "Открывается только по промокоду. Коды создаются ниже после сохранения кейса."
+                    : bannersEnabled
+                      ? "Баннер (Featured/Daily) — верхний ряд; Каталог — сетка ниже."
+                      : "Баннеры скрыты: Featured/Daily попадают в общую сетку каталога вместе с остальными."
                 }
               >
                 <select
                   className="input-field"
                   value={draft.kind}
-                  onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value }))}
+                  onChange={(e) => {
+                    const kind = e.target.value;
+                    setDraft((d) => ({
+                      ...d,
+                      kind,
+                      price_nanoton: kind === "promo" ? 0 : d.price_nanoton,
+                    }));
+                  }}
                 >
                   {KINDS.map((k) => (
                     <option key={k.value} value={k.value}>
@@ -541,16 +640,22 @@ export default function CasesSection() {
               </AdminField>
               <AdminTonField
                 label="Цена (TON)"
-                valueNanoton={draft.price_nanoton}
+                valueNanoton={draft.kind === "promo" ? 0 : draft.price_nanoton}
                 onChangeNanoton={(v) =>
                   setDraft((d) => ({
                     ...d,
-                    price_nanoton: v,
+                    price_nanoton: d.kind === "promo" ? 0 : v,
                     require_channel:
-                      d.kind !== "daily" && v <= 0 ? true : d.require_channel,
+                      d.kind !== "daily" && d.kind !== "promo" && v <= 0
+                        ? true
+                        : d.require_channel,
                   }))
                 }
-                hint="0 = бесплатный кейс (нужна подписка на канал)"
+                hint={
+                  draft.kind === "promo"
+                    ? "Промо-кейс всегда бесплатный (открытие по коду)"
+                    : "0 = бесплатный кейс (нужна подписка на канал)"
+                }
               />
               <AdminField label="Порядок" hint="меньше = выше в витрине">
                 <input
@@ -669,7 +774,9 @@ export default function CasesSection() {
                   className="mt-0.5"
                   checked={
                     draft.require_channel ||
-                    (draft.kind !== "daily" && draft.price_nanoton <= 0)
+                    (draft.kind !== "daily" &&
+                      draft.kind !== "promo" &&
+                      draft.price_nanoton <= 0)
                   }
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, require_channel: e.target.checked }))
@@ -678,7 +785,9 @@ export default function CasesSection() {
                 <span>
                   Нужна подписка на канал
                   <span className="mt-0.5 block text-[11px] text-muted/80">
-                    Для бесплатных (цена 0) обязательно. Канал = PROMO_REQUIRED_CHANNEL.
+                    {draft.kind === "promo"
+                      ? "Опционально для промо-кейса. Канал = PROMO_REQUIRED_CHANNEL."
+                      : "Для бесплатных (цена 0) обязательно. Канал = PROMO_REQUIRED_CHANNEL."}
                   </span>
                 </span>
               </label>
@@ -689,6 +798,92 @@ export default function CasesSection() {
               </AdminButton>
             </div>
           </AdminPanel>
+
+          {draft.kind === "promo" ? (
+            <AdminPanel
+              title="Промокоды кейса"
+              description={
+                draft.id
+                  ? "Код открывает этот кейс один раз на пользователя. Max uses = 0 — без лимита."
+                  : "Сначала сохраните кейс, затем создайте промокоды."
+              }
+            >
+              {!draft.id ? (
+                <AdminEmpty>Промокоды появятся после создания кейса.</AdminEmpty>
+              ) : (
+                <div className="space-y-3">
+                  {casePromosLoading && casePromos.length === 0 ? (
+                    <div className="h-16 animate-pulse rounded-xl bg-surface-raised/50" />
+                  ) : casePromos.length === 0 ? (
+                    <p className="text-sm text-muted">Пока нет промокодов</p>
+                  ) : (
+                    casePromos.map((promo) => (
+                      <div
+                        key={promo.code}
+                        className="flex items-start justify-between gap-3 rounded-xl bg-surface-raised/50 px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold tracking-wide">{promo.code}</p>
+                          <p className="mt-0.5 text-xs text-muted">
+                            {promo.used_count}/{promo.max_uses || "∞"} ·{" "}
+                            {promo.active ? "active" : "off"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-lg px-2 py-1 text-xs text-red-300 transition-colors active:bg-red-500/10 disabled:opacity-50"
+                          disabled={deletingCasePromo === promo.code}
+                          onClick={() => void removeCasePromo(promo.code)}
+                        >
+                          {deletingCasePromo === promo.code ? "…" : "Удалить"}
+                        </button>
+                      </div>
+                    ))
+                  )}
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <AdminField label="Промокод">
+                      <input
+                        className="input-field uppercase tracking-wide"
+                        placeholder="PEPELOVE"
+                        value={casePromoDraft.code}
+                        onChange={(e) =>
+                          setCasePromoDraft((d) => ({
+                            ...d,
+                            code: e.target.value.toUpperCase(),
+                          }))
+                        }
+                      />
+                    </AdminField>
+                    <AdminIntField
+                      label="Max uses"
+                      min={0}
+                      value={casePromoDraft.max_uses}
+                      onChange={(v) => setCasePromoDraft((d) => ({ ...d, max_uses: v }))}
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-muted">
+                    <input
+                      type="checkbox"
+                      checked={casePromoDraft.active}
+                      onChange={(e) =>
+                        setCasePromoDraft((d) => ({ ...d, active: e.target.checked }))
+                      }
+                    />
+                    Активен
+                  </label>
+                  <AdminToolbar>
+                    <AdminButton
+                      disabled={savingCasePromo || !casePromoDraft.code.trim()}
+                      onClick={() => void saveCasePromo()}
+                    >
+                      {savingCasePromo ? "…" : "Создать / обновить промокод"}
+                    </AdminButton>
+                  </AdminToolbar>
+                </div>
+              )}
+            </AdminPanel>
+          ) : null}
 
           <AdminPanel
             title="Содержимое кейса"
