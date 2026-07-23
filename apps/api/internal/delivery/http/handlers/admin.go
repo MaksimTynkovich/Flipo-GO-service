@@ -1026,7 +1026,10 @@ func (h *AdminHandler) UpsertCase(c *gin.Context) {
 		return
 	}
 	if req.Kind == "" {
-		req.Kind = domain.CaseKindCatalog
+		req.Kind = domain.CaseKindFeatured
+	}
+	if strings.TrimSpace(req.AccentColor) == "" {
+		req.AccentColor = "#3b82f6"
 	}
 	if req.TargetRTPBPS <= 0 {
 		req.TargetRTPBPS = 9000

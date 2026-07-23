@@ -396,7 +396,10 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 
 func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
 	if c.Kind == "" {
-		c.Kind = domain.CaseKindCatalog
+		c.Kind = domain.CaseKindFeatured
+	}
+	if strings.TrimSpace(c.AccentColor) == "" {
+		c.AccentColor = "#3b82f6"
 	}
 	if c.Kind != domain.CaseKindDaily && c.PriceNanoton <= 0 && !c.RequireChannel {
 		return fmt.Errorf("бесплатный кейс требует подписку на канал (require_channel)")

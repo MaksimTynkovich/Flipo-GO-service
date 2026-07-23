@@ -69,7 +69,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="admin-sidebar">
         <div className="admin-sidebar__brand">
           <p className="admin-sidebar__brand-mark">Flipo</p>
-          <p className="admin-sidebar__brand-sub">Admin</p>
         </div>
 
         <AdminNav activeSection={activeSection} onNavigate={navigate} />
