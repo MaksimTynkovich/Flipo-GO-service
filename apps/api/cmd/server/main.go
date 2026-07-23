@@ -254,6 +254,7 @@ func main() {
 		cacheIface = &noopCache{}
 	}
 	caseSvc.SetLiveDropPublisher(&caseLiveDropPublisher{hub: hub, cache: cacheIface})
+	caseSvc.LiveSim().Start(ctx)
 
 	betFundingSvc := betfunding.NewService(invRepo, marketRepo, balanceSvc, giftValuator)
 

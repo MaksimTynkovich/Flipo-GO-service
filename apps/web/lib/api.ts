@@ -2158,6 +2158,33 @@ export async function updateAdminCaseCatalogSettings(body: { banners_enabled: bo
   });
 }
 
+export type AdminCaseLiveFeedSettings = {
+  id?: number;
+  enabled: boolean;
+  intensity: number;
+  fill_when_sparse: boolean;
+  min_visible: number;
+  common_weight: number;
+  uncommon_weight: number;
+  rare_weight: number;
+  epic_weight: number;
+  legendary_weight: number;
+  fat_chance: number;
+  fat_min_floor_nanoton: number;
+  updated_at?: string;
+};
+
+export async function getAdminCaseLiveFeedSettings() {
+  return api<AdminCaseLiveFeedSettings>("/api/v1/admin/cases/live-settings");
+}
+
+export async function updateAdminCaseLiveFeedSettings(body: AdminCaseLiveFeedSettings) {
+  return api<AdminCaseLiveFeedSettings>("/api/v1/admin/cases/live-settings", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export async function upsertAdminCase(body: AdminCaseUpsert) {
   return api<{ ok: boolean; id: string }>("/api/v1/admin/cases", {
     method: "PUT",

@@ -225,6 +225,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.POST("/cases/upload", deps.AdminHandler.UploadCaseImage)
 			adminAuthed.GET("/cases/settings", deps.AdminHandler.GetCaseCatalogSettings)
 			adminAuthed.PATCH("/cases/settings", deps.AdminHandler.UpdateCaseCatalogSettings)
+			adminAuthed.GET("/cases/live-settings", deps.AdminHandler.GetCaseLiveFeedSettings)
+			adminAuthed.PATCH("/cases/live-settings", deps.AdminHandler.UpdateCaseLiveFeedSettings)
 			adminAuthed.GET("/cases/promos", deps.AdminHandler.ListCasePromoCodes)
 			adminAuthed.PUT("/cases/promos", deps.AdminHandler.UpsertCasePromoCode)
 			adminAuthed.DELETE("/cases/promos/:code", deps.AdminHandler.DeleteCasePromoCode)

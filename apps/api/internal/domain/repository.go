@@ -74,6 +74,8 @@ type CaseRepository interface {
 	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
 	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
+	GetLiveFeedSettings(ctx context.Context) (*CaseLiveFeedSettings, error)
+	UpdateLiveFeedSettings(ctx context.Context, settings *CaseLiveFeedSettings) error
 
 	ListCasePromoCodes(ctx context.Context, caseID *uuid.UUID) ([]CasePromoCode, error)
 	GetCasePromoCode(ctx context.Context, code string) (*CasePromoCode, error)

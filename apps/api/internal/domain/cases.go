@@ -129,6 +129,25 @@ type CaseLiveDrop struct {
 	CreatedAt           time.Time `json:"created_at"`
 }
 
+// CaseLiveFeedSettings — singleton (id=1) for fake live-feed knobs.
+type CaseLiveFeedSettings struct {
+	ID                 int       `gorm:"primaryKey" json:"id"`
+	Enabled            bool      `gorm:"not null;default:false" json:"enabled"`
+	Intensity          float64   `gorm:"type:decimal(6,3);not null;default:1" json:"intensity"`
+	FillWhenSparse     bool      `gorm:"not null;default:true" json:"fill_when_sparse"`
+	MinVisible         int       `gorm:"not null;default:6" json:"min_visible"`
+	CommonWeight       float64   `gorm:"type:decimal(8,3);not null;default:50" json:"common_weight"`
+	UncommonWeight     float64   `gorm:"type:decimal(8,3);not null;default:25" json:"uncommon_weight"`
+	RareWeight         float64   `gorm:"type:decimal(8,3);not null;default:15" json:"rare_weight"`
+	EpicWeight         float64   `gorm:"type:decimal(8,3);not null;default:7" json:"epic_weight"`
+	LegendaryWeight    float64   `gorm:"type:decimal(8,3);not null;default:3" json:"legendary_weight"`
+	FatChance          float64   `gorm:"type:decimal(6,4);not null;default:0.08" json:"fat_chance"`
+	FatMinFloorNanoton int64     `gorm:"not null;default:5000000000" json:"fat_min_floor_nanoton"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+func (CaseLiveFeedSettings) TableName() string { return "case_live_feed_settings" }
+
 // IsCaseClaimItem — inventory row created by opening a case.
 func IsCaseClaimItem(item InventoryItem) bool {
 	return strings.HasPrefix(item.TelegramTxRef, CaseClaimTxRefPrefix)

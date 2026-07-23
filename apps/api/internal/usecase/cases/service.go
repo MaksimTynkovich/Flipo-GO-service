@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -52,6 +53,8 @@ type Service struct {
 	channelChecker  ChannelChecker
 	admin           AdminCaseNotifier
 	live            LiveDropPublisher
+	feedBuf         *liveDropBuffer
+	liveSim         *LiveSim
 }
 
 type AdminCaseNotifier interface {
@@ -68,13 +71,24 @@ func NewService(
 	users domain.UserRepository,
 	balanceSvc *balance.Service,
 ) *Service {
-	return &Service{cases: caseRepo, inventory: invRepo, users: users, balance: balanceSvc}
+	s := &Service{
+		cases:     caseRepo,
+		inventory: invRepo,
+		users:     users,
+		balance:   balanceSvc,
+		feedBuf:   newLiveDropBuffer(),
+	}
+	s.liveSim = NewLiveSim(s)
+	return s
 }
 
 func (s *Service) SetValuator(v *gifts.Valuator) { s.valuator = v }
 func (s *Service) SetBotResolver(bot BotUserResolver) { s.bot = bot }
 func (s *Service) SetAdminNotifier(notifier AdminCaseNotifier) { s.admin = notifier }
-func (s *Service) SetLiveDropPublisher(publisher LiveDropPublisher) { s.live = publisher }
+func (s *Service) SetLiveDropPublisher(publisher LiveDropPublisher) {
+	s.live = NewBufferingLivePublisher(publisher, s.feedBuf)
+}
+func (s *Service) LiveSim() *LiveSim { return s.liveSim }
 func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
 	s.requiredChannel = strings.TrimSpace(channel)
 	s.channelChecker = checker
@@ -452,28 +466,62 @@ func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, limit int) ([
 }
 
 func (s *Service) LiveFeed(ctx context.Context, limit int) ([]domain.CaseLiveDrop, error) {
+	if limit <= 0 {
+		limit = 6
+	}
 	rows, err := s.cases.ListRecentOpens(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]domain.CaseLiveDrop, 0, len(rows))
-	for _, row := range rows {
+	out := make([]domain.CaseLiveDrop, 0, limit*2)
+	seen := make(map[uuid.UUID]struct{}, limit*2)
+	appendDrop := func(row domain.CaseLiveDrop) {
+		if _, ok := seen[row.OpenID]; ok {
+			return
+		}
+		seen[row.OpenID] = struct{}{}
 		img := row.ImageURL
 		if img == "" {
 			img = giftimage.FragmentURL(row.CollectionSlug)
 		}
-		out = append(out, domain.CaseLiveDrop{
-			OpenID:              row.OpenID,
-			CollectionSlug:      row.CollectionSlug,
-			DisplayName:         row.DisplayName,
-			ImageURL:            img,
-			RarityLabel:         row.RarityLabel,
-			TileBackgroundColor: row.TileBackgroundColor,
-			FloorPriceNanoton:   row.FloorPriceNanoton,
-			CreatedAt:           row.CreatedAt,
-		})
+		row.ImageURL = img
+		out = append(out, row)
+	}
+	if s.feedBuf != nil {
+		for _, row := range s.feedBuf.Snapshot() {
+			appendDrop(row)
+		}
+	}
+	for _, row := range rows {
+		appendDrop(row)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (s *Service) AdminGetLiveFeedSettings(ctx context.Context) (*domain.CaseLiveFeedSettings, error) {
+	cfg, err := s.cases.GetLiveFeedSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	NormalizeLiveFeedSettings(cfg)
+	return cfg, nil
+}
+
+func (s *Service) AdminUpdateLiveFeedSettings(ctx context.Context, cfg domain.CaseLiveFeedSettings) (*domain.CaseLiveFeedSettings, error) {
+	NormalizeLiveFeedSettings(&cfg)
+	if err := s.cases.UpdateLiveFeedSettings(ctx, &cfg); err != nil {
+		return nil, err
+	}
+	if s.liveSim != nil {
+		s.liveSim.ApplySettings(cfg)
+	}
+	return s.AdminGetLiveFeedSettings(ctx)
 }
 
 // Admin CRUD
@@ -625,7 +673,13 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 		}
 		entries[i].TileBackgroundColor = domain.NormalizeLootTileBackgroundColor(entries[i].TileBackgroundColor)
 	}
-	return s.cases.ReplaceLoot(ctx, caseID, entries)
+	if err := s.cases.ReplaceLoot(ctx, caseID, entries); err != nil {
+		return err
+	}
+	if s.liveSim != nil {
+		s.liveSim.InvalidateLootPool()
+	}
+	return nil
 }
 
 func (s *Service) grantPrize(

@@ -1087,6 +1087,37 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, settings)
 }
 
+func (h *AdminHandler) GetCaseLiveFeedSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	settings, err := h.cases.AdminGetLiveFeedSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateCaseLiveFeedSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var req domain.CaseLiveFeedSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	settings, err := h.cases.AdminUpdateLiveFeedSettings(c.Request.Context(), req)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
 func (h *AdminHandler) UpsertCase(c *gin.Context) {
 	if h.cases == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})

@@ -11,7 +11,7 @@ import {
   AdminPanel,
   AdminToolbar,
 } from "@/components/admin/admin-ui";
-import { AdminPercentField, AdminTonField, AdminIntField } from "@/components/admin/AdminInputs";
+import { AdminFloatField, AdminPercentField, AdminTonField, AdminIntField } from "@/components/admin/AdminInputs";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   changesGiftModelImageUrl,
@@ -35,15 +35,18 @@ import {
 import {
   deleteAdminCasePromoCode,
   getAdminCaseCatalogSettings,
+  getAdminCaseLiveFeedSettings,
   getAdminCasePromoCodes,
   getAdminCases,
   replaceAdminCaseLoot,
   resolveAsset,
   updateAdminCaseCatalogSettings,
+  updateAdminCaseLiveFeedSettings,
   uploadAdminCaseImage,
   upsertAdminCase,
   upsertAdminCasePromoCode,
   type AdminCase,
+  type AdminCaseLiveFeedSettings,
   type AdminCaseLootEntry,
   type AdminCasePromoCode,
   type AdminCaseUpsert,
@@ -62,6 +65,20 @@ const EMPTY_CASE_PROMO: Omit<AdminCasePromoCode, "used_count" | "created_at"> = 
   case_id: "",
   max_uses: 0,
   active: true,
+};
+
+const DEFAULT_LIVE_SETTINGS: AdminCaseLiveFeedSettings = {
+  enabled: false,
+  intensity: 1,
+  fill_when_sparse: true,
+  min_visible: 6,
+  common_weight: 50,
+  uncommon_weight: 25,
+  rare_weight: 15,
+  epic_weight: 7,
+  legendary_weight: 3,
+  fat_chance: 0.08,
+  fat_min_floor_nanoton: 5_000_000_000,
 };
 
 const RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
@@ -175,6 +192,9 @@ export default function CasesSection() {
   const [casePromoDraft, setCasePromoDraft] = useState(EMPTY_CASE_PROMO);
   const [savingCasePromo, setSavingCasePromo] = useState(false);
   const [deletingCasePromo, setDeletingCasePromo] = useState<string | null>(null);
+  const [liveSettings, setLiveSettings] = useState<AdminCaseLiveFeedSettings>(DEFAULT_LIVE_SETTINGS);
+  const [liveSettingsLoading, setLiveSettingsLoading] = useState(true);
+  const [savingLiveSettings, setSavingLiveSettings] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -202,7 +222,27 @@ export default function CasesSection() {
         setLoot(lootToDraft(data[0].loot));
       }
     });
+    void getAdminCaseLiveFeedSettings()
+      .then((s) => setLiveSettings({ ...DEFAULT_LIVE_SETTINGS, ...s }))
+      .catch(() => {})
+      .finally(() => setLiveSettingsLoading(false));
   }, [load]);
+
+  async function saveLiveSettings() {
+    setSavingLiveSettings(true);
+    try {
+      const saved = await updateAdminCaseLiveFeedSettings(liveSettings);
+      setLiveSettings({ ...DEFAULT_LIVE_SETTINGS, ...saved });
+      showToast({ title: "Настройки live-ленты сохранены", variant: "success" });
+    } catch (e) {
+      showToast({
+        title: formatUserError(e, "Не удалось сохранить live-ленту"),
+        variant: "error",
+      });
+    } finally {
+      setSavingLiveSettings(false);
+    }
+  }
 
   function selectCase(c: AdminCase) {
     setSelectedId(c.id);
@@ -579,6 +619,114 @@ export default function CasesSection() {
           ) : null}
         </AdminPanel>
       )}
+
+      <AdminPanel
+        title="Live-лента"
+        description="Фейк-дропы только в UI ленты. Не влияет на реальные открытия, баланс и аналитику case_opens."
+      >
+        {liveSettingsLoading ? (
+          <div className="h-20 animate-pulse rounded-xl bg-surface-raised/50" />
+        ) : (
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={liveSettings.enabled}
+                onChange={(e) =>
+                  setLiveSettings((s) => ({ ...s, enabled: e.target.checked }))
+                }
+              />
+              Включить фейк-дропы
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={liveSettings.fill_when_sparse}
+                onChange={(e) =>
+                  setLiveSettings((s) => ({ ...s, fill_when_sparse: e.target.checked }))
+                }
+              />
+              Доливать при редких реальных открытиях
+            </label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <AdminFloatField
+                label="Intensity"
+                hint="0.2–5: чем выше, тем чаще фейк в ленте"
+                min={0.05}
+                step={0.1}
+                value={liveSettings.intensity}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, intensity: v }))}
+              />
+              <AdminIntField
+                label="Min visible"
+                hint="целевой минимум тайлов (1–6)"
+                min={1}
+                value={liveSettings.min_visible}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, min_visible: v }))}
+              />
+              <AdminFloatField
+                label="Fat chance"
+                hint="0–1: шанс «жирного» дропа"
+                min={0}
+                step={0.01}
+                value={liveSettings.fat_chance}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, fat_chance: v }))}
+              />
+              <AdminTonField
+                label="Fat min floor (TON)"
+                hint="порог цены для жирного дропа"
+                valueNanoton={liveSettings.fat_min_floor_nanoton}
+                onChangeNanoton={(v) =>
+                  setLiveSettings((s) => ({ ...s, fat_min_floor_nanoton: v }))
+                }
+              />
+            </div>
+            <p className="text-[11px] text-muted">Веса редкости (выше = чаще в обычном сэмпле)</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <AdminFloatField
+                label="Common"
+                min={0}
+                step={1}
+                value={liveSettings.common_weight}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, common_weight: v }))}
+              />
+              <AdminFloatField
+                label="Uncommon"
+                min={0}
+                step={1}
+                value={liveSettings.uncommon_weight}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, uncommon_weight: v }))}
+              />
+              <AdminFloatField
+                label="Rare"
+                min={0}
+                step={1}
+                value={liveSettings.rare_weight}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, rare_weight: v }))}
+              />
+              <AdminFloatField
+                label="Epic"
+                min={0}
+                step={1}
+                value={liveSettings.epic_weight}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, epic_weight: v }))}
+              />
+              <AdminFloatField
+                label="Legendary"
+                min={0}
+                step={1}
+                value={liveSettings.legendary_weight}
+                onChange={(v) => setLiveSettings((s) => ({ ...s, legendary_weight: v }))}
+              />
+            </div>
+            <AdminToolbar>
+              <AdminButton disabled={savingLiveSettings} onClick={() => void saveLiveSettings()}>
+                {savingLiveSettings ? "…" : "Сохранить live-ленту"}
+              </AdminButton>
+            </AdminToolbar>
+          </div>
+        )}
+      </AdminPanel>
 
       {selectedId ? (
         <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_min(24.5rem,100%)]">

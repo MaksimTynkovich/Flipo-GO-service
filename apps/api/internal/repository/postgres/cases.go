@@ -235,6 +235,53 @@ func (r *CaseRepo) UpdateCatalogSettings(ctx context.Context, settings *domain.C
 	}).Create(settings).Error
 }
 
+func (r *CaseRepo) GetLiveFeedSettings(ctx context.Context) (*domain.CaseLiveFeedSettings, error) {
+	var row domain.CaseLiveFeedSettings
+	err := r.db.WithContext(ctx).First(&row, "id = ?", 1).Error
+	if err == nil {
+		return &row, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	row = defaultLiveFeedSettings()
+	if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
+		return nil, createErr
+	}
+	return &row, nil
+}
+
+func (r *CaseRepo) UpdateLiveFeedSettings(ctx context.Context, settings *domain.CaseLiveFeedSettings) error {
+	settings.ID = 1
+	settings.UpdatedAt = time.Now().UTC()
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"enabled", "intensity", "fill_when_sparse", "min_visible",
+			"common_weight", "uncommon_weight", "rare_weight", "epic_weight", "legendary_weight",
+			"fat_chance", "fat_min_floor_nanoton", "updated_at",
+		}),
+	}).Create(settings).Error
+}
+
+func defaultLiveFeedSettings() domain.CaseLiveFeedSettings {
+	return domain.CaseLiveFeedSettings{
+		ID:                 1,
+		Enabled:            false,
+		Intensity:          1,
+		FillWhenSparse:     true,
+		MinVisible:         6,
+		CommonWeight:       50,
+		UncommonWeight:     25,
+		RareWeight:         15,
+		EpicWeight:         7,
+		LegendaryWeight:    3,
+		FatChance:          0.08,
+		FatMinFloorNanoton: 5_000_000_000,
+		UpdatedAt:          time.Now().UTC(),
+	}
+}
+
 func (r *CaseRepo) ListCasePromoCodes(ctx context.Context, caseID *uuid.UUID) ([]domain.CasePromoCode, error) {
 	var rows []domain.CasePromoCode
 	q := r.db.WithContext(ctx).Order("created_at DESC")

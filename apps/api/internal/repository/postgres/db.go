@@ -83,6 +83,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.CaseCatalogSettings{},
 		&domain.CasePromoCode{},
 		&domain.CasePromoRedemption{},
+		&domain.CaseLiveFeedSettings{},
 	); err != nil {
 		return err
 	}
