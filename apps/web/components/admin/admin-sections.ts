@@ -5,11 +5,13 @@ import DashboardSection from "./sections/DashboardSection";
 import FinanceSection from "./sections/FinanceSection";
 import GamesSection from "./sections/GamesSection";
 import MarketAdminSection from "./sections/MarketAdminSection";
+import MarketDisabledSection from "./sections/MarketDisabledSection";
 import MarketingSection from "./sections/MarketingSection";
 import SystemSection from "./sections/SystemSection";
 import TelegramSection from "./sections/TelegramSection";
 import UsersSection from "./sections/UsersSection";
 import OutcomeSection from "./sections/OutcomeSection";
+import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export type AdminSectionId =
   | "dashboard"
@@ -28,6 +30,7 @@ export type AdminNavItem = {
   id: AdminSectionId;
   href: string;
   label: string;
+  disabled?: boolean;
 };
 
 export const ADMIN_NAV: AdminNavItem[] = [
@@ -37,7 +40,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "games", href: "/admin/games", label: "Игры" },
   { id: "cases", href: "/admin/cases", label: "Кейсы" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы" },
-  { id: "market", href: "/admin/market", label: "Маркет" },
+  { id: "market", href: "/admin/market", label: "Маркет", disabled: !MARKET_ENABLED },
   { id: "finance", href: "/admin/finance", label: "Операции" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг" },
   { id: "settings", href: "/admin/system", label: "Система" },
@@ -50,7 +53,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   users: UsersSection,
   games: GamesSection,
   cases: CasesSection,
-  market: MarketAdminSection,
+  market: MARKET_ENABLED ? MarketAdminSection : MarketDisabledSection,
   finance: FinanceSection,
   marketing: MarketingSection,
   settings: SystemSection,

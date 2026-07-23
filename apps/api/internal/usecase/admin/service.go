@@ -549,6 +549,9 @@ func (s *Service) UpdateGiftPriceSettings(ctx context.Context, adminID uuid.UUID
 }
 
 func (s *Service) UpdateMarketListingPrice(ctx context.Context, adminID, listingID uuid.UUID, priceNanoton int64) error {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return err
+	}
 	if priceNanoton <= 0 {
 		return domain.ErrInvalidAmount
 	}

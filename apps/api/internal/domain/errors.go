@@ -24,6 +24,7 @@ var (
 	ErrUserBanned        = errors.New("аккаунт заблокирован")
 	ErrGameDisabled      = errors.New("игра временно недоступна")
 	ErrBetsPaused        = errors.New("ставки временно не принимаются")
+	ErrMarketDisabled    = errors.New("маркет временно недоступен")
 	ErrMaintenance       = errors.New("техническое обслуживание")
 	ErrPromoInvalid         = errors.New("недействительный промокод")
 	ErrPromoExpired         = errors.New("промокод истёк")

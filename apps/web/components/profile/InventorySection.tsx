@@ -25,6 +25,7 @@ import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { formatUserError } from "@/lib/user-errors";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Button } from "@/components/ui/button";
+import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export function InventorySection() {
   const { setUser } = useAuth();
@@ -49,9 +50,14 @@ export function InventorySection() {
   async function load() {
     setLoading(true);
     try {
-      const [inv, mine] = await Promise.all([getInventory(), getMyMarketListings().catch(() => [])]);
+      const inv = await getInventory();
       setItems(inv.filter((i) => i.status !== "liquidated" && i.status !== "staked" && i.status !== "withdrawn"));
-      setMyListings(mine);
+      if (MARKET_ENABLED) {
+        const mine = await getMyMarketListings().catch(() => [] as MarketListing[]);
+        setMyListings(mine);
+      } else {
+        setMyListings([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -191,7 +197,7 @@ export function InventorySection() {
       {selected && (
         <InventoryGiftDetailSheet
           item={selected}
-          marketListing={listingByItemId.get(selected.id)}
+          marketListing={MARKET_ENABLED ? listingByItemId.get(selected.id) : undefined}
           listError={listError}
           liquidating={liquidating}
           withdrawing={withdrawing}

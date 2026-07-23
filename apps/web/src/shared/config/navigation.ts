@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Briefcase, CircleDot, Gamepad2, Gift, Rocket, ShoppingBag, User, Users } from "lucide-react";
+import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export const APP_ROUTES = {
   home: "/cases",
@@ -32,7 +33,7 @@ export type ScreenContext = {
 const TAB_ROOTS = [
   APP_ROUTES.cases,
   APP_ROUTES.games,
-  APP_ROUTES.market,
+  ...(MARKET_ENABLED ? [APP_ROUTES.market] as const : []),
   APP_ROUTES.inventory,
   APP_ROUTES.profile,
 ] as const;
@@ -105,13 +106,17 @@ export const APP_SCREENS: AppScreenItem[] = [
     level: "tab",
     description: "Лобби с Crash, Рулетка и Комнаты.",
   },
-  {
-    id: "market",
-    href: APP_ROUTES.market,
-    label: "Маркет",
-    level: "tab",
-    description: "Магазин и торговля игровыми предметами.",
-  },
+  ...(MARKET_ENABLED
+    ? [
+        {
+          id: "market" as const,
+          href: APP_ROUTES.market,
+          label: "Маркет",
+          level: "tab" as const,
+          description: "Магазин и торговля игровыми предметами.",
+        },
+      ]
+    : []),
   {
     id: "inventory",
     href: APP_ROUTES.inventory,
@@ -150,7 +155,7 @@ export type MainTabItem = {
   match: (pathname: string) => boolean;
 };
 
-export const MAIN_TABS: MainTabItem[] = [
+const ALL_MAIN_TABS: MainTabItem[] = [
   {
     id: "cases",
     href: APP_ROUTES.cases,
@@ -189,6 +194,10 @@ export const MAIN_TABS: MainTabItem[] = [
     match: (pathname) => pathname.startsWith(APP_ROUTES.profile),
   },
 ];
+
+export const MAIN_TABS: MainTabItem[] = ALL_MAIN_TABS.filter(
+  (tab) => tab.id !== "market" || MARKET_ENABLED,
+);
 
 export type GameLobbyItem = {
   href: string;

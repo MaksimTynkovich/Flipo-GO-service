@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
@@ -23,7 +24,21 @@ func NewMarketHandler(svc *market.Service, analyticsSvc *analyticsuc.Service) *M
 	return &MarketHandler{market: svc, analytics: analyticsSvc}
 }
 
+func respondMarketDisabled(c *gin.Context) bool {
+	if domain.MarketEnabled {
+		return false
+	}
+	httperr.Respond(c, http.StatusServiceUnavailable, domain.ErrMarketDisabled, gin.H{
+		"error": "Маркет временно недоступен.",
+		"code":  "market_disabled",
+	})
+	return true
+}
+
 func (h *MarketHandler) List(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	sort := c.DefaultQuery("sort", "newest")
@@ -51,6 +66,9 @@ func (h *MarketHandler) List(c *gin.Context) {
 }
 
 func (h *MarketHandler) Get(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
@@ -69,6 +87,9 @@ func (h *MarketHandler) Get(c *gin.Context) {
 }
 
 func (h *MarketHandler) ListMine(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	listings, err := h.market.ListMine(c.Request.Context(), userID)
 	if err != nil {
@@ -79,6 +100,9 @@ func (h *MarketHandler) ListMine(c *gin.Context) {
 }
 
 func (h *MarketHandler) Create(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	var req struct {
 		ItemID       string `json:"item_id" binding:"required"`
@@ -116,6 +140,9 @@ func (h *MarketHandler) Create(c *gin.Context) {
 }
 
 func (h *MarketHandler) Cancel(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -132,6 +159,9 @@ func (h *MarketHandler) Cancel(c *gin.Context) {
 }
 
 func (h *MarketHandler) Buy(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	userID := middleware.GetUserID(c)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

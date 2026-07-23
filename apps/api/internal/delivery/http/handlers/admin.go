@@ -549,6 +549,9 @@ func (h *AdminHandler) UpdateRiskSettings(c *gin.Context) {
 }
 
 func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	adminID := middleware.GetUserID(c)
 	listingID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -574,6 +577,9 @@ func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
 }
 
 func (h *AdminHandler) SyncBotMarketGifts(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	if h.botSync == nil || !h.botSync.Enabled() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MTProto не настроен"})
 		return
@@ -587,6 +593,9 @@ func (h *AdminHandler) SyncBotMarketGifts(c *gin.Context) {
 }
 
 func (h *AdminHandler) RepriceBotMarketGifts(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	if h.botSync == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "bot sync not configured"})
 		return

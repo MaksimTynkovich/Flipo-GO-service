@@ -19,12 +19,21 @@ function AdminNav({
     <nav className="admin-sidebar__nav">
       {ADMIN_NAV.map((item) => {
         const isActive = activeSection === item.id;
+        const disabled = Boolean(item.disabled);
         return (
           <button
             key={item.href}
             type="button"
-            onClick={() => onNavigate(item.href)}
-            className={cn("admin-nav-item", isActive && "admin-nav-item--active")}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return;
+              onNavigate(item.href);
+            }}
+            className={cn(
+              "admin-nav-item",
+              isActive && !disabled && "admin-nav-item--active",
+              disabled && "admin-nav-item--disabled",
+            )}
           >
             {item.label}
           </button>
@@ -46,10 +55,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [routeSection]);
 
   useEffect(() => {
-    ADMIN_NAV.forEach((item) => router.prefetch(item.href));
+    ADMIN_NAV.filter((item) => !item.disabled).forEach((item) => router.prefetch(item.href));
   }, [router]);
 
   function navigate(href: string) {
+    const item = ADMIN_NAV.find((entry) => entry.href === href);
+    if (item?.disabled) return;
     const next = resolveAdminSection(href);
     setActiveSection(next);
     startTransition(() => {

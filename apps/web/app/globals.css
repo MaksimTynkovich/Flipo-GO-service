@@ -307,6 +307,19 @@ html.admin-mode body {
   box-shadow: inset 3px 0 0 var(--admin-accent);
 }
 
+.admin-nav-item--disabled,
+.admin-nav-item:disabled {
+  color: color-mix(in srgb, var(--admin-muted) 55%, transparent);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.admin-nav-item--disabled:hover,
+.admin-nav-item:disabled:hover {
+  color: color-mix(in srgb, var(--admin-muted) 55%, transparent);
+  background: transparent;
+}
+
 .admin-login-card {
   border-radius: 1.25rem;
   padding: 1.75rem;
