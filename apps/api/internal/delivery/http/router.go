@@ -2,6 +2,8 @@ package http
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/handlers"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
@@ -9,7 +11,6 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"path/filepath"
 )
 
 type Deps struct {
@@ -34,6 +35,7 @@ type Deps struct {
 	AdminTelegramIDs    []int64
 	Hub                 *websocket.Hub
 	BotsDataDir         string
+	CasesUploadDir      string
 	GiftImageHandler    *handlers.GiftImageHandler
 	CORSOrigins         []string
 }
@@ -52,6 +54,12 @@ func NewRouter(deps Deps) *gin.Engine {
 	if deps.BotsDataDir != "" {
 		if abs, err := filepath.Abs(deps.BotsDataDir); err == nil {
 			r.Static("/static/bots", abs)
+		}
+	}
+	if deps.CasesUploadDir != "" {
+		if abs, err := filepath.Abs(deps.CasesUploadDir); err == nil {
+			_ = os.MkdirAll(abs, 0o755)
+			r.Static("/static/cases", abs)
 		}
 	}
 
@@ -213,6 +221,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.POST("/withdrawals/gifts/:id/fulfill", deps.AdminHandler.FulfillGiftWithdrawal)
 			adminAuthed.GET("/cases", deps.AdminHandler.ListCases)
 			adminAuthed.PUT("/cases", deps.AdminHandler.UpsertCase)
+			adminAuthed.POST("/cases/upload", deps.AdminHandler.UploadCaseImage)
 			adminAuthed.PUT("/cases/:id/loot", deps.AdminHandler.ReplaceCaseLoot)
 			adminAuthed.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
 			adminAuthed.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)

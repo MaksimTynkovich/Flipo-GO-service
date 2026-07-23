@@ -22,6 +22,8 @@ export function resolveAsset(url?: string | null): string | undefined {
   if (!url) return url ?? undefined;
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
   if (url.startsWith("//")) return url;
+  // Served via Next/Caddy rewrites on the Mini App origin.
+  if (url.startsWith("/static/")) return url;
   return API_URL.replace(/\/$/, "") + (url.startsWith("/") ? url : "/" + url);
 }
 export const DEBUG_AUTH = process.env.NEXT_PUBLIC_DEBUG_AUTH === "true";
@@ -118,8 +120,10 @@ function dispatchSessionRefreshed(user: User) {
 async function rawFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const requestId = typeof crypto !== "undefined" ? crypto.randomUUID() : "";
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     "X-Session-ID": typeof window !== "undefined" ? getAnalyticsSessionId() : "",
     "X-Client-Path": typeof window !== "undefined" ? getCurrentPath() : "",
     ...(requestId ? { "X-Request-ID": requestId } : {}),
@@ -2051,6 +2055,15 @@ export async function upsertAdminCase(body: AdminCaseUpsert) {
   return api<{ ok: boolean; id: string }>("/api/v1/admin/cases", {
     method: "PUT",
     body: JSON.stringify(body),
+  });
+}
+
+export async function uploadAdminCaseImage(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return api<{ ok: boolean; url: string; image_url: string }>("/api/v1/admin/cases/upload", {
+    method: "POST",
+    body: form,
   });
 }
 

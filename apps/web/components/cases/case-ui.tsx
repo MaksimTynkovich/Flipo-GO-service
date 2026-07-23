@@ -144,20 +144,47 @@ export function formatCasePrice(nanoton: number): string {
   return ton.toFixed(1).replace(/\.0$/, "");
 }
 
-export function getCatalogAccent(caseItem: Pick<CaseView, "slug" | "accent_color">): CatalogAccent {
-  return (
-    CATALOG[caseItem.slug] || {
-      from: caseItem.accent_color || "#334155",
-      to: "#0a0e14",
-      glow: caseItem.accent_color || "#64748b",
-      border: "rgba(58,69,86,0.9)",
-    }
-  );
+function accentFromHex(hex: string): CatalogAccent {
+  const color = hex.trim() || "#334155";
+  return {
+    from: color,
+    to: "#0a0e14",
+    glow: color,
+    border: "rgba(58,69,86,0.9)",
+  };
 }
 
-/** Unified hero look for all cases (detail + admin preview) — same as Premium. */
-export function getCaseTheme(_caseItem?: Pick<CaseView, "kind" | "slug" | "accent_color">): CaseHeroTheme {
-  return { ...FEATURED.premium, patternVariant: "premium" };
+/** Prefer admin accent_color; slug presets only as fallback when accent empty. */
+export function getCatalogAccent(caseItem: Pick<CaseView, "slug" | "accent_color">): CatalogAccent {
+  const admin = caseItem.accent_color?.trim();
+  if (admin) return accentFromHex(admin);
+  return CATALOG[caseItem.slug] || accentFromHex("#334155");
+}
+
+/** Featured / hero card background from admin accent (or Premium/Daily default). */
+export function getFeaturedAccent(
+  caseItem?: Pick<CaseView, "kind" | "accent_color">,
+): FeaturedTheme {
+  const admin = caseItem?.accent_color?.trim() ?? "";
+  if (/^#[0-9a-fA-F]{6}$/.test(admin)) {
+    const rgb = hexToRgb(admin);
+    const mid = mixRgb(rgb, [4, 9, 16], 0.55);
+    const to = mixRgb(rgb, [6, 13, 22], 0.78);
+    return {
+      from: admin,
+      mid: rgbToHex(...mid),
+      to: rgbToHex(...to),
+      border: `${admin}59`,
+      glow: `${admin}2a`,
+    };
+  }
+  if (caseItem?.kind === "daily") return FEATURED.daily;
+  return FEATURED.premium;
+}
+
+/** Unified hero look for all cases (detail + admin preview). */
+export function getCaseTheme(caseItem?: Pick<CaseView, "kind" | "slug" | "accent_color">): CaseHeroTheme {
+  return { ...getFeaturedAccent(caseItem), patternVariant: "premium" };
 }
 
 export function caseHeroStyle(theme: CaseHeroTheme): CSSProperties {

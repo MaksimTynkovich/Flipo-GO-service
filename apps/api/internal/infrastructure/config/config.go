@@ -63,6 +63,7 @@ type Config struct {
 	BotsDataDir                  string
 	BotsAssetsBaseURL            string
 	GiftsCacheDir                string
+	CasesUploadDir               string
 	MRKTAPIToken                 string
 	GiftAssetAPIKey              string
 	GiftAssetBaseURL             string
@@ -126,6 +127,7 @@ func Load() *Config {
 		BotsDataDir:                  getEnv("BOTS_DATA_DIR", "assets/bots"),
 		BotsAssetsBaseURL:            getEnv("BOTS_ASSETS_BASE_URL", "/static/bots"),
 		GiftsCacheDir:                getEnv("GIFTS_CACHE_DIR", "data/gifts"),
+		CasesUploadDir:               getEnv("CASES_UPLOAD_DIR", "data/cases"),
 		MRKTAPIToken:                 getEnv("MRKT_API_TOKEN", ""),
 		GiftAssetAPIKey:              getEnv("GIFTASSET_API_KEY", ""),
 		GiftAssetBaseURL:             getEnv("GIFTASSET_BASE_URL", "https://giftasset.gifts"),

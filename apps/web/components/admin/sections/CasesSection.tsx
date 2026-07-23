@@ -22,6 +22,7 @@ import { giftImageUrl } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
 import {
   candyTileBackgroundForLoot,
+  getCatalogAccent,
   LOOT_TILE_COLOR_OPTIONS,
   normalizeLootTileColor,
 } from "@/components/cases/case-ui";
@@ -33,11 +34,14 @@ import {
 import {
   getAdminCases,
   replaceAdminCaseLoot,
+  resolveAsset,
+  uploadAdminCaseImage,
   upsertAdminCase,
   type AdminCase,
   type AdminCaseLootEntry,
   type AdminCaseUpsert,
 } from "@/lib/api";
+import { ArrowDown, ArrowUp, Upload } from "lucide-react";
 
 const KINDS = [
   { value: "catalog", label: "Каталог" },
@@ -145,6 +149,7 @@ export default function CasesSection() {
   const [loot, setLoot] = useState<LootDraft[]>([]);
   const [savingCase, setSavingCase] = useState(false);
   const [savingLoot, setSavingLoot] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
@@ -305,9 +310,116 @@ export default function CasesSection() {
     setLoot((prev) => [...prev, giftToLootRow(gift, prev.length)]);
   }
 
+  const sortedCases = useMemo(
+    () =>
+      [...cases].sort((a, b) => {
+        if (a.kind !== b.kind) {
+          const rank = (k: string) =>
+            k === "featured" ? 0 : k === "daily" ? 1 : 2;
+          return rank(a.kind) - rank(b.kind);
+        }
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.title.localeCompare(b.title);
+      }),
+    [cases],
+  );
+
+  async function moveCase(caseId: string, dir: -1 | 1) {
+    const idx = sortedCases.findIndex((c) => c.id === caseId);
+    if (idx < 0) return;
+    const current = sortedCases[idx];
+
+    let neighbor: AdminCase | undefined;
+    if (dir < 0) {
+      for (let i = idx - 1; i >= 0; i -= 1) {
+        if (sortedCases[i].kind === current.kind) {
+          neighbor = sortedCases[i];
+          break;
+        }
+      }
+    } else {
+      for (let i = idx + 1; i < sortedCases.length; i += 1) {
+        if (sortedCases[i].kind === current.kind) {
+          neighbor = sortedCases[i];
+          break;
+        }
+      }
+    }
+    if (!neighbor) return;
+
+    const aOrder = current.sort_order;
+    const bOrder = neighbor.sort_order;
+    const nextA = aOrder === bOrder ? idx + dir : bOrder;
+    const nextB = aOrder === bOrder ? idx : aOrder;
+
+    try {
+      await Promise.all([
+        upsertAdminCase({
+          id: current.id,
+          slug: current.slug,
+          title: current.title,
+          image_url: current.image_url || "",
+          accent_color: current.accent_color || "",
+          price_nanoton: current.price_nanoton,
+          kind: current.kind,
+          sort_order: nextA,
+          active: current.active,
+          require_channel: current.require_channel,
+          target_rtp_bps: current.target_rtp_bps,
+        }),
+        upsertAdminCase({
+          id: neighbor.id,
+          slug: neighbor.slug,
+          title: neighbor.title,
+          image_url: neighbor.image_url || "",
+          accent_color: neighbor.accent_color || "",
+          price_nanoton: neighbor.price_nanoton,
+          kind: neighbor.kind,
+          sort_order: nextB,
+          active: neighbor.active,
+          require_channel: neighbor.require_channel,
+          target_rtp_bps: neighbor.target_rtp_bps,
+        }),
+      ]);
+      const data = await load();
+      const found = data.find((c) => c.id === caseId);
+      if (found) selectCase(found);
+    } catch (e) {
+      showToast({ title: formatUserError(e, "Не удалось поменять порядок"), variant: "error" });
+    }
+  }
+
   const selected = selectedId && selectedId !== "new"
     ? cases.find((c) => c.id === selectedId)
     : null;
+
+  const coverPreviewAccent = getCatalogAccent({
+    slug: draft.slug || "preview",
+    accent_color: draft.accent_color,
+  });
+  const coverPreviewUrl = resolveAsset(draft.image_url?.trim() || "") || "";
+
+  async function onPickCaseImage(file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast({ title: "Нужен файл изображения", variant: "error" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast({ title: "Максимум 5 МБ", variant: "error" });
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const res = await uploadAdminCaseImage(file);
+      setDraft((d) => ({ ...d, image_url: res.image_url || res.url }));
+      showToast({ title: "Картинка загружена", variant: "success" });
+    } catch (e) {
+      showToast({ title: formatUserError(e, "Не удалось загрузить картинку"), variant: "error" });
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   const previewLoot = useMemo(() => lootDraftsToPreview(loot), [loot]);
 
@@ -340,16 +452,53 @@ export default function CasesSection() {
       ) : cases.length === 0 && selectedId !== "new" ? (
         <AdminEmpty>Кейсов пока нет — создайте первый.</AdminEmpty>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {cases.map((c) => (
-            <AdminChip key={c.id} active={selectedId === c.id} onClick={() => selectCase(c)}>
-              {c.title}
-              {!c.active ? " · выкл" : ""}
-            </AdminChip>
-          ))}
-          {selectedId === "new" ? (
-            <AdminChip active>Новый</AdminChip>
-          ) : null}
+        <div className="space-y-2">
+          <p className="text-[11px] text-muted">
+            Порядок внутри секции (Featured / Daily / Каталог) — стрелки или поле «Порядок».
+            Тип кейса задаёт блок на экране.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {sortedCases.map((c, idx) => {
+              const canUp = sortedCases
+                .slice(0, idx)
+                .some((other) => other.kind === c.kind);
+              const canDown = sortedCases
+                .slice(idx + 1)
+                .some((other) => other.kind === c.kind);
+              return (
+                <div key={c.id} className="inline-flex items-center gap-0.5">
+                  <AdminChip active={selectedId === c.id} onClick={() => selectCase(c)}>
+                    <span className="tabular-nums text-muted/70">{c.sort_order}</span>
+                    {" · "}
+                    {c.title}
+                    <span className="text-muted/60"> · {c.kind}</span>
+                    {!c.active ? " · выкл" : ""}
+                  </AdminChip>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-muted hover:bg-white/5 disabled:opacity-30"
+                    disabled={!canUp}
+                    title="Выше в секции"
+                    onClick={() => void moveCase(c.id, -1)}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-muted hover:bg-white/5 disabled:opacity-30"
+                    disabled={!canDown}
+                    title="Ниже в секции"
+                    onClick={() => void moveCase(c.id, 1)}
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+            {selectedId === "new" ? (
+              <AdminChip active>Новый</AdminChip>
+            ) : null}
+          </div>
         </div>
       )}
 
@@ -408,7 +557,7 @@ export default function CasesSection() {
                 }
                 hint="0 = бесплатный кейс (нужна подписка на канал)"
               />
-              <AdminField label="Порядок">
+              <AdminField label="Порядок" hint="меньше = выше в своей секции">
                 <input
                   className="input-field"
                   type="number"
@@ -418,7 +567,7 @@ export default function CasesSection() {
                   }
                 />
               </AdminField>
-              <AdminField label="Accent (#hex)">
+              <AdminField label="Фон (accent #hex)" hint="градиент карточки, если нет картинки или под ней">
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -439,13 +588,77 @@ export default function CasesSection() {
                 onChangeBps={(v) => setDraft((d) => ({ ...d, target_rtp_bps: v }))}
                 hint="например 90 = 9000 bps"
               />
-              <AdminField label="Image URL">
-                <input
-                  className="input-field"
-                  value={draft.image_url || ""}
-                  onChange={(e) => setDraft((d) => ({ ...d, image_url: e.target.value }))}
-                  placeholder="опционально"
-                />
+              <AdminField
+                label="Картинка"
+                className="sm:col-span-2 lg:col-span-3"
+                hint="Загрузка с компьютера (JPEG/PNG/WebP/GIF, до 5 МБ) или прямой URL."
+              >
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      <label className="inline-flex">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="sr-only"
+                          disabled={uploadingImage}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            e.target.value = "";
+                            void onPickCaseImage(f);
+                          }}
+                        />
+                        <span
+                          className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-surface-raised px-3 text-sm ${
+                            uploadingImage ? "pointer-events-none opacity-50" : "hover:bg-white/5"
+                          }`}
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          {uploadingImage ? "Загрузка…" : "С компьютера"}
+                        </span>
+                      </label>
+                      {draft.image_url ? (
+                        <AdminButton
+                          variant="secondary"
+                          className="!h-9"
+                          disabled={uploadingImage}
+                          onClick={() => setDraft((d) => ({ ...d, image_url: "" }))}
+                        >
+                          Убрать
+                        </AdminButton>
+                      ) : null}
+                    </div>
+                    <input
+                      className="input-field"
+                      value={draft.image_url || ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, image_url: e.target.value }))}
+                      placeholder="/static/cases/… или https://…"
+                    />
+                  </div>
+                  <div
+                    className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-[12px] border border-white/10"
+                    style={{
+                      background: coverPreviewUrl
+                        ? "#0a0e14"
+                        : `linear-gradient(180deg, ${coverPreviewAccent.from} 0%, ${coverPreviewAccent.to} 100%)`,
+                    }}
+                    title="Превью обложки"
+                  >
+                    {coverPreviewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={coverPreviewUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="h-8 w-8 rounded-lg bg-white/20 ring-1 ring-inset ring-white/25" />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </AdminField>
               <label className="flex items-center gap-2 pt-5 text-sm text-muted">
                 <input

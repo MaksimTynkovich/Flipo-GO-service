@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +39,7 @@ type AdminHandler struct {
 	inventory           *inventory.Service
 	botSync             *market.BotSyncService
 	hotAddr             string
+	casesUploadDir      string
 	onSocialSimUpdate   func(domain.SocialSimSettings)
 	onMaintenanceUpdate func(domain.PlatformMaintenanceSettings)
 }
@@ -69,6 +74,10 @@ func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
 
 func (h *AdminHandler) SetCasesService(casesSvc *casesuc.Service) {
 	h.cases = casesSvc
+}
+
+func (h *AdminHandler) SetCasesUploadDir(dir string) {
+	h.casesUploadDir = strings.TrimSpace(dir)
 }
 
 func (h *AdminHandler) SetInventoryService(invSvc *inventory.Service) {
@@ -1018,6 +1027,96 @@ func (h *AdminHandler) ReplaceCaseLoot(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+const maxCaseImageBytes = 5 << 20 // 5 MiB
+
+func (h *AdminHandler) UploadCaseImage(c *gin.Context) {
+	if h.casesUploadDir == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "загрузка картинок недоступна"})
+		return
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "нужен файл (поле file)"})
+		return
+	}
+	if file.Size <= 0 || file.Size > maxCaseImageBytes {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "файл до 5 МБ"})
+		return
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	defer src.Close()
+
+	head := make([]byte, 512)
+	n, readErr := io.ReadFull(src, head)
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		respondInternal(c, readErr)
+		return
+	}
+	head = head[:n]
+	ext, ok := caseImageExt(head)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "только JPEG, PNG, WebP или GIF"})
+		return
+	}
+
+	if err := os.MkdirAll(h.casesUploadDir, 0o755); err != nil {
+		respondInternal(c, err)
+		return
+	}
+	name := uuid.New().String() + ext
+	destPath := filepath.Join(h.casesUploadDir, name)
+	dst, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	reader := io.MultiReader(bytes.NewReader(head), src)
+	written, copyErr := io.Copy(dst, io.LimitReader(reader, maxCaseImageBytes+1))
+	closeErr := dst.Close()
+	if copyErr != nil || closeErr != nil {
+		_ = os.Remove(destPath)
+		if copyErr != nil {
+			respondInternal(c, copyErr)
+			return
+		}
+		respondInternal(c, closeErr)
+		return
+	}
+	if written > maxCaseImageBytes {
+		_ = os.Remove(destPath)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "файл до 5 МБ"})
+		return
+	}
+
+	url := "/static/cases/" + name
+	c.JSON(http.StatusOK, gin.H{"ok": true, "url": url, "image_url": url})
+}
+
+func caseImageExt(head []byte) (string, bool) {
+	ct := http.DetectContentType(head)
+	switch {
+	case strings.HasPrefix(ct, "image/jpeg"):
+		return ".jpg", true
+	case strings.HasPrefix(ct, "image/png"):
+		return ".png", true
+	case strings.HasPrefix(ct, "image/gif"):
+		return ".gif", true
+	case strings.HasPrefix(ct, "image/webp"):
+		return ".webp", true
+	default:
+		// DetectContentType often returns application/octet-stream for webp.
+		if len(head) >= 12 && string(head[0:4]) == "RIFF" && string(head[8:12]) == "WEBP" {
+			return ".webp", true
+		}
+		return "", false
+	}
 }
 
 func (h *AdminHandler) GetYieldSettings(c *gin.Context) {

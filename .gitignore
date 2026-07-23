@@ -12,6 +12,7 @@ logs/
 apps/api/data/telegram/
 apps/api/data/gifts/
 data/gifts/
+data/cases/
 .DS_Store
 apps/api/assets/bots/
 # Prebuilt Linux binaries for small VPS deploys

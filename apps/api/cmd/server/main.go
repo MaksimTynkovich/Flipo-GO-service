@@ -346,6 +346,7 @@ func main() {
 	adminHandler.SetBotGiftSync(botSyncSvc)
 	adminHandler.SetWheelService(wheelSvc)
 	adminHandler.SetCasesService(caseSvc)
+	adminHandler.SetCasesUploadDir(cfg.CasesUploadDir)
 	adminHandler.SetInventoryService(invSvc)
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
@@ -387,6 +388,7 @@ func main() {
 		AdminTelegramIDs:   cfg.AdminTelegramIDs,
 		Hub:                hub,
 		BotsDataDir:        cfg.BotsDataDir,
+		CasesUploadDir:     cfg.CasesUploadDir,
 		GiftImageHandler:   handlers.NewGiftImageHandler(giftimage.NewProxy(cfg.GiftsCacheDir)),
 		CORSOrigins:        cfg.CORSOrigins,
 	})

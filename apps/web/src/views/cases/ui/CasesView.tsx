@@ -10,10 +10,10 @@ import {
   FeaturedPattern,
   formatCasePrice,
   getCatalogAccent,
+  getFeaturedAccent,
   caseHeroStyle,
-  FEATURED,
 } from "@/components/cases/case-ui";
-import { getCasesCatalog, type CaseView, type CasesCatalog } from "@/lib/api";
+import { getCasesCatalog, resolveAsset, type CaseView, type CasesCatalog } from "@/lib/api";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
 import { Gift } from "lucide-react";
@@ -40,21 +40,48 @@ function FeaturedCard({ caseItem }: { caseItem: CaseView }) {
   const isDaily = caseItem.kind === "daily";
   const isFree = isDaily || caseItem.price_nanoton <= 0;
   const available = caseItem.daily_available !== false;
-  const theme = FEATURED.premium;
+  const theme = getFeaturedAccent(caseItem);
+  const cover = resolveAsset(caseItem.image_url?.trim()) || "";
 
   return (
     <Link
       href={href}
       className="relative flex min-h-[172px] flex-col overflow-hidden rounded-[18px] border p-3.5"
-      style={caseHeroStyle({ ...theme, patternVariant: "premium" })}
+      style={caseHeroStyle({ ...theme, patternVariant: isDaily ? "daily" : "premium" })}
     >
-      <FeaturedPattern
-        variant="premium"
-        patternId={`feat-pat-${uid}`}
-      />
-      <FeaturedGiftCluster />
+      {cover ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={cover}
+          alt=""
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        <>
+          <FeaturedPattern
+            variant={isDaily ? "daily" : "premium"}
+            patternId={`feat-pat-${uid}`}
+          />
+          <FeaturedGiftCluster />
+        </>
+      )}
 
-      <div className="relative z-[1] max-w-[48%]">
+      {/* Readable overlay when cover art is set */}
+      {cover ? (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: `
+              linear-gradient(105deg, ${theme.from}f2 0%, ${theme.mid}cc 42%, transparent 72%),
+              linear-gradient(180deg, transparent 45%, ${theme.to}e6 100%)
+            `,
+          }}
+          aria-hidden
+        />
+      ) : null}
+
+      <div className="relative z-[1] max-w-[58%]">
         <h3 className="text-[17px] font-bold leading-none tracking-tight text-white">
           {caseItem.title}
         </h3>
@@ -90,7 +117,7 @@ function CatalogCard({ caseItem }: { caseItem: CaseView }) {
   const uid = useId().replace(/:/g, "");
   const href = `${APP_ROUTES.cases}/${caseItem.slug}`;
   const accent = getCatalogAccent(caseItem);
-  const cover = caseItem.image_url?.trim();
+  const cover = resolveAsset(caseItem.image_url?.trim()) || "";
 
   return (
     <Link
@@ -170,6 +197,12 @@ export function CasesView() {
     void load();
   }, [load]);
 
+  const featuredRow = data
+    ? [...data.featured, ...(data.daily ? [data.daily] : [])].sort(
+        (a, b) => a.sort_order - b.sort_order,
+      )
+    : [];
+
   return (
     <PageShell flush>
       <div className="space-y-4 pb-2">
@@ -191,12 +224,13 @@ export function CasesView() {
 
         {data ? (
           <>
-            <div className="grid grid-cols-2 gap-2.5">
-              {data.featured.map((item) => (
-                <FeaturedCard key={item.id} caseItem={item} />
-              ))}
-              {data.daily ? <FeaturedCard caseItem={data.daily} /> : null}
-            </div>
+            {featuredRow.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2.5">
+                {featuredRow.map((item) => (
+                  <FeaturedCard key={item.id} caseItem={item} />
+                ))}
+              </div>
+            ) : null}
 
             <section>
               <h2 className="mb-2.5 text-[17px] font-semibold tracking-tight text-white">
