@@ -1152,12 +1152,14 @@ export type AdminBotSettings = {
 
 export type MaintenanceStatus = {
   enabled: boolean;
+  accept_bets: boolean;
   message: string;
 };
 
 export type AdminMaintenanceSettings = {
   id?: number;
   enabled: boolean;
+  accept_bets: boolean;
   message: string;
   updated_at?: string;
 };

@@ -10,6 +10,7 @@ import { GameModeGate } from "@/components/games/GameModeGate";
 import { RouletteWheel } from "@/components/games/RouletteWheel";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useAcceptBets } from "@/components/providers/MaintenanceGate";
 import { useToast } from "@/components/providers/ToastProvider";
 import { connectGameWS } from "@/lib/ws";
 import {
@@ -38,6 +39,7 @@ export default function RoulettePage() {
 
 function RoulettePageContent() {
   const { user } = useAuth();
+  const acceptBets = useAcceptBets();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
   const [state, setState] = useState<RouletteRoundState | null>(null);
@@ -199,11 +201,19 @@ function RoulettePageContent() {
     return Array.from(ids);
   }, [roundBets?.bets, user?.id]);
 
-  const canBet = state?.phase === "betting" && !betting;
+  const canBet = acceptBets && state?.phase === "betting" && !betting;
   const canEditBet = !betting;
   const roundTotals = roundBets?.totals ?? { red: 0, green: 0, black: 0 };
 
   async function bet(color: string) {
+    if (!acceptBets) {
+      showToast({
+        variant: "error",
+        title: "Ставки временно не принимаются",
+      });
+      haptics.notificationOccurred("error");
+      return;
+    }
     if (!canBet) {
       showToast({
         variant: "error",

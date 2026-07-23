@@ -408,7 +408,8 @@ func (s *Service) UpdateMaintenanceSettings(ctx context.Context, adminID uuid.UU
 		return err
 	}
 	return s.audit(ctx, adminID, "maintenance_settings_updated", "platform_maintenance_settings", "1", map[string]any{
-		"enabled": settings.Enabled,
+		"enabled":     settings.Enabled,
+		"accept_bets": settings.AcceptBets,
 	})
 }
 

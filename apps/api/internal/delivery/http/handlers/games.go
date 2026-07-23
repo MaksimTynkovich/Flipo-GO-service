@@ -422,6 +422,11 @@ func writeGameBetError(c *gin.Context, err error) {
 			"error": "Игра временно недоступна.",
 			"code":  "game_disabled",
 		})
+	case errors.Is(err, domain.ErrBetsPaused):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
+			"error": "Ставки временно не принимаются.",
+			"code":  "bets_paused",
+		})
 	case errors.Is(err, domain.ErrGiftNotAvailable):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Подарок недоступен для ставки.",

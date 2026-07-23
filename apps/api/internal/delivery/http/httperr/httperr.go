@@ -85,6 +85,7 @@ func isExpectedClientError(err error, status int) bool {
 		domain.ErrDailyWinCap,
 		domain.ErrUserBanned,
 		domain.ErrGameDisabled,
+		domain.ErrBetsPaused,
 		domain.ErrPromoInvalid,
 		domain.ErrPromoExpired,
 		domain.ErrPromoExhausted,

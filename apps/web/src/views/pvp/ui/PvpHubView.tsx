@@ -17,6 +17,7 @@ import {
   usePvpRoomSlots,
 } from "@/components/games/pvp/PvpRecentResults";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useAcceptBets } from "@/components/providers/MaintenanceGate";
 import { api, getInventory } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { BetFundingMode, buildPvpStakeBody } from "@/lib/bet-funding";
@@ -47,6 +48,7 @@ function tonToNanoton(amountTon: string): number {
 
 export function PvpHubView() {
   const { user } = useAuth();
+  const acceptBets = useAcceptBets();
   const haptics = useTelegramHaptics();
   const [state, setState] = useState<PvpLobbyState>({ active: [], history: [] });
   const [lobbyReady, setLobbyReady] = useState(false);
@@ -110,6 +112,10 @@ export function PvpHubView() {
   }, [joinRoomId, joinGiftIds]);
 
   async function createRoom() {
+    if (!acceptBets) {
+      setError("Ставки временно не принимаются");
+      return;
+    }
     const tonNanoton = tonToNanoton(betAmount);
     if (tonNanoton <= 0 && selectedGiftIds.length === 0) {
       setError("Укажите TON и/или выберите подарки для ставки.");
@@ -157,6 +163,10 @@ export function PvpHubView() {
   }
 
   function openJoin(roomId: string) {
+    if (!acceptBets) {
+      setError("Ставки временно не принимаются");
+      return;
+    }
     const room = state.active.find((item) => item.id === roomId);
     setJoinRoomId(roomId);
     setJoinFundingMode("balance");
@@ -169,6 +179,10 @@ export function PvpHubView() {
   }
 
   async function confirmJoin() {
+    if (!acceptBets) {
+      setError("Ставки временно не принимаются");
+      return;
+    }
     if (!joinRoomId) return;
     const room = state.active.find((item) => item.id === joinRoomId);
     if (!room) return;
@@ -268,10 +282,16 @@ export function PvpHubView() {
           <Button
             className="pvp-create__cta h-12 w-full rounded-2xl text-base font-bold"
             variant="accent"
-            disabled={creating}
+            disabled={creating || !acceptBets}
             onClick={createRoom}
           >
-            {creating ? <BtnBusy label="Создаём…" /> : "Создать комнату"}
+            {creating ? (
+              <BtnBusy label="Создаём…" />
+            ) : !acceptBets ? (
+              "Ставки временно закрыты"
+            ) : (
+              "Создать комнату"
+            )}
           </Button>
 
           {error && !joinRoomId && (
@@ -364,7 +384,7 @@ export function PvpHubView() {
                     variant="accent"
                     className="h-11 rounded-xl"
                     onClick={confirmJoin}
-                    disabled={!!joiningId || !joinInRange}
+                    disabled={!!joiningId || !joinInRange || !acceptBets}
                   >
                     {joiningId ? <BtnBusy label="Входим…" /> : "Войти"}
                   </Button>

@@ -13,34 +13,36 @@ import (
 
 // MaintenanceState holds a cached kill-switch for site-wide maintenance.
 type MaintenanceState struct {
-	mu      sync.RWMutex
-	enabled bool
-	message string
+	mu         sync.RWMutex
+	enabled    bool
+	acceptBets bool
+	message    string
 }
 
 func NewMaintenanceState() *MaintenanceState {
-	return &MaintenanceState{}
+	return &MaintenanceState{acceptBets: true}
 }
 
-func (s *MaintenanceState) Set(enabled bool, message string) {
+func (s *MaintenanceState) Set(enabled bool, acceptBets bool, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.enabled = enabled
+	s.acceptBets = acceptBets
 	s.message = message
 }
 
-func (s *MaintenanceState) Snapshot() (enabled bool, message string) {
+func (s *MaintenanceState) Snapshot() (enabled bool, acceptBets bool, message string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.enabled, s.message
+	return s.enabled, s.acceptBets, s.message
 }
 
 func (s *MaintenanceState) Load(settings *domain.PlatformMaintenanceSettings) {
 	if settings == nil {
-		s.Set(false, "")
+		s.Set(false, true, "")
 		return
 	}
-	s.Set(settings.Enabled, settings.Message)
+	s.Set(settings.Enabled, settings.AcceptBets, settings.Message)
 }
 
 const defaultMaintenanceMessage = "Скоро вернёмся."
@@ -50,7 +52,7 @@ const defaultMaintenanceMessage = "Скоро вернёмся."
 // status endpoint stay available so staff can keep using the product.
 func MaintenanceGate(state *MaintenanceState, authSvc *auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		enabled, message := state.Snapshot()
+		enabled, _, message := state.Snapshot()
 		if !enabled {
 			c.Next()
 			return

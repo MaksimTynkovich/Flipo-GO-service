@@ -356,14 +356,20 @@ func main() {
 	maintenanceState := middleware.NewMaintenanceState()
 	if settings, err := platformRepo.GetMaintenanceSettings(ctx); err == nil {
 		maintenanceState.Load(settings)
+		socialSim.SetAcceptBets(settings.AcceptBets)
 	} else {
 		slog.Warn("failed to load maintenance settings", "error", err)
 	}
 	adminHandler.SetMaintenanceUpdater(func(settings domain.PlatformMaintenanceSettings) {
 		maintenanceState.Load(&settings)
+		socialSim.SetAcceptBets(settings.AcceptBets)
 	})
 	go middleware.RefreshMaintenanceState(maintenanceState, func() (*domain.PlatformMaintenanceSettings, error) {
-		return platformRepo.GetMaintenanceSettings(context.Background())
+		settings, err := platformRepo.GetMaintenanceSettings(context.Background())
+		if err == nil && settings != nil {
+			socialSim.SetAcceptBets(settings.AcceptBets)
+		}
+		return settings, err
 	}, 15*time.Second, ctx.Done())
 
 	router := httpx.NewRouter(httpx.Deps{
@@ -383,7 +389,7 @@ func main() {
 		AdminHandler:       adminHandler,
 		AnalyticsHandler:   handlers.NewAnalyticsHandler(authSvc, analyticsSvc),
 		PresenceHandler:    handlers.NewPresenceHandler(socialSim),
-		MaintenanceHandler: handlers.NewMaintenanceHandler(platformRepo),
+		MaintenanceHandler: handlers.NewMaintenanceHandler(platformRepo, maintenanceState),
 		MaintenanceState:   maintenanceState,
 		AdminTelegramIDs:   cfg.AdminTelegramIDs,
 		Hub:                hub,

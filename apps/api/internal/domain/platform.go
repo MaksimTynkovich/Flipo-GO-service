@@ -92,11 +92,13 @@ type TelegramBotSettings struct {
 func (TelegramBotSettings) TableName() string { return "telegram_bot_settings" }
 
 // PlatformMaintenanceSettings — singleton kill-switch for site-wide maintenance mode.
+// AcceptBets=false pauses new game bets while cashouts and in-flight rounds continue.
 type PlatformMaintenanceSettings struct {
-	ID        int       `gorm:"primaryKey" json:"id"`
-	Enabled   bool      `gorm:"not null;default:false" json:"enabled"`
-	Message   string    `gorm:"type:text;not null;default:''" json:"message"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         int       `gorm:"primaryKey" json:"id"`
+	Enabled    bool      `gorm:"not null;default:false" json:"enabled"`
+	AcceptBets bool      `gorm:"not null;default:true" json:"accept_bets"`
+	Message    string    `gorm:"type:text;not null;default:''" json:"message"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func (PlatformMaintenanceSettings) TableName() string { return "platform_maintenance_settings" }
