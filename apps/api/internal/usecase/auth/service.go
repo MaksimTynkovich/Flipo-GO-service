@@ -364,6 +364,16 @@ func (s *Service) IsAdmin(telegramID int64) bool {
 	return ok
 }
 
+func (s *Service) CanAccessAdmin(claims *Claims) bool {
+	if s == nil || claims == nil {
+		return false
+	}
+	if s.IsAdmin(claims.TelegramID) {
+		return true
+	}
+	return claims.AdminPanel && s.AdminPanelPasswordConfigured()
+}
+
 func (s *Service) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) (string, error) {
 	normalized, err := ton.NormalizeAddress(wallet)
 	if err != nil {

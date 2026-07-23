@@ -133,6 +133,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.GET("/cases", deps.CasesHandler.Catalog)
 			authed.GET("/cases/opens", deps.CasesHandler.Opens)
+			authed.GET("/cases/live", deps.CasesHandler.Live)
 			authed.GET("/cases/:id", deps.CasesHandler.Get)
 			authed.POST("/cases/:id/open", deps.CasesHandler.Open)
 
@@ -242,11 +243,20 @@ func NewRouter(deps Deps) *gin.Engine {
 
 	r.GET("/ws/games/:game", func(c *gin.Context) {
 		game := c.Param("game")
-		websocket.ServeWS(deps.Hub, game, c.Writer, c.Request)
+		switch game {
+		case "roulette", "crash", "pvp", "cases":
+			websocket.ServeWS(deps.Hub, game, c.Writer, c.Request)
+		default:
+			c.Status(http.StatusNotFound)
+		}
 	})
 
 	r.GET("/ws/user", func(c *gin.Context) {
 		websocket.ServeUserWS(deps.Hub, deps.Auth, c.Writer, c.Request)
+	})
+
+	r.GET("/ws/admin", func(c *gin.Context) {
+		websocket.ServeAdminWS(deps.Hub, deps.Auth, c.Writer, c.Request)
 	})
 
 	return r

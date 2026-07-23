@@ -75,6 +75,18 @@ func (h *CasesHandler) Opens(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+func (h *CasesHandler) Live(c *gin.Context) {
+	out, err := h.cases.LiveFeed(c.Request.Context(), 6)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if out == nil {
+		out = []domain.CaseLiveDrop{}
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func writeCasesError(c *gin.Context, err error) {
 	var channelErr *casesuc.ChannelNotSubscribedError
 	if errors.As(err, &channelErr) {

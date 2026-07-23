@@ -7345,6 +7345,103 @@ body::-webkit-scrollbar,
   gap: 0.65rem;
 }
 
+/* Cases catalog live feed — compact candy tiles */
+.cases-live-feed {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.cases-live-feed__live {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 0.7rem;
+}
+
+.cases-live-feed__dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+  animation: cases-live-pulse 1.6s ease-in-out infinite;
+}
+
+.cases-live-feed__row {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 0.4rem;
+}
+
+.cases-live-feed__tile {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.cases-live-feed__frame {
+  position: relative;
+  display: flex;
+  width: 100%;
+  aspect-ratio: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.55rem;
+}
+
+.cases-live-feed__price {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.08rem;
+  height: 0.9rem;
+  padding: 0 0.22rem;
+  border-radius: 4px;
+  background: rgb(15 30 44 / 72%);
+  color: #fff;
+  font-size: 0.52rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.cases-live-feed__price-icon {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex-shrink: 0;
+}
+
+.cases-live-feed__img {
+  width: 74%;
+  height: 74%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+@keyframes cases-live-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.88);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.12);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.28);
+  }
+}
+
 .case-loot-card {
   display: flex;
   flex-direction: column;

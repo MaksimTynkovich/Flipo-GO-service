@@ -51,10 +51,15 @@ type Service struct {
 	requiredChannel string
 	channelChecker  ChannelChecker
 	admin           AdminCaseNotifier
+	live            LiveDropPublisher
 }
 
 type AdminCaseNotifier interface {
 	NotifyCaseOpen(ctx context.Context, actor telegram.AdminActor, caseTitle, prizeName, source string, priceNanoton, prizeFloorNanoton int64, backed bool)
+}
+
+type LiveDropPublisher interface {
+	PublishCaseLiveDrop(ctx context.Context, drop domain.CaseLiveDrop)
 }
 
 func NewService(
@@ -69,6 +74,7 @@ func NewService(
 func (s *Service) SetValuator(v *gifts.Valuator) { s.valuator = v }
 func (s *Service) SetBotResolver(bot BotUserResolver) { s.bot = bot }
 func (s *Service) SetAdminNotifier(notifier AdminCaseNotifier) { s.admin = notifier }
+func (s *Service) SetLiveDropPublisher(publisher LiveDropPublisher) { s.live = publisher }
 func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
 	s.requiredChannel = strings.TrimSpace(channel)
 	s.channelChecker = checker
@@ -360,6 +366,22 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		LootEntry: toLootPreview(entry),
 		Backed:    backed,
 	}
+	if s.live != nil {
+		img := entry.ImageURL
+		if img == "" {
+			img = giftimage.FragmentURL(entry.CollectionSlug)
+		}
+		s.live.PublishCaseLiveDrop(ctx, domain.CaseLiveDrop{
+			OpenID:              openID,
+			CollectionSlug:      entry.CollectionSlug,
+			DisplayName:         entry.DisplayName,
+			ImageURL:            img,
+			RarityLabel:         entry.RarityLabel,
+			TileBackgroundColor: entry.TileBackgroundColor,
+			FloorPriceNanoton:   entry.FloorPriceNanoton,
+			CreatedAt:           open.CreatedAt,
+		})
+	}
 	if s.admin != nil {
 		actor := telegram.AdminActor{}
 		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
@@ -425,6 +447,31 @@ func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, limit int) ([
 			continue
 		}
 		out = append(out, *res)
+	}
+	return out, nil
+}
+
+func (s *Service) LiveFeed(ctx context.Context, limit int) ([]domain.CaseLiveDrop, error) {
+	rows, err := s.cases.ListRecentOpens(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.CaseLiveDrop, 0, len(rows))
+	for _, row := range rows {
+		img := row.ImageURL
+		if img == "" {
+			img = giftimage.FragmentURL(row.CollectionSlug)
+		}
+		out = append(out, domain.CaseLiveDrop{
+			OpenID:              row.OpenID,
+			CollectionSlug:      row.CollectionSlug,
+			DisplayName:         row.DisplayName,
+			ImageURL:            img,
+			RarityLabel:         row.RarityLabel,
+			TileBackgroundColor: row.TileBackgroundColor,
+			FloorPriceNanoton:   row.FloorPriceNanoton,
+			CreatedAt:           row.CreatedAt,
+		})
 	}
 	return out, nil
 }

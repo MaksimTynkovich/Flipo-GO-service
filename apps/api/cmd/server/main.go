@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -220,6 +221,7 @@ func main() {
 	caseSvc.SetAdminNotifier(adminNotifier)
 
 	hub := websocket.NewHub()
+	adminNotifier.SetRealtime(hub)
 	balanceSvc.SetNotifier(hub)
 	referralSvc.SetBalanceService(balanceSvc)
 	referralSvc.SetBalanceNotifier(hub)
@@ -251,6 +253,7 @@ func main() {
 	} else {
 		cacheIface = &noopCache{}
 	}
+	caseSvc.SetLiveDropPublisher(&caseLiveDropPublisher{hub: hub, cache: cacheIface})
 
 	betFundingSvc := betfunding.NewService(invRepo, marketRepo, balanceSvc, giftValuator)
 
@@ -454,6 +457,26 @@ func (n *noopCache) AcquireLock(ctx context.Context, key string, ttl time.Durati
 }
 func (n *noopCache) ReleaseLock(ctx context.Context, key string) error {
 	return nil
+}
+
+type caseLiveDropPublisher struct {
+	hub   *websocket.Hub
+	cache interface {
+		Publish(context.Context, string, []byte) error
+	}
+}
+
+func (p *caseLiveDropPublisher) PublishCaseLiveDrop(ctx context.Context, drop domain.CaseLiveDrop) {
+	data, err := json.Marshal(drop)
+	if err != nil {
+		return
+	}
+	if p.cache != nil {
+		_ = p.cache.Publish(ctx, "pubsub:cases:live", data)
+	}
+	if p.hub != nil {
+		p.hub.Broadcast("cases", websocket.JSONMessage("drop", json.RawMessage(data)))
+	}
 }
 
 func validateProductionConfig(cfg *config.Config) error {

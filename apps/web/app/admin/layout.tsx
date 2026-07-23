@@ -78,16 +78,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
     }
     refreshUnread();
-    const timer = window.setInterval(refreshUnread, 30_000);
+    // Rare HTTP fallback if WS drops; primary updates come from admin WS.
+    const timer = window.setInterval(refreshUnread, 120_000);
     function onUnread(e: Event) {
       const detail = (e as CustomEvent<number>).detail;
       if (typeof detail === "number") setUnreadCount(detail);
     }
     window.addEventListener("admin-notifications-unread", onUnread);
+
+    let disconnect: (() => void) | undefined;
+    void import("@/lib/ws").then(({ connectAdminWS, ADMIN_NOTIFICATIONS_UNREAD_EVENT }) => {
+      if (cancelled) return;
+      disconnect = connectAdminWS((msg) => {
+        if (msg.event !== "admin.notification") return;
+        const payload = msg.payload as { unread_count?: number; notification?: unknown };
+        if (typeof payload.unread_count === "number") {
+          setUnreadCount(payload.unread_count);
+          window.dispatchEvent(
+            new CustomEvent(ADMIN_NOTIFICATIONS_UNREAD_EVENT, { detail: payload.unread_count }),
+          );
+        }
+        if (payload.notification) {
+          window.dispatchEvent(
+            new CustomEvent("admin-notification", { detail: payload.notification }),
+          );
+        }
+      });
+    });
+
     return () => {
       cancelled = true;
       window.clearInterval(timer);
       window.removeEventListener("admin-notifications-unread", onUnread);
+      disconnect?.();
     };
   }, []);
 

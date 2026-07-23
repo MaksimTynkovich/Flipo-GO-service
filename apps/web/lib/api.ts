@@ -2017,6 +2017,17 @@ export type CaseLootPreview = {
   floor_price_nanoton?: number;
 };
 
+export type CaseLiveDrop = {
+  open_id: string;
+  collection_slug: string;
+  display_name: string;
+  image_url: string;
+  rarity_label?: string;
+  tile_background_color?: string;
+  floor_price_nanoton: number;
+  created_at: string;
+};
+
 export type CaseView = {
   id: string;
   slug: string;
@@ -2052,6 +2063,10 @@ export type CaseOpenResult = {
 
 export async function getCasesCatalog() {
   return api<CasesCatalog>("/api/v1/cases");
+}
+
+export async function getCasesLiveFeed() {
+  return api<CaseLiveDrop[]>("/api/v1/cases/live");
 }
 
 export async function getCase(idOrSlug: string) {

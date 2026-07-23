@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AdminButton,
@@ -172,13 +172,38 @@ export default function NotificationsSection() {
     }
   }
 
+  const categoryRef = useRef(category);
+  categoryRef.current = category;
+
   useEffect(() => {
     load().catch(() => {});
+    // Slow HTTP fallback; live updates arrive via admin WS.
     const timer = window.setInterval(() => {
       load().catch(() => {});
-    }, 20_000);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on category via setCategory handler
+    }, 120_000);
+
+    function onRealtime(e: Event) {
+      const notif = (e as CustomEvent<AdminNotification>).detail;
+      if (!notif?.id) return;
+      const currentCategory = categoryRef.current;
+      setItems((prev) => {
+        if (prev.some((row) => row.id === notif.id)) return prev;
+        if (currentCategory !== "all" && notif.category !== currentCategory) return prev;
+        return [notif, ...prev].slice(0, 150);
+      });
+    }
+    function onUnread(e: Event) {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail === "number") setUnread(detail);
+    }
+    window.addEventListener("admin-notification", onRealtime);
+    window.addEventListener("admin-notifications-unread", onUnread);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("admin-notification", onRealtime);
+      window.removeEventListener("admin-notifications-unread", onUnread);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once; category via ref
   }, []);
 
   async function selectCategory(next: AdminNotificationCategory) {

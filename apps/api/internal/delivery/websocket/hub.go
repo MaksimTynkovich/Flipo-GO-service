@@ -38,6 +38,10 @@ type Hub struct {
 	userMu        sync.RWMutex
 	userClients   map[uuid.UUID]map[*UserClient]bool
 	userBroadcast chan userEnvelope
+
+	adminMu        sync.RWMutex
+	adminClients   map[*AdminClient]bool
+	adminBroadcast chan []byte
 }
 
 func NewHub() *Hub {
@@ -45,7 +49,7 @@ func NewHub() *Hub {
 		clients:   make(map[string]map[*Client]bool),
 		broadcast: make(map[string]chan []byte),
 	}
-	for _, game := range []string{"roulette", "crash", "pvp"} {
+	for _, game := range []string{"roulette", "crash", "pvp", "cases"} {
 		h.clients[game] = make(map[*Client]bool)
 		h.broadcast[game] = make(chan []byte, 256)
 		go h.runBroadcast(game)
@@ -99,6 +103,13 @@ func (h *Hub) Broadcast(gameType string, data []byte) {
 func (h *Hub) Register(client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.clients[client.GameType] == nil {
+		h.clients[client.GameType] = make(map[*Client]bool)
+		if h.broadcast[client.GameType] == nil {
+			h.broadcast[client.GameType] = make(chan []byte, 256)
+			go h.runBroadcast(client.GameType)
+		}
+	}
 	h.clients[client.GameType][client] = true
 }
 

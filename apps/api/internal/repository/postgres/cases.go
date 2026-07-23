@@ -162,6 +162,54 @@ func (r *CaseRepo) ListOpensByUser(ctx context.Context, userID uuid.UUID, limit 
 	return rows, err
 }
 
+func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.CaseLiveDrop, error) {
+	if limit <= 0 {
+		limit = 24
+	}
+	type row struct {
+		OpenID              uuid.UUID
+		CollectionSlug      string
+		DisplayName         string
+		ImageURL            string
+		RarityLabel         string
+		TileBackgroundColor string
+		FloorPriceNanoton   int64
+		CreatedAt           time.Time
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Table("case_opens AS o").
+		Select(`o.id AS open_id,
+			e.collection_slug,
+			e.display_name,
+			e.image_url,
+			e.rarity_label,
+			e.tile_background_color,
+			e.floor_price_nanoton,
+			o.created_at`).
+		Joins("JOIN case_loot_entries e ON e.id = o.loot_entry_id").
+		Order("o.created_at DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.CaseLiveDrop, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.CaseLiveDrop{
+			OpenID:              row.OpenID,
+			CollectionSlug:      row.CollectionSlug,
+			DisplayName:         row.DisplayName,
+			ImageURL:            row.ImageURL,
+			RarityLabel:         row.RarityLabel,
+			TileBackgroundColor: row.TileBackgroundColor,
+			FloorPriceNanoton:   row.FloorPriceNanoton,
+			CreatedAt:           row.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
 func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogSettings, error) {
 	var row domain.CaseCatalogSettings
 	err := r.db.WithContext(ctx).First(&row, "id = ?", 1).Error

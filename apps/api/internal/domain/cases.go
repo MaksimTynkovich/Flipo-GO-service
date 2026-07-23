@@ -117,6 +117,18 @@ type CasePromoRedemption struct {
 
 func (CasePromoRedemption) TableName() string { return "case_promo_redemptions" }
 
+// CaseLiveDrop — recent case open for the catalog live feed.
+type CaseLiveDrop struct {
+	OpenID              uuid.UUID `json:"open_id"`
+	CollectionSlug      string    `json:"collection_slug"`
+	DisplayName         string    `json:"display_name"`
+	ImageURL            string    `json:"image_url"`
+	RarityLabel         string    `json:"rarity_label,omitempty"`
+	TileBackgroundColor string    `json:"tile_background_color,omitempty"`
+	FloorPriceNanoton   int64     `json:"floor_price_nanoton"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
 // IsCaseClaimItem — inventory row created by opening a case.
 func IsCaseClaimItem(item InventoryItem) bool {
 	return strings.HasPrefix(item.TelegramTxRef, CaseClaimTxRefPrefix)

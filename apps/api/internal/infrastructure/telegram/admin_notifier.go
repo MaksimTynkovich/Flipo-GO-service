@@ -16,11 +16,17 @@ import (
 // AdminNotifier persists ops alerts into the in-app admin notifications feed.
 // Events from admins themselves are ignored (except always-notify kinds).
 type AdminNotifier struct {
-	store    domain.AdminNotificationRepository
-	adminIDs []int64
-	adminSet map[int64]struct{}
+	store      domain.AdminNotificationRepository
+	adminIDs   []int64
+	adminSet   map[int64]struct{}
+	realtime   AdminRealtimeBroadcaster
 	// Dedupes first-time bot /start alerts within a single process.
 	botStartSeen sync.Map
+}
+
+// AdminRealtimeBroadcaster pushes new notifications to connected admin panels.
+type AdminRealtimeBroadcaster interface {
+	BroadcastAdminNotification(notif *domain.AdminNotification, unreadCount int64)
 }
 
 func NewAdminNotifier(store domain.AdminNotificationRepository, adminIDs []int64) *AdminNotifier {
@@ -37,6 +43,13 @@ func NewAdminNotifier(store domain.AdminNotificationRepository, adminIDs []int64
 		ids = append(ids, id)
 	}
 	return &AdminNotifier{store: store, adminIDs: ids, adminSet: set}
+}
+
+func (n *AdminNotifier) SetRealtime(rt AdminRealtimeBroadcaster) {
+	if n == nil {
+		return
+	}
+	n.realtime = rt
 }
 
 func (n *AdminNotifier) Enabled() bool {
@@ -633,6 +646,16 @@ func (n *AdminNotifier) persist(
 		defer cancel()
 		if err := n.store.CreateAdminNotification(ctx, notif); err != nil {
 			slog.Warn("admin notification persist failed", "kind", kind, "error", err)
+			return
 		}
+		if n.realtime == nil {
+			return
+		}
+		unread, err := n.store.CountUnreadAdminNotifications(ctx, "")
+		if err != nil {
+			slog.Warn("admin notification unread count failed", "error", err)
+			unread = 0
+		}
+		n.realtime.BroadcastAdminNotification(notif, unread)
 	}()
 }
