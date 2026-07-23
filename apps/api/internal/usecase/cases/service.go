@@ -396,7 +396,7 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 
 func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
 	if c.Kind == "" {
-		c.Kind = domain.CaseKindFeatured
+		c.Kind = domain.CaseKindCatalog
 	}
 	if strings.TrimSpace(c.AccentColor) == "" {
 		c.AccentColor = "#3b82f6"

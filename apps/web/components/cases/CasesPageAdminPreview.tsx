@@ -20,9 +20,13 @@ function adminToView(c: AdminCase): CaseView {
   };
 }
 
-function kindLabel(kind: string): string {
-  if (kind === "featured") return "Featured";
-  if (kind === "daily") return "Daily";
+function kindLabel(kind: string, bannersEnabled: boolean): string {
+  if (!bannersEnabled) {
+    // Without banners everything sits in the catalog grid.
+    return kind === "daily" ? "Daily" : "Каталог";
+  }
+  if (kind === "featured") return "Баннер";
+  if (kind === "daily") return "Баннер · Daily";
   return "Каталог";
 }
 
@@ -176,7 +180,7 @@ export function CasesPageAdminPreview({
                         {c.title || c.slug}
                       </span>
                       <span className="block truncate text-[11px] text-muted">
-                        #{idx + 1} · {kindLabel(c.kind)}
+                        #{idx + 1} · {kindLabel(c.kind, bannersEnabled)}
                         {!c.active ? " · выкл" : ""}
                       </span>
                     </span>
@@ -216,7 +220,8 @@ export function CasesPageAdminPreview({
         <div className="admin-cases-vitrine__preview-scroll">
           <CasesCatalogScreen
             cases={previewCases}
-            flatOrder
+            bannersEnabled={bannersEnabled}
+            flatOrder={!bannersEnabled}
             interactive={false}
             selectedId={selectedId}
             onCaseClick={(item) => {

@@ -48,8 +48,8 @@ import { Upload } from "lucide-react";
 
 const KINDS = [
   { value: "catalog", label: "Каталог" },
-  { value: "featured", label: "Featured" },
-  { value: "daily", label: "Daily" },
+  { value: "featured", label: "Баннер (Featured)" },
+  { value: "daily", label: "Баннер (Daily)" },
 ] as const;
 
 const RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
@@ -67,7 +67,7 @@ function emptyCaseDraft(): CaseDraft {
     image_url: "",
     accent_color: "#3b82f6",
     price_nanoton: 500_000_000,
-    kind: "featured",
+    kind: "catalog",
     sort_order: 0,
     active: true,
     require_channel: false,
@@ -252,7 +252,7 @@ export default function CasesSection() {
         image_url: draft.image_url?.trim() || "",
         accent_color: draft.accent_color?.trim() || "#3b82f6",
         price_nanoton: draft.price_nanoton,
-        kind: draft.kind || "featured",
+        kind: draft.kind || "catalog",
         sort_order: draft.sort_order,
         active: draft.active,
         require_channel: requireChannel,
@@ -519,7 +519,14 @@ export default function CasesSection() {
                   onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
                 />
               </AdminField>
-              <AdminField label="Тип">
+              <AdminField
+                label="Тип"
+                hint={
+                  bannersEnabled
+                    ? "Баннер (Featured/Daily) — верхний ряд; Каталог — сетка ниже."
+                    : "Баннеры скрыты: Featured/Daily попадают в общую сетку каталога вместе с остальными."
+                }
+              >
                 <select
                   className="input-field"
                   value={draft.kind}
@@ -545,7 +552,7 @@ export default function CasesSection() {
                 }
                 hint="0 = бесплатный кейс (нужна подписка на канал)"
               />
-              <AdminField label="Порядок" hint="меньше = выше в своей секции">
+              <AdminField label="Порядок" hint="меньше = выше в витрине">
                 <input
                   className="input-field"
                   type="number"
