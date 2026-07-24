@@ -5,7 +5,7 @@ import { MarketView } from "@/src/views/market";
 
 export default function MarketPage() {
   if (!MARKET_ENABLED) {
-    redirect(APP_ROUTES.cases);
+    redirect(APP_ROUTES.games);
   }
   return <MarketView />;
 }

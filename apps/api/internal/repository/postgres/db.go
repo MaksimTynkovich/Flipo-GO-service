@@ -135,6 +135,7 @@ func migrateCasesColumnFix(db *gorm.DB) error {
 			END IF;
 		END $$`,
 		`ALTER TABLE case_loot_entries ADD COLUMN IF NOT EXISTS floor_price_nanoton BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE case_catalog_settings ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE`,
 	}
 	for _, stmt := range statements {
 		if err := db.Exec(stmt).Error; err != nil {

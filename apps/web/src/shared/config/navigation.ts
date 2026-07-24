@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Briefcase, CircleDot, Gamepad2, Gift, Rocket, ShoppingBag, User, Users } from "lucide-react";
+import { CircleDot, Gamepad2, Gift, Package, Rocket, ShoppingBag, User, Users } from "lucide-react";
 import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export const APP_ROUTES = {
@@ -160,7 +160,7 @@ const ALL_MAIN_TABS: MainTabItem[] = [
     id: "cases",
     href: APP_ROUTES.cases,
     label: "Кейсы",
-    icon: Briefcase,
+    icon: Package,
     match: (pathname) =>
       pathname === APP_ROUTES.cases || pathname.startsWith(`${APP_ROUTES.cases}/`),
   },
@@ -198,6 +198,11 @@ const ALL_MAIN_TABS: MainTabItem[] = [
 export const MAIN_TABS: MainTabItem[] = ALL_MAIN_TABS.filter(
   (tab) => tab.id !== "market" || MARKET_ENABLED,
 );
+
+export function getMainTabs(options?: { casesEnabled?: boolean }): MainTabItem[] {
+  const casesEnabled = options?.casesEnabled !== false;
+  return MAIN_TABS.filter((tab) => tab.id !== "cases" || casesEnabled);
+}
 
 export type GameLobbyItem = {
   href: string;

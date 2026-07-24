@@ -238,7 +238,7 @@ func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogS
 	if err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
-	row = domain.CaseCatalogSettings{ID: 1, BannersEnabled: false, UpdatedAt: time.Now().UTC()}
+	row = domain.CaseCatalogSettings{ID: 1, Enabled: true, BannersEnabled: false, UpdatedAt: time.Now().UTC()}
 	if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
 		return nil, createErr
 	}
@@ -250,7 +250,7 @@ func (r *CaseRepo) UpdateCatalogSettings(ctx context.Context, settings *domain.C
 	settings.UpdatedAt = time.Now().UTC()
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"banners_enabled", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"enabled", "banners_enabled", "updated_at"}),
 	}).Create(settings).Error
 }
 

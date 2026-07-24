@@ -24,6 +24,7 @@ import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { openTelegramLink } from "@/src/shared/lib/twa";
@@ -50,6 +51,7 @@ export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
   const { user, setUser } = useAuth();
+  const { casesEnabled, ready: featuresReady } = useCasesFeatures();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
   const idOrSlug = String(params?.id || "");
@@ -74,6 +76,13 @@ export function CaseDetailView() {
     [showToast],
   );
 
+  useEffect(() => {
+    if (!featuresReady) return;
+    if (!casesEnabled) {
+      router.replace(APP_ROUTES.games);
+    }
+  }, [featuresReady, casesEnabled, router]);
+
   const load = useCallback(async () => {
     if (!idOrSlug) return;
     setLoading(true);
@@ -87,8 +96,9 @@ export function CaseDetailView() {
   }, [idOrSlug, notifyError]);
 
   useEffect(() => {
+    if (!featuresReady || !casesEnabled) return;
     void load();
-  }, [load]);
+  }, [load, featuresReady, casesEnabled]);
 
   useEffect(() => {
     const iso = caseItem?.next_available_at;
@@ -245,6 +255,10 @@ export function CaseDetailView() {
       return `Открыть · ${formatCasePrice(caseItem.price_nanoton)} TON`;
     }
     return "Открыть бесплатно";
+  }
+
+  if (!featuresReady || !casesEnabled) {
+    return null;
   }
 
   return (

@@ -2162,8 +2162,18 @@ export async function getAdminCases() {
   return api<AdminCase[]>("/api/v1/admin/cases");
 }
 
+export type CasesFeatures = {
+  enabled: boolean;
+  banners_enabled: boolean;
+};
+
+export async function getCasesFeatures() {
+  return api<CasesFeatures>("/api/v1/cases/features");
+}
+
 export type AdminCaseCatalogSettings = {
   id: number;
+  enabled: boolean;
   banners_enabled: boolean;
   updated_at?: string;
 };
@@ -2172,7 +2182,10 @@ export async function getAdminCaseCatalogSettings() {
   return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings");
 }
 
-export async function updateAdminCaseCatalogSettings(body: { banners_enabled: boolean }) {
+export async function updateAdminCaseCatalogSettings(body: {
+  enabled?: boolean;
+  banners_enabled?: boolean;
+}) {
   return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings", {
     method: "PATCH",
     body: JSON.stringify(body),

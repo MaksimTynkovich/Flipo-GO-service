@@ -6,6 +6,7 @@ import { MaintenanceGate } from "./MaintenanceGate";
 import { AnalyticsProvider } from "./AnalyticsProvider";
 import { AuthProvider } from "./AuthProvider";
 import { AdminAuthProvider } from "./AdminAuthProvider";
+import { CasesFeaturesProvider } from "./CasesFeaturesProvider";
 import { ToastProvider } from "./ToastProvider";
 import { UserRealtimeProvider } from "./UserRealtimeProvider";
 import { TelegramProvider } from "@/src/app/providers/TelegramProvider";
@@ -14,11 +15,13 @@ function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <TelegramAccessGate>
       <AuthProvider>
-        <MaintenanceGate>
-          <ToastProvider>
-            <UserRealtimeProvider>{children}</UserRealtimeProvider>
-          </ToastProvider>
-        </MaintenanceGate>
+        <CasesFeaturesProvider>
+          <MaintenanceGate>
+            <ToastProvider>
+              <UserRealtimeProvider>{children}</UserRealtimeProvider>
+            </ToastProvider>
+          </MaintenanceGate>
+        </CasesFeaturesProvider>
       </AuthProvider>
     </TelegramAccessGate>
   );

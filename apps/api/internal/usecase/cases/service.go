@@ -159,7 +159,13 @@ type CatalogView struct {
 	Featured       []CaseView `json:"featured"`
 	Daily          *CaseView  `json:"daily,omitempty"`
 	Catalog        []CaseView `json:"catalog"`
+	Enabled        bool       `json:"enabled"`
 	BannersEnabled bool       `json:"banners_enabled"`
+}
+
+type FeaturesView struct {
+	Enabled        bool `json:"enabled"`
+	BannersEnabled bool `json:"banners_enabled"`
 }
 
 type OpenResult struct {
@@ -173,7 +179,32 @@ type OpenResult struct {
 	Backed       bool                `json:"backed"`
 }
 
+func (s *Service) Features(ctx context.Context) (*FeaturesView, error) {
+	settings, err := s.cases.GetCatalogSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &FeaturesView{
+		Enabled:        settings.Enabled,
+		BannersEnabled: settings.BannersEnabled,
+	}, nil
+}
+
+func (s *Service) ensureCasesEnabled(ctx context.Context) error {
+	settings, err := s.cases.GetCatalogSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if !settings.Enabled {
+		return domain.ErrCasesDisabled
+	}
+	return nil
+}
+
 func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, error) {
+	if err := s.ensureCasesEnabled(ctx); err != nil {
+		return nil, err
+	}
 	rows, err := s.cases.ListActive(ctx)
 	if err != nil {
 		return nil, err
@@ -181,6 +212,7 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, 
 	out := &CatalogView{
 		Featured: make([]CaseView, 0),
 		Catalog:  make([]CaseView, 0),
+		Enabled:  true,
 	}
 	if settings, err := s.cases.GetCatalogSettings(ctx); err == nil && settings != nil {
 		out.BannersEnabled = settings.BannersEnabled
@@ -232,6 +264,9 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, 
 }
 
 func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID) (*CaseView, error) {
+	if err := s.ensureCasesEnabled(ctx); err != nil {
+		return nil, err
+	}
 	c, err := s.findCase(ctx, idOrSlug)
 	if err != nil {
 		return nil, err
@@ -252,6 +287,9 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID) (*
 }
 
 func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempotencyKey, promoCode string) (*OpenResult, error) {
+	if err := s.ensureCasesEnabled(ctx); err != nil {
+		return nil, err
+	}
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" {
 		return nil, domain.ErrInvalidAmount
@@ -478,6 +516,9 @@ func (s *Service) validateCasePromo(ctx context.Context, userID, caseID uuid.UUI
 }
 
 func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, limit int) ([]OpenResult, error) {
+	if err := s.ensureCasesEnabled(ctx); err != nil {
+		return nil, err
+	}
 	opens, err := s.cases.ListOpensByUser(ctx, userID, limit)
 	if err != nil {
 		return nil, err
@@ -494,6 +535,9 @@ func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, limit int) ([
 }
 
 func (s *Service) LiveFeed(ctx context.Context, limit int) ([]domain.CaseLiveDrop, error) {
+	if err := s.ensureCasesEnabled(ctx); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 6
 	}
@@ -670,10 +714,21 @@ func (s *Service) AdminGetCatalogSettings(ctx context.Context) (*domain.CaseCata
 	return s.cases.GetCatalogSettings(ctx)
 }
 
-func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, bannersEnabled bool) (*domain.CaseCatalogSettings, error) {
-	settings := &domain.CaseCatalogSettings{
-		ID:             1,
-		BannersEnabled: bannersEnabled,
+type CatalogSettingsPatch struct {
+	Enabled        *bool
+	BannersEnabled *bool
+}
+
+func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogSettingsPatch) (*domain.CaseCatalogSettings, error) {
+	settings, err := s.cases.GetCatalogSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if patch.Enabled != nil {
+		settings.Enabled = *patch.Enabled
+	}
+	if patch.BannersEnabled != nil {
+		settings.BannersEnabled = *patch.BannersEnabled
 	}
 	if err := s.cases.UpdateCatalogSettings(ctx, settings); err != nil {
 		return nil, err

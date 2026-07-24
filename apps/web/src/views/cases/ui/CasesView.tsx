@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { CasesCatalogScreen } from "@/components/cases/CasesCatalogScreen";
 import { CasesLiveFeed } from "@/components/cases/CasesLiveFeed";
+import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   getCasesCatalog,
@@ -13,6 +15,7 @@ import {
   type CasesCatalog,
 } from "@/lib/api";
 import { formatUserError } from "@/lib/user-errors";
+import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { connectGameWS } from "@/lib/ws";
 
 const LIVE_FEED_LIMIT = 6;
@@ -23,10 +26,19 @@ function prependLiveDrop(prev: CaseLiveDrop[], drop: CaseLiveDrop): CaseLiveDrop
 }
 
 export function CasesView() {
+  const router = useRouter();
+  const { casesEnabled, ready: featuresReady } = useCasesFeatures();
   const { showToast } = useToast();
   const [data, setData] = useState<CasesCatalog | null>(null);
   const [live, setLive] = useState<CaseLiveDrop[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!featuresReady) return;
+    if (!casesEnabled) {
+      router.replace(APP_ROUTES.games);
+    }
+  }, [featuresReady, casesEnabled, router]);
 
   const loadLive = useCallback(async () => {
     try {
@@ -56,10 +68,12 @@ export function CasesView() {
   }, [showToast]);
 
   useEffect(() => {
+    if (!featuresReady || !casesEnabled) return;
     void load();
-  }, [load]);
+  }, [load, featuresReady, casesEnabled]);
 
   useEffect(() => {
+    if (!featuresReady || !casesEnabled) return;
     return connectGameWS(
       "cases",
       (msg) => {
@@ -70,7 +84,11 @@ export function CasesView() {
       },
       { onOpen: () => void loadLive() },
     );
-  }, [loadLive]);
+  }, [loadLive, featuresReady, casesEnabled]);
+
+  if (!featuresReady || !casesEnabled) {
+    return null;
+  }
 
   const cases: CaseView[] = data
     ? [

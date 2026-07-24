@@ -93,6 +93,7 @@ func (UserCaseState) TableName() string { return "user_case_state" }
 // CaseCatalogSettings — singleton (id=1) for catalog UI knobs.
 type CaseCatalogSettings struct {
 	ID             int       `gorm:"primaryKey" json:"id"`
+	Enabled        bool      `gorm:"not null;default:true" json:"enabled"`
 	BannersEnabled bool      `gorm:"not null;default:false" json:"banners_enabled"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }

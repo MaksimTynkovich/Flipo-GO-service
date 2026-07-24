@@ -21,11 +21,20 @@ func NewCasesHandler(svc *casesuc.Service) *CasesHandler {
 	return &CasesHandler{cases: svc}
 }
 
+func (h *CasesHandler) Features(c *gin.Context) {
+	out, err := h.cases.Features(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func (h *CasesHandler) Catalog(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	out, err := h.cases.Catalog(c.Request.Context(), userID)
 	if err != nil {
-		respondInternal(c, err)
+		writeCasesError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, out)
@@ -66,7 +75,7 @@ func (h *CasesHandler) Opens(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	out, err := h.cases.ListOpens(c.Request.Context(), userID, 50)
 	if err != nil {
-		respondInternal(c, err)
+		writeCasesError(c, err)
 		return
 	}
 	if out == nil {
@@ -78,6 +87,10 @@ func (h *CasesHandler) Opens(c *gin.Context) {
 func (h *CasesHandler) Live(c *gin.Context) {
 	out, err := h.cases.LiveFeed(c.Request.Context(), 6)
 	if err != nil {
+		if errors.Is(err, domain.ErrCasesDisabled) {
+			c.JSON(http.StatusOK, []domain.CaseLiveDrop{})
+			return
+		}
 		respondInternal(c, err)
 		return
 	}
@@ -102,6 +115,8 @@ func writeCasesError(c *gin.Context, err error) {
 		httperr.Respond(c, http.StatusNotFound, err, gin.H{"error": "Кейс не найден", "code": "not_found"})
 	case errors.Is(err, domain.ErrCaseUnavailable):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Кейс недоступен", "code": "case_unavailable"})
+	case errors.Is(err, domain.ErrCasesDisabled):
+		httperr.Respond(c, http.StatusServiceUnavailable, err, gin.H{"error": "Кейсы временно недоступны", "code": "cases_disabled"})
 	case errors.Is(err, domain.ErrCaseDailyUsed):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Ежедневный кейс уже открыт сегодня", "code": "case_daily_used"})
 	case errors.Is(err, domain.ErrCaseCooldown):

@@ -131,6 +131,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/wheel/status", deps.WheelHandler.Status)
 			authed.POST("/wheel/spin", deps.WheelHandler.Spin)
 
+			authed.GET("/cases/features", deps.CasesHandler.Features)
 			authed.GET("/cases", deps.CasesHandler.Catalog)
 			authed.GET("/cases/opens", deps.CasesHandler.Opens)
 			authed.GET("/cases/live", deps.CasesHandler.Live)

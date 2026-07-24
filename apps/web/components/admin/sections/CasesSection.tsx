@@ -279,7 +279,9 @@ export default function CasesSection() {
   const [savingLoot, setSavingLoot] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [bannersEnabled, setBannersEnabled] = useState(false);
+  const [casesEnabled, setCasesEnabled] = useState(true);
   const [savingBanners, setSavingBanners] = useState(false);
+  const [savingCasesEnabled, setSavingCasesEnabled] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -302,7 +304,10 @@ export default function CasesSection() {
         getAdminCaseCatalogSettings().catch(() => null),
       ]);
       setCases(data);
-      if (settings) setBannersEnabled(Boolean(settings.banners_enabled));
+      if (settings) {
+        setBannersEnabled(Boolean(settings.banners_enabled));
+        setCasesEnabled(settings.enabled !== false);
+      }
       return data;
     } catch (e) {
       showToast({ title: formatUserError(e, "Не удалось загрузить кейсы"), variant: "error" });
@@ -424,6 +429,22 @@ export default function CasesSection() {
       showToast({ title: formatUserError(e, "Не удалось сохранить настройку"), variant: "error" });
     } finally {
       setSavingBanners(false);
+    }
+  }
+
+  async function toggleCasesEnabled(next: boolean) {
+    setSavingCasesEnabled(true);
+    try {
+      const settings = await updateAdminCaseCatalogSettings({ enabled: next });
+      setCasesEnabled(settings.enabled !== false);
+      showToast({
+        title: settings.enabled !== false ? "Кейсы включены для игроков" : "Кейсы выключены для игроков",
+        variant: "success",
+      });
+    } catch (e) {
+      showToast({ title: formatUserError(e, "Не удалось сохранить настройку"), variant: "error" });
+    } finally {
+      setSavingCasesEnabled(false);
     }
   }
 
@@ -726,7 +747,18 @@ export default function CasesSection() {
         <AdminButton onClick={startNew}>Новый кейс</AdminButton>
         <AdminButton
           variant="secondary"
-          disabled={savingBanners || loading}
+          disabled={savingCasesEnabled || loading}
+          onClick={() => void toggleCasesEnabled(!casesEnabled)}
+        >
+          {savingCasesEnabled
+            ? "…"
+            : casesEnabled
+              ? "Выключить кейсы"
+              : "Включить кейсы"}
+        </AdminButton>
+        <AdminButton
+          variant="secondary"
+          disabled={savingBanners || loading || !casesEnabled}
           onClick={() => void toggleBanners(!bannersEnabled)}
         >
           {savingBanners
@@ -737,11 +769,15 @@ export default function CasesSection() {
         </AdminButton>
       </AdminToolbar>
       <p className="text-[11px] text-muted">
-        Баннеры featured/daily на странице кейсов:{" "}
+        Раздел кейсов для игроков:{" "}
+        <span className="text-foreground/80">
+          {casesEnabled ? "включён (иконка в навбаре видна)" : "выключен (навбар и API скрыты)"}
+        </span>
+        . Баннеры featured/daily:{" "}
         <span className="text-foreground/80">
           {bannersEnabled ? "показаны" : "скрыты"}
         </span>
-        . Полноценную реализацию баннеров сделаем позже.
+        .
       </p>
 
       {loading && cases.length === 0 ? (

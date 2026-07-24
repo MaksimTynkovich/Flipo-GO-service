@@ -1073,13 +1073,17 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		return
 	}
 	var req struct {
-		BannersEnabled bool `json:"banners_enabled"`
+		Enabled        *bool `json:"enabled"`
+		BannersEnabled *bool `json:"banners_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	settings, err := h.cases.AdminUpdateCatalogSettings(c.Request.Context(), req.BannersEnabled)
+	settings, err := h.cases.AdminUpdateCatalogSettings(c.Request.Context(), casesuc.CatalogSettingsPatch{
+		Enabled:        req.Enabled,
+		BannersEnabled: req.BannersEnabled,
+	})
 	if err != nil {
 		respondInternal(c, err)
 		return
