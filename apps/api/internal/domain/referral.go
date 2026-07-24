@@ -17,8 +17,7 @@ const (
 	DefaultReferralQualifyMinStakeNano    = 1_000_000_000  // 1 TON
 	DefaultReferralQualifyMinAge         = 7 * 24 * time.Hour
 	DefaultReferralMilestoneMinBetNano   = 100_000_000    // 0.1 TON
-	RefWelcomePromoCode                  = "REF_WELCOME"
-	RefWelcomeMaxCashoutNano             = 30_000_000 // 0.03 TON
+	RefWelcomePromoCode = "REF_WELCOME"
 )
 
 // ReferralPerk — invitee staking perks activated after first stake.

@@ -352,17 +352,6 @@ func (r *PlatformRepo) GetPromoCode(ctx context.Context, code string) (*domain.P
 	return &promo, err
 }
 
-func (r *PlatformRepo) GetActiveRedemption(ctx context.Context, userID uuid.UUID) (*domain.PromoRedemption, error) {
-	var redemption domain.PromoRedemption
-	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND status = ?", userID, "active").
-		First(&redemption).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	return &redemption, err
-}
-
 func (r *PlatformRepo) HasRedeemedPromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.PromoRedemption{}).
@@ -382,20 +371,6 @@ func (r *PlatformRepo) IncrementPromoUsed(ctx context.Context, code string) erro
 	return r.db.WithContext(ctx).Model(&domain.PromoCode{}).
 		Where("code = ?", code).
 		UpdateColumn("used_count", gorm.Expr("used_count + 1")).Error
-}
-
-func (r *PlatformRepo) UpdateRedemptionProgress(ctx context.Context, redemptionID uuid.UUID, progress int64, status string) error {
-	updates := map[string]interface{}{
-		"wager_progress_nanoton": progress,
-		"status":                   status,
-	}
-	if status == "completed" || status == "forfeited" {
-		now := time.Now().UTC()
-		updates["completed_at"] = now
-	}
-	return r.db.WithContext(ctx).Model(&domain.PromoRedemption{}).
-		Where("id = ?", redemptionID).
-		Updates(updates).Error
 }
 
 func (r *PlatformRepo) CreateBroadcast(ctx context.Context, broadcast *domain.TelegramBroadcast) error {

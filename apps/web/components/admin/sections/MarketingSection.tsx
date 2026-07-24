@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
-import { AdminFloatField, AdminIntField, AdminTonField } from "@/components/admin/AdminInputs";
+import { AdminIntField, AdminTonField } from "@/components/admin/AdminInputs";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { AdminUserPicker } from "@/components/admin/AdminUserPicker";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -29,7 +29,6 @@ import {
 const EMPTY_PROMO: AdminPromoCode = {
   code: "",
   bonus_nanoton: 500_000_000,
-  wager_multiplier: 3,
   max_uses: 100,
   used_count: 0,
   active: true,
@@ -529,9 +528,7 @@ export default function MarketingSection() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-semibold">{promo.code}</span>
-                    <span>
-                      +{formatTON(promo.bonus_nanoton)} TON · x{promo.wager_multiplier} wager
-                    </span>
+                    <span>+{formatTON(promo.bonus_nanoton)} TON</span>
                   </div>
                   <p className="mt-1 text-xs text-muted">
                     {promo.used_count}/{promo.max_uses || "∞"} · {promo.active ? "active" : "off"}
@@ -564,12 +561,6 @@ export default function MarketingSection() {
             label="Бонус (TON)"
             valueNanoton={draft.bonus_nanoton}
             onChangeNanoton={(v) => setDraft({ ...draft, bonus_nanoton: v })}
-          />
-          <AdminFloatField
-            label="Wager multiplier"
-            min={1}
-            value={draft.wager_multiplier}
-            onChange={(v) => setDraft({ ...draft, wager_multiplier: v })}
           />
           <AdminIntField
             label="Max uses"

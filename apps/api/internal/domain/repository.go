@@ -16,7 +16,6 @@ type UserRepository interface {
 	UpdateBanned(ctx context.Context, userID uuid.UUID, banned bool) error
 	UpdateWithdrawalsDisabled(ctx context.Context, userID uuid.UUID, disabled bool) error
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (int64, error)
-	ReleasePromoBalance(ctx context.Context, userID uuid.UUID) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
@@ -224,11 +223,9 @@ type PlatformRepository interface {
 	GetYieldSettings(ctx context.Context) (*PlatformYieldSettings, error)
 	UpdateYieldSettings(ctx context.Context, settings *PlatformYieldSettings) error
 	GetPromoCode(ctx context.Context, code string) (*PromoCode, error)
-	GetActiveRedemption(ctx context.Context, userID uuid.UUID) (*PromoRedemption, error)
 	HasRedeemedPromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
 	CreateRedemption(ctx context.Context, redemption *PromoRedemption) error
 	IncrementPromoUsed(ctx context.Context, code string) error
-	UpdateRedemptionProgress(ctx context.Context, redemptionID uuid.UUID, progress int64, status string) error
 	CreateBroadcast(ctx context.Context, broadcast *TelegramBroadcast) error
 	GetBroadcast(ctx context.Context, id uuid.UUID) (*TelegramBroadcast, error)
 	UpdateBroadcast(ctx context.Context, broadcast *TelegramBroadcast) error

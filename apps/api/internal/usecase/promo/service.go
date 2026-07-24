@@ -32,7 +32,6 @@ func (e *ChannelNotSubscribedError) Is(target error) bool {
 
 type Service struct {
 	platform        domain.PlatformRepository
-	games           domain.GameRepository
 	users           domain.UserRepository
 	balance         *balance.Service
 	notifier        balance.BalanceNotifier
@@ -41,8 +40,8 @@ type Service struct {
 	admin           AdminPromoNotifier
 }
 
-func NewService(platform domain.PlatformRepository, games domain.GameRepository, users domain.UserRepository, balance *balance.Service) *Service {
-	return &Service{platform: platform, games: games, users: users, balance: balance}
+func NewService(platform domain.PlatformRepository, users domain.UserRepository, balance *balance.Service) *Service {
+	return &Service{platform: platform, users: users, balance: balance}
 }
 
 func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
@@ -63,13 +62,9 @@ func (s *Service) RequiredChannel() string {
 }
 
 type StatusView struct {
-	Active               bool   `json:"active"`
-	PromoCode            string `json:"promo_code,omitempty"`
-	BonusNanoton         int64  `json:"bonus_nanoton,omitempty"`
-	WagerRequiredNanoton int64  `json:"wager_required_nanoton,omitempty"`
-	WagerProgressNanoton int64  `json:"wager_progress_nanoton,omitempty"`
-	RemainingNanoton     int64  `json:"remaining_nanoton,omitempty"`
-	ReplacedPromoCode    string `json:"replaced_promo_code,omitempty"`
+	Active       bool   `json:"active"`
+	PromoCode    string `json:"promo_code,omitempty"`
+	BonusNanoton int64  `json:"bonus_nanoton,omitempty"`
 }
 
 func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (*StatusView, error) {
@@ -117,43 +112,19 @@ func (s *Service) activate(ctx context.Context, userID uuid.UUID, code string) (
 		return nil, err
 	}
 
-	var replacedCode string
-	active, err := s.platform.GetActiveRedemption(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if active != nil {
-		progress, err := s.games.SumUserBetsSince(ctx, userID, active.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.platform.UpdateRedemptionProgress(ctx, active.ID, progress, "forfeited"); err != nil {
-			return nil, err
-		}
-		if err := s.users.ReleasePromoBalance(ctx, userID); err != nil {
-			return nil, err
-		}
-		balance.NotifyUser(ctx, s.users, s.notifier, userID, 0, domain.LedgerPromoBonus)
-		replacedCode = active.PromoCode
-	}
-
-	wagerRequired := int64(float64(promo.BonusNanoton) * promo.WagerMultiplier)
-	if wagerRequired <= 0 {
-		wagerRequired = promo.BonusNanoton
-	}
-
+	now := time.Now().UTC()
 	redemptionID := uuid.New()
 	if _, err := s.balance.Credit(ctx, userID, promo.BonusNanoton, domain.LedgerPromoBonus, "promo_code", redemptionID); err != nil {
 		return nil, err
 	}
 
 	redemption := &domain.PromoRedemption{
-		ID:                   redemptionID,
-		UserID:               userID,
-		PromoCode:            promo.Code,
-		BonusNanoton:         promo.BonusNanoton,
-		WagerRequiredNanoton: wagerRequired,
-		Status:               "active",
+		ID:           redemptionID,
+		UserID:       userID,
+		PromoCode:    promo.Code,
+		BonusNanoton: promo.BonusNanoton,
+		Status:       "completed",
+		CompletedAt:  &now,
 	}
 	if err := s.platform.CreateRedemption(ctx, redemption); err != nil {
 		return nil, err
@@ -171,12 +142,11 @@ func (s *Service) activate(ctx context.Context, userID uuid.UUID, code string) (
 		}
 	}
 
-	status, err := s.Status(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	status.ReplacedPromoCode = replacedCode
-	return status, nil
+	return &StatusView{
+		Active:       false,
+		PromoCode:    promo.Code,
+		BonusNanoton: promo.BonusNanoton,
+	}, nil
 }
 
 func (s *Service) notifyActivationFailed(ctx context.Context, userID uuid.UUID, code, reason string) {
@@ -219,8 +189,6 @@ func promoFailureReason(err error) string {
 		return "промокод исчерпан"
 	case errors.Is(err, domain.ErrPromoAlreadyRedeemed):
 		return "промокод уже использован"
-	case errors.Is(err, domain.ErrPromoWagerPending):
-		return "сначала нужно отыграть активный бонус"
 	default:
 		msg := strings.TrimSpace(err.Error())
 		if msg == "" {
@@ -254,48 +222,7 @@ func (s *Service) ensureChannelSubscribed(ctx context.Context, userID uuid.UUID)
 }
 
 func (s *Service) Status(ctx context.Context, userID uuid.UUID) (*StatusView, error) {
-	redemption, err := s.platform.GetActiveRedemption(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if redemption == nil {
-		return &StatusView{Active: false}, nil
-	}
-
-	progress, err := s.games.SumUserBetsSince(ctx, userID, redemption.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	if progress >= redemption.WagerRequiredNanoton && redemption.Status == "active" {
-		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "completed")
-		s.applyPromoCashoutCap(ctx, userID, redemption)
-		_ = s.users.ReleasePromoBalance(ctx, userID)
-		balance.NotifyUser(ctx, s.users, s.notifier, userID, 0, domain.LedgerPromoBonus)
-		redemption.Status = "completed"
-	} else if progress != redemption.WagerProgressNanoton {
-		_ = s.platform.UpdateRedemptionProgress(ctx, redemption.ID, progress, "active")
-		redemption.WagerProgressNanoton = progress
-	}
-
-	remaining := redemption.WagerRequiredNanoton - redemption.WagerProgressNanoton
-	if remaining < 0 {
-		remaining = 0
-	}
-
-	return &StatusView{
-		Active:               redemption.Status == "active",
-		PromoCode:            redemption.PromoCode,
-		BonusNanoton:         redemption.BonusNanoton,
-		WagerRequiredNanoton: redemption.WagerRequiredNanoton,
-		WagerProgressNanoton: redemption.WagerProgressNanoton,
-		RemainingNanoton:     remaining,
-	}, nil
-}
-
-func (s *Service) HasActivePromoRedemption(ctx context.Context, userID uuid.UUID) (bool, error) {
-	redemption, err := s.platform.GetActiveRedemption(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	return redemption != nil, nil
+	_ = ctx
+	_ = userID
+	return &StatusView{Active: false}, nil
 }

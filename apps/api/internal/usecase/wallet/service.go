@@ -30,10 +30,6 @@ type WithdrawalRiskEvaluator interface {
 	EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netNanoton int64) (score int, flags []string, reviewReason *string, needsReview bool, err error)
 }
 
-type WithdrawalPromoGate interface {
-	HasActivePromoRedemption(ctx context.Context, userID uuid.UUID) (bool, error)
-}
-
 type AdminWalletNotifier interface {
 	NotifyDeposit(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
 	NotifyDepositConfirmed(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
@@ -50,7 +46,6 @@ type Service struct {
 	risk      WithdrawalRiskEvaluator
 	analytics *analyticsuc.Service
 	notifier  balance.BalanceNotifier
-	promoGate WithdrawalPromoGate
 	admin     AdminWalletNotifier
 }
 
@@ -73,10 +68,6 @@ func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
 
 func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 	s.notifier = notifier
-}
-
-func (s *Service) SetPromoGate(gate WithdrawalPromoGate) {
-	s.promoGate = gate
 }
 
 func (s *Service) SetAdminNotifier(notifier AdminWalletNotifier) {

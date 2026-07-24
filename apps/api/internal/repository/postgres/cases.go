@@ -248,10 +248,25 @@ func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogS
 func (r *CaseRepo) UpdateCatalogSettings(ctx context.Context, settings *domain.CaseCatalogSettings) error {
 	settings.ID = 1
 	settings.UpdatedAt = time.Now().UTC()
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"enabled", "banners_enabled", "updated_at"}),
-	}).Create(settings).Error
+	// Use a map so false bools are written (GORM Create omits zero-value fields,
+	// which made ON CONFLICT SET enabled = EXCLUDED.enabled fall back to DEFAULT true).
+	res := r.db.WithContext(ctx).Model(&domain.CaseCatalogSettings{}).Where("id = ?", 1).Updates(map[string]any{
+		"enabled":         settings.Enabled,
+		"banners_enabled": settings.BannersEnabled,
+		"updated_at":      settings.UpdatedAt,
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return r.db.WithContext(ctx).Create(&domain.CaseCatalogSettings{
+			ID:             1,
+			Enabled:        settings.Enabled,
+			BannersEnabled: settings.BannersEnabled,
+			UpdatedAt:      settings.UpdatedAt,
+		}).Error
+	}
+	return nil
 }
 
 func (r *CaseRepo) GetLiveFeedSettings(ctx context.Context) (*domain.CaseLiveFeedSettings, error) {

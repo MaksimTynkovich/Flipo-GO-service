@@ -121,10 +121,9 @@ func (h *Hub) OnlineUserCount(skipAdmin func(telegramID int64) bool) int {
 	return count
 }
 
-func (h *Hub) BalanceUpdated(userID uuid.UUID, balanceNanoton, promoBalanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
+func (h *Hub) BalanceUpdated(userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {
 	h.NotifyUser(userID, "balance.updated", map[string]interface{}{
 		"betting_balance": balanceNanoton,
-		"promo_balance":   promoBalanceNanoton,
 		"delta_nanoton":   deltaNanoton,
 		"ledger_type":     string(ledgerType),
 	})

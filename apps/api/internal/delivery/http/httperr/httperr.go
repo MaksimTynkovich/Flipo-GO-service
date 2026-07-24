@@ -92,7 +92,6 @@ func isExpectedClientError(err error, status int) bool {
 		domain.ErrPromoExpired,
 		domain.ErrPromoExhausted,
 		domain.ErrPromoAlreadyRedeemed,
-		domain.ErrPromoFundsRestricted,
 		domain.ErrPromoInUse,
 		domain.ErrStakingPoolFull,
 		domain.ErrStakingPersonalLimit,

@@ -93,16 +93,15 @@ type AdminNotificationFilter struct {
 	Limit      int
 }
 
-// PromoCode — marketing bonus codes with wager requirement.
+// PromoCode — marketing bonus codes credited to the main balance.
 type PromoCode struct {
-	Code              string     `gorm:"size:32;primaryKey" json:"code"`
-	BonusNanoton      int64      `gorm:"not null" json:"bonus_nanoton"`
-	WagerMultiplier   float64    `gorm:"type:decimal(6,2);not null;default:1" json:"wager_multiplier"`
-	MaxUses           int        `gorm:"not null;default:0" json:"max_uses"`
-	UsedCount         int        `gorm:"not null;default:0" json:"used_count"`
-	Active            bool       `gorm:"not null;default:true" json:"active"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
+	Code         string     `gorm:"size:32;primaryKey" json:"code"`
+	BonusNanoton int64      `gorm:"not null" json:"bonus_nanoton"`
+	MaxUses      int        `gorm:"not null;default:0" json:"max_uses"`
+	UsedCount    int        `gorm:"not null;default:0" json:"used_count"`
+	Active       bool       `gorm:"not null;default:true" json:"active"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 func (PromoCode) TableName() string { return "promo_codes" }
@@ -319,25 +318,21 @@ type AdminUserAudience struct {
 	BoostTierUsers             int64               `json:"boost_tier_users"`
 	StakingTVLNanoton          int64               `json:"staking_tvl_nanoton"`
 	BalancesNanoton            int64               `json:"balances_nanoton"`
-	PromoBalancesNanoton       int64               `json:"promo_balances_nanoton"`
 	StakingAccruedYieldNanoton int64               `json:"staking_accrued_yield_nanoton"`
 	StakingDailyYieldNanoton   int64               `json:"staking_daily_yield_nanoton"`
 	StakingWeeklyYieldNanoton  int64               `json:"staking_weekly_yield_nanoton"`
 	TopReferrers               []AdminReferrerStat `json:"top_referrers"`
 }
 
-// PromoRedemption — player promo activation with wager tracking.
+// PromoRedemption — player promo activation history.
 type PromoRedemption struct {
-	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID               uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
-	PromoCode            string     `gorm:"size:32;not null;index" json:"promo_code"`
-	BonusNanoton         int64      `gorm:"not null" json:"bonus_nanoton"`
-	WagerRequiredNanoton int64      `gorm:"not null" json:"wager_required_nanoton"`
-	WagerProgressNanoton int64      `gorm:"not null;default:0" json:"wager_progress_nanoton"`
-	MaxCashoutNanoton    int64      `gorm:"not null;default:0" json:"max_cashout_nanoton"`
-	Status               string     `gorm:"size:32;not null;default:'active';index" json:"status"`
-	CreatedAt            time.Time  `json:"created_at"`
-	CompletedAt          *time.Time `json:"completed_at,omitempty"`
+	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID       uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
+	PromoCode    string     `gorm:"size:32;not null;index" json:"promo_code"`
+	BonusNanoton int64      `gorm:"not null" json:"bonus_nanoton"`
+	Status       string     `gorm:"size:32;not null;default:'completed';index" json:"status"`
+	CreatedAt    time.Time  `json:"created_at"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
 }
 
 func (PromoRedemption) TableName() string { return "promo_redemptions" }

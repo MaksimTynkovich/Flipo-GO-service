@@ -8,7 +8,6 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { buyMarketListing, getMarketListings, MarketListing } from "@/lib/api";
 import { patchUserBalance } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
-import { mainBalanceNanoton } from "@/lib/balance";
 import { formatCollectionSlug } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
 import { Gift, SearchX } from "lucide-react";
@@ -215,10 +214,10 @@ export function MarketSection({ onPurchased }: Props) {
     setBuying(true);
     setError(null);
     try {
-      const { balance, promo_balance } = await buyMarketListing(selected.id);
+      const { balance } = await buyMarketListing(selected.id);
       markModalCompleted("market_gift_detail");
       setUser((prev) =>
-        prev ? patchUserBalance(prev, { betting_balance: balance, promo_balance }) : prev,
+        prev ? patchUserBalance(prev, { betting_balance: balance }) : prev,
       );
       setSelected(null);
       await load();
@@ -230,7 +229,7 @@ export function MarketSection({ onPurchased }: Props) {
     }
   }
 
-  const availableBalance = user ? mainBalanceNanoton(user) : 0;
+  const availableBalance = user?.betting_balance ?? 0;
   const canBuy =
     !!user &&
     !!selected &&

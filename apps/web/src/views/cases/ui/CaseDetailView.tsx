@@ -19,7 +19,6 @@ import {
   type CaseView,
 } from "@/lib/api";
 import { patchUserBalance } from "@/lib/apply-balance";
-import { mainBalanceNanoton } from "@/lib/balance";
 import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
@@ -133,7 +132,7 @@ export function CaseDetailView() {
     Boolean(caseItem?.require_channel) && caseItem?.channel_subscribed === false;
   const channel = caseItem?.required_channel || PROMO_REQUIRED_CHANNEL;
   const channelUrl = promoChannelUrl(channel);
-  const balance = user ? mainBalanceNanoton(user) : 0;
+  const balance = user?.betting_balance ?? 0;
   const needsTopUp =
     Boolean(caseItem) &&
     !isFree &&

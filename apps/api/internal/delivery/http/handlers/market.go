@@ -175,8 +175,6 @@ func (h *MarketHandler) Buy(c *gin.Context) {
 		status := http.StatusBadRequest
 		if errors.Is(err, domain.ErrInsufficientFunds) {
 			status = http.StatusPaymentRequired
-		} else if errors.Is(err, domain.ErrPromoFundsRestricted) {
-			status = http.StatusPaymentRequired
 		} else if errors.Is(err, domain.ErrForbidden) {
 			status = http.StatusForbidden
 		} else if errors.Is(err, domain.ErrNotFound) {
@@ -185,8 +183,6 @@ func (h *MarketHandler) Buy(c *gin.Context) {
 		msg := err.Error()
 		if errors.Is(err, domain.ErrInsufficientFunds) {
 			msg = "Недостаточно средств"
-		} else if errors.Is(err, domain.ErrPromoFundsRestricted) {
-			msg = "Бонус нельзя тратить на маркет"
 		}
 		c.JSON(status, gin.H{"error": msg})
 		return
@@ -194,10 +190,8 @@ func (h *MarketHandler) Buy(c *gin.Context) {
 	trackUserEvent(h.analytics, c.Request.Context(), userID, "market", "market_purchase_completed", "success", "", "", map[string]any{
 		"listing_id":    id.String(),
 		"balance_after": balance.BettingBalance,
-		"promo_balance": balance.PromoBalance,
 	})
 	c.JSON(http.StatusOK, gin.H{
-		"balance":       balance.BettingBalance,
-		"promo_balance": balance.PromoBalance,
+		"balance": balance.BettingBalance,
 	})
 }
