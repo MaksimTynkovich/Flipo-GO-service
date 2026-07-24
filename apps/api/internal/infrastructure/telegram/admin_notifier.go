@@ -14,12 +14,14 @@ import (
 )
 
 // AdminNotifier persists ops alerts into the in-app admin notifications feed.
+// Important finance/ops events are also mirrored to admin Telegram DMs.
 // Events from admins themselves are ignored (except always-notify kinds).
 type AdminNotifier struct {
-	store      domain.AdminNotificationRepository
-	adminIDs   []int64
-	adminSet   map[int64]struct{}
-	realtime   AdminRealtimeBroadcaster
+	store    domain.AdminNotificationRepository
+	api      *BotAPI
+	adminIDs []int64
+	adminSet map[int64]struct{}
+	realtime AdminRealtimeBroadcaster
 	// Dedupes first-time bot /start alerts within a single process.
 	botStartSeen sync.Map
 }
@@ -29,7 +31,7 @@ type AdminRealtimeBroadcaster interface {
 	BroadcastAdminNotification(notif *domain.AdminNotification, unreadCount int64)
 }
 
-func NewAdminNotifier(store domain.AdminNotificationRepository, adminIDs []int64) *AdminNotifier {
+func NewAdminNotifier(store domain.AdminNotificationRepository, api *BotAPI, adminIDs []int64) *AdminNotifier {
 	set := make(map[int64]struct{}, len(adminIDs))
 	ids := make([]int64, 0, len(adminIDs))
 	for _, id := range adminIDs {
@@ -42,7 +44,7 @@ func NewAdminNotifier(store domain.AdminNotificationRepository, adminIDs []int64
 		set[id] = struct{}{}
 		ids = append(ids, id)
 	}
-	return &AdminNotifier{store: store, adminIDs: ids, adminSet: set}
+	return &AdminNotifier{store: store, api: api, adminIDs: ids, adminSet: set}
 }
 
 func (n *AdminNotifier) SetRealtime(rt AdminRealtimeBroadcaster) {
@@ -80,6 +82,45 @@ func FormatActor(a AdminActor) string {
 		return fmt.Sprintf("%s (@%s, id=%d)", name, a.Username, a.TelegramID)
 	}
 	return fmt.Sprintf("%s (id=%d)", name, a.TelegramID)
+}
+
+func (n *AdminNotifier) AlertAdminPanelLogin(ctx context.Context, challengeID string, actor AdminActor, ip, userAgent string) {
+	if n == nil || n.api == nil || !n.api.Enabled() || len(n.adminIDs) == 0 || strings.TrimSpace(challengeID) == "" {
+		return
+	}
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		ip = "—"
+	}
+	ua := strings.TrimSpace(userAgent)
+	if len(ua) > 180 {
+		ua = ua[:180] + "…"
+	}
+	if ua == "" {
+		ua = "—"
+	}
+	text := fmt.Sprintf(
+		"🔐 Запрос входа в админку\n%s\nIP: %s\nUA: %s\n\nРазрешите вход только если это вы.",
+		FormatActor(actor),
+		ip,
+		ua,
+	)
+	markup := InlineKeyboardMarkup{
+		InlineKeyboard: [][]InlineKeyboardButton{{
+			{Text: "✅ Разрешить вход", CallbackData: "adminlogin:ok:" + challengeID},
+			{Text: "❌ Отклонить", CallbackData: "adminlogin:no:" + challengeID},
+		}},
+	}
+	for _, adminID := range n.adminIDs {
+		adminID := adminID
+		go func() {
+			sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := n.api.SendMessageWithMarkup(sendCtx, adminID, text, markup); err != nil {
+				slog.Warn("admin login alert failed", "admin_id", adminID, "error", err)
+			}
+		}()
+	}
 }
 
 func (n *AdminNotifier) NotifyBotStart(ctx context.Context, actor AdminActor) {
@@ -648,14 +689,56 @@ func (n *AdminNotifier) persist(
 			slog.Warn("admin notification persist failed", "kind", kind, "error", err)
 			return
 		}
-		if n.realtime == nil {
-			return
+		if n.realtime != nil {
+			unread, err := n.store.CountUnreadAdminNotifications(ctx, "")
+			if err != nil {
+				slog.Warn("admin notification unread count failed", "error", err)
+				unread = 0
+			}
+			n.realtime.BroadcastAdminNotification(notif, unread)
 		}
-		unread, err := n.store.CountUnreadAdminNotifications(ctx, "")
-		if err != nil {
-			slog.Warn("admin notification unread count failed", "error", err)
-			unread = 0
+		if mirrorImportantToTelegram(kind, meta) {
+			n.sendTelegram(title, body)
 		}
-		n.realtime.BroadcastAdminNotification(notif, unread)
 	}()
+}
+
+func mirrorImportantToTelegram(kind string, meta map[string]any) bool {
+	switch kind {
+	case "deposit", "deposit_confirmed",
+		"withdraw_attempt", "withdraw_confirmed", "withdraw_failed":
+		return true
+	case "gift_withdraw":
+		status, _ := meta["status"].(string)
+		return status == "needs_purchase" || status == "held"
+	default:
+		return false
+	}
+}
+
+func (n *AdminNotifier) sendTelegram(title, body string) {
+	if n == nil || n.api == nil || !n.api.Enabled() || len(n.adminIDs) == 0 {
+		return
+	}
+	text := strings.TrimSpace(title)
+	if body = strings.TrimSpace(body); body != "" {
+		if text != "" {
+			text += "\n" + body
+		} else {
+			text = body
+		}
+	}
+	if text == "" {
+		return
+	}
+	for _, adminID := range n.adminIDs {
+		adminID := adminID
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := n.api.SendMessage(ctx, adminID, text); err != nil {
+				slog.Warn("admin telegram notify failed", "admin_id", adminID, "error", err)
+			}
+		}()
+	}
 }

@@ -155,7 +155,7 @@ func main() {
 	if !cfg.AdminNotifyEnabled {
 		notifStore = nil
 	}
-	adminNotifier := telegram.NewAdminNotifier(notifStore, cfg.AdminTelegramIDs)
+	adminNotifier := telegram.NewAdminNotifier(notifStore, botAPI, cfg.AdminTelegramIDs)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL, cfg.ChannelURL)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
@@ -326,6 +326,8 @@ func main() {
 
 	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName, cfg.ChannelURL, cfg.SupportURL, cfg.WelcomeText)
 	botUpdates.SetAdminNotifier(adminNotifier)
+	botUpdates.SetAdminLoginApprover(authSvc)
+	authSvc.SetAdminLoginAlerter(adminNotifier)
 	botUpdates.SetUserLookup(telegram.UserRepoLookup{
 		Find: func(ctx context.Context, telegramID int64) (any, error) {
 			return userRepo.FindByTelegramID(ctx, telegramID)

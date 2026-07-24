@@ -1,24 +1,32 @@
 "use client";
 
 import { candyTileBackgroundForLoot } from "@/components/cases/case-ui";
+import { TonIcon } from "@/components/icons/TonIcon";
 import type { CaseLiveDrop } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 
 function LiveTile({ drop }: { drop: CaseLiveDrop }) {
+  const isTon = drop.prize_type === "ton";
   return (
     <article className="cases-live-feed__tile" title={drop.display_name}>
       <div
         className="cases-live-feed__frame"
         style={{ background: candyTileBackgroundForLoot(drop) }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={giftImageUrl(drop.collection_slug, drop.image_url)}
-          alt=""
-          className="cases-live-feed__img"
-          draggable={false}
-        />
+        {isTon ? (
+          <span className="cases-live-feed__ton">
+            <TonIcon variant="brand" className="cases-live-feed__ton-icon" title="TON" />
+          </span>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={giftImageUrl(drop.collection_slug, drop.image_url)}
+            alt=""
+            className="cases-live-feed__img"
+            draggable={false}
+          />
+        )}
       </div>
     </article>
   );

@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type Dispatch,
   type FormEvent,
@@ -14,6 +15,7 @@ import {
   authAdminPanel,
   clearAdminAuthToken,
   getAdminAuthToken,
+  getAdminPanelLoginStatus,
   getMe,
   setAdminAuthToken,
   type User,
@@ -36,10 +38,12 @@ const AdminAuthContext = createContext<AdminAuthState | null>(null);
 function AdminLoginScreen({
   error,
   submitting,
+  awaitingApproval,
   onSubmit,
 }: {
   error: string | null;
   submitting: boolean;
+  awaitingApproval: boolean;
   onSubmit: (password: string) => Promise<void>;
 }) {
   const [password, setPassword] = useState("");
@@ -64,24 +68,40 @@ function AdminLoginScreen({
           </h1>
         </div>
 
-        <AdminField label="Пароль">
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="admin-input"
-            placeholder="••••••••"
-            disabled={submitting}
-            autoFocus
-          />
-        </AdminField>
+        {awaitingApproval ? (
+          <div className="space-y-2 rounded-xl bg-[var(--admin-raised)] px-3 py-3 text-sm leading-relaxed text-[var(--admin-muted)]">
+            <p className="font-medium text-[var(--admin-fg)]">Ожидаем подтверждение</p>
+            <p>
+              В Telegram-боте у админов появилась кнопка «Разрешить вход». После нажатия вы
+              попадёте в панель автоматически.
+            </p>
+          </div>
+        ) : (
+          <AdminField label="Пароль">
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="admin-input"
+              placeholder="••••••••"
+              disabled={submitting}
+              autoFocus
+            />
+          </AdminField>
+        )}
 
         {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
-        <AdminButton type="submit" className="w-full" disabled={submitting || !password}>
-          {submitting ? "Вход…" : "Войти"}
-        </AdminButton>
+        {!awaitingApproval ? (
+          <AdminButton type="submit" className="w-full" disabled={submitting || !password}>
+            {submitting ? "Проверяем…" : "Войти"}
+          </AdminButton>
+        ) : (
+          <AdminButton type="button" variant="secondary" className="w-full" disabled>
+            Ждём Telegram…
+          </AdminButton>
+        )}
       </form>
     </div>
   );
@@ -93,6 +113,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add("admin-mode");
@@ -147,25 +169,76 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (pollRef.current != null) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, []);
+
+  function stopPolling() {
+    if (pollRef.current != null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  function startPolling(challengeId: string) {
+    stopPolling();
+    setAwaitingApproval(true);
+    pollRef.current = window.setInterval(() => {
+      void (async () => {
+        try {
+          const status = await getAdminPanelLoginStatus(challengeId);
+          if (status.status === "pending") return;
+          stopPolling();
+          setAwaitingApproval(false);
+          if (status.status === "approved") {
+            setAdminAuthToken(status.token);
+            setUser(status.user);
+            setError(null);
+            window.dispatchEvent(
+              new CustomEvent(ADMIN_AUTH_SESSION_REFRESHED, { detail: { user: status.user } }),
+            );
+            return;
+          }
+          if (status.status === "denied") {
+            setError("Вход отклонён в Telegram");
+            return;
+          }
+          if (status.status === "expired") {
+            setError("Время подтверждения истекло — войдите снова");
+          }
+        } catch (e) {
+          stopPolling();
+          setAwaitingApproval(false);
+          setError(formatUserError(e, "Не удалось проверить статус входа"));
+        }
+      })();
+    }, 2000);
+  }
+
   async function login(password: string) {
     setSubmitting(true);
     setError(null);
     try {
-      const { token, user: next } = await authAdminPanel(password);
-      setAdminAuthToken(token);
-      setUser(next);
-      window.dispatchEvent(
-        new CustomEvent(ADMIN_AUTH_SESSION_REFRESHED, { detail: { user: next } }),
-      );
+      const pending = await authAdminPanel(password);
+      startPolling(pending.challenge_id);
     } catch (e) {
       setError(formatUserError(e, "Не удалось войти"));
       setUser(null);
+      setAwaitingApproval(false);
+      stopPolling();
     } finally {
       setSubmitting(false);
     }
   }
 
   function logout() {
+    stopPolling();
+    setAwaitingApproval(false);
     clearAdminAuthToken();
     setUser(null);
     setError(null);
@@ -184,7 +257,12 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return (
-      <AdminLoginScreen error={error} submitting={submitting} onSubmit={login} />
+      <AdminLoginScreen
+        error={error}
+        submitting={submitting}
+        awaitingApproval={awaitingApproval}
+        onSubmit={login}
+      />
     );
   }
 

@@ -49,4 +49,8 @@ var (
 	ErrAdminPasswordNotSet    = errors.New("пароль админки не настроен")
 	ErrAdminPasswordInvalid   = errors.New("неверный пароль")
 	ErrAdminActorMissing      = errors.New("сначала зайдите в Mini App под admin Telegram ID")
+	ErrAdminLoginPending      = errors.New("ожидаем подтверждение входа в Telegram")
+	ErrAdminLoginDenied       = errors.New("вход отклонён")
+	ErrAdminLoginExpired      = errors.New("время подтверждения истекло")
+	ErrAdminLoginNotFound     = errors.New("запрос на вход не найден")
 )

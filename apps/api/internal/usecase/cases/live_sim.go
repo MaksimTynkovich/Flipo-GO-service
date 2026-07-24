@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
-	"github.com/flipo/flipo/apps/api/internal/infrastructure/giftimage"
 	"github.com/google/uuid"
 )
 
@@ -131,20 +130,7 @@ func (s *LiveSim) tick(ctx context.Context) {
 	if !ok {
 		return
 	}
-	img := entry.ImageURL
-	if img == "" {
-		img = giftimage.FragmentURL(entry.CollectionSlug)
-	}
-	drop := domain.CaseLiveDrop{
-		OpenID:              uuid.New(),
-		CollectionSlug:      entry.CollectionSlug,
-		DisplayName:         entry.DisplayName,
-		ImageURL:            img,
-		RarityLabel:         entry.RarityLabel,
-		TileBackgroundColor: entry.TileBackgroundColor,
-		FloorPriceNanoton:   entry.FloorPriceNanoton,
-		CreatedAt:           time.Now().UTC(),
-	}
+	drop := liveDropFromEntry(uuid.New(), entry, time.Now().UTC())
 	if s.svc.live != nil {
 		s.svc.live.PublishCaseLiveDrop(ctx, drop)
 	} else if s.svc.feedBuf != nil {
@@ -161,7 +147,7 @@ func (s *LiveSim) sampleLoot(ctx context.Context, cfg domain.CaseLiveFeedSetting
 	if cfg.FatChance > 0 && randFloat() < cfg.FatChance {
 		fat := make([]domain.CaseLootEntry, 0)
 		for _, e := range pool {
-			if e.FloorPriceNanoton >= cfg.FatMinFloorNanoton {
+			if domain.CaseLootPrizeValueNanoton(e) >= cfg.FatMinFloorNanoton {
 				fat = append(fat, e)
 			}
 		}

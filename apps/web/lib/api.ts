@@ -38,6 +38,11 @@ const AUTH_PATHS = new Set([
   "/api/v1/admin/auth/login",
 ]);
 
+function isAuthPath(path: string): boolean {
+  if (AUTH_PATHS.has(path)) return true;
+  return path.startsWith("/api/v1/admin/auth/login/");
+}
+
 export class ApiRequestError extends Error {
   code?: string;
   channel?: string;
@@ -176,7 +181,7 @@ export async function silentReauth(): Promise<User | null> {
 export async function api<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
   const res = await rawFetch(path, options);
 
-  if (res.status === 401 && !retried && !AUTH_PATHS.has(path)) {
+  if (res.status === 401 && !retried && !isAuthPath(path)) {
     const isAdminPath =
       path.startsWith("/api/v1/admin") ||
       (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
@@ -237,10 +242,25 @@ export async function authDebug() {
 }
 
 export async function authAdminPanel(password: string) {
-  return api<{ token: string; user: User }>("/api/v1/admin/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ password }),
-  });
+  return api<{ status: "pending"; challenge_id: string; message?: string }>(
+    "/api/v1/admin/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    },
+  );
+}
+
+export type AdminLoginStatusResponse =
+  | { status: "pending"; challenge_id: string }
+  | { status: "denied"; challenge_id: string }
+  | { status: "expired"; challenge_id: string }
+  | { status: "approved"; challenge_id: string; token: string; user: User };
+
+export async function getAdminPanelLoginStatus(challengeId: string) {
+  return api<AdminLoginStatusResponse>(
+    `/api/v1/admin/auth/login/${encodeURIComponent(challengeId)}`,
+  );
 }
 
 export async function getMe() {
@@ -1998,6 +2018,7 @@ export async function spinWheel() {
 
 export type CaseLootPreview = {
   id: string;
+  prize_type?: "gift" | "ton" | string;
   collection_slug: string;
   display_name: string;
   image_url: string;
@@ -2006,10 +2027,12 @@ export type CaseLootPreview = {
   tile_background_color?: string;
   sort_order: number;
   floor_price_nanoton?: number;
+  amount_nanoton?: number;
 };
 
 export type CaseLiveDrop = {
   open_id: string;
+  prize_type?: "gift" | "ton" | string;
   collection_slug: string;
   display_name: string;
   image_url: string;
@@ -2048,7 +2071,9 @@ export type CaseOpenResult = {
   open_id: string;
   case_id: string;
   source: string;
-  item: InventoryItem;
+  prize_type?: "gift" | "ton" | string;
+  prize_nanoton?: number;
+  item?: InventoryItem | null;
   loot_entry: CaseLootPreview;
   backed: boolean;
 };
@@ -2089,6 +2114,7 @@ export async function getCaseOpens() {
 
 export type AdminCaseLootEntry = {
   id?: string;
+  prize_type?: "gift" | "ton" | string;
   collection_slug: string;
   display_name: string;
   image_url?: string;
@@ -2098,6 +2124,7 @@ export type AdminCaseLootEntry = {
   sort_order: number;
   weight: number;
   floor_price_nanoton?: number;
+  amount_nanoton?: number;
 };
 
 export type AdminCase = {

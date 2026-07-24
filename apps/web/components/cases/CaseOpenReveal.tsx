@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { candyTileBackgroundForLoot } from "@/components/cases/case-ui";
+import { TonIcon } from "@/components/icons/TonIcon";
 import type { CaseLootPreview } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
@@ -288,13 +289,19 @@ export function CaseOpenReveal({
                       background: candyTileBackgroundForLoot(item),
                     }}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={giftImageUrl(item.collection_slug, item.image_url)}
-                      alt=""
-                      className="case-reveal__img"
-                      draggable={false}
-                    />
+                    {item.prize_type === "ton" ? (
+                      <span className="case-reveal__ton">
+                        <TonIcon variant="brand" className="case-reveal__ton-icon" title="TON" />
+                      </span>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={giftImageUrl(item.collection_slug, item.image_url)}
+                        alt=""
+                        className="case-reveal__img"
+                        draggable={false}
+                      />
+                    )}
                   </div>
                 );
               })}

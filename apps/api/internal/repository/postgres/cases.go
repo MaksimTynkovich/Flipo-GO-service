@@ -180,6 +180,7 @@ func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.Cas
 	}
 	type row struct {
 		OpenID              uuid.UUID
+		PrizeType           string
 		CollectionSlug      string
 		DisplayName         string
 		ImageURL            string
@@ -192,12 +193,17 @@ func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.Cas
 	err := r.db.WithContext(ctx).
 		Table("case_opens AS o").
 		Select(`o.id AS open_id,
+			COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift') AS prize_type,
 			e.collection_slug,
 			e.display_name,
 			e.image_url,
 			e.rarity_label,
 			e.tile_background_color,
-			e.floor_price_nanoton,
+			CASE
+				WHEN COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift') = 'ton'
+					THEN COALESCE(NULLIF(o.prize_nanoton, 0), NULLIF(e.amount_nanoton, 0), e.floor_price_nanoton)
+				ELSE e.floor_price_nanoton
+			END AS floor_price_nanoton,
 			o.created_at`).
 		Joins("JOIN case_loot_entries e ON e.id = o.loot_entry_id").
 		Order("o.created_at DESC").
@@ -210,6 +216,7 @@ func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.Cas
 	for _, row := range rows {
 		out = append(out, domain.CaseLiveDrop{
 			OpenID:              row.OpenID,
+			PrizeType:           row.PrizeType,
 			CollectionSlug:      row.CollectionSlug,
 			DisplayName:         row.DisplayName,
 			ImageURL:            row.ImageURL,

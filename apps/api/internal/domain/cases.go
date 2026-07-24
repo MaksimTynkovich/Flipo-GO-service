@@ -23,6 +23,9 @@ const (
 
 	CaseFulfillmentUnbacked = "unbacked"
 	CaseFulfillmentBacked   = "backed"
+
+	CasePrizeTypeGift = "gift"
+	CasePrizeTypeTon  = "ton"
 )
 
 type Case struct {
@@ -44,32 +47,36 @@ type Case struct {
 func (Case) TableName() string { return "cases" }
 
 type CaseLootEntry struct {
-	ID                uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	CaseID            uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
-	CollectionSlug    string    `gorm:"size:128;not null" json:"collection_slug"`
-	Weight            int       `gorm:"not null" json:"weight"`
-	DisplayName       string    `gorm:"size:128;not null" json:"display_name"`
-	ImageURL          string    `gorm:"size:512" json:"image_url"`
-	RarityLabel           string    `gorm:"size:64" json:"rarity_label"`
-	TileBackgroundColor   string    `gorm:"size:16" json:"tile_background_color"`
-	SortOrder             int       `gorm:"not null;default:0" json:"sort_order"`
-	FloorPriceNanoton int64     `gorm:"not null;default:0" json:"floor_price_nanoton"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID                  uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	CaseID              uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
+	PrizeType           string    `gorm:"size:16;not null;default:gift" json:"prize_type"`
+	CollectionSlug      string    `gorm:"size:128;not null;default:''" json:"collection_slug"`
+	Weight              int       `gorm:"not null" json:"weight"`
+	DisplayName         string    `gorm:"size:128;not null" json:"display_name"`
+	ImageURL            string    `gorm:"size:512" json:"image_url"`
+	RarityLabel         string    `gorm:"size:64" json:"rarity_label"`
+	TileBackgroundColor string    `gorm:"size:16" json:"tile_background_color"`
+	SortOrder           int       `gorm:"not null;default:0" json:"sort_order"`
+	FloorPriceNanoton   int64     `gorm:"not null;default:0" json:"floor_price_nanoton"`
+	AmountNanoton       int64     `gorm:"not null;default:0" json:"amount_nanoton"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 func (CaseLootEntry) TableName() string { return "case_loot_entries" }
 
 type CaseOpen struct {
-	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	UserID           uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
-	CaseID           uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
-	PricePaidNanoton int64     `gorm:"not null" json:"price_paid_nanoton"`
-	Source           string    `gorm:"size:16;not null" json:"source"`
-	RngRoll          int       `gorm:"not null" json:"rng_roll"`
-	LootEntryID      uuid.UUID `gorm:"type:uuid;not null" json:"loot_entry_id"`
-	InventoryItemID  uuid.UUID `gorm:"type:uuid;not null" json:"inventory_item_id"`
-	IdempotencyKey   string    `gorm:"size:128;not null;uniqueIndex" json:"idempotency_key"`
-	CreatedAt        time.Time `gorm:"index" json:"created_at"`
+	ID               uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID           uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
+	CaseID           uuid.UUID  `gorm:"type:uuid;not null;index" json:"case_id"`
+	PricePaidNanoton int64      `gorm:"not null" json:"price_paid_nanoton"`
+	Source           string     `gorm:"size:16;not null" json:"source"`
+	RngRoll          int        `gorm:"not null" json:"rng_roll"`
+	LootEntryID      uuid.UUID  `gorm:"type:uuid;not null" json:"loot_entry_id"`
+	InventoryItemID  *uuid.UUID `gorm:"type:uuid" json:"inventory_item_id,omitempty"`
+	PrizeType        string     `gorm:"size:16;not null;default:gift" json:"prize_type"`
+	PrizeNanoton     int64      `gorm:"not null;default:0" json:"prize_nanoton"`
+	IdempotencyKey   string     `gorm:"size:128;not null;uniqueIndex" json:"idempotency_key"`
+	CreatedAt        time.Time  `gorm:"index" json:"created_at"`
 }
 
 func (CaseOpen) TableName() string { return "case_opens" }
@@ -120,6 +127,7 @@ func (CasePromoRedemption) TableName() string { return "case_promo_redemptions" 
 // CaseLiveDrop — recent case open for the catalog live feed.
 type CaseLiveDrop struct {
 	OpenID              uuid.UUID `json:"open_id"`
+	PrizeType           string    `json:"prize_type,omitempty"`
 	CollectionSlug      string    `json:"collection_slug"`
 	DisplayName         string    `json:"display_name"`
 	ImageURL            string    `json:"image_url"`
@@ -173,6 +181,27 @@ func IsUnbackedCaseClaim(item InventoryItem) bool {
 		return true
 	}
 	return CaseClaimFulfillment(item.Metadata) == CaseFulfillmentUnbacked
+}
+
+// NormalizeCasePrizeType returns gift|ton (empty → gift).
+func NormalizeCasePrizeType(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case CasePrizeTypeTon:
+		return CasePrizeTypeTon
+	default:
+		return CasePrizeTypeGift
+	}
+}
+
+// CaseLootPrizeValueNanoton is EV/display value: ton amount or gift floor.
+func CaseLootPrizeValueNanoton(e CaseLootEntry) int64 {
+	if NormalizeCasePrizeType(e.PrizeType) == CasePrizeTypeTon {
+		if e.AmountNanoton > 0 {
+			return e.AmountNanoton
+		}
+		return e.FloorPriceNanoton
+	}
+	return e.FloorPriceNanoton
 }
 
 // Allowed loot tile background colors (admin picker). Empty string = use rarity default.

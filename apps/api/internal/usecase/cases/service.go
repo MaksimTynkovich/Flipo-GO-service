@@ -95,14 +95,16 @@ func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) 
 }
 
 type LootPreview struct {
-	ID               uuid.UUID `json:"id"`
-	CollectionSlug   string    `json:"collection_slug"`
-	DisplayName      string    `json:"display_name"`
-	ImageURL         string    `json:"image_url"`
-	RarityLabel           string    `json:"rarity_label"`
-	TileBackgroundColor   string    `json:"tile_background_color,omitempty"`
-	SortOrder             int       `json:"sort_order"`
-	FloorPriceNanoton int64    `json:"floor_price_nanoton,omitempty"`
+	ID                  uuid.UUID `json:"id"`
+	PrizeType           string    `json:"prize_type"`
+	CollectionSlug      string    `json:"collection_slug"`
+	DisplayName         string    `json:"display_name"`
+	ImageURL            string    `json:"image_url"`
+	RarityLabel         string    `json:"rarity_label"`
+	TileBackgroundColor string    `json:"tile_background_color,omitempty"`
+	SortOrder           int       `json:"sort_order"`
+	FloorPriceNanoton   int64     `json:"floor_price_nanoton,omitempty"`
+	AmountNanoton       int64     `json:"amount_nanoton,omitempty"`
 }
 
 type CaseView struct {
@@ -124,15 +126,17 @@ type CaseView struct {
 
 // AdminLootEntry — loot row for admin CRUD (includes weight).
 type AdminLootEntry struct {
-	ID                uuid.UUID `json:"id"`
-	CollectionSlug    string    `json:"collection_slug"`
-	DisplayName       string    `json:"display_name"`
-	ImageURL          string    `json:"image_url"`
-	RarityLabel           string    `json:"rarity_label"`
-	TileBackgroundColor   string    `json:"tile_background_color"`
-	SortOrder             int       `json:"sort_order"`
-	Weight            int       `json:"weight"`
-	FloorPriceNanoton int64     `json:"floor_price_nanoton"`
+	ID                  uuid.UUID `json:"id"`
+	PrizeType           string    `json:"prize_type"`
+	CollectionSlug      string    `json:"collection_slug"`
+	DisplayName         string    `json:"display_name"`
+	ImageURL            string    `json:"image_url"`
+	RarityLabel         string    `json:"rarity_label"`
+	TileBackgroundColor string    `json:"tile_background_color"`
+	SortOrder           int       `json:"sort_order"`
+	Weight              int       `json:"weight"`
+	FloorPriceNanoton   int64     `json:"floor_price_nanoton"`
+	AmountNanoton       int64     `json:"amount_nanoton"`
 }
 
 // AdminCaseView — full case for admin list/edit.
@@ -159,12 +163,14 @@ type CatalogView struct {
 }
 
 type OpenResult struct {
-	OpenID    uuid.UUID           `json:"open_id"`
-	CaseID    uuid.UUID           `json:"case_id"`
-	Source    string              `json:"source"`
-	Item      inventory.ItemView  `json:"item"`
-	LootEntry LootPreview         `json:"loot_entry"`
-	Backed    bool                `json:"backed"`
+	OpenID       uuid.UUID           `json:"open_id"`
+	CaseID       uuid.UUID           `json:"case_id"`
+	Source       string              `json:"source"`
+	PrizeType    string              `json:"prize_type"`
+	PrizeNanoton int64               `json:"prize_nanoton,omitempty"`
+	Item         *inventory.ItemView `json:"item,omitempty"`
+	LootEntry    LootPreview         `json:"loot_entry"`
+	Backed       bool                `json:"backed"`
 }
 
 func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, error) {
@@ -330,12 +336,42 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		}
 	}
 
-	item, backed, err := s.grantPrize(ctx, userID, openID, *c, entry)
-	if err != nil {
-		if price > 0 {
-			_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+	prizeType := domain.NormalizeCasePrizeType(entry.PrizeType)
+	var item *domain.InventoryItem
+	var itemView *inventory.ItemView
+	var backed bool
+	var prizeNanoton int64
+
+	if prizeType == domain.CasePrizeTypeTon {
+		prizeNanoton = domain.CaseLootPrizeValueNanoton(entry)
+		if prizeNanoton <= 0 {
+			if price > 0 {
+				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+			}
+			return nil, domain.ErrInvalidAmount
 		}
-		return nil, err
+		if _, err := s.balance.Credit(ctx, userID, prizeNanoton, domain.LedgerCasePrize, "case_open", openID); err != nil {
+			if price > 0 {
+				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+			}
+			return nil, err
+		}
+	} else {
+		granted, isBacked, err := s.grantPrize(ctx, userID, openID, *c, entry)
+		if err != nil {
+			if price > 0 {
+				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+			}
+			return nil, err
+		}
+		item = granted
+		backed = isBacked
+		view := inventory.BuildItemView(ctx, s.valuator, *item)
+		itemView = &view
+		prizeNanoton = view.ValuationNanoton
+		if prizeNanoton <= 0 {
+			prizeNanoton = view.FloorPriceNanoton
+		}
 	}
 
 	open := &domain.CaseOpen{
@@ -346,9 +382,14 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		Source:           source,
 		RngRoll:          roll,
 		LootEntryID:      entry.ID,
-		InventoryItemID:  item.ID,
+		PrizeType:        prizeType,
+		PrizeNanoton:     prizeNanoton,
 		IdempotencyKey:   idempotencyKey,
 		CreatedAt:        time.Now().UTC(),
+	}
+	if item != nil {
+		id := item.ID
+		open.InventoryItemID = &id
 	}
 	if err := s.cases.CreateOpen(ctx, open); err != nil {
 		if existing, findErr := s.cases.FindOpenByIdempotency(ctx, idempotencyKey); findErr == nil && existing != nil {
@@ -371,30 +412,18 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 		}
 	}
 
-	view := inventory.BuildItemView(ctx, s.valuator, *item)
 	result := &OpenResult{
-		OpenID:    openID,
-		CaseID:    c.ID,
-		Source:    source,
-		Item:      view,
-		LootEntry: toLootPreview(entry),
-		Backed:    backed,
+		OpenID:       openID,
+		CaseID:       c.ID,
+		Source:       source,
+		PrizeType:    prizeType,
+		PrizeNanoton: prizeNanoton,
+		Item:         itemView,
+		LootEntry:    toLootPreview(entry),
+		Backed:       backed,
 	}
 	if s.live != nil {
-		img := entry.ImageURL
-		if img == "" {
-			img = giftimage.FragmentURL(entry.CollectionSlug)
-		}
-		s.live.PublishCaseLiveDrop(ctx, domain.CaseLiveDrop{
-			OpenID:              openID,
-			CollectionSlug:      entry.CollectionSlug,
-			DisplayName:         entry.DisplayName,
-			ImageURL:            img,
-			RarityLabel:         entry.RarityLabel,
-			TileBackgroundColor: entry.TileBackgroundColor,
-			FloorPriceNanoton:   entry.FloorPriceNanoton,
-			CreatedAt:           open.CreatedAt,
-		})
+		s.live.PublishCaseLiveDrop(ctx, liveDropFromEntry(openID, entry, open.CreatedAt))
 	}
 	if s.admin != nil {
 		actor := telegram.AdminActor{}
@@ -406,15 +435,14 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 				LastName:   user.LastName,
 			}
 		}
-		prizeName := view.Name
-		if prizeName == "" {
-			prizeName = entry.DisplayName
+		prizeName := entry.DisplayName
+		if itemView != nil && itemView.Name != "" {
+			prizeName = itemView.Name
 		}
-		floor := view.ValuationNanoton
-		if floor <= 0 {
-			floor = view.FloorPriceNanoton
+		if prizeType == domain.CasePrizeTypeTon && prizeName == "" {
+			prizeName = "TON"
 		}
-		s.admin.NotifyCaseOpen(ctx, actor, c.Title, prizeName, string(source), price, floor, backed)
+		s.admin.NotifyCaseOpen(ctx, actor, c.Title, prizeName, string(source), price, prizeNanoton, backed)
 	}
 	return result, nil
 }
@@ -480,11 +508,13 @@ func (s *Service) LiveFeed(ctx context.Context, limit int) ([]domain.CaseLiveDro
 			return
 		}
 		seen[row.OpenID] = struct{}{}
-		img := row.ImageURL
-		if img == "" {
-			img = giftimage.FragmentURL(row.CollectionSlug)
+		if row.PrizeType != domain.CasePrizeTypeTon {
+			img := row.ImageURL
+			if img == "" {
+				img = giftimage.FragmentURL(row.CollectionSlug)
+			}
+			row.ImageURL = img
 		}
-		row.ImageURL = img
 		out = append(out, row)
 	}
 	if s.feedBuf != nil {
@@ -550,20 +580,19 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 		if loot, err := s.cases.ListLootByCase(ctx, row.ID); err == nil {
 			view.Loot = make([]AdminLootEntry, 0, len(loot))
 			for _, e := range loot {
-				img := e.ImageURL
-				if img == "" {
-					img = giftimage.FragmentURL(e.CollectionSlug)
-				}
+				preview := toLootPreview(e)
 				view.Loot = append(view.Loot, AdminLootEntry{
 					ID:                  e.ID,
+					PrizeType:           preview.PrizeType,
 					CollectionSlug:      e.CollectionSlug,
-					DisplayName:         e.DisplayName,
-					ImageURL:            img,
+					DisplayName:         preview.DisplayName,
+					ImageURL:            preview.ImageURL,
 					RarityLabel:         e.RarityLabel,
 					TileBackgroundColor: e.TileBackgroundColor,
 					SortOrder:           e.SortOrder,
 					Weight:              e.Weight,
 					FloorPriceNanoton:   e.FloorPriceNanoton,
+					AmountNanoton:       e.AmountNanoton,
 				})
 			}
 		}
@@ -660,18 +689,35 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 		if entries[i].Weight <= 0 {
 			return domain.ErrInvalidAmount
 		}
-		if entries[i].FloorPriceNanoton < 0 {
+		if entries[i].FloorPriceNanoton < 0 || entries[i].AmountNanoton < 0 {
 			return domain.ErrInvalidAmount
 		}
+		prizeType := domain.NormalizeCasePrizeType(entries[i].PrizeType)
+		entries[i].PrizeType = prizeType
+		entries[i].DisplayName = strings.TrimSpace(entries[i].DisplayName)
+		entries[i].TileBackgroundColor = domain.NormalizeLootTileBackgroundColor(entries[i].TileBackgroundColor)
+
+		if prizeType == domain.CasePrizeTypeTon {
+			if entries[i].AmountNanoton <= 0 {
+				return domain.ErrInvalidAmount
+			}
+			entries[i].CollectionSlug = ""
+			if entries[i].DisplayName == "" {
+				entries[i].DisplayName = "TON"
+			}
+			// Keep floor in sync so RTP/live feed use the cash amount.
+			entries[i].FloorPriceNanoton = entries[i].AmountNanoton
+			continue
+		}
+
 		entries[i].CollectionSlug = strings.ToLower(strings.TrimSpace(entries[i].CollectionSlug))
 		if entries[i].CollectionSlug == "" {
 			return domain.ErrInvalidAmount
 		}
-		entries[i].DisplayName = strings.TrimSpace(entries[i].DisplayName)
+		entries[i].AmountNanoton = 0
 		if entries[i].DisplayName == "" {
 			entries[i].DisplayName = entries[i].CollectionSlug
 		}
-		entries[i].TileBackgroundColor = domain.NormalizeLootTileBackgroundColor(entries[i].TileBackgroundColor)
 	}
 	if err := s.cases.ReplaceLoot(ctx, caseID, entries); err != nil {
 		return err
@@ -841,7 +887,7 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 			view.Loot = make([]LootPreview, 0, len(loot))
 			for _, e := range loot {
 				preview := toLootPreview(e)
-				if preview.FloorPriceNanoton <= 0 {
+				if preview.PrizeType != domain.CasePrizeTypeTon && preview.FloorPriceNanoton <= 0 {
 					preview.FloorPriceNanoton = s.quoteCollectionFloor(ctx, e.CollectionSlug)
 				}
 				view.Loot = append(view.Loot, preview)
@@ -906,11 +952,6 @@ func (s *Service) isChannelSubscribed(ctx context.Context, userID uuid.UUID) (bo
 }
 
 func (s *Service) openResultFromExisting(ctx context.Context, open *domain.CaseOpen) (*OpenResult, error) {
-	item, err := s.inventory.FindByID(ctx, open.InventoryItemID)
-	if err != nil {
-		return nil, err
-	}
-	view := inventory.BuildItemView(ctx, s.valuator, *item)
 	preview := LootPreview{}
 	if loot, err := s.cases.ListLootByCase(ctx, open.CaseID); err == nil {
 		for _, e := range loot {
@@ -920,30 +961,88 @@ func (s *Service) openResultFromExisting(ctx context.Context, open *domain.CaseO
 			}
 		}
 	}
-	return &OpenResult{
-		OpenID:    open.ID,
-		CaseID:    open.CaseID,
-		Source:    open.Source,
-		Item:      view,
-		LootEntry: preview,
-		Backed:    !domain.IsUnbackedCaseClaim(*item),
-	}, nil
+	prizeType := domain.NormalizeCasePrizeType(open.PrizeType)
+	if prizeType == "" || (open.PrizeType == "" && preview.PrizeType != "") {
+		prizeType = domain.NormalizeCasePrizeType(preview.PrizeType)
+	}
+	result := &OpenResult{
+		OpenID:       open.ID,
+		CaseID:       open.CaseID,
+		Source:       open.Source,
+		PrizeType:    prizeType,
+		PrizeNanoton: open.PrizeNanoton,
+		LootEntry:    preview,
+	}
+	if prizeType == domain.CasePrizeTypeTon {
+		if result.PrizeNanoton <= 0 {
+			result.PrizeNanoton = domain.CaseLootPrizeValueNanoton(domain.CaseLootEntry{
+				PrizeType:         prizeType,
+				AmountNanoton:     preview.AmountNanoton,
+				FloorPriceNanoton: preview.FloorPriceNanoton,
+			})
+		}
+		return result, nil
+	}
+	if open.InventoryItemID == nil {
+		return nil, domain.ErrNotFound
+	}
+	item, err := s.inventory.FindByID(ctx, *open.InventoryItemID)
+	if err != nil {
+		return nil, err
+	}
+	view := inventory.BuildItemView(ctx, s.valuator, *item)
+	result.Item = &view
+	result.Backed = !domain.IsUnbackedCaseClaim(*item)
+	if result.PrizeNanoton <= 0 {
+		result.PrizeNanoton = view.ValuationNanoton
+		if result.PrizeNanoton <= 0 {
+			result.PrizeNanoton = view.FloorPriceNanoton
+		}
+	}
+	return result, nil
 }
 
 func toLootPreview(e domain.CaseLootEntry) LootPreview {
+	prizeType := domain.NormalizeCasePrizeType(e.PrizeType)
 	img := e.ImageURL
-	if img == "" {
+	name := e.DisplayName
+	floor := e.FloorPriceNanoton
+	if prizeType == domain.CasePrizeTypeTon {
+		if name == "" {
+			name = "TON"
+		}
+		if floor <= 0 {
+			floor = e.AmountNanoton
+		}
+	} else if img == "" && e.CollectionSlug != "" {
 		img = giftimage.FragmentURL(e.CollectionSlug)
 	}
 	return LootPreview{
 		ID:                  e.ID,
+		PrizeType:           prizeType,
 		CollectionSlug:      e.CollectionSlug,
-		DisplayName:         e.DisplayName,
+		DisplayName:         name,
 		ImageURL:            img,
 		RarityLabel:         e.RarityLabel,
 		TileBackgroundColor: e.TileBackgroundColor,
 		SortOrder:           e.SortOrder,
-		FloorPriceNanoton:   e.FloorPriceNanoton,
+		FloorPriceNanoton:   floor,
+		AmountNanoton:       e.AmountNanoton,
+	}
+}
+
+func liveDropFromEntry(openID uuid.UUID, entry domain.CaseLootEntry, createdAt time.Time) domain.CaseLiveDrop {
+	preview := toLootPreview(entry)
+	return domain.CaseLiveDrop{
+		OpenID:              openID,
+		PrizeType:           preview.PrizeType,
+		CollectionSlug:      preview.CollectionSlug,
+		DisplayName:         preview.DisplayName,
+		ImageURL:            preview.ImageURL,
+		RarityLabel:         preview.RarityLabel,
+		TileBackgroundColor: preview.TileBackgroundColor,
+		FloorPriceNanoton:   domain.CaseLootPrizeValueNanoton(entry),
+		CreatedAt:           createdAt,
 	}
 }
 

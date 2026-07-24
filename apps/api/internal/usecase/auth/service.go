@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"time"
 
@@ -44,6 +43,8 @@ type Service struct {
 	debugInitialBalance int64
 	analytics           *analyticsuc.Service
 	adminEvents         AdminEventNotifier
+	adminLoginAlerter   AdminLoginAlerter
+	adminLogins         *adminLoginStore
 }
 
 func NewService(users domain.UserRepository, botToken string, jwtSecret string, jwtExpiry time.Duration, referrals *referral.Service, opts ...ServiceOption) *Service {
@@ -283,59 +284,6 @@ func (s *Service) issueTokenWithOpts(user *domain.User, adminPanel bool, ttl tim
 
 func (s *Service) AdminPanelPasswordConfigured() bool {
 	return s.adminPanelPassword != ""
-}
-
-// AuthenticateAdminPanel issues a JWT for browser /admin login (no Telegram initData).
-// Actor is the first ADMIN_TELEGRAM_IDS user that already exists in the DB.
-func (s *Service) AuthenticateAdminPanel(ctx context.Context, password string) (string, *domain.User, error) {
-	if s.adminPanelPassword == "" {
-		return "", nil, domain.ErrAdminPasswordNotSet
-	}
-	if subtle.ConstantTimeCompare([]byte(password), []byte(s.adminPanelPassword)) != 1 {
-		return "", nil, domain.ErrAdminPasswordInvalid
-	}
-	if len(s.adminTelegramOrder) == 0 {
-		return "", nil, domain.ErrAdminActorMissing
-	}
-
-	var user *domain.User
-	for _, telegramID := range s.adminTelegramOrder {
-		found, err := s.users.FindByTelegramID(ctx, telegramID)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				continue
-			}
-			return "", nil, err
-		}
-		if found != nil {
-			if found.IsBanned {
-				return "", nil, domain.ErrUserBanned
-			}
-			user = found
-			break
-		}
-	}
-	if user == nil {
-		return "", nil, domain.ErrAdminActorMissing
-	}
-
-	token, err := s.issueTokenWithOpts(user, true, adminPanelTokenTTL)
-	if err != nil {
-		return "", nil, err
-	}
-	s.analytics.Track(ctx, analyticsuc.EventInput{
-		UserID:        &user.ID,
-		TelegramID:    &user.TelegramID,
-		Source:        "api",
-		EventName:     "auth_admin_panel_succeeded",
-		EventCategory: "auth",
-		Status:        "success",
-		StakingTier:   string(user.StakingTier),
-		Properties: map[string]any{
-			"source": "admin_panel",
-		},
-	})
-	return token, user, nil
 }
 
 func (s *Service) ParseToken(tokenStr string) (*Claims, error) {

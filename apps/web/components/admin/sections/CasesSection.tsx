@@ -138,22 +138,28 @@ function inferModelName(entry: AdminCaseLootEntry): string | undefined {
 }
 
 function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
-  return (entries || []).map((e, i) => ({
-    _key: e.id || `new-${i}-${e.collection_slug}`,
-    _modelName: inferModelName(e),
-    id: e.id,
-    collection_slug: e.collection_slug,
-    display_name: e.display_name,
-    image_url: e.image_url || "",
-    rarity_label: e.rarity_label || "",
-    tile_background_color: e.tile_background_color || "",
-    sort_order: e.sort_order ?? i,
-    weight: e.weight > 0 ? e.weight : 1,
-    floor_price_nanoton: e.floor_price_nanoton ?? 0,
-  }));
+  return (entries || []).map((e, i) => {
+    const prizeType = e.prize_type === "ton" ? "ton" : "gift";
+    return {
+      _key: e.id || `new-${i}-${prizeType}-${e.collection_slug || e.amount_nanoton || i}`,
+      _modelName: prizeType === "gift" ? inferModelName(e) : undefined,
+      id: e.id,
+      prize_type: prizeType,
+      collection_slug: e.collection_slug || "",
+      display_name: e.display_name,
+      image_url: e.image_url || "",
+      rarity_label: e.rarity_label || "",
+      tile_background_color: e.tile_background_color || "",
+      sort_order: e.sort_order ?? i,
+      weight: e.weight > 0 ? e.weight : 1,
+      floor_price_nanoton: e.floor_price_nanoton ?? 0,
+      amount_nanoton: e.amount_nanoton ?? (prizeType === "ton" ? e.floor_price_nanoton ?? 0 : 0),
+    };
+  });
 }
 
 function lootPreviewUrl(row: LootDraft): string {
+  if (row.prize_type === "ton") return "";
   if (row.image_url?.includes("cdn.changes.tg")) return row.image_url;
   if (row._modelName) return changesGiftModelImageUrl(row._modelName);
   return giftImageUrl(row.collection_slug || "unknown", row.image_url);
@@ -163,6 +169,7 @@ function giftToLootRow(gift: ChangesGiftModel, sortOrder: number): LootDraft {
   return {
     _key: `new-${Date.now()}-${gift.collectionSlug}`,
     _modelName: gift.modelName,
+    prize_type: "gift",
     collection_slug: gift.collectionSlug,
     display_name: gift.displayName,
     image_url: gift.previewUrl,
@@ -171,6 +178,23 @@ function giftToLootRow(gift: ChangesGiftModel, sortOrder: number): LootDraft {
     sort_order: sortOrder,
     weight: 1,
     floor_price_nanoton: 0,
+    amount_nanoton: 0,
+  };
+}
+
+function tonToLootRow(sortOrder: number): LootDraft {
+  return {
+    _key: `new-ton-${Date.now()}`,
+    prize_type: "ton",
+    collection_slug: "",
+    display_name: "TON",
+    image_url: "",
+    rarity_label: "",
+    tile_background_color: "",
+    sort_order: sortOrder,
+    weight: 1,
+    floor_price_nanoton: 1_000_000_000,
+    amount_nanoton: 1_000_000_000,
   };
 }
 
@@ -409,7 +433,7 @@ export default function CasesSection() {
   );
 
   const lootSlugs = useMemo(
-    () => new Set(loot.map((row) => row.collection_slug)),
+    () => new Set(loot.map((row) => row.collection_slug).filter(Boolean)),
     [loot],
   );
 
@@ -511,17 +535,40 @@ export default function CasesSection() {
     const cleaned: AdminCaseLootEntry[] = [];
     for (let i = 0; i < loot.length; i += 1) {
       const row = loot[i];
+      const prizeType = row.prize_type === "ton" ? "ton" : "gift";
+      if (row.weight <= 0) {
+        showToast({ title: `Приз ${i + 1}: weight должен быть > 0`, variant: "error" });
+        return;
+      }
+      if (prizeType === "ton") {
+        const amount = Math.max(0, Math.round(row.amount_nanoton ?? 0));
+        if (amount <= 0) {
+          showToast({ title: `Приз ${i + 1}: укажите сумму TON`, variant: "error" });
+          return;
+        }
+        cleaned.push({
+          ...(row.id ? { id: row.id } : {}),
+          prize_type: "ton",
+          collection_slug: "",
+          display_name: row.display_name.trim() || "TON",
+          image_url: "",
+          rarity_label: row.rarity_label?.trim() || "",
+          tile_background_color: normalizeLootTileColor(row.tile_background_color),
+          sort_order: i,
+          weight: Math.round(row.weight),
+          floor_price_nanoton: amount,
+          amount_nanoton: amount,
+        });
+        continue;
+      }
       const slug = row.collection_slug.trim().toLowerCase();
       if (!slug) {
         showToast({ title: `Приз ${i + 1}: нет collection_slug`, variant: "error" });
         return;
       }
-      if (row.weight <= 0) {
-        showToast({ title: `Приз ${i + 1}: weight должен быть > 0`, variant: "error" });
-        return;
-      }
       cleaned.push({
         ...(row.id ? { id: row.id } : {}),
+        prize_type: "gift",
         collection_slug: slug,
         display_name: row.display_name.trim() || slug,
         image_url: row.image_url?.trim() || "",
@@ -530,6 +577,7 @@ export default function CasesSection() {
         sort_order: i,
         weight: Math.round(row.weight),
         floor_price_nanoton: Math.max(0, Math.round(row.floor_price_nanoton ?? 0)),
+        amount_nanoton: 0,
       });
     }
     setSavingLoot(true);
@@ -572,6 +620,10 @@ export default function CasesSection() {
 
   function addGift(gift: ChangesGiftModel) {
     setLoot((prev) => [...prev, giftToLootRow(gift, prev.length)]);
+  }
+
+  function addTonPrize() {
+    setLoot((prev) => [...prev, tonToLootRow(prev.length)]);
   }
 
   async function reorderCasesByIds(orderedIds: string[]) {
@@ -1214,32 +1266,43 @@ export default function CasesSection() {
               <>
                 {loot.length === 0 ? (
                   <AdminEmpty>
-                    Пусто — нажмите «Добавить подарок» и выберите модель из каталога.
+                    Пусто — добавьте подарок или TON-приз.
                   </AdminEmpty>
                 ) : (
                   <div className="space-y-2">
                     {loot.map((row, idx) => {
                       const expanded = expandedKey === row._key;
+                      const isTon = row.prize_type === "ton";
                       return (
                         <div key={row._key} className="admin-loot-card">
                           <div
                             className="admin-loot-card__thumb"
                             style={{ background: candyTileBackgroundForLoot(row) }}
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={lootPreviewUrl(row)}
-                              alt=""
-                              className="admin-loot-card__img"
-                            />
+                            {isTon ? (
+                              <span className="flex h-full w-full items-center justify-center text-sm font-bold text-white/90">
+                                TON
+                              </span>
+                            ) : (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={lootPreviewUrl(row)}
+                                alt=""
+                                className="admin-loot-card__img"
+                              />
+                            )}
                           </div>
                           <div className="min-w-0 space-y-2">
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="admin-loot-card__title">
-                                  {row.display_name || row._modelName || row.collection_slug}
+                                  {isTon
+                                    ? row.display_name || "TON"
+                                    : row.display_name || row._modelName || row.collection_slug}
                                 </p>
-                                <p className="admin-loot-card__slug">{row.collection_slug}</p>
+                                <p className="admin-loot-card__slug">
+                                  {isTon ? "приз · TON" : row.collection_slug}
+                                </p>
                               </div>
                               <div className="flex flex-wrap gap-1">
                                 <AdminButton
@@ -1300,14 +1363,28 @@ export default function CasesSection() {
                                 loot={loot}
                                 onApplyWeights={applyLootWeights}
                               />
-                              <AdminTonField
-                                label="цена (TON)"
-                                valueNanoton={row.floor_price_nanoton ?? 0}
-                                onChangeNanoton={(v) =>
-                                  updateLoot(row._key, { floor_price_nanoton: Math.max(0, v) })
-                                }
-                                hint="Показывается в списке призов кейса. 0 — подтянуть рыночный floor."
-                              />
+                              {isTon ? (
+                                <AdminTonField
+                                  label="сумма (TON)"
+                                  valueNanoton={row.amount_nanoton ?? 0}
+                                  onChangeNanoton={(v) =>
+                                    updateLoot(row._key, {
+                                      amount_nanoton: Math.max(0, v),
+                                      floor_price_nanoton: Math.max(0, v),
+                                    })
+                                  }
+                                  hint="Сколько TON зачислить на баланс при выпадении"
+                                />
+                              ) : (
+                                <AdminTonField
+                                  label="цена (TON)"
+                                  valueNanoton={row.floor_price_nanoton ?? 0}
+                                  onChangeNanoton={(v) =>
+                                    updateLoot(row._key, { floor_price_nanoton: Math.max(0, v) })
+                                  }
+                                  hint="Показывается в списке призов кейса. 0 — подтянуть рыночный floor."
+                                />
+                              )}
                               <AdminField label="редкость" className="col-span-2 sm:col-span-3">
                                 <div className="flex flex-wrap gap-1">
                                   {RARITY_OPTIONS.map((r) => (
@@ -1388,28 +1465,36 @@ export default function CasesSection() {
                                     }
                                   />
                                 </AdminField>
-                                <AdminField label="collection_slug" hint="обычно авто из модели">
-                                  <input
-                                    className="input-field"
-                                    value={row.collection_slug}
-                                    onChange={(e) =>
-                                      updateLoot(row._key, {
-                                        collection_slug: e.target.value
-                                          .toLowerCase()
-                                          .replace(/[^a-z0-9-]/g, ""),
-                                      })
-                                    }
-                                  />
-                                </AdminField>
-                                <AdminField label="image_url" className="sm:col-span-2" hint="CDN URL, заполняется автоматически">
-                                  <input
-                                    className="input-field font-mono text-xs"
-                                    value={row.image_url || ""}
-                                    onChange={(e) =>
-                                      updateLoot(row._key, { image_url: e.target.value })
-                                    }
-                                  />
-                                </AdminField>
+                                {!isTon ? (
+                                  <>
+                                    <AdminField label="collection_slug" hint="обычно авто из модели">
+                                      <input
+                                        className="input-field"
+                                        value={row.collection_slug}
+                                        onChange={(e) =>
+                                          updateLoot(row._key, {
+                                            collection_slug: e.target.value
+                                              .toLowerCase()
+                                              .replace(/[^a-z0-9-]/g, ""),
+                                          })
+                                        }
+                                      />
+                                    </AdminField>
+                                    <AdminField
+                                      label="image_url"
+                                      className="sm:col-span-2"
+                                      hint="CDN URL, заполняется автоматически"
+                                    >
+                                      <input
+                                        className="input-field font-mono text-xs"
+                                        value={row.image_url || ""}
+                                        onChange={(e) =>
+                                          updateLoot(row._key, { image_url: e.target.value })
+                                        }
+                                      />
+                                    </AdminField>
+                                  </>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>
@@ -1422,6 +1507,9 @@ export default function CasesSection() {
                 <div className="flex flex-wrap gap-2 pt-1">
                   <AdminButton variant="secondary" onClick={() => setPickerOpen(true)}>
                     + Добавить подарок
+                  </AdminButton>
+                  <AdminButton variant="secondary" onClick={addTonPrize}>
+                    + Добавить TON
                   </AdminButton>
                   <AdminButton disabled={savingLoot || loot.length === 0} onClick={() => void saveLoot()}>
                     {savingLoot ? "…" : "Сохранить лут"}

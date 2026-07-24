@@ -46,12 +46,13 @@ func main() {
 		platformRepo,
 		giftTraitRepo,
 	)
+	botAPI := telegram.NewBotAPI(cfg.BotToken)
 	adminNotifRepo := postgres.NewAdminNotificationRepo(db)
 	var notifStore domain.AdminNotificationRepository = adminNotifRepo
 	if !cfg.AdminNotifyEnabled {
 		notifStore = nil
 	}
-	adminNotifier := telegram.NewAdminNotifier(notifStore, cfg.AdminTelegramIDs)
+	adminNotifier := telegram.NewAdminNotifier(notifStore, botAPI, cfg.AdminTelegramIDs)
 	depositNotifier := notifications.NewGiftDepositNotifier(
 		telegram.NewBotNotifier(cfg.BotToken),
 		nil,

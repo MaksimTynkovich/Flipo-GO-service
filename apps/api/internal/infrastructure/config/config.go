@@ -57,7 +57,8 @@ type Config struct {
 	AdminTelegramIDs       []int64
 	// AdminPanelPassword unlocks browser login at /admin (no Telegram initData).
 	AdminPanelPassword string
-	// AdminNotifyEnabled gates recording of in-app admin notifications.
+	// AdminNotifyEnabled gates recording of in-app admin notifications
+	// (and Telegram mirrors for important finance/ops events).
 	AdminNotifyEnabled bool
 	PromoRequiredChannel         string
 	BotsDataDir                  string

@@ -222,9 +222,10 @@ export function CaseDetailView() {
   }
 
   async function handleSellPrize() {
-    if (!result) return;
+    const itemId = result?.item?.id;
+    if (!itemId) return;
     try {
-      const { balance } = await liquidateItem(result.item.id);
+      const { balance } = await liquidateItem(itemId);
       setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: balance }) : prev));
       haptics.notificationOccurred("success");
     } catch (e) {

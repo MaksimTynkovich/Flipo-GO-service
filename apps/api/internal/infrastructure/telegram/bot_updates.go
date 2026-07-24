@@ -11,8 +11,16 @@ import (
 )
 
 type Update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *Message `json:"message"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *Message       `json:"message"`
+	CallbackQuery *CallbackQuery `json:"callback_query"`
+}
+
+type CallbackQuery struct {
+	ID      string       `json:"id"`
+	From    *MessageFrom `json:"from"`
+	Message *Message     `json:"message"`
+	Data    string       `json:"data"`
 }
 
 type Message struct {
@@ -52,8 +60,15 @@ type BotUpdates struct {
 	webAppURLResolver        WebAppURLResolver
 	webAppButtonTextResolver WebAppButtonTextResolver
 	adminNotifier            *AdminNotifier
+	adminLogin               AdminLoginApprover
 	users                    UserLookup
 	analytics                *analyticsuc.Service
+}
+
+// AdminLoginApprover resolves pending /admin password logins from Telegram buttons.
+type AdminLoginApprover interface {
+	ApproveAdminLogin(ctx context.Context, challengeID string, approverTelegramID int64) error
+	DenyAdminLogin(ctx context.Context, challengeID string, approverTelegramID int64) error
 }
 
 func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName, channelURL, supportURL, welcomeText string) *BotUpdates {
@@ -80,6 +95,10 @@ func (h *BotUpdates) SetAdminNotifier(notifier *AdminNotifier) {
 	h.adminNotifier = notifier
 }
 
+func (h *BotUpdates) SetAdminLoginApprover(approver AdminLoginApprover) {
+	h.adminLogin = approver
+}
+
 func (h *BotUpdates) SetUserLookup(users UserLookup) {
 	h.users = users
 }
@@ -93,7 +112,13 @@ func (h *BotUpdates) Enabled() bool {
 }
 
 func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
-	if !h.Enabled() || update.Message == nil {
+	if !h.Enabled() {
+		return nil
+	}
+	if update.CallbackQuery != nil {
+		return h.handleCallbackQuery(ctx, update.CallbackQuery)
+	}
+	if update.Message == nil {
 		return nil
 	}
 
@@ -107,6 +132,63 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 	h.maybeNotifyBotStart(ctx, update.Message)
 
 	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload)
+}
+
+func (h *BotUpdates) handleCallbackQuery(ctx context.Context, cq *CallbackQuery) error {
+	if cq == nil || cq.From == nil {
+		return nil
+	}
+	data := strings.TrimSpace(cq.Data)
+	parts := strings.Split(data, ":")
+	if len(parts) != 3 || parts[0] != "adminlogin" {
+		_ = h.api.AnswerCallbackQuery(ctx, cq.ID, "", false)
+		return nil
+	}
+	action, challengeID := parts[1], parts[2]
+	if challengeID == "" || h.adminLogin == nil {
+		_ = h.api.AnswerCallbackQuery(ctx, cq.ID, "Недоступно", true)
+		return nil
+	}
+
+	var (
+		err    error
+		okText string
+		result string
+	)
+	switch action {
+	case "ok":
+		err = h.adminLogin.ApproveAdminLogin(ctx, challengeID, cq.From.ID)
+		okText = "Вход разрешён"
+		result = "✅ Вход разрешён"
+	case "no":
+		err = h.adminLogin.DenyAdminLogin(ctx, challengeID, cq.From.ID)
+		okText = "Вход отклонён"
+		result = "❌ Вход отклонён"
+	default:
+		_ = h.api.AnswerCallbackQuery(ctx, cq.ID, "Неизвестное действие", true)
+		return nil
+	}
+
+	if err != nil {
+		msg := err.Error()
+		_ = h.api.AnswerCallbackQuery(ctx, cq.ID, msg, true)
+		return nil
+	}
+	_ = h.api.AnswerCallbackQuery(ctx, cq.ID, okText, false)
+
+	if cq.Message != nil {
+		who := strings.TrimSpace(cq.From.FirstName)
+		if cq.From.Username != "" {
+			who = fmt.Sprintf("%s (@%s)", who, cq.From.Username)
+		}
+		base := strings.TrimSpace(cq.Message.Text)
+		if base == "" {
+			base = "Запрос входа в админку"
+		}
+		edited := fmt.Sprintf("%s\n\n%s\nКем: %s", base, result, who)
+		_ = h.api.EditMessageText(ctx, cq.Message.Chat.ID, cq.Message.MessageID, edited, InlineKeyboardMarkup{})
+	}
+	return nil
 }
 
 func (h *BotUpdates) trackBotStart(ctx context.Context, msg *Message, payload string) {

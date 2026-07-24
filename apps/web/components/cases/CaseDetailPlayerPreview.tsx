@@ -27,7 +27,11 @@ export function caseDetailHeading(title: string): string {
 }
 
 function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
-  const floor = entry.floor_price_nanoton ?? 0;
+  const isTon = entry.prize_type === "ton";
+  const floor =
+    isTon
+      ? entry.amount_nanoton || entry.floor_price_nanoton || 0
+      : entry.floor_price_nanoton ?? 0;
 
   return (
     <article className="case-loot-card">
@@ -37,21 +41,29 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
       >
         {floor > 0 ? (
           <span className="case-loot-card__price">
-            {formatTON(floor)}
             <TonIcon variant="brand" className="case-loot-card__price-icon" aria-hidden />
+            {formatTON(floor)}
           </span>
         ) : null}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={giftImageUrl(entry.collection_slug, entry.image_url)}
-          alt={entry.display_name}
-          className="case-loot-card__img"
-          draggable={false}
-        />
+        {isTon ? (
+          <span className="case-loot-card__ton">
+            <TonIcon variant="brand" className="case-loot-card__ton-icon" title="TON" />
+          </span>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={giftImageUrl(entry.collection_slug, entry.image_url)}
+            alt={entry.display_name}
+            className="case-loot-card__img"
+            draggable={false}
+          />
+        )}
       </div>
       <div className="case-loot-card__meta">
-        <p className="case-loot-card__name">{entry.display_name}</p>
-        <p className="case-loot-card__hint">Случайная модель</p>
+        <p className="case-loot-card__name">
+          {isTon ? entry.display_name || "TON" : entry.display_name}
+        </p>
+        <p className="case-loot-card__hint">{isTon ? "На баланс" : "Случайная модель"}</p>
       </div>
     </article>
   );

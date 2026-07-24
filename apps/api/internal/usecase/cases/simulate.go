@@ -68,13 +68,17 @@ func (s *Service) AdminSimulateCase(ctx context.Context, caseID uuid.UUID, itera
 	floors := make(map[uuid.UUID]int64, len(loot))
 	var warnings []string
 	for _, e := range loot {
-		floor := e.FloorPriceNanoton
-		if floor <= 0 {
+		floor := domain.CaseLootPrizeValueNanoton(e)
+		if floor <= 0 && domain.NormalizeCasePrizeType(e.PrizeType) != domain.CasePrizeTypeTon {
 			floor = s.quoteCollectionFloor(ctx, e.CollectionSlug)
 		}
 		floors[e.ID] = floor
 		if floor <= 0 && e.Weight > 0 {
-			warnings = append(warnings, "нет floor у «"+e.DisplayName+"» ("+e.CollectionSlug+")")
+			label := e.DisplayName
+			if label == "" {
+				label = e.CollectionSlug
+			}
+			warnings = append(warnings, "нет цены у «"+label+"»")
 		}
 	}
 

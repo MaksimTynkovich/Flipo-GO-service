@@ -12,7 +12,7 @@ type CaseWinModalProps = {
   result: CaseOpenResult;
   accent?: string;
   onAgain: () => void;
-  onSell: () => Promise<void>;
+  onSell?: () => Promise<void>;
 };
 
 export function CaseWinModal({
@@ -25,12 +25,22 @@ export function CaseWinModal({
   const [open, setOpen] = useState(false);
   const [selling, setSelling] = useState(false);
 
+  const isTon = result.prize_type === "ton";
   const slug =
-    result.item.collection_slug || result.loot_entry.collection_slug;
-  const image = result.item.image_url || result.loot_entry.image_url;
-  const name = result.item.name || result.loot_entry.display_name;
-  const value = giftBuyPriceNanoton(result.item);
+    result.item?.collection_slug || result.loot_entry.collection_slug;
+  const image = result.item?.image_url || result.loot_entry.image_url;
+  const name = isTon
+    ? result.loot_entry.display_name || "TON"
+    : result.item?.name || result.loot_entry.display_name;
+  const tonPrize =
+    result.prize_nanoton ||
+    result.loot_entry.amount_nanoton ||
+    result.loot_entry.floor_price_nanoton ||
+    0;
+  const giftValue = result.item ? giftBuyPriceNanoton(result.item) : 0;
+  const value = isTon ? tonPrize : giftValue;
   const glow = accent || "#3390ec";
+  const canSell = !isTon && Boolean(result.item) && Boolean(onSell);
 
   useEffect(() => {
     setMounted(true);
@@ -61,7 +71,7 @@ export function CaseWinModal({
   }
 
   async function handleSell() {
-    if (selling) return;
+    if (!canSell || selling || !onSell) return;
     setSelling(true);
     try {
       await onSell();
@@ -91,42 +101,57 @@ export function CaseWinModal({
       />
 
       <div className="case-win-modal__body">
-        <p className="case-win-modal__eyebrow">Поздравляем! Вы выиграли</p>
+        <p className="case-win-modal__eyebrow">Вы выбили</p>
 
         <div className="case-win-modal__prize" aria-hidden>
           <span className="case-win-modal__aura" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={giftImageUrl(slug, image)}
-            alt=""
-            className="case-win-modal__img"
-            draggable={false}
-          />
+          {isTon ? (
+            <span className="case-win-modal__ton">
+              <TonIcon variant="brand" className="case-win-modal__ton-icon" title="TON" />
+            </span>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={giftImageUrl(slug, image)}
+              alt=""
+              className="case-win-modal__img"
+              draggable={false}
+            />
+          )}
         </div>
 
         <h2 id="case-win-title" className="case-win-modal__title">
-          {name}
+          {isTon && value > 0 ? `${formatTON(value)} TON` : name}
         </h2>
 
-        {value > 0 ? (
+        {!isTon && value > 0 ? (
           <p className="case-win-modal__value">
             <TonIcon variant="brand" className="h-4 w-4" />
             {formatTON(value)} TON
           </p>
         ) : null}
 
+        {isTon ? (
+          <p className="case-win-modal__note">Зачислено на баланс</p>
+        ) : null}
+
         <div className="case-win-modal__actions">
+          {canSell ? (
+            <button
+              type="button"
+              className="case-win-modal__btn case-win-modal__btn--primary app-control"
+              disabled={selling}
+              onClick={() => void handleSell()}
+            >
+              {selling ? "Продажа…" : "Продать"}
+            </button>
+          ) : null}
           <button
             type="button"
-            className="case-win-modal__btn case-win-modal__btn--primary app-control"
-            disabled={selling}
-            onClick={() => void handleSell()}
-          >
-            {selling ? "Продажа…" : "Продать"}
-          </button>
-          <button
-            type="button"
-            className="case-win-modal__btn case-win-modal__btn--ghost app-control"
+            className={cn(
+              "case-win-modal__btn app-control",
+              canSell ? "case-win-modal__btn--ghost" : "case-win-modal__btn--primary",
+            )}
             disabled={selling}
             onClick={() => closeThen(onAgain)}
           >

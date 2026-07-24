@@ -161,6 +161,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 		admin := v1.Group("/admin")
 		admin.POST("/auth/login", deps.AuthHandler.AdminPanelLogin)
+		admin.GET("/auth/login/:id", deps.AuthHandler.AdminPanelLoginStatus)
 		adminAuthed := admin.Group("")
 		adminAuthed.Use(middleware.AdminAuth(deps.Auth, deps.AdminTelegramIDs))
 		{

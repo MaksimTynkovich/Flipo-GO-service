@@ -50,7 +50,7 @@ func waitPersist() {
 
 func TestAdminNotifierSkipsAdmins(t *testing.T) {
 	store := &countingStore{}
-	n := NewAdminNotifier(store, []int64{111, 222})
+	n := NewAdminNotifier(store, nil, []int64{111, 222})
 	if !n.IsAdmin(111) {
 		t.Fatal("expected 111 to be admin")
 	}
@@ -72,7 +72,7 @@ func TestAdminNotifierSkipsAdmins(t *testing.T) {
 
 func TestNotifyGiftInventoryAllowsAdminActor(t *testing.T) {
 	store := &countingStore{}
-	n := NewAdminNotifier(store, []int64{111})
+	n := NewAdminNotifier(store, nil, []int64{111})
 	n.NotifyGiftInventory(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "Vice Cream", 1_000_000_000)
 	waitPersist()
 	if store.getCount() != 1 {
@@ -82,7 +82,7 @@ func TestNotifyGiftInventoryAllowsAdminActor(t *testing.T) {
 
 func TestNotifyWheelShareAllowsAdminActor(t *testing.T) {
 	store := &countingStore{}
-	n := NewAdminNotifier(store, []int64{111})
+	n := NewAdminNotifier(store, nil, []int64{111})
 	n.NotifyWheelShare(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "share")
 	waitPersist()
 	if store.getCount() != 1 {
@@ -99,8 +99,29 @@ func TestFormatActor(t *testing.T) {
 }
 
 func TestAdminNotifierDisabledWithoutStore(t *testing.T) {
-	n := NewAdminNotifier(nil, []int64{111})
+	n := NewAdminNotifier(nil, nil, []int64{111})
 	if n.Enabled() {
 		t.Fatal("expected disabled without store")
+	}
+}
+
+func TestMirrorImportantToTelegram(t *testing.T) {
+	if !mirrorImportantToTelegram("deposit", nil) {
+		t.Fatal("deposit should mirror")
+	}
+	if !mirrorImportantToTelegram("withdraw_failed", nil) {
+		t.Fatal("withdraw_failed should mirror")
+	}
+	if mirrorImportantToTelegram("game_result", nil) {
+		t.Fatal("game_result should not mirror")
+	}
+	if !mirrorImportantToTelegram("gift_withdraw", map[string]any{"status": "needs_purchase"}) {
+		t.Fatal("gift purchase request should mirror")
+	}
+	if !mirrorImportantToTelegram("gift_withdraw", map[string]any{"status": "held"}) {
+		t.Fatal("held gift withdraw should mirror")
+	}
+	if mirrorImportantToTelegram("gift_withdraw", map[string]any{"status": "sent"}) {
+		t.Fatal("sent gift withdraw should not mirror")
 	}
 }

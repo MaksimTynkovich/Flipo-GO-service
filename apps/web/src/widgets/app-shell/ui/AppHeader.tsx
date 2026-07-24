@@ -39,7 +39,7 @@ export function AppHeader() {
         <div className="relative z-10 flex min-w-0 items-center overflow-visible">
           <div className="balance-pill">
             <div className="balance-pill__amount">
-              <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
+              <TonIcon className="h-6 w-6 shrink-0 text-[var(--accent)]" />
               <span className="balance-pill__value truncate">
                 {loading ? "…" : user ? `${formatTON(mainBalance)} TON` : "—"}
               </span>
@@ -54,7 +54,7 @@ export function AppHeader() {
               onClick={() => haptics.impactOccurred("medium")}
               className="app-control balance-pill__deposit"
             >
-              <Plus className="h-4 w-4" strokeWidth={2.5} />
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.75} />
             </Link>
           </div>
         </div>
