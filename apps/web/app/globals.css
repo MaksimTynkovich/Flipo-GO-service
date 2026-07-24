@@ -7517,6 +7517,15 @@ body::-webkit-scrollbar,
   color: rgba(255, 255, 255, 0.92);
 }
 
+.case-loot-card__hint {
+  margin: 0;
+  font-size: 0.62rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.38);
+  text-align: center;
+}
+
 .case-loot-card__rarity {
   margin-top: 0.05rem;
   padding: 0.12rem 0.45rem;

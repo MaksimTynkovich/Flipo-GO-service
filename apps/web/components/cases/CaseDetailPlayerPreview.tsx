@@ -51,6 +51,7 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
       </div>
       <div className="case-loot-card__meta">
         <p className="case-loot-card__name">{entry.display_name}</p>
+        <p className="case-loot-card__hint">Случайная модель</p>
       </div>
     </article>
   );
@@ -176,7 +177,7 @@ export function CaseDetailPlayerPreview({
       <section className="case-detail__collections">
         <div className="case-detail__collections-head">
           <Package className="h-4 w-4 text-accent" strokeWidth={2.2} aria-hidden />
-          <h2>Коллекции в этом кейсе</h2>
+          <h2>Список призов</h2>
         </div>
         {loot.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-surface py-10 text-muted">
