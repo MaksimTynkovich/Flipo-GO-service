@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,6 +32,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
+	casesuc "github.com/flipo/flipo/apps/api/internal/usecase/cases"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
@@ -146,15 +149,18 @@ func main() {
 	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo, giftTraitRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
-	adminIDs := cfg.AdminTelegramIDs
+	adminNotifRepo := postgres.NewAdminNotificationRepo(db)
+	adminSvc.SetNotificationRepo(adminNotifRepo)
+	var notifStore domain.AdminNotificationRepository = adminNotifRepo
 	if !cfg.AdminNotifyEnabled {
-		adminIDs = nil
+		notifStore = nil
 	}
-	adminNotifier := telegram.NewAdminNotifier(botAPI, adminIDs)
+	adminNotifier := telegram.NewAdminNotifier(notifStore, botAPI, cfg.AdminTelegramIDs)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL, cfg.ChannelURL)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),
+		auth.WithAdminPanelPassword(cfg.AdminPanelPassword),
 		auth.WithAnalytics(analyticsSvc),
 		auth.WithAdminEvents(adminNotifier),
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
@@ -207,8 +213,15 @@ func main() {
 	marketSvc.SetValuator(giftValuator)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftTransfer, giftValuator, marketSvc)
 	invSvc.SetWithdrawHoldChecker(riskSvc)
+	caseRepo := postgres.NewCaseRepo(db)
+	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
+	caseSvc.SetValuator(giftValuator)
+	caseSvc.SetBotResolver(marketRepo)
+	caseSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
+	caseSvc.SetAdminNotifier(adminNotifier)
 
 	hub := websocket.NewHub()
+	adminNotifier.SetRealtime(hub)
 	balanceSvc.SetNotifier(hub)
 	referralSvc.SetBalanceService(balanceSvc)
 	referralSvc.SetBalanceNotifier(hub)
@@ -240,6 +253,8 @@ func main() {
 	} else {
 		cacheIface = &noopCache{}
 	}
+	caseSvc.SetLiveDropPublisher(&caseLiveDropPublisher{hub: hub, cache: cacheIface})
+	caseSvc.LiveSim().Start(ctx)
 
 	betFundingSvc := betfunding.NewService(invRepo, marketRepo, balanceSvc, giftValuator)
 
@@ -250,6 +265,11 @@ func main() {
 	pvpSvc.SetValuator(giftValuator)
 	pvpSvc.SetOutcome(outcomeSvc)
 	pvpSvc.SetTickNotifier(hub)
+	crashSvc.SetUsers(userRepo)
+	rouletteSvc.SetUsers(userRepo)
+	crashSvc.SetAdminNotifier(adminNotifier)
+	rouletteSvc.SetAdminNotifier(adminNotifier)
+	pvpSvc.SetAdminNotifier(adminNotifier)
 	betHook := func(ctx context.Context, userID uuid.UUID, amount int64) {
 		referralSvc.OnQualifyingBet(ctx, userID, amount)
 	}
@@ -306,6 +326,8 @@ func main() {
 
 	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName, cfg.ChannelURL, cfg.SupportURL, cfg.WelcomeText)
 	botUpdates.SetAdminNotifier(adminNotifier)
+	botUpdates.SetAdminLoginApprover(authSvc)
+	authSvc.SetAdminLoginAlerter(adminNotifier)
 	botUpdates.SetUserLookup(telegram.UserRepoLookup{
 		Find: func(ctx context.Context, telegramID int64) (any, error) {
 			return userRepo.FindByTelegramID(ctx, telegramID)
@@ -326,6 +348,13 @@ func main() {
 		}
 		return settings.WebAppButtonText
 	})
+	botUpdates.SetTermsURLResolver(func(ctx context.Context) (string, string) {
+		settings, err := platformRepo.GetBotSettings(ctx)
+		if err != nil {
+			return "", ""
+		}
+		return settings.TermsURL, settings.TermsButtonText
+	})
 	if cfg.TelegramWebhookURL != "" {
 		if err := botAPI.SetWebhook(ctx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
 			slog.Warn("telegram webhook registration failed", "error", err)
@@ -337,7 +366,12 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
 	adminHandler.SetBotGiftSync(botSyncSvc)
 	adminHandler.SetWheelService(wheelSvc)
+	adminHandler.SetCasesService(caseSvc)
+	adminHandler.SetCasesUploadDir(cfg.CasesUploadDir)
 	adminHandler.SetInventoryService(invSvc)
+	adminHandler.SetOnlineCounter(func() int {
+		return hub.OnlineUserCount(authSvc.IsAdmin)
+	})
 	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
 		socialsim.Normalize(&settings)
 		socialSim.ApplySettings(settings)
@@ -346,14 +380,20 @@ func main() {
 	maintenanceState := middleware.NewMaintenanceState()
 	if settings, err := platformRepo.GetMaintenanceSettings(ctx); err == nil {
 		maintenanceState.Load(settings)
+		socialSim.SetAcceptBets(settings.AcceptBets)
 	} else {
 		slog.Warn("failed to load maintenance settings", "error", err)
 	}
 	adminHandler.SetMaintenanceUpdater(func(settings domain.PlatformMaintenanceSettings) {
 		maintenanceState.Load(&settings)
+		socialSim.SetAcceptBets(settings.AcceptBets)
 	})
 	go middleware.RefreshMaintenanceState(maintenanceState, func() (*domain.PlatformMaintenanceSettings, error) {
-		return platformRepo.GetMaintenanceSettings(context.Background())
+		settings, err := platformRepo.GetMaintenanceSettings(context.Background())
+		if err == nil && settings != nil {
+			socialSim.SetAcceptBets(settings.AcceptBets)
+		}
+		return settings, err
 	}, 15*time.Second, ctx.Done())
 
 	router := httpx.NewRouter(httpx.Deps{
@@ -367,16 +407,18 @@ func main() {
 		ReferralHandler:    handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:       handlers.NewPromoHandler(promoSvc, analyticsSvc),
 		WheelHandler:       handlers.NewWheelHandler(wheelSvc, riskSvc),
+		CasesHandler:       handlers.NewCasesHandler(caseSvc),
 		WalletHandler:      handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		TelegramHandler:    handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
 		AdminHandler:       adminHandler,
 		AnalyticsHandler:   handlers.NewAnalyticsHandler(authSvc, analyticsSvc),
 		PresenceHandler:    handlers.NewPresenceHandler(socialSim),
-		MaintenanceHandler: handlers.NewMaintenanceHandler(platformRepo),
+		MaintenanceHandler: handlers.NewMaintenanceHandler(platformRepo, maintenanceState),
 		MaintenanceState:   maintenanceState,
 		AdminTelegramIDs:   cfg.AdminTelegramIDs,
 		Hub:                hub,
 		BotsDataDir:        cfg.BotsDataDir,
+		CasesUploadDir:     cfg.CasesUploadDir,
 		GiftImageHandler:   handlers.NewGiftImageHandler(giftimage.NewProxy(cfg.GiftsCacheDir)),
 		CORSOrigins:        cfg.CORSOrigins,
 	})
@@ -427,6 +469,26 @@ func (n *noopCache) ReleaseLock(ctx context.Context, key string) error {
 	return nil
 }
 
+type caseLiveDropPublisher struct {
+	hub   *websocket.Hub
+	cache interface {
+		Publish(context.Context, string, []byte) error
+	}
+}
+
+func (p *caseLiveDropPublisher) PublishCaseLiveDrop(ctx context.Context, drop domain.CaseLiveDrop) {
+	data, err := json.Marshal(drop)
+	if err != nil {
+		return
+	}
+	if p.cache != nil {
+		_ = p.cache.Publish(ctx, "pubsub:cases:live", data)
+	}
+	if p.hub != nil {
+		p.hub.Broadcast("cases", websocket.JSONMessage("drop", json.RawMessage(data)))
+	}
+}
+
 func validateProductionConfig(cfg *config.Config) error {
 	if cfg.Env != "production" {
 		return nil
@@ -446,6 +508,9 @@ func validateProductionConfig(cfg *config.Config) error {
 	}
 	if len(cfg.AdminTelegramIDs) == 0 {
 		return fmt.Errorf("ADMIN_TELEGRAM_IDS is required when ENV=production")
+	}
+	if strings.TrimSpace(cfg.AdminPanelPassword) == "" {
+		return fmt.Errorf("ADMIN_PANEL_PASSWORD is required when ENV=production")
 	}
 	if cfg.TelegramWebhookURL == "" {
 		return fmt.Errorf("TELEGRAM_WEBHOOK_URL is required when ENV=production")

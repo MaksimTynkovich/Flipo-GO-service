@@ -3,7 +3,7 @@
 export const BRAND_ACCENT = "#3390EC";
 export const BRAND_LINK = "#6AB3F3";
 
-/** Cool fintech dark defaults (fallback before Telegram theme sync). */
+/** Cool fintech dark palette — app UI is always dark regardless of Telegram theme. */
 export const BRAND_BG = "#0C141C";
 export const BRAND_SURFACE = "#141C27";
 export const BRAND_SURFACE_RAISED = "#1A2433";

@@ -11,7 +11,9 @@ ngrok.log
 logs/
 apps/api/data/telegram/
 apps/api/data/gifts/
+apps/api/data/cases/
 data/gifts/
+data/cases/
 .DS_Store
 apps/api/assets/bots/
 # Prebuilt Linux binaries for small VPS deploys

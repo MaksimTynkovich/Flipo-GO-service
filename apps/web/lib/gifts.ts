@@ -1,3 +1,5 @@
+import { changesGiftModelImageUrl, isChangesGiftImageUrl } from "@/lib/changes-gifts";
+
 const FRAGMENT_GIFT_PREFIX = "https://nft.fragment.com/gift/";
 const PROXY_GIFT_PREFIX = "/static/gifts/";
 
@@ -12,6 +14,9 @@ function giftSlugFromSources(slug: string, imageUrl?: string): string {
 }
 
 export function giftImageUrl(slug: string, imageUrl?: string): string {
+  if (imageUrl && isChangesGiftImageUrl(imageUrl)) {
+    return imageUrl;
+  }
   if (
     imageUrl &&
     !imageUrl.includes("nft.fragment.com") &&

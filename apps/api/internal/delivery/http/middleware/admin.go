@@ -32,16 +32,20 @@ func AdminAuth(authSvc *auth.Service, adminTelegramIDs []int64) gin.HandlerFunc 
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен", "code": "invalid_token"})
 			return
 		}
-		if len(allowed) == 0 {
-			logAdminAuthFailure(c, "admin_not_configured", nil)
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Админ-доступ не настроен", "code": "admin_not_configured"})
-			return
-		}
-		if _, ok := allowed[claims.TelegramID]; !ok {
+
+		_, inAllowlist := allowed[claims.TelegramID]
+		panelOK := claims.AdminPanel && authSvc.AdminPanelPasswordConfigured()
+		if !inAllowlist && !panelOK {
+			if len(allowed) == 0 && !authSvc.AdminPanelPasswordConfigured() {
+				logAdminAuthFailure(c, "admin_not_configured", nil)
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Админ-доступ не настроен", "code": "admin_not_configured"})
+				return
+			}
 			logAdminAuthFailure(c, "admin_access_required", nil)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Нужны права администратора", "code": "admin_access_required"})
 			return
 		}
+
 		c.Set(UserIDKey, claims.UserID)
 		c.Set("telegram_id", claims.TelegramID)
 		c.Next()

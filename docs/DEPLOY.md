@@ -70,6 +70,7 @@ ssh -i ~/.ssh/flipo_deploy root@5.252.155.209 /opt/flipo/deploy/deploy.sh
 | `NEXT_PUBLIC_DEBUG_AUTH` | `false` |
 | `TON_CHAIN_DEV_MODE` | `false` |
 | `ADMIN_TELEGRAM_IDS` | your Telegram user ID(s) |
+| `ADMIN_PANEL_PASSWORD` | browser login password for `/admin` |
 | `BOT_TOKEN` | from @BotFather |
 | `TELEGRAM_WEBAPP_URL` | public HTTPS Mini App URL |
 | `TELEGRAM_WEBHOOK_URL` | `https://…/api/v1/telegram/webhook` |
@@ -154,7 +155,7 @@ npm run start
 ## Post-deploy smoke test
 
 1. Telegram login via Mini App (not `/auth/debug`).
-2. Admin panel only for IDs in `ADMIN_TELEGRAM_IDS`.
+2. Admin panel at `/admin`: password login (`ADMIN_PANEL_PASSWORD`) or JWT for IDs in `ADMIN_TELEGRAM_IDS`.
 3. Create a small TON deposit → balance credited (real chain).
 4. Place a bet; withdraw a small amount.
 5. Market empty until real listings / bot buyback — no mock gifts.

@@ -134,7 +134,7 @@ func (r *PlatformRepo) GetMaintenanceSettings(ctx context.Context) (*domain.Plat
 	var settings domain.PlatformMaintenanceSettings
 	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		defaults := domain.PlatformMaintenanceSettings{ID: 1, Enabled: false, Message: "", UpdatedAt: time.Now().UTC()}
+		defaults := domain.PlatformMaintenanceSettings{ID: 1, Enabled: false, AcceptBets: true, Message: "", UpdatedAt: time.Now().UTC()}
 		if createErr := r.db.WithContext(ctx).Create(&defaults).Error; createErr != nil {
 			return nil, createErr
 		}
@@ -240,10 +240,11 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	var maintenance domain.PlatformMaintenanceSettings
 	if err := r.db.WithContext(ctx).First(&maintenance, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		if err := r.db.WithContext(ctx).Create(&domain.PlatformMaintenanceSettings{
-			ID:        1,
-			Enabled:   false,
-			Message:   "",
-			UpdatedAt: time.Now().UTC(),
+			ID:         1,
+			Enabled:    false,
+			AcceptBets: true,
+			Message:    "",
+			UpdatedAt:  time.Now().UTC(),
 		}).Error; err != nil {
 			return err
 		}

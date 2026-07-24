@@ -46,6 +46,7 @@ services:
       TON_CHAIN_DEV_MODE: "false"
       BOTS_DATA_DIR: /assets/bots
       GIFTS_CACHE_DIR: /data/gifts
+      CASES_UPLOAD_DIR: /data/cases
       TELEGRAM_SESSION_PATH: /data/telegram/session.json
     ports:
       - "127.0.0.1:8080:8080"
@@ -58,6 +59,7 @@ services:
       - ../logs:/var/log/flipo
       - ../data/telegram:/data/telegram
       - ../data/gifts:/data/gifts
+      - ../data/cases:/data/cases
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
       interval: 10s

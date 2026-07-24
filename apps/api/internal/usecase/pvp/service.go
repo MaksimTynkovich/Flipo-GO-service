@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	outcomeuc "github.com/flipo/flipo/apps/api/internal/usecase/outcome"
@@ -36,12 +38,21 @@ type Service struct {
 	ghosts    GhostClaimer
 	bots      BotMatchmaker
 	outcome   *outcomeuc.Service
+	admin     AdminGameNotifier
 	roomMu    sync.Map
 	betHook   func(context.Context, uuid.UUID, int64)
 }
 
+type AdminGameNotifier interface {
+	NotifyGameResult(ctx context.Context, actor telegram.AdminActor, game, outcome, selection string, stakeNanoton, payoutNanoton int64, multiplier, crashPoint *float64, resultLabel string)
+}
+
 func (s *Service) SetOutcome(svc *outcomeuc.Service) {
 	s.outcome = svc
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminGameNotifier) {
+	s.admin = notifier
 }
 
 func (s *Service) SetQualifyingBetHook(hook func(context.Context, uuid.UUID, int64)) {
@@ -803,7 +814,47 @@ func (s *Service) finishGame(ctx context.Context, room *domain.PvPRoom) error {
 		}
 	}
 
+	if s.admin != nil {
+		for _, p := range players {
+			stake := p.StakeNanoton
+			if stake <= 0 {
+				stake = latest.BetAmountNanoton
+			}
+			actor := s.actorForUser(ctx, p.UserID)
+			if p.UserID == winnerID {
+				s.admin.NotifyGameResult(
+					ctx, actor, "pvp", "win", "победа",
+					stake, payout, nil, nil,
+					fmt.Sprintf("банк %s TON", formatPvPTON(payout)),
+				)
+			} else {
+				s.admin.NotifyGameResult(
+					ctx, actor, "pvp", "lose", "поражение",
+					stake, 0, nil, nil,
+					"проигрыш комнаты",
+				)
+			}
+		}
+	}
+
 	return nil
+}
+
+func formatPvPTON(nanoton int64) string {
+	return fmt.Sprintf("%.2f", float64(nanoton)/1e9)
+}
+
+func (s *Service) actorForUser(ctx context.Context, userID uuid.UUID) telegram.AdminActor {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil || user == nil {
+		return telegram.AdminActor{}
+	}
+	return telegram.AdminActor{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		FirstName:  user.FirstName,
+		LastName:   user.LastName,
+	}
 }
 
 func (s *Service) buildLobbyState(ctx context.Context) (*LobbyState, error) {

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { UserAvatar } from "@/components/UserAvatar";
 import { formatTON } from "@/lib/api";
 import { hasPromoBalance, mainBalanceNanoton } from "@/lib/balance";
 import { TonIcon } from "@/components/icons/TonIcon";
@@ -22,11 +22,11 @@ export function AppHeader() {
       <div className="app-container relative flex h-14 items-center justify-between gap-3">
         <Link
           href={APP_ROUTES.profile}
-          aria-label="Открыть профиль"
+          aria-label="Профиль"
           onClick={() => haptics.impactOccurred("light")}
-          className="app-control relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full ring-0 transition-[box-shadow] duration-200 hover:ring-2 hover:ring-accent/25"
+          className="app-control relative z-10 flex shrink-0 items-center rounded-full active:opacity-80"
         >
-          <UserAvatar user={user} size={36} />
+          <UserAvatar user={user} size={34} />
         </Link>
 
         <div
@@ -37,16 +37,14 @@ export function AppHeader() {
         </div>
 
         <div className="relative z-10 flex min-w-0 items-center overflow-visible">
-          <div className="balance-pill flex min-w-0 items-center overflow-visible rounded-full">
-            <div className="flex min-w-0 items-center gap-1.5 px-3 py-1.5">
-              <span className="truncate text-[15px] font-semibold tabular-nums leading-none tracking-tight text-foreground">
-                {loading ? "…" : user ? formatTON(mainBalance) : "—"}
+          <div className="balance-pill">
+            <div className="balance-pill__amount">
+              <TonIcon className="balance-pill__ton h-6 w-6 shrink-0" />
+              <span className="balance-pill__value truncate">
+                {loading ? "…" : user ? `${formatTON(mainBalance)}` : "—"}
               </span>
-              <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
               {!loading && user && hasPromoBalance(user) ? (
-                <span className="shrink-0 text-[11px] font-semibold tabular-nums leading-none text-accent">
-                  +{formatTON(promoBalance)}
-                </span>
+                <span className="balance-pill__bonus">+{formatTON(promoBalance)}</span>
               ) : null}
             </div>
 
@@ -54,9 +52,9 @@ export function AppHeader() {
               href={APP_ROUTES.deposit}
               aria-label="Пополнить баланс"
               onClick={() => haptics.impactOccurred("medium")}
-              className="app-control flex h-9 w-9 shrink-0 items-center justify-center rounded-r-full border-l border-[var(--border)] text-muted hover:bg-accent/15 hover:text-accent active:bg-accent/20"
+              className="app-control balance-pill__deposit"
             >
-              <Plus className="h-4 w-4" strokeWidth={2.5} />
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.75} />
             </Link>
           </div>
         </div>

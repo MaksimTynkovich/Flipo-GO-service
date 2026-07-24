@@ -55,12 +55,16 @@ type Config struct {
 	// false keeps credentials in .env but never opens an MTProto session.
 	TelegramMTProtoEnabled bool
 	AdminTelegramIDs       []int64
-	// AdminNotifyEnabled gates Bot API DM alerts to ADMIN_TELEGRAM_IDS.
+	// AdminPanelPassword unlocks browser login at /admin (no Telegram initData).
+	AdminPanelPassword string
+	// AdminNotifyEnabled gates recording of in-app admin notifications
+	// (and Telegram mirrors for important finance/ops events).
 	AdminNotifyEnabled bool
 	PromoRequiredChannel         string
 	BotsDataDir                  string
 	BotsAssetsBaseURL            string
 	GiftsCacheDir                string
+	CasesUploadDir               string
 	MRKTAPIToken                 string
 	GiftAssetAPIKey              string
 	GiftAssetBaseURL             string
@@ -118,11 +122,13 @@ func Load() *Config {
 		TelegramSessionPath:          getEnv("TELEGRAM_SESSION_PATH", "data/telegram/session.json"),
 		TelegramMTProtoEnabled:       getEnvBool("TELEGRAM_MTPROTO_ENABLED", true),
 		AdminTelegramIDs:             parseInt64List(getEnv("ADMIN_TELEGRAM_IDS", "")),
+		AdminPanelPassword:           getEnv("ADMIN_PANEL_PASSWORD", ""),
 		AdminNotifyEnabled:           getEnvBool("ADMIN_NOTIFY_ENABLED", true),
 		PromoRequiredChannel:         firstNonEmpty(getEnv("PROMO_REQUIRED_CHANNEL", ""), getEnv("NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL", "")),
 		BotsDataDir:                  getEnv("BOTS_DATA_DIR", "assets/bots"),
 		BotsAssetsBaseURL:            getEnv("BOTS_ASSETS_BASE_URL", "/static/bots"),
 		GiftsCacheDir:                getEnv("GIFTS_CACHE_DIR", "data/gifts"),
+		CasesUploadDir:               getEnv("CASES_UPLOAD_DIR", "data/cases"),
 		MRKTAPIToken:                 getEnv("MRKT_API_TOKEN", ""),
 		GiftAssetAPIKey:              getEnv("GIFTASSET_API_KEY", ""),
 		GiftAssetBaseURL:             getEnv("GIFTASSET_BASE_URL", "https://giftasset.gifts"),

@@ -1,3 +1,10 @@
+import {
+  BRAND_ACCENT,
+  BRAND_ACCENT_FOREGROUND,
+  BRAND_LINK,
+  BRAND_SURFACE_RAISED,
+} from "@/src/shared/config/brand";
+
 export type TelegramThemeParams = {
   bg_color?: string;
   text_color?: string;
@@ -77,12 +84,6 @@ export const TELEGRAM_THEME_DEFAULTS = {
   linkColor: "#6ab3f3",
   secondaryBgColor: "#141c27",
 } as const;
-
-type Rgb = {
-  r: number;
-  g: number;
-  b: number;
-};
 
 export function getTelegramWebApp(): TelegramWebApp | null {
   if (typeof window === "undefined") {
@@ -360,130 +361,26 @@ export function applyTelegramSafeAreaToDocument() {
   root.style.setProperty("--app-tabbar-offset", `${getAppTabbarOffset(inset.bottom)}px`);
 }
 
+/** App UI is always dark — ignore Telegram light/dark themeParams. */
 export function readTelegramTheme() {
-  const params = getTelegramWebApp()?.themeParams;
-
-  const bgColor = normalizeBackgroundColor(params?.bg_color);
-  const secondaryBgColor = normalizeSecondaryBackgroundColor(params?.secondary_bg_color, bgColor);
-
-  return {
-    bgColor,
-    textColor: params?.text_color || TELEGRAM_THEME_DEFAULTS.textColor,
-    hintColor: params?.hint_color || TELEGRAM_THEME_DEFAULTS.hintColor,
-    buttonColor: params?.button_color || TELEGRAM_THEME_DEFAULTS.buttonColor,
-    linkColor: params?.link_color || TELEGRAM_THEME_DEFAULTS.linkColor,
-    secondaryBgColor,
-  };
+  return { ...TELEGRAM_THEME_DEFAULTS };
 }
-
-/** Telegram on some devices reports pure black — lift to the app palette. */
-function normalizeBackgroundColor(color?: string) {
-  const value = color?.trim() || TELEGRAM_THEME_DEFAULTS.bgColor;
-  if (getLuminance(value) < 0.1) {
-    return TELEGRAM_THEME_DEFAULTS.bgColor;
-  }
-  return value;
-}
-
-function normalizeSecondaryBackgroundColor(color: string | undefined, bgColor: string) {
-  const fallback = TELEGRAM_THEME_DEFAULTS.secondaryBgColor;
-  let value = color?.trim() || fallback;
-
-  if (getLuminance(value) < 0.1) {
-    value = fallback;
-  }
-  if (getLuminance(value) <= getLuminance(bgColor)) {
-    return mixColors(bgColor, TELEGRAM_THEME_DEFAULTS.textColor, 0.06);
-  }
-  return value;
-}
-
-function clamp(value: number, min = 0, max = 255) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function normalizeHex(input: string) {
-  const value = input.trim();
-
-  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
-    return value.toLowerCase();
-  }
-
-  if (/^#[0-9a-fA-F]{3}$/.test(value)) {
-    const r = value.charAt(1);
-    const g = value.charAt(2);
-    const b = value.charAt(3);
-
-    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
-  }
-
-  return null;
-}
-
-function hexToRgb(input: string, fallback: string): Rgb {
-  const normalized = normalizeHex(input) ?? normalizeHex(fallback) ?? "#000000";
-  const hex = normalized.slice(1);
-
-  return {
-    r: parseInt(hex.slice(0, 2), 16),
-    g: parseInt(hex.slice(2, 4), 16),
-    b: parseInt(hex.slice(4, 6), 16),
-  };
-}
-
-function rgbToHex({ r, g, b }: Rgb) {
-  return `#${[r, g, b]
-    .map((channel) => clamp(Math.round(channel)).toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-function mixColors(base: string, overlay: string, ratio: number) {
-  const baseRgb = hexToRgb(base, TELEGRAM_THEME_DEFAULTS.bgColor);
-  const overlayRgb = hexToRgb(overlay, TELEGRAM_THEME_DEFAULTS.textColor);
-  const safeRatio = Math.min(1, Math.max(0, ratio));
-
-  return rgbToHex({
-    r: baseRgb.r + (overlayRgb.r - baseRgb.r) * safeRatio,
-    g: baseRgb.g + (overlayRgb.g - baseRgb.g) * safeRatio,
-    b: baseRgb.b + (overlayRgb.b - baseRgb.b) * safeRatio,
-  });
-}
-
-function getLuminance(color: string) {
-  const { r, g, b } = hexToRgb(color, TELEGRAM_THEME_DEFAULTS.bgColor);
-  const channels = [r, g, b].map((channel) => {
-    const normalized = channel / 255;
-    return normalized <= 0.03928
-      ? normalized / 12.92
-      : ((normalized + 0.055) / 1.055) ** 2.4;
-  });
-
-  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-}
-
-import { BRAND_ACCENT, BRAND_ACCENT_FOREGROUND, BRAND_LINK } from "@/src/shared/config/brand";
 
 export function resolveThemeTokens(theme = readTelegramTheme()) {
-  const isDark = getLuminance(theme.bgColor) < 0.45;
-
   return {
     background: theme.bgColor,
     foreground: theme.textColor,
     muted: theme.hintColor,
     accent: BRAND_ACCENT,
-    accentForeground: isDark ? BRAND_ACCENT_FOREGROUND : "#ffffff",
+    accentForeground: BRAND_ACCENT_FOREGROUND,
     link: BRAND_LINK,
-    surface: theme.secondaryBgColor || mixColors(theme.bgColor, theme.textColor, isDark ? 0.06 : 0.04),
-    surfaceRaised: mixColors(
-      theme.secondaryBgColor || theme.bgColor,
-      theme.textColor,
-      isDark ? 0.1 : 0.06,
-    ),
-    border: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+    surface: theme.secondaryBgColor,
+    surfaceRaised: BRAND_SURFACE_RAISED,
+    border: "rgba(255,255,255,0.06)",
     primary: BRAND_ACCENT,
-    success: isDark ? "#3ecf8e" : "#1faa6a",
-    danger: isDark ? "#e56555" : "#e53935",
-    isDark,
+    success: "#3ecf8e",
+    danger: "#e56555",
+    isDark: true as const,
   };
 }
 
@@ -512,5 +409,5 @@ export function applyTelegramThemeToDocument(theme = readTelegramTheme()) {
   root.style.setProperty("--primary", tokens.primary);
   root.style.setProperty("--success", tokens.success);
   root.style.setProperty("--danger", tokens.danger);
-  root.style.colorScheme = tokens.isDark ? "dark" : "light";
+  root.style.colorScheme = "dark";
 }

@@ -60,6 +60,9 @@ func (s *Service) SetBalanceNotifier(notifier balance.BalanceNotifier) {
 }
 
 func (s *Service) List(ctx context.Context, limit, offset int, sort string) ([]ListingView, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
 	listings, err := s.market.ListActive(ctx, limit, offset, sort)
 	if err != nil {
 		return nil, err
@@ -73,6 +76,9 @@ func (s *Service) List(ctx context.Context, limit, offset int, sort string) ([]L
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*ListingView, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
 	listing, err := s.market.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -83,6 +89,9 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*ListingView, error) {
 }
 
 func (s *Service) ListMine(ctx context.Context, userID uuid.UUID) ([]ListingView, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
 	listings, err := s.market.ListBySeller(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -95,6 +104,9 @@ func (s *Service) ListMine(ctx context.Context, userID uuid.UUID) ([]ListingView
 }
 
 func (s *Service) CreateListing(ctx context.Context, userID, itemID uuid.UUID, priceNanoton int64) (*ListingView, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
 	if priceNanoton <= 0 {
 		return nil, domain.ErrInvalidAmount
 	}
@@ -149,10 +161,16 @@ func (s *Service) CreateListing(ctx context.Context, userID, itemID uuid.UUID, p
 }
 
 func (s *Service) CancelListing(ctx context.Context, userID, listingID uuid.UUID) error {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return err
+	}
 	return s.market.CancelListing(ctx, listingID, userID)
 }
 
 func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (*domain.User, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
 	listing, err := s.market.FindByID(ctx, listingID)
 	if err != nil {
 		return nil, err

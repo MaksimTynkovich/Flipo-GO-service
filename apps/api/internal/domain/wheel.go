@@ -78,15 +78,6 @@ type WheelSpinOverrideView struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
-type WheelRecentWin struct {
-	Username      string    `json:"username"`
-	FirstName     string    `json:"first_name"`
-	PhotoURL      string    `json:"photo_url,omitempty"`
-	PrizeNanoton  int64     `json:"prize_nanoton"`
-	SegmentLabel  string    `json:"segment_label"`
-	CreatedAt     time.Time `json:"created_at"`
-}
-
 // WheelPeriodStats aggregates non-admin spins for a time window.
 type WheelPeriodStats struct {
 	Spins         int64

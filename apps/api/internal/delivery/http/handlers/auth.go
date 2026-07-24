@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -110,6 +111,104 @@ func (h *AuthHandler) DebugAuth(c *gin.Context) {
 		"token": token,
 		"user":  toUserView(h.auth, user),
 	})
+}
+
+func (h *AuthHandler) AdminPanelLogin(c *gin.Context) {
+	var req struct {
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_payload"})
+		return
+	}
+
+	challenge, err := h.auth.RequestAdminPanelLogin(
+		c.Request.Context(),
+		req.Password,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+	)
+	if err != nil {
+		h.analytics.Track(c.Request.Context(), analyticsuc.EventInput{
+			Source:        "api",
+			EventName:     "auth_admin_panel_failed",
+			EventCategory: "auth",
+			Status:        "error",
+			ErrorCode:     "admin_panel_auth_failed",
+			ErrorMessage:  err.Error(),
+		})
+		switch {
+		case errors.Is(err, domain.ErrAdminPasswordNotSet):
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "Пароль админки не настроен",
+				"code":  "admin_password_not_set",
+			})
+		case errors.Is(err, domain.ErrAdminActorMissing):
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "Сначала зайдите в Mini App под admin Telegram ID",
+				"code":  "admin_actor_missing",
+			})
+		case errors.Is(err, domain.ErrUserBanned):
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Аккаунт заблокирован.",
+				"code":  "user_banned",
+			})
+		case errors.Is(err, domain.ErrAdminPasswordInvalid):
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Неверный пароль",
+				"code":  "admin_password_invalid",
+			})
+		default:
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"status":       "pending",
+		"challenge_id": challenge.ID,
+		"message":      "Подтвердите вход кнопкой в Telegram-боте",
+	})
+}
+
+func (h *AuthHandler) AdminPanelLoginStatus(c *gin.Context) {
+	challengeID := strings.TrimSpace(c.Param("id"))
+	if challengeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id", "code": "invalid_id"})
+		return
+	}
+	ch, err := h.auth.GetAdminPanelLoginStatus(c.Request.Context(), challengeID)
+	if err != nil {
+		if errors.Is(err, domain.ErrAdminLoginNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error(), "code": "admin_login_not_found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	switch ch.Status {
+	case auth.AdminLoginPending:
+		c.JSON(http.StatusOK, gin.H{"status": "pending", "challenge_id": ch.ID})
+	case auth.AdminLoginDenied:
+		c.JSON(http.StatusOK, gin.H{"status": "denied", "challenge_id": ch.ID})
+	case auth.AdminLoginExpired:
+		c.JSON(http.StatusOK, gin.H{"status": "expired", "challenge_id": ch.ID})
+	case auth.AdminLoginApproved:
+		user, err := h.auth.GetUser(c.Request.Context(), ch.UserID)
+		if err != nil || user == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "пользователь не найден"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"status":       "approved",
+			"challenge_id": ch.ID,
+			"token":        ch.Token,
+			"user":         toUserView(h.auth, user),
+		})
+	default:
+		c.JSON(http.StatusOK, gin.H{"status": string(ch.Status), "challenge_id": ch.ID})
+	}
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {

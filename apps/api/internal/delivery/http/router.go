@@ -2,6 +2,8 @@ package http
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/handlers"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
@@ -9,7 +11,6 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"path/filepath"
 )
 
 type Deps struct {
@@ -25,6 +26,7 @@ type Deps struct {
 	TelegramHandler     *handlers.TelegramHandler
 	PromoHandler        *handlers.PromoHandler
 	WheelHandler        *handlers.WheelHandler
+	CasesHandler        *handlers.CasesHandler
 	AdminHandler        *handlers.AdminHandler
 	AnalyticsHandler    *handlers.AnalyticsHandler
 	PresenceHandler     *handlers.PresenceHandler
@@ -33,6 +35,7 @@ type Deps struct {
 	AdminTelegramIDs    []int64
 	Hub                 *websocket.Hub
 	BotsDataDir         string
+	CasesUploadDir      string
 	GiftImageHandler    *handlers.GiftImageHandler
 	CORSOrigins         []string
 }
@@ -51,6 +54,12 @@ func NewRouter(deps Deps) *gin.Engine {
 	if deps.BotsDataDir != "" {
 		if abs, err := filepath.Abs(deps.BotsDataDir); err == nil {
 			r.Static("/static/bots", abs)
+		}
+	}
+	if deps.CasesUploadDir != "" {
+		if abs, err := filepath.Abs(deps.CasesUploadDir); err == nil {
+			_ = os.MkdirAll(abs, 0o755)
+			r.Static("/static/cases", abs)
 		}
 	}
 
@@ -122,6 +131,13 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/wheel/status", deps.WheelHandler.Status)
 			authed.POST("/wheel/spin", deps.WheelHandler.Spin)
 
+			authed.GET("/cases/features", deps.CasesHandler.Features)
+			authed.GET("/cases", deps.CasesHandler.Catalog)
+			authed.GET("/cases/opens", deps.CasesHandler.Opens)
+			authed.GET("/cases/live", deps.CasesHandler.Live)
+			authed.GET("/cases/:id", deps.CasesHandler.Get)
+			authed.POST("/cases/:id/open", deps.CasesHandler.Open)
+
 			authed.POST("/wallet/deposit/intent", deps.WalletHandler.CreateDepositIntent)
 			authed.POST("/wallet/deposit/:id/confirm", deps.WalletHandler.ConfirmDeposit)
 			authed.POST("/wallet/withdraw", deps.WalletHandler.RequestWithdrawal)
@@ -145,78 +161,107 @@ func NewRouter(deps Deps) *gin.Engine {
 		}
 
 		admin := v1.Group("/admin")
-		admin.Use(middleware.AdminAuth(deps.Auth, deps.AdminTelegramIDs))
+		admin.POST("/auth/login", deps.AuthHandler.AdminPanelLogin)
+		admin.GET("/auth/login/:id", deps.AuthHandler.AdminPanelLoginStatus)
+		adminAuthed := admin.Group("")
+		adminAuthed.Use(middleware.AdminAuth(deps.Auth, deps.AdminTelegramIDs))
 		{
-			admin.GET("/revenue/summary", deps.AdminHandler.RevenueSummary)
-			admin.GET("/revenue/timeseries", deps.AdminHandler.RevenueTimeseries)
-			admin.GET("/transfers", deps.AdminHandler.Transfers)
-			admin.POST("/transfers/:id/review", deps.AdminHandler.ReviewTransfer)
-			admin.GET("/ledger", deps.AdminHandler.Ledger)
-			admin.GET("/analytics/overview", deps.AdminHandler.AnalyticsOverview)
-			admin.GET("/analytics/staking-dropoff", deps.AdminHandler.AnalyticsStakingDropoff)
-			admin.GET("/analytics/users/:id", deps.AdminHandler.AnalyticsUserDrilldown)
-			admin.GET("/games/stats", deps.AdminHandler.GameStats)
-			admin.GET("/games/configs", deps.AdminHandler.ListGameConfigs)
-			admin.PATCH("/games/configs", deps.AdminHandler.UpdateGameConfig)
-			admin.GET("/social-sim", deps.AdminHandler.GetSocialSimSettings)
-			admin.PATCH("/social-sim", deps.AdminHandler.UpdateSocialSimSettings)
-			admin.POST("/games/:game/rotate-seed", deps.AdminHandler.RotateSeed)
-			admin.GET("/games/:game/seeds", deps.AdminHandler.SeedHistory)
-			admin.GET("/outcome/overrides", deps.AdminHandler.ListOutcomeOverrides)
-			admin.POST("/outcome/overrides", deps.AdminHandler.CreateOutcomeOverride)
-			admin.DELETE("/outcome/overrides/:id", deps.AdminHandler.DeleteOutcomeOverride)
-			admin.GET("/risk/users", deps.AdminHandler.RiskUsers)
-			admin.GET("/risk/settings", deps.AdminHandler.GetRiskSettings)
-			admin.PATCH("/risk/settings", deps.AdminHandler.UpdateRiskSettings)
-			admin.GET("/treasury/status", deps.AdminHandler.TreasuryStatus)
-			admin.GET("/users", deps.AdminHandler.ListUsers)
-			admin.GET("/users/stats", deps.AdminHandler.UserAudience)
-			admin.PATCH("/users/:id/ban", deps.AdminHandler.SetUserBanned)
-			admin.PATCH("/users/:id/withdrawals", deps.AdminHandler.SetUserWithdrawalsDisabled)
-			admin.PATCH("/users/:id/balance", deps.AdminHandler.SetUserBalance)
-			admin.GET("/users/:id/bets", deps.AdminHandler.UserBets)
-			admin.GET("/users/:id/transfers", deps.AdminHandler.UserTransfers)
-			admin.PATCH("/market/listings/:id", deps.AdminHandler.UpdateMarketListingPrice)
-			admin.POST("/market/sync-bot-gifts", deps.AdminHandler.SyncBotMarketGifts)
-			admin.POST("/market/reprice-bot-gifts", deps.AdminHandler.RepriceBotMarketGifts)
-			admin.GET("/gift-price-settings", deps.AdminHandler.GetGiftPriceSettings)
-			admin.PATCH("/gift-price-settings", deps.AdminHandler.UpdateGiftPriceSettings)
-			admin.GET("/gift-trait-prices", deps.AdminHandler.ListGiftTraitPrices)
-			admin.PATCH("/gift-trait-prices", deps.AdminHandler.UpdateGiftTraitPrice)
-			admin.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)
-			admin.GET("/marketing/settings", deps.AdminHandler.GetYieldSettings)
-			admin.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)
-			admin.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
-			admin.DELETE("/marketing/promos/:code", deps.AdminHandler.DeletePromoCode)
-			admin.GET("/marketing/wheel", deps.AdminHandler.WheelStats)
-			admin.GET("/marketing/wheel/segments", deps.AdminHandler.ListWheelSegments)
-			admin.PUT("/marketing/wheel/segments/:id", deps.AdminHandler.UpdateWheelSegment)
-			admin.GET("/marketing/wheel/overrides", deps.AdminHandler.ListWheelSpinOverrides)
-			admin.POST("/marketing/wheel/overrides", deps.AdminHandler.CreateWheelSpinOverride)
-			admin.DELETE("/marketing/wheel/overrides/:id", deps.AdminHandler.DeleteWheelSpinOverride)
-			admin.POST("/marketing/wheel/grant-spins", deps.AdminHandler.GrantWheelBonusSpins)
-			admin.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
-			admin.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
-			admin.GET("/maintenance", deps.AdminHandler.GetMaintenanceSettings)
-			admin.PATCH("/maintenance", deps.AdminHandler.UpdateMaintenanceSettings)
-			admin.GET("/withdrawals/settings", deps.AdminHandler.GetWithdrawalSettings)
-			admin.PATCH("/withdrawals/settings", deps.AdminHandler.UpdateWithdrawalSettings)
-			admin.GET("/withdrawals/gifts", deps.AdminHandler.ListPendingGiftWithdrawals)
-			admin.POST("/withdrawals/gifts/:id/review", deps.AdminHandler.ReviewGiftWithdrawal)
-			admin.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
-			admin.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
-			admin.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)
-			admin.GET("/audit", deps.AdminHandler.AuditLogs)
+			adminAuthed.GET("/revenue/summary", deps.AdminHandler.RevenueSummary)
+			adminAuthed.GET("/revenue/timeseries", deps.AdminHandler.RevenueTimeseries)
+			adminAuthed.GET("/transfers", deps.AdminHandler.Transfers)
+			adminAuthed.POST("/transfers/:id/review", deps.AdminHandler.ReviewTransfer)
+			adminAuthed.GET("/ledger", deps.AdminHandler.Ledger)
+			adminAuthed.GET("/analytics/overview", deps.AdminHandler.AnalyticsOverview)
+			adminAuthed.GET("/analytics/users/:id", deps.AdminHandler.AnalyticsUserDrilldown)
+			adminAuthed.GET("/games/stats", deps.AdminHandler.GameStats)
+			adminAuthed.GET("/games/configs", deps.AdminHandler.ListGameConfigs)
+			adminAuthed.PATCH("/games/configs", deps.AdminHandler.UpdateGameConfig)
+			adminAuthed.GET("/social-sim", deps.AdminHandler.GetSocialSimSettings)
+			adminAuthed.PATCH("/social-sim", deps.AdminHandler.UpdateSocialSimSettings)
+			adminAuthed.POST("/games/:game/rotate-seed", deps.AdminHandler.RotateSeed)
+			adminAuthed.GET("/games/:game/seeds", deps.AdminHandler.SeedHistory)
+			adminAuthed.GET("/outcome/overrides", deps.AdminHandler.ListOutcomeOverrides)
+			adminAuthed.POST("/outcome/overrides", deps.AdminHandler.CreateOutcomeOverride)
+			adminAuthed.DELETE("/outcome/overrides/:id", deps.AdminHandler.DeleteOutcomeOverride)
+			adminAuthed.GET("/risk/users", deps.AdminHandler.RiskUsers)
+			adminAuthed.GET("/risk/settings", deps.AdminHandler.GetRiskSettings)
+			adminAuthed.PATCH("/risk/settings", deps.AdminHandler.UpdateRiskSettings)
+			adminAuthed.GET("/treasury/status", deps.AdminHandler.TreasuryStatus)
+			adminAuthed.GET("/users", deps.AdminHandler.ListUsers)
+			adminAuthed.GET("/users/stats", deps.AdminHandler.UserAudience)
+			adminAuthed.PATCH("/users/:id/ban", deps.AdminHandler.SetUserBanned)
+			adminAuthed.PATCH("/users/:id/withdrawals", deps.AdminHandler.SetUserWithdrawalsDisabled)
+			adminAuthed.PATCH("/users/:id/balance", deps.AdminHandler.SetUserBalance)
+			adminAuthed.GET("/users/:id/bets", deps.AdminHandler.UserBets)
+			adminAuthed.GET("/users/:id/transfers", deps.AdminHandler.UserTransfers)
+			adminAuthed.PATCH("/market/listings/:id", deps.AdminHandler.UpdateMarketListingPrice)
+			adminAuthed.POST("/market/sync-bot-gifts", deps.AdminHandler.SyncBotMarketGifts)
+			adminAuthed.POST("/market/reprice-bot-gifts", deps.AdminHandler.RepriceBotMarketGifts)
+			adminAuthed.GET("/gift-price-settings", deps.AdminHandler.GetGiftPriceSettings)
+			adminAuthed.PATCH("/gift-price-settings", deps.AdminHandler.UpdateGiftPriceSettings)
+			adminAuthed.GET("/gift-trait-prices", deps.AdminHandler.ListGiftTraitPrices)
+			adminAuthed.PATCH("/gift-trait-prices", deps.AdminHandler.UpdateGiftTraitPrice)
+			adminAuthed.GET("/marketing/promos", deps.AdminHandler.ListPromoCodes)
+			adminAuthed.GET("/marketing/settings", deps.AdminHandler.GetYieldSettings)
+			adminAuthed.PATCH("/marketing/settings", deps.AdminHandler.UpdateYieldSettings)
+			adminAuthed.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
+			adminAuthed.DELETE("/marketing/promos/:code", deps.AdminHandler.DeletePromoCode)
+			adminAuthed.GET("/marketing/wheel", deps.AdminHandler.WheelStats)
+			adminAuthed.GET("/marketing/wheel/segments", deps.AdminHandler.ListWheelSegments)
+			adminAuthed.PUT("/marketing/wheel/segments/:id", deps.AdminHandler.UpdateWheelSegment)
+			adminAuthed.GET("/marketing/wheel/overrides", deps.AdminHandler.ListWheelSpinOverrides)
+			adminAuthed.POST("/marketing/wheel/overrides", deps.AdminHandler.CreateWheelSpinOverride)
+			adminAuthed.DELETE("/marketing/wheel/overrides/:id", deps.AdminHandler.DeleteWheelSpinOverride)
+			adminAuthed.POST("/marketing/wheel/grant-spins", deps.AdminHandler.GrantWheelBonusSpins)
+			adminAuthed.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
+			adminAuthed.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
+			adminAuthed.GET("/maintenance", deps.AdminHandler.GetMaintenanceSettings)
+			adminAuthed.PATCH("/maintenance", deps.AdminHandler.UpdateMaintenanceSettings)
+			adminAuthed.GET("/withdrawals/settings", deps.AdminHandler.GetWithdrawalSettings)
+			adminAuthed.PATCH("/withdrawals/settings", deps.AdminHandler.UpdateWithdrawalSettings)
+			adminAuthed.GET("/withdrawals/gifts", deps.AdminHandler.ListPendingGiftWithdrawals)
+			adminAuthed.POST("/withdrawals/gifts/:id/review", deps.AdminHandler.ReviewGiftWithdrawal)
+			adminAuthed.POST("/withdrawals/gifts/:id/fulfill", deps.AdminHandler.FulfillGiftWithdrawal)
+			adminAuthed.GET("/cases", deps.AdminHandler.ListCases)
+			adminAuthed.PUT("/cases", deps.AdminHandler.UpsertCase)
+			adminAuthed.POST("/cases/upload", deps.AdminHandler.UploadCaseImage)
+			adminAuthed.GET("/cases/settings", deps.AdminHandler.GetCaseCatalogSettings)
+			adminAuthed.PATCH("/cases/settings", deps.AdminHandler.UpdateCaseCatalogSettings)
+			adminAuthed.GET("/cases/live-settings", deps.AdminHandler.GetCaseLiveFeedSettings)
+			adminAuthed.PATCH("/cases/live-settings", deps.AdminHandler.UpdateCaseLiveFeedSettings)
+			adminAuthed.GET("/cases/promos", deps.AdminHandler.ListCasePromoCodes)
+			adminAuthed.PUT("/cases/promos", deps.AdminHandler.UpsertCasePromoCode)
+			adminAuthed.DELETE("/cases/promos/:code", deps.AdminHandler.DeleteCasePromoCode)
+			adminAuthed.PUT("/cases/:id/loot", deps.AdminHandler.ReplaceCaseLoot)
+			adminAuthed.POST("/cases/:id/simulate", deps.AdminHandler.SimulateCase)
+			adminAuthed.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
+			adminAuthed.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
+			adminAuthed.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)
+			adminAuthed.GET("/audit", deps.AdminHandler.AuditLogs)
+			adminAuthed.GET("/online", deps.AdminHandler.OnlineNow)
+			adminAuthed.GET("/notifications", deps.AdminHandler.ListNotifications)
+			adminAuthed.GET("/notifications/unread-count", deps.AdminHandler.UnreadNotificationCount)
+			adminAuthed.POST("/notifications/:id/read", deps.AdminHandler.MarkNotificationRead)
+			adminAuthed.POST("/notifications/read-all", deps.AdminHandler.MarkAllNotificationsRead)
 		}
 	}
 
 	r.GET("/ws/games/:game", func(c *gin.Context) {
 		game := c.Param("game")
-		websocket.ServeWS(deps.Hub, game, c.Writer, c.Request)
+		switch game {
+		case "roulette", "crash", "pvp", "cases":
+			websocket.ServeWS(deps.Hub, game, c.Writer, c.Request)
+		default:
+			c.Status(http.StatusNotFound)
+		}
 	})
 
 	r.GET("/ws/user", func(c *gin.Context) {
 		websocket.ServeUserWS(deps.Hub, deps.Auth, c.Writer, c.Request)
+	})
+
+	r.GET("/ws/admin", func(c *gin.Context) {
+		websocket.ServeAdminWS(deps.Hub, deps.Auth, c.Writer, c.Request)
 	})
 
 	return r

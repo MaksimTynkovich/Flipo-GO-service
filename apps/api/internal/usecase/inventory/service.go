@@ -2,8 +2,10 @@ package inventory
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
@@ -117,6 +119,9 @@ func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.In
 }
 
 func (s *Service) Deposit(ctx context.Context, userID uuid.UUID, txRef string) (*ItemView, error) {
+	if err := domain.EnsureGiftDepositEnabled(); err != nil {
+		return nil, err
+	}
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -176,44 +181,72 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	return s.market.BuybackFromUser(ctx, userID, itemID, payout, payout)
 }
 
-func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pending bool, err error) {
+func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pending bool, message string, err error) {
 	item, err := s.inventory.FindByID(ctx, itemID)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	if item.UserID != userID {
-		return false, domain.ErrInvalidAmount
+		return false, "", domain.ErrInvalidAmount
 	}
 	if item.Status != domain.InvAvailable {
-		return false, domain.ErrInvalidAmount
+		return false, "", domain.ErrInvalidAmount
 	}
 	if isProfileVirtualItem(*item) {
-		return false, domain.ErrInvalidAmount
+		return false, "", domain.ErrInvalidAmount
 	}
-	if item.Source != domain.NFTSourceTelegramGift || item.TelegramGiftID == "" {
-		return false, domain.ErrInvalidAmount
+	if item.Source != domain.NFTSourceTelegramGift {
+		return false, "", domain.ErrInvalidAmount
 	}
 
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
-		return false, err
+		return false, "", err
+	}
+
+	// Unbacked case claim — queue for manual purchase/fulfillment.
+	if domain.IsUnbackedCaseClaim(*item) {
+		if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
+			return false, "", err
+		}
+		if s.admin != nil {
+			s.admin.NotifyGiftWithdraw(ctx, telegram.AdminActor{
+				TelegramID: user.TelegramID,
+				Username:   user.Username,
+				FirstName:  user.FirstName,
+				LastName:   user.LastName,
+			}, item.Name, item.CollectionSlug, "needs_purchase", item.FloorPriceNanoton)
+		}
+		return true, "Вывод в обработке", nil
+	}
+
+	if item.TelegramGiftID == "" {
+		return false, "", domain.ErrInvalidAmount
 	}
 
 	if s.withdrawHold != nil {
 		held, _, holdErr := s.withdrawHold.IsUserWithdrawHeld(ctx, userID)
 		if holdErr != nil {
-			return false, holdErr
+			return false, "", holdErr
 		}
 		if held {
 			if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
-				return false, err
+				return false, "", err
 			}
-			return true, nil
+			if s.admin != nil {
+				s.admin.NotifyGiftWithdraw(ctx, telegram.AdminActor{
+					TelegramID: user.TelegramID,
+					Username:   user.Username,
+					FirstName:  user.FirstName,
+					LastName:   user.LastName,
+				}, item.Name, item.CollectionSlug, "held", item.FloorPriceNanoton)
+			}
+			return true, "Вывод в обработке", nil
 		}
 	}
 
 	if s.giftTransfer == nil {
-		return false, fmt.Errorf("вывод подарков временно недоступен")
+		return false, "", fmt.Errorf("вывод подарков временно недоступен")
 	}
 
 	recipient := telegram.ScanTargetByID(user.TelegramID)
@@ -223,18 +256,30 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 
 	if err := s.giftTransfer.SendGift(ctx, item.TelegramGiftID, recipient); err != nil {
 		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
-			return false, fmt.Errorf("вывод подарков временно недоступен")
+			return false, "", fmt.Errorf("вывод подарков временно недоступен")
 		}
 		if errors.Is(err, telegram.ErrGiftNotOnAccount) {
-			return false, fmt.Errorf("подарок недоступен для вывода")
+			return false, "", fmt.Errorf("подарок недоступен для вывода")
 		}
 		if errors.Is(err, telegram.ErrInsufficientStars) {
-			return false, fmt.Errorf("недостаточно Stars на аккаунте депозита")
+			return false, "", fmt.Errorf("вывод подарков временно недоступен")
 		}
-		return false, err
+		// Do not leak raw Telegram/MTProto errors to the client.
+		return false, "", fmt.Errorf("вывод подарков временно недоступен")
 	}
 
-	return false, s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn)
+	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn); err != nil {
+		return false, "", err
+	}
+	if s.admin != nil {
+		s.admin.NotifyGiftWithdraw(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, item.Name, item.CollectionSlug, "sent", item.FloorPriceNanoton)
+	}
+	return false, "", nil
 }
 
 func (s *Service) ListPendingWithdrawals(ctx context.Context, limit int) ([]domain.AdminPendingGiftWithdraw, error) {
@@ -250,7 +295,9 @@ func (s *Service) ListPendingWithdrawals(ctx context.Context, limit int) ([]doma
 			Name:           item.Name,
 			ImageURL:       item.ImageURL,
 			TelegramGiftID: item.TelegramGiftID,
+			CollectionSlug: item.CollectionSlug,
 			FloorNanoton:   item.FloorPriceNanoton,
+			NeedsPurchase:  domain.IsUnbackedCaseClaim(item) || item.TelegramGiftID == "",
 			UpdatedAt:      item.UpdatedAt,
 		}
 		if user, err := s.users.FindByID(ctx, item.UserID); err == nil && user != nil {
@@ -275,6 +322,10 @@ func (s *Service) ReviewPendingWithdrawal(ctx context.Context, itemID uuid.UUID,
 		return s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvAvailable)
 	}
 
+	if domain.IsUnbackedCaseClaim(*item) || item.TelegramGiftID == "" {
+		return fmt.Errorf("сначала привяжите подарок: укажите telegram_gift_id через fulfill")
+	}
+
 	user, err := s.users.FindByID(ctx, item.UserID)
 	if err != nil {
 		return err
@@ -292,6 +343,54 @@ func (s *Service) ReviewPendingWithdrawal(ctx context.Context, itemID uuid.UUID,
 		}
 		if errors.Is(err, telegram.ErrGiftNotOnAccount) {
 			return fmt.Errorf("подарок недоступен для вывода")
+		}
+		if errors.Is(err, telegram.ErrInsufficientStars) {
+			return fmt.Errorf("недостаточно Stars на аккаунте депозита")
+		}
+		return err
+	}
+	return s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn)
+}
+
+// FulfillPendingWithdrawal binds a real telegram gift slug to an unbacked claim and sends it.
+func (s *Service) FulfillPendingWithdrawal(ctx context.Context, itemID uuid.UUID, telegramGiftID string) error {
+	telegramGiftID = strings.TrimSpace(telegramGiftID)
+	if telegramGiftID == "" {
+		return domain.ErrInvalidAmount
+	}
+	item, err := s.inventory.FindByID(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item.Status != domain.InvWithdrawPending {
+		return fmt.Errorf("подарок не в очереди вывода")
+	}
+
+	meta, _ := json.Marshal(map[string]any{
+		"fulfillment": domain.CaseFulfillmentBacked,
+		"collection":  item.CollectionSlug,
+	})
+	if err := s.inventory.BindTelegramGift(ctx, itemID, telegramGiftID, item.ImageURL, meta, domain.CaseFulfillmentBacked); err != nil {
+		return err
+	}
+
+	user, err := s.users.FindByID(ctx, item.UserID)
+	if err != nil {
+		return err
+	}
+	if s.giftTransfer == nil {
+		return fmt.Errorf("вывод подарков временно недоступен")
+	}
+	recipient := telegram.ScanTargetByID(user.TelegramID)
+	if user.Username != "" {
+		recipient = telegram.ScanTargetByUsername(user.Username)
+	}
+	if err := s.giftTransfer.SendGift(ctx, telegramGiftID, recipient); err != nil {
+		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
+			return fmt.Errorf("вывод подарков временно недоступен")
+		}
+		if errors.Is(err, telegram.ErrGiftNotOnAccount) {
+			return fmt.Errorf("подарок недоступен для вывода — проверьте slug на аккаунте бота")
 		}
 		if errors.Is(err, telegram.ErrInsufficientStars) {
 			return fmt.Errorf("недостаточно Stars на аккаунте депозита")

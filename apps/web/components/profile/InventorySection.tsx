@@ -25,6 +25,7 @@ import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { formatUserError } from "@/lib/user-errors";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Button } from "@/components/ui/button";
+import { GIFT_DEPOSIT_ENABLED, MARKET_ENABLED } from "@/src/shared/config/features";
 
 export function InventorySection() {
   const { setUser } = useAuth();
@@ -49,9 +50,14 @@ export function InventorySection() {
   async function load() {
     setLoading(true);
     try {
-      const [inv, mine] = await Promise.all([getInventory(), getMyMarketListings().catch(() => [])]);
+      const inv = await getInventory();
       setItems(inv.filter((i) => i.status !== "liquidated" && i.status !== "staked" && i.status !== "withdrawn"));
-      setMyListings(mine);
+      if (MARKET_ENABLED) {
+        const mine = await getMyMarketListings().catch(() => [] as MarketListing[]);
+        setMyListings(mine);
+      } else {
+        setMyListings([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -90,7 +96,7 @@ export function InventorySection() {
       closeSheet();
       load();
     } catch (e) {
-      setListError(formatUserError(e, "Ошибка"));
+      setListError(formatUserError(e, "Не удалось продать подарок"));
     } finally {
       setLiquidating(false);
     }
@@ -105,13 +111,16 @@ export function InventorySection() {
       markModalCompleted("inventory_gift_detail");
       if (result.pending) {
         setSelected({ ...selected, status: "withdraw_pending" });
+        if (result.message) {
+          setListError(null);
+        }
         await load();
       } else {
         closeSheet();
         load();
       }
     } catch (e) {
-      setListError(formatUserError(e, "Ошибка"));
+      setListError(formatUserError(e, "Не удалось вывести подарок"));
     } finally {
       setWithdrawing(false);
     }
@@ -133,9 +142,9 @@ export function InventorySection() {
 
   return (
     <>
-      <InventoryDepositGuide />
+      {GIFT_DEPOSIT_ENABLED ? <InventoryDepositGuide /> : null}
 
-      <section className="mt-5 space-y-2">
+      <section className={GIFT_DEPOSIT_ENABLED ? "mt-5 space-y-2" : "space-y-2"}>
         <div className="flex items-center justify-between px-0.5">
           <p className="section-label">Мои подарки</p>
           {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}
@@ -188,7 +197,7 @@ export function InventorySection() {
       {selected && (
         <InventoryGiftDetailSheet
           item={selected}
-          marketListing={listingByItemId.get(selected.id)}
+          marketListing={MARKET_ENABLED ? listingByItemId.get(selected.id) : undefined}
           listError={listError}
           liquidating={liquidating}
           withdrawing={withdrawing}

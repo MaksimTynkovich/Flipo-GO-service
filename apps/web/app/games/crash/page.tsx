@@ -12,6 +12,7 @@ import { ProofModal } from "@/components/provably-fair/ProofModal";
 import { PageShell } from "@/components/PageShell";
 import { BtnBusy } from "@/components/ui/BtnBusy";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useAcceptBets } from "@/components/providers/MaintenanceGate";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   cashoutCrash,
@@ -67,6 +68,7 @@ export default function CrashPage() {
 
 function CrashPageContent() {
   const { user } = useAuth();
+  const acceptBets = useAcceptBets();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
   const [state, setState] = useState<CrashRoundState | null>(null);
@@ -338,7 +340,7 @@ function CrashPageContent() {
       .map((bet) => bet.gift!);
   }, [roundBets?.bets, user?.id]);
 
-  const canBet = state?.phase === "betting" && !betting;
+  const canBet = acceptBets && state?.phase === "betting" && !betting;
   const canEditBet = !betting && !cashingOut;
   const canCashout =
     state?.phase === "running" &&
@@ -356,6 +358,7 @@ function CrashPageContent() {
     (preparedTonNanoton > 0 ? 1 : 0) + preparedGiftIds.length;
 
   const betButtonLabel = (() => {
+    if (!acceptBets) return "Ставки временно закрыты";
     if (canBet) {
       return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
     }
@@ -393,6 +396,11 @@ function CrashPageContent() {
   })();
 
   async function bet() {
+    if (!acceptBets) {
+      showToast({ variant: "error", title: "Ставки временно не принимаются" });
+      haptics.notificationOccurred("error");
+      return;
+    }
     if (!canBet) {
       showToast({ variant: "error", title: crashPhaseBetMessage(state?.phase) });
       haptics.notificationOccurred("error");
@@ -608,6 +616,7 @@ function CrashPageContent() {
   const primaryBusyLabel = cashingOut ? "Забираем…" : "Ставим…";
   const primaryLabel = (() => {
     if (canCashout) return null; // rendered with live amount span
+    if (!acceptBets) return "Ставки временно закрыты";
     if (canBet) {
       return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
     }

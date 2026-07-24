@@ -15,6 +15,7 @@ import {
 
 const DEFAULT_SETTINGS: AdminMaintenanceSettings = {
   enabled: false,
+  accept_bets: true,
   message: "",
 };
 
@@ -36,9 +37,15 @@ export default function SystemSection() {
       const [maintenance, withdrawals] = await loadCached("admin:system:v2", () =>
         Promise.all([getAdminMaintenanceSettings(), getAdminWithdrawalSettings()]),
       );
-      setSettings(maintenance);
+      setSettings({
+        ...maintenance,
+        accept_bets: maintenance.accept_bets !== false,
+      });
       setWithdrawalSettings(withdrawals);
-      primeCache("admin:system:v2", [maintenance, withdrawals]);
+      primeCache("admin:system:v2", [
+        { ...maintenance, accept_bets: maintenance.accept_bets !== false },
+        withdrawals,
+      ]);
     } finally {
       setLoading(false);
     }
@@ -61,8 +68,75 @@ export default function SystemSection() {
   return (
     <AdminPage
       title="Система"
-      description="Глобальные переключатели платформы. Режим обслуживания сразу закрывает приложение для игроков."
+      description="Глобальные переключатели платформы. Сначала можно остановить новые ставки, затем включить полное тех.обслуживание перед деплоем."
     >
+      <AdminPanel
+        title="Приём ставок"
+        description="Когда выключено, новые ставки crash / roulette / pvp не принимаются. Cashout и доигрыш текущих раундов работают. Кейсы, маркет и стейкинг не затрагиваются."
+      >
+        {loading && !settings ? (
+          <div className="h-4 w-56 animate-pulse rounded bg-surface-raised" />
+        ) : (
+          <div className="space-y-4">
+            <label className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={form.accept_bets}
+                onChange={(e) => setSettings({ ...form, accept_bets: e.target.checked })}
+              />
+              <span className={!form.accept_bets ? "font-medium text-danger" : undefined}>
+                Принимать новые ставки
+              </span>
+            </label>
+
+            <AdminToolbar>
+              <AdminButton
+                variant={!form.accept_bets ? "danger" : "primary"}
+                disabled={saving || (loading && !settings)}
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    await updateAdminMaintenanceSettings({
+                      enabled: form.enabled,
+                      accept_bets: form.accept_bets,
+                      message: form.message.trim(),
+                    });
+                    setSettings({ ...form, message: form.message.trim() });
+                    primeCache("admin:system:v2", [
+                      { ...form, message: form.message.trim() },
+                      withdrawalForm,
+                    ]);
+                    showToast({
+                      variant: "success",
+                      title: form.accept_bets
+                        ? "Приём ставок включён"
+                        : "Приём новых ставок остановлен",
+                    });
+                  } catch (error) {
+                    showToast({
+                      variant: "error",
+                      title: "Не удалось сохранить",
+                      subtitle: error instanceof Error ? error.message : undefined,
+                    });
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                {saving ? "Сохранение…" : "Сохранить"}
+              </AdminButton>
+            </AdminToolbar>
+
+            {!form.accept_bets ? (
+              <p className="text-xs text-danger">
+                Новые ставки закрыты. Дождитесь доигрыша раундов, затем включайте тех.обслуживание и
+                деплойте.
+              </p>
+            ) : null}
+          </div>
+        )}
+      </AdminPanel>
+
       <AdminPanel
         title="Техническое обслуживание"
         description="Когда включено, игроки видят экран обслуживания, а игровой API отвечает 503. Админы продолжают пользоваться проектом как обычно."
@@ -107,6 +181,7 @@ export default function SystemSection() {
                   try {
                     await updateAdminMaintenanceSettings({
                       enabled: form.enabled,
+                      accept_bets: form.accept_bets,
                       message: form.message.trim(),
                     });
                     setSettings({ ...form, message: form.message.trim() });

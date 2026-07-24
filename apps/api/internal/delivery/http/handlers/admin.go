@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +15,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/admin"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	casesuc "github.com/flipo/flipo/apps/api/internal/usecase/cases"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
@@ -30,11 +35,14 @@ type AdminHandler struct {
 	treasury            *treasury.Service
 	telegram            *telegramadmin.Service
 	wheel               *wheel.Service
+	cases               *casesuc.Service
 	inventory           *inventory.Service
 	botSync             *market.BotSyncService
 	hotAddr             string
+	casesUploadDir      string
 	onSocialSimUpdate   func(domain.SocialSimSettings)
 	onMaintenanceUpdate func(domain.PlatformMaintenanceSettings)
+	onlineCounter       func() int
 }
 
 func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, outcomeSvc *outcome.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
@@ -65,8 +73,28 @@ func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
 	h.wheel = wheelSvc
 }
 
+func (h *AdminHandler) SetCasesService(casesSvc *casesuc.Service) {
+	h.cases = casesSvc
+}
+
+func (h *AdminHandler) SetCasesUploadDir(dir string) {
+	h.casesUploadDir = strings.TrimSpace(dir)
+}
+
 func (h *AdminHandler) SetInventoryService(invSvc *inventory.Service) {
 	h.inventory = invSvc
+}
+
+func (h *AdminHandler) SetOnlineCounter(fn func() int) {
+	h.onlineCounter = fn
+}
+
+func (h *AdminHandler) OnlineNow(c *gin.Context) {
+	online := 0
+	if h.onlineCounter != nil {
+		online = h.onlineCounter()
+	}
+	c.JSON(http.StatusOK, gin.H{"online": online})
 }
 
 func (h *AdminHandler) WheelStats(c *gin.Context) {
@@ -305,6 +333,61 @@ func (h *AdminHandler) AuditLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, logs)
 }
 
+func (h *AdminHandler) ListNotifications(c *gin.Context) {
+	category := strings.TrimSpace(c.Query("category"))
+	unreadOnly := c.Query("unread") == "1" || strings.EqualFold(c.Query("unread"), "true")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	items, err := h.admin.ListNotifications(c.Request.Context(), category, unreadOnly, limit)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.AdminNotification{}
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) UnreadNotificationCount(c *gin.Context) {
+	category := strings.TrimSpace(c.Query("category"))
+	count, err := h.admin.UnreadNotificationCount(c.Request.Context(), category)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+func (h *AdminHandler) MarkNotificationRead(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.admin.MarkNotificationRead(c.Request.Context(), id); err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) MarkAllNotificationsRead(c *gin.Context) {
+	var body struct {
+		Category string `json:"category"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	category := strings.TrimSpace(body.Category)
+	if category == "" {
+		category = strings.TrimSpace(c.Query("category"))
+	}
+	n, err := h.admin.MarkAllNotificationsRead(c.Request.Context(), category)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "marked": n})
+}
+
 func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
 	days, _ := strconv.Atoi(c.DefaultQuery("days", "1"))
 	if days <= 0 {
@@ -321,21 +404,6 @@ func (h *AdminHandler) AnalyticsOverview(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, overview)
-}
-
-func (h *AdminHandler) AnalyticsStakingDropoff(c *gin.Context) {
-	days, _ := strconv.Atoi(c.DefaultQuery("days", "7"))
-	if days <= 0 {
-		days = 7
-	}
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	since := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
-	out, err := h.analytics.StakingDropoff(c.Request.Context(), since, limit)
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, out)
 }
 
 func (h *AdminHandler) AnalyticsUserDrilldown(c *gin.Context) {
@@ -549,6 +617,9 @@ func (h *AdminHandler) UpdateRiskSettings(c *gin.Context) {
 }
 
 func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	adminID := middleware.GetUserID(c)
 	listingID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -574,6 +645,9 @@ func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
 }
 
 func (h *AdminHandler) SyncBotMarketGifts(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	if h.botSync == nil || !h.botSync.Enabled() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MTProto не настроен"})
 		return
@@ -587,6 +661,9 @@ func (h *AdminHandler) SyncBotMarketGifts(c *gin.Context) {
 }
 
 func (h *AdminHandler) RepriceBotMarketGifts(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
 	if h.botSync == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "bot sync not configured"})
 		return
@@ -932,6 +1009,364 @@ func (h *AdminHandler) ReviewGiftWithdrawal(c *gin.Context) {
 		"note": strings.TrimSpace(req.Note),
 	})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) FulfillGiftWithdrawal(c *gin.Context) {
+	if h.inventory == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "инвентарь недоступен"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	itemID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID предмета"})
+		return
+	}
+	var req struct {
+		TelegramGiftID string `json:"telegram_gift_id" binding:"required"`
+		Note           string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.inventory.FulfillPendingWithdrawal(c.Request.Context(), itemID, req.TelegramGiftID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), adminID, "gift_withdrawal_fulfilled", "inventory_item", itemID.String(), map[string]string{
+		"telegram_gift_id": strings.TrimSpace(req.TelegramGiftID),
+		"note":             strings.TrimSpace(req.Note),
+	})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) ListCases(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusOK, []any{})
+		return
+	}
+	items, err := h.cases.AdminList(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) GetCaseCatalogSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	settings, err := h.cases.AdminGetCatalogSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var req struct {
+		Enabled        *bool `json:"enabled"`
+		BannersEnabled *bool `json:"banners_enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	settings, err := h.cases.AdminUpdateCatalogSettings(c.Request.Context(), casesuc.CatalogSettingsPatch{
+		Enabled:        req.Enabled,
+		BannersEnabled: req.BannersEnabled,
+	})
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) GetCaseLiveFeedSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	settings, err := h.cases.AdminGetLiveFeedSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateCaseLiveFeedSettings(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var req domain.CaseLiveFeedSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	settings, err := h.cases.AdminUpdateLiveFeedSettings(c.Request.Context(), req)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpsertCase(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var req domain.Case
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Slug = strings.ToLower(strings.TrimSpace(req.Slug))
+	if req.Slug == "" || req.Title == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "нужны slug и title"})
+		return
+	}
+	if req.Kind == "" {
+		req.Kind = domain.CaseKindCatalog
+	}
+	if strings.TrimSpace(req.AccentColor) == "" {
+		req.AccentColor = "#3b82f6"
+	}
+	if req.TargetRTPBPS <= 0 {
+		req.TargetRTPBPS = 9000
+	}
+	if err := h.cases.AdminUpsertCase(c.Request.Context(), &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "id": req.ID})
+}
+
+func (h *AdminHandler) ReplaceCaseLoot(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	var req struct {
+		Entries []domain.CaseLootEntry `json:"entries"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.cases.AdminReplaceLoot(c.Request.Context(), caseID, req.Entries); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) SimulateCase(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	var req struct {
+		Iterations int `json:"iterations"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	result, err := h.cases.AdminSimulateCase(c.Request.Context(), caseID, req.Iterations)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "кейс не найден"})
+		case errors.Is(err, domain.ErrCaseNoLoot):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "у кейса нет лута"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) ListCasePromoCodes(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var caseID *uuid.UUID
+	if raw := strings.TrimSpace(c.Query("case_id")); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный case_id"})
+			return
+		}
+		caseID = &id
+	}
+	items, err := h.cases.AdminListCasePromoCodes(c.Request.Context(), caseID)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.CasePromoCode{}
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) UpsertCasePromoCode(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var promo domain.CasePromoCode
+	if err := c.ShouldBindJSON(&promo); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.cases.AdminUpsertCasePromoCode(c.Request.Context(), &promo); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrPromoInvalid):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Введите промокод"})
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Кейс не найден"})
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) DeleteCasePromoCode(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	code := strings.ToUpper(strings.TrimSpace(c.Param("code")))
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Укажите код"})
+		return
+	}
+	if err := h.cases.AdminDeleteCasePromoCode(c.Request.Context(), code); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Промокод не найден"})
+		case errors.Is(err, domain.ErrPromoInUse):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Есть активации — удаление недоступно"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+const maxCaseImageBytes = 5 << 20 // 5 MiB
+
+func (h *AdminHandler) UploadCaseImage(c *gin.Context) {
+	if h.casesUploadDir == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "загрузка картинок недоступна"})
+		return
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "нужен файл (поле file)"})
+		return
+	}
+	if file.Size <= 0 || file.Size > maxCaseImageBytes {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "файл до 5 МБ"})
+		return
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	defer src.Close()
+
+	head := make([]byte, 512)
+	n, readErr := io.ReadFull(src, head)
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		respondInternal(c, readErr)
+		return
+	}
+	head = head[:n]
+	ext, ok := caseImageExt(head)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "только JPEG, PNG, WebP или GIF"})
+		return
+	}
+
+	if err := os.MkdirAll(h.casesUploadDir, 0o755); err != nil {
+		respondInternal(c, err)
+		return
+	}
+	name := uuid.New().String() + ext
+	destPath := filepath.Join(h.casesUploadDir, name)
+	dst, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	reader := io.MultiReader(bytes.NewReader(head), src)
+	written, copyErr := io.Copy(dst, io.LimitReader(reader, maxCaseImageBytes+1))
+	closeErr := dst.Close()
+	if copyErr != nil || closeErr != nil {
+		_ = os.Remove(destPath)
+		if copyErr != nil {
+			respondInternal(c, copyErr)
+			return
+		}
+		respondInternal(c, closeErr)
+		return
+	}
+	if written > maxCaseImageBytes {
+		_ = os.Remove(destPath)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "файл до 5 МБ"})
+		return
+	}
+
+	url := "/static/cases/" + name
+	c.JSON(http.StatusOK, gin.H{"ok": true, "url": url, "image_url": url})
+}
+
+func caseImageExt(head []byte) (string, bool) {
+	ct := http.DetectContentType(head)
+	switch {
+	case strings.HasPrefix(ct, "image/jpeg"):
+		return ".jpg", true
+	case strings.HasPrefix(ct, "image/png"):
+		return ".png", true
+	case strings.HasPrefix(ct, "image/gif"):
+		return ".gif", true
+	case strings.HasPrefix(ct, "image/webp"):
+		return ".webp", true
+	default:
+		// DetectContentType often returns application/octet-stream for webp.
+		if len(head) >= 12 && string(head[0:4]) == "RIFF" && string(head[8:12]) == "WEBP" {
+			return ".webp", true
+		}
+		return "", false
+	}
 }
 
 func (h *AdminHandler) GetYieldSettings(c *gin.Context) {

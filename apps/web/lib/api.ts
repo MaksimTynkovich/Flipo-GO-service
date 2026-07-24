@@ -22,13 +22,26 @@ export function resolveAsset(url?: string | null): string | undefined {
   if (!url) return url ?? undefined;
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
   if (url.startsWith("//")) return url;
+  // Served via Next/Caddy rewrites on the Mini App origin.
+  if (url.startsWith("/static/")) return url;
   return API_URL.replace(/\/$/, "") + (url.startsWith("/") ? url : "/" + url);
 }
 export const DEBUG_AUTH = process.env.NEXT_PUBLIC_DEBUG_AUTH === "true";
 export const AUTH_SESSION_REFRESHED = "flipo:auth-session-refreshed";
+export const ADMIN_AUTH_SESSION_REFRESHED = "flipo:admin-auth-session-refreshed";
 
 const TOKEN_KEY = "flipo_token";
-const AUTH_PATHS = new Set(["/api/v1/auth/telegram", "/api/v1/auth/debug"]);
+const ADMIN_TOKEN_KEY = "flipo_admin_token";
+const AUTH_PATHS = new Set([
+  "/api/v1/auth/telegram",
+  "/api/v1/auth/debug",
+  "/api/v1/admin/auth/login",
+]);
+
+function isAuthPath(path: string): boolean {
+  if (AUTH_PATHS.has(path)) return true;
+  return path.startsWith("/api/v1/admin/auth/login/");
+}
 
 export class ApiRequestError extends Error {
   code?: string;
@@ -72,6 +85,9 @@ export type InventoryItem = {
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
+  if (window.location.pathname.startsWith("/admin")) {
+    return localStorage.getItem(ADMIN_TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  }
   return localStorage.getItem(TOKEN_KEY);
 }
 
@@ -87,6 +103,19 @@ export function getAuthToken(): string | null {
   return getToken();
 }
 
+export function getAdminAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
+export function setAdminAuthToken(token: string) {
+  localStorage.setItem(ADMIN_TOKEN_KEY, token);
+}
+
+export function clearAdminAuthToken() {
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
 let reauthPromise: Promise<User | null> | null = null;
 
 function dispatchSessionRefreshed(user: User) {
@@ -96,8 +125,10 @@ function dispatchSessionRefreshed(user: User) {
 async function rawFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken();
   const requestId = typeof crypto !== "undefined" ? crypto.randomUUID() : "";
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     "X-Session-ID": typeof window !== "undefined" ? getAnalyticsSessionId() : "",
     "X-Client-Path": typeof window !== "undefined" ? getCurrentPath() : "",
     ...(requestId ? { "X-Request-ID": requestId } : {}),
@@ -150,10 +181,18 @@ export async function silentReauth(): Promise<User | null> {
 export async function api<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
   const res = await rawFetch(path, options);
 
-  if (res.status === 401 && !retried && !AUTH_PATHS.has(path)) {
-    const user = await silentReauth();
-    if (user) {
-      return api<T>(path, options, true);
+  if (res.status === 401 && !retried && !isAuthPath(path)) {
+    const isAdminPath =
+      path.startsWith("/api/v1/admin") ||
+      (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+    if (isAdminPath) {
+      clearAdminAuthToken();
+      window.dispatchEvent(new CustomEvent(ADMIN_AUTH_SESSION_REFRESHED, { detail: { user: null } }));
+    } else {
+      const user = await silentReauth();
+      if (user) {
+        return api<T>(path, options, true);
+      }
     }
   }
 
@@ -202,6 +241,28 @@ export async function authDebug() {
   });
 }
 
+export async function authAdminPanel(password: string) {
+  return api<{ status: "pending"; challenge_id: string; message?: string }>(
+    "/api/v1/admin/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    },
+  );
+}
+
+export type AdminLoginStatusResponse =
+  | { status: "pending"; challenge_id: string }
+  | { status: "denied"; challenge_id: string }
+  | { status: "expired"; challenge_id: string }
+  | { status: "approved"; challenge_id: string; token: string; user: User };
+
+export async function getAdminPanelLoginStatus(challengeId: string) {
+  return api<AdminLoginStatusResponse>(
+    `/api/v1/admin/auth/login/${encodeURIComponent(challengeId)}`,
+  );
+}
+
 export async function getMe() {
   return api<User>("/api/v1/me");
 }
@@ -248,9 +309,10 @@ export async function liquidateItem(id: string) {
 
 export async function withdrawGiftItem(id: string) {
   try {
-    const result = await api<{ ok: boolean; pending?: boolean }>(`/api/v1/inventory/${id}/withdraw`, {
-      method: "POST",
-    });
+    const result = await api<{ ok: boolean; pending?: boolean; message?: string }>(
+      `/api/v1/inventory/${id}/withdraw`,
+      { method: "POST" },
+    );
     trackEvent({
       event_name: "inventory_withdrawn",
       event_category: "inventory",
@@ -1106,16 +1168,20 @@ export type AdminBotSettings = {
   spam_protection_level: number;
   webapp_url: string;
   webapp_button_text: string;
+  terms_url: string;
+  terms_button_text: string;
 };
 
 export type MaintenanceStatus = {
   enabled: boolean;
+  accept_bets: boolean;
   message: string;
 };
 
 export type AdminMaintenanceSettings = {
   id?: number;
   enabled: boolean;
+  accept_bets: boolean;
   message: string;
   updated_at?: string;
 };
@@ -1135,7 +1201,9 @@ export type AdminPendingGiftWithdraw = {
   name: string;
   image_url?: string;
   telegram_gift_id: string;
+  collection_slug?: string;
   floor_price_nanoton: number;
+  needs_purchase?: boolean;
   updated_at: string;
 };
 
@@ -1355,6 +1423,69 @@ export async function getAdminRiskUsers() {
 
 export async function getAdminAuditLogs() {
   return api<AdminAuditLog[]>("/api/v1/admin/audit");
+}
+
+export async function getAdminOnlineNow() {
+  return api<{ online: number }>("/api/v1/admin/online");
+}
+
+export type AdminNotificationCategory =
+  | "all"
+  | "finance"
+  | "gifts"
+  | "cases"
+  | "referral"
+  | "game"
+  | "promo"
+  | "system";
+
+export type AdminNotification = {
+  id: string;
+  kind: string;
+  category: string;
+  severity: "info" | "warning" | "critical" | string;
+  title: string;
+  summary: string;
+  body: string;
+  actor_telegram_id: number;
+  actor_username: string;
+  actor_first_name: string;
+  actor_last_name: string;
+  amount_nanoton?: number | null;
+  meta?: Record<string, unknown> | null;
+  read_at?: string | null;
+  created_at: string;
+};
+
+export async function getAdminNotifications(opts?: {
+  category?: string;
+  unreadOnly?: boolean;
+  limit?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.category && opts.category !== "all") params.set("category", opts.category);
+  if (opts?.unreadOnly) params.set("unread", "1");
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  const q = params.toString();
+  return api<AdminNotification[]>(`/api/v1/admin/notifications${q ? `?${q}` : ""}`);
+}
+
+export async function getAdminNotificationUnreadCount(category?: string) {
+  const params = new URLSearchParams();
+  if (category && category !== "all") params.set("category", category);
+  const q = params.toString();
+  return api<{ count: number }>(`/api/v1/admin/notifications/unread-count${q ? `?${q}` : ""}`);
+}
+
+export async function markAdminNotificationRead(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/notifications/${id}/read`, { method: "POST" });
+}
+
+export async function markAllAdminNotificationsRead(category?: string) {
+  return api<{ ok: boolean; marked: number }>("/api/v1/admin/notifications/read-all", {
+    method: "POST",
+    body: JSON.stringify({ category: category && category !== "all" ? category : "" }),
+  });
 }
 
 export type GameModeKey = "wheel" | "crash" | "roulette" | "pvp";
@@ -1640,47 +1771,6 @@ export async function getAdminAnalyticsOverview(
   return api<AdminAnalyticsOverview>(`/api/v1/admin/analytics/overview?${params.toString()}`);
 }
 
-export type AdminStakingDropoffGift = {
-  slug: string;
-  name: string;
-  collection_slug?: string;
-  price_nanoton: number;
-  is_staked: boolean;
-  daily_yield_nanoton?: number;
-};
-
-export type AdminStakingDropoffUser = {
-  user_id: string;
-  telegram_id: number;
-  username: string;
-  first_name: string;
-  entered_at: string;
-  first_staking_at?: string;
-  last_staking_at?: string;
-  valued_at: string;
-  profile_gift_count: number;
-  unstaked_profile_count: number;
-  profile_valuation_nanoton: number;
-  unstaked_profile_valuation_nanoton: number;
-  gifts: AdminStakingDropoffGift[];
-};
-
-export type AdminStakingDropoff = {
-  viewers_with_profile_gifts: number;
-  dropoff_count: number;
-  dropoff_rate_pct: number;
-  total_unstaked_valuation_nanoton: number;
-  users: AdminStakingDropoffUser[];
-};
-
-export async function getAdminStakingDropoff(days = 7, limit = 50) {
-  const params = new URLSearchParams({
-    days: String(days),
-    limit: String(limit),
-  });
-  return api<AdminStakingDropoff>(`/api/v1/admin/analytics/staking-dropoff?${params.toString()}`);
-}
-
 export async function getAdminUserAnalytics(userId: string, limit = 60, sessionId?: string) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (sessionId) params.set("session_id", sessionId);
@@ -1763,6 +1853,13 @@ export async function reviewAdminGiftWithdrawal(id: string, approve: boolean, no
   });
 }
 
+export async function fulfillAdminGiftWithdrawal(id: string, telegramGiftId: string, note = "") {
+  return api<{ ok: boolean }>(`/api/v1/admin/withdrawals/gifts/${id}/fulfill`, {
+    method: "POST",
+    body: JSON.stringify({ telegram_gift_id: telegramGiftId, note }),
+  });
+}
+
 export async function getWalletTransfers() {
   return api<WalletTransfer[]>("/api/v1/wallet/transfers");
 }
@@ -1831,14 +1928,6 @@ export type WheelSegment = {
   sort_order: number;
 };
 
-export type WheelRecentWin = {
-  display_name: string;
-  photo_url?: string;
-  prize_nanoton: number;
-  segment_label: string;
-  created_at: string;
-};
-
 export type WheelStatus = {
   channel_subscribed: boolean;
   required_channel?: string;
@@ -1849,7 +1938,6 @@ export type WheelStatus = {
   unlimited_spins?: boolean;
   next_daily_reset_at: string;
   segments: WheelSegment[];
-  recent_wins: WheelRecentWin[];
 };
 
 export type WheelSpinResult = {
@@ -1928,6 +2016,302 @@ export async function getWheelStatus() {
 
 export async function spinWheel() {
   return api<WheelSpinResult>("/api/v1/wheel/spin", { method: "POST" });
+}
+
+export type CaseLootPreview = {
+  id: string;
+  prize_type?: "gift" | "ton" | string;
+  collection_slug: string;
+  display_name: string;
+  image_url: string;
+  rarity_label?: string;
+  /** Admin-picked tile color; overrides rarity gradient when set. */
+  tile_background_color?: string;
+  sort_order: number;
+  floor_price_nanoton?: number;
+  amount_nanoton?: number;
+};
+
+export type CaseLiveDrop = {
+  open_id: string;
+  prize_type?: "gift" | "ton" | string;
+  collection_slug: string;
+  display_name: string;
+  image_url: string;
+  rarity_label?: string;
+  tile_background_color?: string;
+  floor_price_nanoton: number;
+  created_at: string;
+};
+
+export type CaseView = {
+  id: string;
+  slug: string;
+  title: string;
+  image_url?: string;
+  accent_color?: string;
+  price_nanoton: number;
+  kind: "catalog" | "featured" | "daily" | string;
+  sort_order: number;
+  require_channel?: boolean;
+  required_channel?: string;
+  channel_subscribed?: boolean;
+  loot?: CaseLootPreview[];
+  daily_available?: boolean;
+  next_available_at?: string;
+};
+
+export type CasesCatalog = {
+  featured: CaseView[];
+  daily?: CaseView | null;
+  catalog: CaseView[];
+  /** Top featured/daily banner row. Off by default until banners are ready. */
+  banners_enabled?: boolean;
+};
+
+export type CaseOpenResult = {
+  open_id: string;
+  case_id: string;
+  source: string;
+  prize_type?: "gift" | "ton" | string;
+  prize_nanoton?: number;
+  item?: InventoryItem | null;
+  loot_entry: CaseLootPreview;
+  backed: boolean;
+};
+
+export async function getCasesCatalog() {
+  return api<CasesCatalog>("/api/v1/cases");
+}
+
+export async function getCasesLiveFeed() {
+  return api<CaseLiveDrop[]>("/api/v1/cases/live");
+}
+
+export async function getCase(idOrSlug: string) {
+  return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}`);
+}
+
+export async function openCase(
+  idOrSlug: string,
+  opts?: { idempotencyKey?: string; promoCode?: string },
+) {
+  const key =
+    opts?.idempotencyKey ||
+    (typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `case-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const body: { idempotency_key: string; promo_code?: string } = { idempotency_key: key };
+  const promo = opts?.promoCode?.trim();
+  if (promo) body.promo_code = promo.toUpperCase();
+  return api<CaseOpenResult>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/open`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getCaseOpens() {
+  return api<CaseOpenResult[]>("/api/v1/cases/opens");
+}
+
+export type AdminCaseLootEntry = {
+  id?: string;
+  prize_type?: "gift" | "ton" | string;
+  collection_slug: string;
+  display_name: string;
+  image_url?: string;
+  rarity_label?: string;
+  /** Admin-picked tile color; overrides rarity gradient when set. */
+  tile_background_color?: string;
+  sort_order: number;
+  weight: number;
+  floor_price_nanoton?: number;
+  amount_nanoton?: number;
+};
+
+export type AdminCase = {
+  id: string;
+  slug: string;
+  title: string;
+  image_url?: string;
+  accent_color?: string;
+  price_nanoton: number;
+  kind: string;
+  sort_order: number;
+  active: boolean;
+  require_channel: boolean;
+  target_rtp_bps: number;
+  loot: AdminCaseLootEntry[];
+};
+
+export type AdminCaseUpsert = {
+  id?: string;
+  slug: string;
+  title: string;
+  image_url?: string;
+  accent_color?: string;
+  price_nanoton: number;
+  kind: string;
+  sort_order: number;
+  active: boolean;
+  require_channel: boolean;
+  target_rtp_bps: number;
+};
+
+export async function getAdminCases() {
+  return api<AdminCase[]>("/api/v1/admin/cases");
+}
+
+export type CasesFeatures = {
+  enabled: boolean;
+  banners_enabled: boolean;
+};
+
+export async function getCasesFeatures() {
+  return api<CasesFeatures>("/api/v1/cases/features");
+}
+
+export type AdminCaseCatalogSettings = {
+  id: number;
+  enabled: boolean;
+  banners_enabled: boolean;
+  updated_at?: string;
+};
+
+export async function getAdminCaseCatalogSettings() {
+  return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings");
+}
+
+export async function updateAdminCaseCatalogSettings(body: {
+  enabled?: boolean;
+  banners_enabled?: boolean;
+}) {
+  return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export type AdminCaseLiveFeedSettings = {
+  id?: number;
+  enabled: boolean;
+  intensity: number;
+  fill_when_sparse: boolean;
+  min_visible: number;
+  common_weight: number;
+  uncommon_weight: number;
+  rare_weight: number;
+  epic_weight: number;
+  legendary_weight: number;
+  fat_chance: number;
+  fat_min_floor_nanoton: number;
+  updated_at?: string;
+};
+
+export async function getAdminCaseLiveFeedSettings() {
+  return api<AdminCaseLiveFeedSettings>("/api/v1/admin/cases/live-settings");
+}
+
+export async function updateAdminCaseLiveFeedSettings(body: AdminCaseLiveFeedSettings) {
+  return api<AdminCaseLiveFeedSettings>("/api/v1/admin/cases/live-settings", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function upsertAdminCase(body: AdminCaseUpsert) {
+  return api<{ ok: boolean; id: string }>("/api/v1/admin/cases", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function uploadAdminCaseImage(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return api<{ ok: boolean; url: string; image_url: string }>("/api/v1/admin/cases/upload", {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function replaceAdminCaseLoot(caseId: string, entries: AdminCaseLootEntry[]) {
+  return api<{ ok: boolean }>(`/api/v1/admin/cases/${encodeURIComponent(caseId)}/loot`, {
+    method: "PUT",
+    body: JSON.stringify({ entries }),
+  });
+}
+
+export type AdminCaseSimulateEntry = {
+  loot_entry_id: string;
+  display_name: string;
+  collection_slug: string;
+  weight: number;
+  expected_pct_bps: number;
+  hits: number;
+  actual_pct_bps: number;
+  floor_price_nanoton: number;
+  prize_sum_nanoton: number;
+};
+
+export type AdminCaseSimulateResult = {
+  case_id: string;
+  slug: string;
+  iterations: number;
+  price_nanoton: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+  house_edge_nanoton: number;
+  simulated_rtp_bps: number;
+  theoretical_rtp_bps: number;
+  target_rtp_bps: number;
+  rtp_available: boolean;
+  entries: AdminCaseSimulateEntry[];
+  warnings?: string[];
+};
+
+export async function simulateAdminCase(caseId: string, iterations = 100) {
+  return api<AdminCaseSimulateResult>(
+    `/api/v1/admin/cases/${encodeURIComponent(caseId)}/simulate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ iterations }),
+    },
+  );
+}
+
+export type AdminCasePromoCode = {
+  code: string;
+  case_id: string;
+  max_uses: number;
+  used_count: number;
+  active: boolean;
+  expires_at?: string;
+  created_at?: string;
+};
+
+export async function getAdminCasePromoCodes(caseId?: string) {
+  const q = caseId ? `?case_id=${encodeURIComponent(caseId)}` : "";
+  return api<AdminCasePromoCode[]>(`/api/v1/admin/cases/promos${q}`);
+}
+
+export async function upsertAdminCasePromoCode(promo: {
+  code: string;
+  case_id: string;
+  max_uses: number;
+  active: boolean;
+  expires_at?: string | null;
+}) {
+  return api<{ ok: boolean }>("/api/v1/admin/cases/promos", {
+    method: "PUT",
+    body: JSON.stringify(promo),
+  });
+}
+
+export async function deleteAdminCasePromoCode(code: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/cases/promos/${encodeURIComponent(code)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function getAdminWheelStats() {

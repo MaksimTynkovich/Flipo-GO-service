@@ -1,0 +1,238 @@
+"use client";
+
+import Link from "next/link";
+import { Gift } from "lucide-react";
+import { TonIcon } from "@/components/icons/TonIcon";
+import { formatCasePrice } from "@/components/cases/case-ui";
+import { resolveAsset, type CaseView } from "@/lib/api";
+import { APP_ROUTES } from "@/src/shared/config/navigation";
+import { cn } from "@/lib/utils";
+
+function priceLabel(caseItem: CaseView): { text: string; free: boolean; muted?: boolean } {
+  const isDaily = caseItem.kind === "daily";
+  const isPromo = caseItem.kind === "promo";
+  const isFree = isDaily || isPromo || caseItem.price_nanoton <= 0;
+  if (isPromo) {
+    return { text: "Промокод", free: true };
+  }
+  if (isFree) {
+    return {
+      text: "Бесплатно",
+      free: true,
+    };
+  }
+  return { text: `${formatCasePrice(caseItem.price_nanoton)} TON`, free: false };
+}
+
+export function CaseCard({
+  caseItem,
+  layout,
+  interactive = true,
+  selected = false,
+  onClick,
+}: {
+  caseItem: CaseView;
+  layout: "wide" | "tile";
+  interactive?: boolean;
+  selected?: boolean;
+  onClick?: () => void;
+}) {
+  const href = `${APP_ROUTES.cases}/${caseItem.slug}`;
+  const cover = resolveAsset(caseItem.image_url?.trim()) || "";
+  const price = priceLabel(caseItem);
+
+  const className = cn(
+    "group relative block overflow-hidden rounded-2xl border bg-[#101820]",
+    layout === "wide" ? "aspect-[5/4]" : "aspect-[4/5]",
+    selected ? "border-accent/60 ring-1 ring-accent/35" : "border-white/[0.07]",
+    onClick && "cursor-pointer",
+  );
+
+  const body = (
+    <>
+      {cover ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={cover}
+          alt=""
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-active:scale-[1.02]"
+          draggable={false}
+        />
+      ) : (
+        <div
+          className="pointer-events-none absolute inset-0 bg-[#101820]"
+          aria-hidden
+        />
+      )}
+
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(4,8,14,0.05) 0%, rgba(4,8,14,0.08) 42%, rgba(4,8,14,0.72) 72%, rgba(4,8,14,0.96) 100%)",
+        }}
+        aria-hidden
+      />
+
+      <div className="absolute inset-x-0 bottom-0 z-[1] flex items-baseline justify-between gap-2 p-2.5">
+        <h3
+          className={cn(
+            "min-w-0 flex-1 truncate font-bold leading-none tracking-[-0.02em] text-white",
+            "drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
+            layout === "wide" ? "text-[16px]" : "text-[14px]",
+          )}
+        >
+          {caseItem.title}
+        </h3>
+        <span
+          className={cn(
+            "inline-flex shrink-0 max-w-[55%] items-baseline gap-1 truncate px-0.5 font-bold leading-none tabular-nums",
+            "drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
+            layout === "wide" ? "text-[16px]" : "text-[14px]",
+            price.muted
+              ? "text-white/70"
+              : price.free
+                ? "text-emerald-200"
+                : "text-white",
+          )}
+        >
+          {!price.free && !price.muted ? (
+            <TonIcon variant="brand" className="relative top-[0.05em] h-[0.95em] w-[0.95em] shrink-0" />
+          ) : null}
+          <span className="truncate">{price.text}</span>
+        </span>
+      </div>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        className={className}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  if (interactive) {
+    return (
+      <Link href={href} className={className}>
+        {body}
+      </Link>
+    );
+  }
+
+  return <div className={className}>{body}</div>;
+}
+
+export function splitCasesForCatalog(params: {
+  cases: CaseView[];
+  bannersEnabled: boolean;
+}): {
+  featuredRow: CaseView[];
+  catalog: CaseView[];
+} {
+  const active = params.cases.filter((c) => (c as CaseView & { active?: boolean }).active !== false);
+  const byOrder = (a: CaseView, b: CaseView) =>
+    a.sort_order - b.sort_order || a.title.localeCompare(b.title);
+
+  const featured = active.filter((c) => c.kind === "featured").sort(byOrder);
+  const daily = active.filter((c) => c.kind === "daily").sort(byOrder);
+  const catalogOnly = active
+    .filter((c) => c.kind !== "featured" && c.kind !== "daily")
+    .sort(byOrder);
+
+  if (params.bannersEnabled) {
+    return {
+      featuredRow: [...featured, ...daily],
+      catalog: catalogOnly,
+    };
+  }
+
+  // Flat grid in sort_order — matches admin reorder list.
+  return {
+    featuredRow: [],
+    catalog: [...active].sort(byOrder),
+  };
+}
+
+export function CasesCatalogScreen({
+  cases,
+  bannersEnabled = false,
+  /** Force one grid in given order (admin reorder preview). */
+  flatOrder = false,
+  interactive = true,
+  selectedId = null,
+  onCaseClick,
+  className,
+}: {
+  cases: CaseView[];
+  bannersEnabled?: boolean;
+  flatOrder?: boolean;
+  interactive?: boolean;
+  selectedId?: string | null;
+  onCaseClick?: (caseItem: CaseView) => void;
+  className?: string;
+}) {
+  const { featuredRow, catalog } = flatOrder
+    ? { featuredRow: [] as CaseView[], catalog: cases }
+    : splitCasesForCatalog({ cases, bannersEnabled });
+
+  const showBanners = !flatOrder && bannersEnabled && featuredRow.length > 0;
+
+  return (
+    <div className={cn("space-y-4", className)}>
+      {showBanners ? (
+        <div className="grid grid-cols-2 gap-2">
+          {featuredRow.map((item) => (
+            <CaseCard
+              key={item.id}
+              caseItem={item}
+              layout="wide"
+              interactive={interactive && !onCaseClick}
+              selected={selectedId === item.id}
+              onClick={onCaseClick ? () => onCaseClick(item) : undefined}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      <section>
+        {showBanners ? (
+          <h2 className="mb-2 text-[13px] font-medium tracking-tight text-white/55">
+            Каталог
+          </h2>
+        ) : null}
+        {catalog.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-surface/60 py-12 text-muted">
+            <Gift className="h-7 w-7 opacity-35" />
+            <p className="text-sm">Пока нет кейсов</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {catalog.map((item) => (
+              <CaseCard
+                key={item.id}
+                caseItem={item}
+                layout="tile"
+                interactive={interactive && !onCaseClick}
+                selected={selectedId === item.id}
+                onClick={onCaseClick ? () => onCaseClick(item) : undefined}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

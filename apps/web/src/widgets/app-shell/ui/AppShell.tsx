@@ -20,6 +20,10 @@ export function AppShell({ children }: PropsWithChildren) {
     main.scrollTop = 0;
   }, [pathname]);
 
+  if (isAdmin) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="app-frame">
       <AppHeader />
@@ -27,7 +31,7 @@ export function AppShell({ children }: PropsWithChildren) {
         ref={mainRef}
         className={cn(
           "app-frame__main pb-[var(--app-tabbar-offset)] pt-[var(--app-header-offset)]",
-          isAdmin ? "admin-container" : "app-container",
+          "app-container",
         )}
       >
         <div key={pathname} className="page-enter">

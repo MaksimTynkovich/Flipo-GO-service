@@ -14,7 +14,7 @@ export function TelegramGateScreen() {
 
       <h1 className="text-2xl font-semibold tracking-tight text-foreground">Откройте Flipo в Telegram</h1>
       <p className="mt-3 max-w-sm text-sm leading-6 text-muted">
-        Это мини-приложение работает только внутри Telegram. Перейдите в бота, чтобы играть,
+        Это приложение работает только внутри Telegram. Перейдите в бота, чтобы играть,
         пополнять баланс и управлять подарками.
       </p>
 

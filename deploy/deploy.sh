@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/deploy"
 
-mkdir -p "$ROOT/deploy/prebuilt" "$ROOT/logs" "$ROOT/data/telegram" "$ROOT/data/gifts"
+mkdir -p "$ROOT/deploy/prebuilt" "$ROOT/logs" "$ROOT/data/telegram" "$ROOT/data/gifts" "$ROOT/data/cases"
 
 if [[ ! -x "$ROOT/deploy/prebuilt/api" ]]; then
   echo "missing executable: deploy/prebuilt/api" >&2

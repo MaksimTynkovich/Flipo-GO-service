@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ChevronRight,
   Gift,
-  Shield,
   Sparkles,
   Ticket,
   Users,
@@ -29,6 +28,7 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { REFERRAL_MONTHLY_SHARE_PERCENT } from "@/lib/referral";
+import { formatUserError } from "@/lib/user-errors";
 import { cn } from "@/lib/utils";
 
 export function ProfileOverviewView() {
@@ -90,7 +90,7 @@ export function ProfileOverviewView() {
       closeModal?.();
       setPromoOpen(false);
     } catch (e) {
-      setPromoError(e instanceof Error ? e.message : "Не удалось активировать");
+      setPromoError(formatUserError(e, "Не удалось активировать"));
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
         const channel = e.channel || PROMO_REQUIRED_CHANNEL;
         const url = promoChannelUrl(channel);
@@ -187,18 +187,6 @@ export function ProfileOverviewView() {
           subtitle={`${REFERRAL_MONTHLY_SHARE_PERCENT}% со стейкинга друзей`}
           onClick={() => haptics.impactOccurred("medium")}
         />
-        {user?.is_admin ? (
-          <>
-            <div className="mx-4 hairline-top" />
-            <ProfileMenuLink
-              href={APP_ROUTES.admin}
-              icon={<Shield className="h-4 w-4" />}
-              title="Система"
-              subtitle="Админ-панель"
-              onClick={() => haptics.impactOccurred("medium")}
-            />
-          </>
-        ) : null}
       </section>
 
       <section className="panel overflow-hidden p-0">

@@ -138,6 +138,8 @@ const (
 	LedgerReferralBonus LedgerType = "referral_bonus"
 	LedgerPromoBonus    LedgerType = "promo_bonus"
 	LedgerWheelPrize    LedgerType = "wheel_prize"
+	LedgerCaseOpen      LedgerType = "case_open"
+	LedgerCasePrize     LedgerType = "case_prize"
 	LedgerWithdraw   LedgerType = "withdraw"
 	LedgerRefund     LedgerType = "refund"
 	LedgerMarketBuy  LedgerType = "market_buy"

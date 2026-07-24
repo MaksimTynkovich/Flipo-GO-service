@@ -16,10 +16,13 @@ import (
 )
 
 type Claims struct {
-	UserID     uuid.UUID `json:"user_id"`
-	TelegramID int64     `json:"telegram_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	TelegramID  int64     `json:"telegram_id"`
+	AdminPanel  bool      `json:"admin_panel,omitempty"`
 	jwt.RegisteredClaims
 }
+
+const adminPanelTokenTTL = 12 * time.Hour
 
 type AdminEventNotifier interface {
 	NotifyReferralJoined(ctx context.Context, actor, referrer telegram.AdminActor)
@@ -32,12 +35,16 @@ type Service struct {
 	jwtSecret           []byte
 	jwtExpiry           time.Duration
 	adminTelegramIDs    map[int64]struct{}
+	adminTelegramOrder  []int64
+	adminPanelPassword  string
 	debugAuthEnabled    bool
 	debugTelegramID     int64
 	debugUsername       string
 	debugInitialBalance int64
 	analytics           *analyticsuc.Service
 	adminEvents         AdminEventNotifier
+	adminLoginAlerter   AdminLoginAlerter
+	adminLogins         *adminLoginStore
 }
 
 func NewService(users domain.UserRepository, botToken string, jwtSecret string, jwtExpiry time.Duration, referrals *referral.Service, opts ...ServiceOption) *Service {
@@ -70,9 +77,16 @@ func WithAdminTelegramIDs(ids []int64) ServiceOption {
 		if s.adminTelegramIDs == nil {
 			s.adminTelegramIDs = make(map[int64]struct{}, len(ids))
 		}
+		s.adminTelegramOrder = append([]int64(nil), ids...)
 		for _, id := range ids {
 			s.adminTelegramIDs[id] = struct{}{}
 		}
+	}
+}
+
+func WithAdminPanelPassword(password string) ServiceOption {
+	return func(s *Service) {
+		s.adminPanelPassword = password
 	}
 }
 
@@ -251,16 +265,25 @@ func (s *Service) AuthenticateDebug(ctx context.Context) (string, *domain.User, 
 }
 
 func (s *Service) issueToken(user *domain.User) (string, error) {
+	return s.issueTokenWithOpts(user, false, s.jwtExpiry)
+}
+
+func (s *Service) issueTokenWithOpts(user *domain.User, adminPanel bool, ttl time.Duration) (string, error) {
 	claims := Claims{
 		UserID:     user.ID,
 		TelegramID: user.TelegramID,
+		AdminPanel: adminPanel,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.jwtExpiry)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.jwtSecret)
+}
+
+func (s *Service) AdminPanelPasswordConfigured() bool {
+	return s.adminPanelPassword != ""
 }
 
 func (s *Service) ParseToken(tokenStr string) (*Claims, error) {
@@ -287,6 +310,16 @@ func (s *Service) IsAdmin(telegramID int64) bool {
 	}
 	_, ok := s.adminTelegramIDs[telegramID]
 	return ok
+}
+
+func (s *Service) CanAccessAdmin(claims *Claims) bool {
+	if s == nil || claims == nil {
+		return false
+	}
+	if s.IsAdmin(claims.TelegramID) {
+		return true
+	}
+	return claims.AdminPanel && s.AdminPanelPasswordConfigured()
 }
 
 func (s *Service) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) (string, error) {

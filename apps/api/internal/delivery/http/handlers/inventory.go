@@ -3,7 +3,9 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
@@ -32,6 +34,13 @@ func (h *InventoryHandler) List(c *gin.Context) {
 }
 
 func (h *InventoryHandler) Deposit(c *gin.Context) {
+	if err := domain.EnsureGiftDepositEnabled(); err != nil {
+		httperr.Respond(c, http.StatusServiceUnavailable, err, gin.H{
+			"error": "Депозит подарками временно недоступен.",
+			"code":  "gift_deposit_disabled",
+		})
+		return
+	}
 	userID := middleware.GetUserID(c)
 	var req struct {
 		TxRef string `json:"tx_ref" binding:"required"`
@@ -74,7 +83,7 @@ func (h *InventoryHandler) Withdraw(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
 		return
 	}
-	pending, err := h.inventory.Withdraw(c.Request.Context(), userID, itemID)
+	pending, message, err := h.inventory.Withdraw(c.Request.Context(), userID, itemID)
 	if err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "error", "withdraw_failed", err.Error(), map[string]any{"item_id": itemID.String()})
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -84,7 +93,11 @@ func (h *InventoryHandler) Withdraw(c *gin.Context) {
 		"item_id": itemID.String(),
 		"pending": pending,
 	})
-	c.JSON(http.StatusOK, gin.H{"ok": true, "pending": pending})
+	resp := gin.H{"ok": true, "pending": pending}
+	if message != "" {
+		resp["message"] = message
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *InventoryHandler) Stake(c *gin.Context) {

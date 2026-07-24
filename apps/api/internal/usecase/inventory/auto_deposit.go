@@ -41,6 +41,10 @@ func NewAutoDepositService(
 }
 
 func (s *AutoDepositService) ProcessIncoming(ctx context.Context, incoming []telegram.IncomingGift) (int, error) {
+	if err := domain.EnsureGiftDepositEnabled(); err != nil {
+		slog.Info("gift deposit paused: skipping incoming gifts", "count", len(incoming))
+		return 0, nil
+	}
 	credited := 0
 	for _, gift := range incoming {
 		ok, err := s.creditOne(ctx, gift)

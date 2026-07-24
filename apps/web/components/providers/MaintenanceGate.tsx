@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getMaintenanceStatus } from "@/lib/api";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -12,6 +12,17 @@ type GateState =
   | { status: "open" }
   | { status: "maintenance"; message: string };
 
+type BettingStatus = {
+  /** When false, new crash/roulette/pvp bets are rejected; cashouts still work. */
+  acceptBets: boolean;
+};
+
+const BettingStatusContext = createContext<BettingStatus>({ acceptBets: true });
+
+export function useAcceptBets() {
+  return useContext(BettingStatusContext).acceptBets;
+}
+
 export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user } = useAuth();
@@ -19,28 +30,37 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   const isAdminUser = Boolean(user?.is_admin);
   const bypass = isAdminRoute || isAdminUser;
   const [state, setState] = useState<GateState>({ status: "loading" });
+  const [acceptBets, setAcceptBets] = useState(true);
 
   useEffect(() => {
-    if (bypass) {
+    let cancelled = false;
+
+    const apply = (data: { enabled: boolean; accept_bets?: boolean; message: string }) => {
+      if (cancelled) return;
+      setAcceptBets(data.accept_bets !== false);
+      if (bypass) {
+        setState({ status: "open" });
+        return;
+      }
+      if (data.enabled) {
+        setState({ status: "maintenance", message: data.message || "" });
+        return;
+      }
       setState({ status: "open" });
-      return;
+    };
+
+    if (!bypass) {
+      setState({ status: "loading" });
     }
 
-    let cancelled = false;
-    setState({ status: "loading" });
-
     getMaintenanceStatus()
-      .then((data) => {
-        if (cancelled) return;
-        if (data.enabled) {
-          setState({ status: "maintenance", message: data.message || "" });
-          return;
-        }
-        setState({ status: "open" });
-      })
+      .then(apply)
       .catch(() => {
         // Fail open: don't lock users out if status probe fails.
-        if (!cancelled) setState({ status: "open" });
+        if (!cancelled) {
+          setAcceptBets(true);
+          setState({ status: "open" });
+        }
       });
 
     return () => {
@@ -48,13 +68,13 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
     };
   }, [bypass]);
 
-  // Poll while the app is open so turning maintenance on/off applies without reload.
+  // Poll while the app is open so turning maintenance / bet pause on/off applies without reload.
   useEffect(() => {
-    if (bypass) return;
-
     const timer = window.setInterval(() => {
       getMaintenanceStatus()
         .then((data) => {
+          setAcceptBets(data.accept_bets !== false);
+          if (bypass) return;
           if (data.enabled) {
             setState({ status: "maintenance", message: data.message || "" });
           } else {
@@ -67,17 +87,17 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(timer);
   }, [bypass]);
 
-  if (bypass) {
-    return children;
-  }
+  const bettingValue = useMemo(() => ({ acceptBets }), [acceptBets]);
 
-  if (state.status === "loading") {
+  if (!bypass && state.status === "loading") {
     return <AppSplashScreen />;
   }
 
-  if (state.status === "maintenance") {
+  if (!bypass && state.status === "maintenance") {
     return <MaintenanceScreen message={state.message} />;
   }
 
-  return children;
+  return (
+    <BettingStatusContext.Provider value={bettingValue}>{children}</BettingStatusContext.Provider>
+  );
 }

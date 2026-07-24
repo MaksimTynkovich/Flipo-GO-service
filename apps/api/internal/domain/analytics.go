@@ -183,38 +183,3 @@ type AnalyticsEventCreate struct {
 	Properties     datatypes.JSON
 	OccurredAt     time.Time
 }
-
-// AnalyticsStakingDropoffGift — snapshot of a profile gift valuation shown on the staking page.
-type AnalyticsStakingDropoffGift struct {
-	Slug              string `json:"slug"`
-	Name              string `json:"name"`
-	CollectionSlug    string `json:"collection_slug,omitempty"`
-	PriceNanoton      int64  `json:"price_nanoton"`
-	IsStaked          bool   `json:"is_staked"`
-	DailyYieldNanoton int64  `json:"daily_yield_nanoton,omitempty"`
-}
-
-// AnalyticsStakingDropoffUser — visited staking, had profile gifts valued, never staked.
-type AnalyticsStakingDropoffUser struct {
-	UserID                       uuid.UUID                     `json:"user_id"`
-	TelegramID                   int64                         `json:"telegram_id"`
-	Username                     string                        `json:"username"`
-	FirstName                    string                        `json:"first_name"`
-	EnteredAt                    time.Time                     `json:"entered_at"`
-	FirstStakingAt               *time.Time                    `json:"first_staking_at,omitempty"`
-	LastStakingAt                *time.Time                    `json:"last_staking_at,omitempty"`
-	ValuedAt                     time.Time                     `json:"valued_at"`
-	ProfileGiftCount             int                           `json:"profile_gift_count"`
-	UnstakedProfileCount         int                           `json:"unstaked_profile_count"`
-	ProfileValuationNanoton      int64                         `json:"profile_valuation_nanoton"`
-	UnstakedProfileValuationNano int64                         `json:"unstaked_profile_valuation_nanoton"`
-	Gifts                        []AnalyticsStakingDropoffGift `json:"gifts"`
-}
-
-type AnalyticsStakingDropoff struct {
-	ViewersWithProfileGifts      int64                          `json:"viewers_with_profile_gifts"`
-	DropoffCount                 int64                          `json:"dropoff_count"`
-	DropoffRatePct               float64                        `json:"dropoff_rate_pct"`
-	TotalUnstakedValuationNanoton int64                         `json:"total_unstaked_valuation_nanoton"`
-	Users                        []AnalyticsStakingDropoffUser  `json:"users"`
-}

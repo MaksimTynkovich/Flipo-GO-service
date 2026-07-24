@@ -85,7 +85,7 @@ export function walletStatusLabel(status: string): string {
     case "expired":
       return "Истекло";
     default:
-      return status;
+      return "В обработке";
   }
 }
 

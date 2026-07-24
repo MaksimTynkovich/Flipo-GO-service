@@ -97,6 +97,14 @@ func (s *Service) ValidateBet(ctx context.Context, in BetCheckInput) error {
 		return domain.ErrUserBanned
 	}
 
+	maintenance, err := s.platform.GetMaintenanceSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if maintenance != nil && !maintenance.AcceptBets {
+		return domain.ErrBetsPaused
+	}
+
 	telegramID := in.TelegramID
 	if telegramID == 0 {
 		telegramID = user.TelegramID

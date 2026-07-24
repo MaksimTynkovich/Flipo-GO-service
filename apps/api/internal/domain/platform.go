@@ -65,6 +65,34 @@ type AdminAuditLog struct {
 
 func (AdminAuditLog) TableName() string { return "admin_audit_logs" }
 
+// AdminNotification — in-app ops feed (replaces Telegram admin DMs).
+type AdminNotification struct {
+	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Kind            string         `gorm:"size:64;not null;index" json:"kind"`
+	Category        string         `gorm:"size:32;not null;index" json:"category"`
+	Severity        string         `gorm:"size:16;not null;default:info" json:"severity"`
+	Title           string         `gorm:"size:128;not null" json:"title"`
+	Summary         string         `gorm:"size:512;not null" json:"summary"`
+	Body            string         `gorm:"type:text;not null" json:"body"`
+	ActorTelegramID int64          `gorm:"not null;default:0;index" json:"actor_telegram_id"`
+	ActorUsername   string         `gorm:"size:64;not null;default:''" json:"actor_username"`
+	ActorFirstName  string         `gorm:"size:128;not null;default:''" json:"actor_first_name"`
+	ActorLastName   string         `gorm:"size:128;not null;default:''" json:"actor_last_name"`
+	AmountNanoton   *int64         `json:"amount_nanoton,omitempty"`
+	Meta            datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"meta,omitempty"`
+	ReadAt          *time.Time     `json:"read_at,omitempty"`
+	CreatedAt       time.Time      `gorm:"index" json:"created_at"`
+}
+
+func (AdminNotification) TableName() string { return "admin_notifications" }
+
+// AdminNotificationFilter — list/count options for the admin feed.
+type AdminNotificationFilter struct {
+	Category   string
+	UnreadOnly bool
+	Limit      int
+}
+
 // PromoCode — marketing bonus codes with wager requirement.
 type PromoCode struct {
 	Code              string     `gorm:"size:32;primaryKey" json:"code"`
@@ -86,17 +114,21 @@ type TelegramBotSettings struct {
 	SpamProtectionLevel int       `gorm:"not null;default:1" json:"spam_protection_level"`
 	WebAppURL           string    `gorm:"column:web_app_url;size:512" json:"webapp_url"`
 	WebAppButtonText    string    `gorm:"column:web_app_button_text;size:64" json:"webapp_button_text"`
+	TermsURL            string    `gorm:"column:terms_url;size:512;not null;default:''" json:"terms_url"`
+	TermsButtonText     string    `gorm:"column:terms_button_text;size:64;not null;default:''" json:"terms_button_text"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 func (TelegramBotSettings) TableName() string { return "telegram_bot_settings" }
 
 // PlatformMaintenanceSettings — singleton kill-switch for site-wide maintenance mode.
+// AcceptBets=false pauses new game bets while cashouts and in-flight rounds continue.
 type PlatformMaintenanceSettings struct {
-	ID        int       `gorm:"primaryKey" json:"id"`
-	Enabled   bool      `gorm:"not null;default:false" json:"enabled"`
-	Message   string    `gorm:"type:text;not null;default:''" json:"message"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         int       `gorm:"primaryKey" json:"id"`
+	Enabled    bool      `gorm:"not null;default:false" json:"enabled"`
+	AcceptBets bool      `gorm:"not null;default:true" json:"accept_bets"`
+	Message    string    `gorm:"type:text;not null;default:''" json:"message"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func (PlatformMaintenanceSettings) TableName() string { return "platform_maintenance_settings" }
@@ -194,7 +226,7 @@ type AdminUserRow struct {
 	ReferrerCode               string `json:"referrer_code,omitempty"`
 }
 
-// AdminPendingGiftWithdraw — gift held in withdraw_pending for silent hold review.
+// AdminPendingGiftWithdraw — gift held in withdraw_pending for silent hold review or case claim purchase.
 type AdminPendingGiftWithdraw struct {
 	ItemID         uuid.UUID `json:"item_id"`
 	UserID         uuid.UUID `json:"user_id"`
@@ -204,7 +236,9 @@ type AdminPendingGiftWithdraw struct {
 	Name           string    `json:"name"`
 	ImageURL       string    `json:"image_url"`
 	TelegramGiftID string    `json:"telegram_gift_id"`
+	CollectionSlug string    `json:"collection_slug"`
 	FloorNanoton   int64     `json:"floor_price_nanoton"`
+	NeedsPurchase  bool      `json:"needs_purchase"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 

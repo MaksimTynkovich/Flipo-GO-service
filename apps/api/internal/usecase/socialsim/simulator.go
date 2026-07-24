@@ -139,6 +139,9 @@ type Simulator struct {
 	humanJoins map[uuid.UUID]pendingHumanJoin
 
 	recentPersonas map[uuid.UUID]time.Time
+
+	// When false, stop placing new ghost bets / PvP rooms (cashouts of in-flight continue).
+	acceptBets bool
 }
 
 type ghostRoomInternal struct {
@@ -167,6 +170,7 @@ func NewSimulator(store ConfigStore, limits GameLimits, publish PresencePublishe
 		recentPersonas: make(map[uuid.UUID]time.Time),
 		humanJoins:     make(map[uuid.UUID]pendingHumanJoin),
 		cfg:            DefaultSettings(),
+		acceptBets:     true,
 	}
 	s.presence = domain.PresenceSnapshot{
 		Online:    0,
@@ -185,6 +189,12 @@ func (s *Simulator) SetCrashRepublish(fn RepublishFn) {
 
 func (s *Simulator) SetRouletteRepublish(fn RepublishFn) {
 	s.republishRoulette = fn
+}
+
+func (s *Simulator) SetAcceptBets(accept bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.acceptBets = accept
 }
 
 func (s *Simulator) Start(ctx context.Context) {
@@ -602,13 +612,14 @@ func (s *Simulator) tickBets(ctx context.Context) {
 	now := time.Now()
 	crashRound := s.crashRound
 	rouletteRound := s.rouletteRound
-	if s.cfg.CrashEnabled && s.crashPhase == "betting" && s.crashRound != uuid.Nil {
+	acceptBets := s.acceptBets
+	if acceptBets && s.cfg.CrashEnabled && s.crashPhase == "betting" && s.crashRound != uuid.Nil {
 		s.maybePlaceCrashBetLocked(ctx, now)
 	}
 	if s.cfg.CrashEnabled && s.crashPhase == "running" {
 		s.applyCrashCashoutsLocked(s.crashMult)
 	}
-	if s.cfg.RouletteEnabled && s.roulettePhase == "betting" && s.rouletteRound != uuid.Nil {
+	if acceptBets && s.cfg.RouletteEnabled && s.roulettePhase == "betting" && s.rouletteRound != uuid.Nil {
 		s.maybePlaceRouletteBetLocked(ctx, now)
 	}
 	crashDirty := s.crashDirty
@@ -937,6 +948,10 @@ func (s *Simulator) tickPvP(ctx context.Context) {
 		alive = append(alive, room)
 	}
 	s.pvpRooms = alive
+
+	if !s.acceptBets {
+		return
+	}
 
 	openCount := 0
 	for _, r := range s.pvpRooms {

@@ -3,20 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { MAIN_TABS } from "@/src/shared/config/navigation";
+import { getMainTabs } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
+import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 
 export function AppTabBar() {
   const pathname = usePathname();
   const haptics = useTelegramHaptics();
+  const { casesEnabled } = useCasesFeatures();
+  const tabs = getMainTabs({ casesEnabled });
 
   return (
     <nav
       aria-label="Основная навигация"
       className="app-tabbar absolute bottom-0 left-0 right-0 z-50 bg-background pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] hairline-top"
     >
-      <div className="app-container grid h-[3.25rem] grid-cols-4 items-stretch">
-        {MAIN_TABS.map(({ href, label, icon: Icon, match }) => {
+      <div
+        className={cn(
+          "app-container grid h-[3.25rem] items-stretch",
+          tabs.length === 5 ? "grid-cols-5" : "grid-cols-4",
+        )}
+      >
+        {tabs.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname);
 
           return (

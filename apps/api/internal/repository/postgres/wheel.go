@@ -141,53 +141,6 @@ func (r *WheelRepo) CreateSpin(ctx context.Context, spin *domain.WheelSpin) erro
 	return r.db.WithContext(ctx).Create(spin).Error
 }
 
-func (r *WheelRepo) ListRecentWins(ctx context.Context, limit int) ([]domain.WheelRecentWin, error) {
-	return r.ListTopWinsSince(ctx, time.Time{}, limit)
-}
-
-func (r *WheelRepo) ListTopWinsSince(ctx context.Context, since time.Time, limit int) ([]domain.WheelRecentWin, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	type row struct {
-		Username     string
-		FirstName    string
-		PhotoURL     string
-		PrizeNanoton int64
-		SegmentLabel string
-		CreatedAt    time.Time
-	}
-	var rows []row
-	q := r.db.WithContext(ctx).
-		Table("wheel_spins AS ws").
-		Select("u.username, u.first_name, u.photo_url, ws.prize_nanoton, seg.label AS segment_label, ws.created_at").
-		Joins("JOIN users u ON u.id = ws.user_id").
-		Joins("JOIN wheel_segments seg ON seg.id = ws.segment_id").
-		Where("ws.spin_source <> ?", domain.WheelSpinSourceAdmin)
-	if !since.IsZero() {
-		q = q.Where("ws.created_at >= ?", since.UTC())
-	}
-	err := q.
-		Order("ws.prize_nanoton DESC, ws.created_at DESC").
-		Limit(limit).
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	out := make([]domain.WheelRecentWin, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, domain.WheelRecentWin{
-			Username:     r.Username,
-			FirstName:    r.FirstName,
-			PhotoURL:     r.PhotoURL,
-			PrizeNanoton: r.PrizeNanoton,
-			SegmentLabel: r.SegmentLabel,
-			CreatedAt:    r.CreatedAt,
-		})
-	}
-	return out, nil
-}
-
 func (r *WheelRepo) SumPrizesSince(ctx context.Context, since time.Time) (int64, error) {
 	var total int64
 	q := r.db.WithContext(ctx).Model(&domain.WheelSpin{}).

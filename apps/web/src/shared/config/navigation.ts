@@ -1,8 +1,10 @@
 import type { LucideIcon } from "lucide-react";
-import { CircleDot, Gamepad2, Gift, Rocket, ShoppingBag, User, Users } from "lucide-react";
+import { CircleDot, Gamepad2, Gift, Package, Rocket, ShoppingBag, User, Users } from "lucide-react";
+import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export const APP_ROUTES = {
-  home: "/games",
+  home: "/cases",
+  cases: "/cases",
   games: "/games",
   crash: "/games/crash",
   roulette: "/games/roulette",
@@ -29,8 +31,9 @@ export type ScreenContext = {
 };
 
 const TAB_ROOTS = [
+  APP_ROUTES.cases,
   APP_ROUTES.games,
-  APP_ROUTES.market,
+  ...(MARKET_ENABLED ? [APP_ROUTES.market] as const : []),
   APP_ROUTES.inventory,
   APP_ROUTES.profile,
 ] as const;
@@ -75,6 +78,7 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
 
 export type AppScreenItem = {
   id:
+    | "cases"
     | "games"
     | "market"
     | "inventory"
@@ -89,19 +93,30 @@ export type AppScreenItem = {
 
 export const APP_SCREENS: AppScreenItem[] = [
   {
+    id: "cases",
+    href: APP_ROUTES.cases,
+    label: "Кейсы",
+    level: "tab",
+    description: "Каталог кейсов с подарками Telegram.",
+  },
+  {
     id: "games",
     href: APP_ROUTES.games,
     label: "Игры",
     level: "tab",
     description: "Лобби с Crash, Рулетка и Комнаты.",
   },
-  {
-    id: "market",
-    href: APP_ROUTES.market,
-    label: "Маркет",
-    level: "tab",
-    description: "Магазин и торговля игровыми предметами.",
-  },
+  ...(MARKET_ENABLED
+    ? [
+        {
+          id: "market" as const,
+          href: APP_ROUTES.market,
+          label: "Маркет",
+          level: "tab" as const,
+          description: "Магазин и торговля игровыми предметами.",
+        },
+      ]
+    : []),
   {
     id: "inventory",
     href: APP_ROUTES.inventory,
@@ -133,14 +148,22 @@ export const APP_SCREENS: AppScreenItem[] = [
 ];
 
 export type MainTabItem = {
-  id: "games" | "market" | "inventory" | "profile";
+  id: "cases" | "games" | "market" | "inventory" | "profile";
   href: string;
   label: string;
   icon: LucideIcon;
   match: (pathname: string) => boolean;
 };
 
-export const MAIN_TABS: MainTabItem[] = [
+const ALL_MAIN_TABS: MainTabItem[] = [
+  {
+    id: "cases",
+    href: APP_ROUTES.cases,
+    label: "Кейсы",
+    icon: Package,
+    match: (pathname) =>
+      pathname === APP_ROUTES.cases || pathname.startsWith(`${APP_ROUTES.cases}/`),
+  },
   {
     id: "games",
     href: APP_ROUTES.games,
@@ -171,6 +194,15 @@ export const MAIN_TABS: MainTabItem[] = [
     match: (pathname) => pathname.startsWith(APP_ROUTES.profile),
   },
 ];
+
+export const MAIN_TABS: MainTabItem[] = ALL_MAIN_TABS.filter(
+  (tab) => tab.id !== "market" || MARKET_ENABLED,
+);
+
+export function getMainTabs(options?: { casesEnabled?: boolean }): MainTabItem[] {
+  const casesEnabled = options?.casesEnabled !== false;
+  return MAIN_TABS.filter((tab) => tab.id !== "cases" || casesEnabled);
+}
 
 export type GameLobbyItem = {
   href: string;
@@ -235,6 +267,15 @@ export function getScreenContext(pathname: string): ScreenContext {
   if (isTabRoot(pathname)) {
     const tab = MAIN_TABS.find((item) => item.href === pathname);
     return { level: "tab", title: tab?.label ?? "" };
+  }
+
+  if (pathname.startsWith(`${APP_ROUTES.cases}/`)) {
+    return {
+      level: "stack",
+      title: "Кейс",
+      backHref: APP_ROUTES.cases,
+      backLabel: "Кейсы",
+    };
   }
 
   const exact = STACK_SCREENS[pathname];

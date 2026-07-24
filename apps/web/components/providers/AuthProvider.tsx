@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { usePathname } from "next/navigation";
 import {
   AUTH_SESSION_REFRESHED,
   authDebug,
@@ -32,8 +31,6 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isAdminRoute = pathname.startsWith("/admin");
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -71,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         initTelegramWebApp();
 
         const inTelegram = hasTelegramInitData();
-        const allowBrowserSession = DEBUG_AUTH || isAdminRoute;
+        const allowBrowserSession = DEBUG_AUTH;
 
         const token = localStorage.getItem("flipo_token");
         if (token && (inTelegram || allowBrowserSession)) {
@@ -168,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     init();
-  }, [isAdminRoute]);
+  }, []);
 
   if (loading) {
     return <AppSplashScreen showRecovery />;

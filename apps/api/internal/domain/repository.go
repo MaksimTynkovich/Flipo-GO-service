@@ -50,8 +50,41 @@ type InventoryRepository interface {
 	ReleaseFromBet(ctx context.Context, itemID uuid.UUID) error
 	TransferFromBet(ctx context.Context, itemID, newUserID uuid.UUID) error
 	TransferOwnership(ctx context.Context, itemID, newUserID uuid.UUID, fromStatus InventoryStatus) error
+	// TakeHouseGiftForCollection transfers one bot-owned gift of the collection to the user (available).
+	TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug string) (*InventoryItem, error)
+	BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment string) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
 	SetFloorPrice(ctx context.Context, slug string, price int64) error
+}
+
+type CaseRepository interface {
+	ListActive(ctx context.Context) ([]Case, error)
+	ListAll(ctx context.Context) ([]Case, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*Case, error)
+	FindBySlug(ctx context.Context, slug string) (*Case, error)
+	CreateCase(ctx context.Context, c *Case) error
+	UpdateCase(ctx context.Context, c *Case) error
+	ListLootByCase(ctx context.Context, caseID uuid.UUID) ([]CaseLootEntry, error)
+	ReplaceLoot(ctx context.Context, caseID uuid.UUID, entries []CaseLootEntry) error
+	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserCaseState, error)
+	SaveState(ctx context.Context, state *UserCaseState) error
+	CreateOpen(ctx context.Context, open *CaseOpen) error
+	FindOpenByIdempotency(ctx context.Context, key string) (*CaseOpen, error)
+	FindLatestOpenByUserCase(ctx context.Context, userID, caseID uuid.UUID) (*CaseOpen, error)
+	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
+	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
+	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
+	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
+	GetLiveFeedSettings(ctx context.Context) (*CaseLiveFeedSettings, error)
+	UpdateLiveFeedSettings(ctx context.Context, settings *CaseLiveFeedSettings) error
+
+	ListCasePromoCodes(ctx context.Context, caseID *uuid.UUID) ([]CasePromoCode, error)
+	GetCasePromoCode(ctx context.Context, code string) (*CasePromoCode, error)
+	UpsertCasePromoCode(ctx context.Context, promo *CasePromoCode) error
+	DeleteCasePromoCode(ctx context.Context, code string) error
+	HasRedeemedCasePromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
+	CreateCasePromoRedemption(ctx context.Context, redemption *CasePromoRedemption) error
+	IncrementCasePromoUsed(ctx context.Context, code string) error
 }
 
 type MarketRepository interface {
@@ -131,8 +164,6 @@ type WheelRepository interface {
 	TryAddReferralBonusSpin(ctx context.Context, userID uuid.UUID, day time.Time, dailyLimit int) (granted bool, err error)
 	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	CreateSpin(ctx context.Context, spin *WheelSpin) error
-	ListRecentWins(ctx context.Context, limit int) ([]WheelRecentWin, error)
-	ListTopWinsSince(ctx context.Context, since time.Time, limit int) ([]WheelRecentWin, error)
 	SumPrizesSince(ctx context.Context, since time.Time) (int64, error)
 	CountSpinsGlobalSince(ctx context.Context, since time.Time) (int64, error)
 	AdminPeriodStats(ctx context.Context, since time.Time) (WheelPeriodStats, error)
@@ -225,11 +256,18 @@ type AdminRepository interface {
 	UserTransfersSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserTransfersSummary, error)
 }
 
+type AdminNotificationRepository interface {
+	CreateAdminNotification(ctx context.Context, n *AdminNotification) error
+	ListAdminNotifications(ctx context.Context, filter AdminNotificationFilter) ([]AdminNotification, error)
+	CountUnreadAdminNotifications(ctx context.Context, category string) (int64, error)
+	MarkAdminNotificationRead(ctx context.Context, id uuid.UUID) error
+	MarkAllAdminNotificationsRead(ctx context.Context, category string) (int64, error)
+}
+
 type AnalyticsRepository interface {
 	RecordEvents(ctx context.Context, events []AnalyticsEventCreate) error
 	GetOverview(ctx context.Context, since time.Time, filter AnalyticsOverviewFilter) (*AnalyticsOverview, error)
 	GetUserDrilldown(ctx context.Context, userID uuid.UUID, limit int, sessionID string) (*AnalyticsUserDrilldown, error)
-	GetStakingDropoff(ctx context.Context, since time.Time, limit int) (*AnalyticsStakingDropoff, error)
 }
 
 type PvPRepository interface {

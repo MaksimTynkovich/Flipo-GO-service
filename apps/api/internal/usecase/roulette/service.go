@@ -8,6 +8,7 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/google/uuid"
@@ -74,6 +75,7 @@ type RoundBetsState struct {
 
 type Service struct {
 	games     domain.GameRepository
+	users     domain.UserRepository
 	balance   *balance.Service
 	funding   *betfunding.Service
 	inventory domain.InventoryRepository
@@ -81,11 +83,24 @@ type Service struct {
 	bettingS  int
 	spinS     int
 	overlay   BetOverlay
+	admin     AdminGameNotifier
 	betHook   func(context.Context, uuid.UUID, int64)
+}
+
+type AdminGameNotifier interface {
+	NotifyGameResult(ctx context.Context, actor telegram.AdminActor, game, outcome, selection string, stakeNanoton, payoutNanoton int64, multiplier, crashPoint *float64, resultLabel string)
 }
 
 func (s *Service) SetQualifyingBetHook(hook func(context.Context, uuid.UUID, int64)) {
 	s.betHook = hook
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminGameNotifier) {
+	s.admin = notifier
+}
+
+func (s *Service) SetUsers(users domain.UserRepository) {
+	s.users = users
 }
 
 func NewService(
@@ -192,6 +207,7 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 		var sel map[string]string
 		_ = json.Unmarshal(bet.Selection, &sel)
 		betColor := sel["color"]
+		resultLbl := fmt.Sprintf("выпало %s (%d)", rouletteColorLabel(result), resultNumber)
 
 		if betColor == result {
 			gross := provablyfair.RoulettePayout(result, bet.AmountNanoton)
@@ -201,13 +217,70 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 				_, _ = s.balance.Credit(ctx, bet.UserID, credit, domain.LedgerWin, "game_bet", bet.ID)
 			}
 			_ = s.funding.ReleaseOnWin(ctx, bet)
+			if s.admin != nil {
+				s.admin.NotifyGameResult(
+					ctx,
+					s.actorForUser(ctx, bet.UserID),
+					"roulette",
+					"win",
+					rouletteColorLabel(betColor),
+					bet.AmountNanoton,
+					credit,
+					nil,
+					nil,
+					resultLbl,
+				)
+			}
 		} else {
 			_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
 			_ = s.funding.SettleLoss(ctx, bet)
+			if s.admin != nil {
+				s.admin.NotifyGameResult(
+					ctx,
+					s.actorForUser(ctx, bet.UserID),
+					"roulette",
+					"lose",
+					rouletteColorLabel(betColor),
+					bet.AmountNanoton,
+					0,
+					nil,
+					nil,
+					resultLbl,
+				)
+			}
 		}
 	}
 	_ = s.PublishBets(ctx, roundID)
 	return nil
+}
+
+func rouletteColorLabel(color string) string {
+	switch color {
+	case "red":
+		return "красное"
+	case "black":
+		return "чёрное"
+	case "green":
+		return "зелёное"
+	default:
+		return color
+	}
+}
+
+func (s *Service) actorForUser(ctx context.Context, userID uuid.UUID) telegram.AdminActor {
+	if s.users == nil {
+		return telegram.AdminActor{}
+	}
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil || user == nil {
+		return telegram.AdminActor{}
+	}
+	return telegram.AdminActor{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		FirstName:  user.FirstName,
+		LastName:   user.LastName,
+	}
 }
 
 func (s *Service) GetCurrentRoundBets(ctx context.Context) (*RoundBetsState, error) {

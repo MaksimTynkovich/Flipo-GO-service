@@ -45,3 +45,22 @@ func TestOpenAppMarkupWebAppURLWithPayload(t *testing.T) {
 		t.Fatalf("unexpected web_app url: %s", webApp["url"])
 	}
 }
+
+func TestStartMenuMarkupIncludesTermsButton(t *testing.T) {
+	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "Привет")
+	h.SetTermsURLResolver(func(ctx context.Context) (string, string) {
+		return "https://example.com/terms", "Политика"
+	})
+	markup := h.startMenuMarkup(context.Background(), "")
+	rows := markup["inline_keyboard"].([][]map[string]any)
+	if len(rows) < 2 {
+		t.Fatalf("expected terms row, got %d rows", len(rows))
+	}
+	btn := rows[1][0]
+	if btn["text"] != "Политика" {
+		t.Fatalf("unexpected terms button text: %v", btn["text"])
+	}
+	if btn["url"] != "https://example.com/terms" {
+		t.Fatalf("unexpected terms url: %v", btn["url"])
+	}
+}
