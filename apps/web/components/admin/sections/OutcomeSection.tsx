@@ -129,7 +129,7 @@ export default function OutcomeSection() {
       <div className="space-y-4">
         <AdminPanel
           title="Назначить исход"
-          description="Движок подбирает server seed, который естественным образом даёт нужный результат — provably-fair проверка остаётся валидной (флаг admin_influenced в proof)."
+          description="Движок подбирает server seed, который естественным образом даёт нужный результат — provably-fair проверка остаётся валидной."
         >
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">

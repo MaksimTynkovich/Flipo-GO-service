@@ -31,7 +31,7 @@ type GameRound struct {
 	ServerSeed     string         `gorm:"size:128" json:"server_seed,omitempty"`
 	ClientSeed     string         `gorm:"size:128" json:"client_seed"`
 	Nonce          int64          `gorm:"default:0" json:"nonce"`
-	AdminInfluenced bool          `gorm:"not null;default:false" json:"admin_influenced"`
+	AdminInfluenced bool          `gorm:"not null;default:false" json:"-"`
 	CreatedAt      time.Time      `json:"created_at"`
 
 	Bets []GameBet `gorm:"foreignKey:RoundID" json:"-"`
