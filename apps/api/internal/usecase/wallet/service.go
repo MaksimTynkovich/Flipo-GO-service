@@ -246,11 +246,6 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 	if receiveNanoton < s.cfg.MinWithdrawNanoton {
 		return nil, 0, domain.ErrInvalidAmount
 	}
-	if s.promoGate != nil {
-		if active, err := s.promoGate.HasActivePromoRedemption(ctx, userID); err == nil && active {
-			return nil, 0, domain.ErrPromoWagerPending
-		}
-	}
 	if !s.chain.CanSend() {
 		return nil, 0, domain.ErrChainUnavailable
 	}
