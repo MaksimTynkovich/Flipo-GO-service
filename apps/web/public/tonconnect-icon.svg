@@ -1,36 +1,3 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <!-- Глубокий премиальный Web3 фон -->
-    <linearGradient id="bgUltra" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0F172A" />
-      <stop offset="100%" stop-color="#020617" />
-    </linearGradient>
-
-    <!-- Градиент Telegram-Неона -->
-    <linearGradient id="tgNeon" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00A2E8" />
-      <stop offset="100%" stop-color="#0088CC" />
-    </linearGradient>
-
-    <!-- Мягкое свечение для фокуса -->
-    <filter id="glowUltra" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
-  </defs>
-
-  <!-- Фон -->
-  <rect width="512" height="512" fill="url(#bgUltra)" />
-
-  <!-- ЕДИНЫЙ УНИВЕРСАЛЬНЫЙ ЭЛЕМЕНТ (Синтез всех смыслов) -->
-  <g transform="translate(256, 256) scale(1.1)" filter="url(#glowUltra)">
-    <!-- Левое крыло / Теневая сторона -->
-    <path d="M 0,-110 L -90,45 L 0,0 Z" fill="#007BB5" />
-
-    <!-- Правое крыло / Световая сторона -->
-    <path d="M 0,-110 L 90,45 L 0,0 Z" fill="url(#tgNeon)" />
-
-    <!-- Нижний замок геометрии NFT-гексагона (основание) -->
-    <path d="M -90,45 L 0,100 L 90,45 L 0,0 Z" fill="#ffffff" fill-opacity="0.04" stroke="#0088CC" stroke-width="1.5" />
-  </g>
+  <image width="512" height="512" href="tonconnect-icon.png" />
 </svg>
