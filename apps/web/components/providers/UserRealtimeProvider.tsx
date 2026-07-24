@@ -33,7 +33,6 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
       if (msg.event === "balance.updated") {
         const payload = msg.payload as {
           betting_balance?: number;
-          promo_balance?: number;
           delta_nanoton?: number;
           ledger_type?: string;
         };
@@ -47,7 +46,6 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
         ) {
           stashWheelPrizeBalance({
             betting_balance: payload.betting_balance,
-            promo_balance: payload.promo_balance,
             delta_nanoton: payload.delta_nanoton,
           });
           return;
@@ -59,7 +57,6 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
               ? {
                   ...prev,
                   betting_balance: payload.betting_balance!,
-                  promo_balance: payload.promo_balance ?? prev.promo_balance ?? 0,
                 }
               : prev,
           );

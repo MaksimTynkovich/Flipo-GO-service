@@ -15,5 +15,5 @@ func NotifyUser(ctx context.Context, users domain.UserRepository, notifier Balan
 	if err != nil {
 		return
 	}
-	notifier.BalanceUpdated(userID, user.BettingBalance, user.PromoBalance, deltaNanoton, ledgerType)
+	notifier.BalanceUpdated(userID, user.BettingBalance, deltaNanoton, ledgerType)
 }

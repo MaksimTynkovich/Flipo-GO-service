@@ -43,16 +43,10 @@ func migrateReferralV2(db *gorm.DB) error {
 		}
 	}
 
-	if tableExists(db, "promo_redemptions") && !columnExists(db, "promo_redemptions", "max_cashout_nanoton") {
-		if err := db.Exec(`ALTER TABLE promo_redemptions ADD COLUMN max_cashout_nanoton BIGINT NOT NULL DEFAULT 0`).Error; err != nil {
-			return err
-		}
-	}
-
 	if tableExists(db, "promo_codes") {
 		_ = db.Exec(`
-			INSERT INTO promo_codes (code, bonus_nanoton, wager_multiplier, max_uses, used_count, active)
-			VALUES ('REF_WELCOME', 50000000, 30, 0, 0, TRUE)
+			INSERT INTO promo_codes (code, bonus_nanoton, max_uses, used_count, active)
+			VALUES ('REF_WELCOME', 50000000, 0, 0, TRUE)
 			ON CONFLICT (code) DO NOTHING
 		`).Error
 	}

@@ -166,10 +166,6 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 		if buyer.BettingBalance < price {
 			return domain.ErrInsufficientFunds
 		}
-		available := buyer.BettingBalance - buyer.PromoBalance
-		if available < price {
-			return domain.ErrPromoFundsRestricted
-		}
 
 		var seller domain.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).

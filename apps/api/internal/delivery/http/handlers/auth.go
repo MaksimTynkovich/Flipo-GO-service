@@ -24,7 +24,6 @@ type userView struct {
 	FirstName      string             `json:"first_name"`
 	PhotoURL       string             `json:"photo_url,omitempty"`
 	BettingBalance int64              `json:"betting_balance"`
-	PromoBalance   int64              `json:"promo_balance"`
 	StakingTier    domain.StakingTier `json:"staking_tier"`
 	TonWallet      string             `json:"ton_wallet,omitempty"`
 	IsAdmin        bool               `json:"is_admin"`
@@ -259,7 +258,6 @@ func toUserView(authSvc *auth.Service, user *domain.User) userView {
 		FirstName:      user.FirstName,
 		PhotoURL:       user.PhotoURL,
 		BettingBalance: user.BettingBalance,
-		PromoBalance:   user.PromoBalance,
 		StakingTier:    user.StakingTier,
 		TonWallet:      user.TonWallet,
 		IsAdmin:        authSvc.IsAdmin(user.TelegramID),

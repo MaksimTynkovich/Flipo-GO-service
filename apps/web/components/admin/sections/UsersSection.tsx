@@ -474,7 +474,7 @@ export default function UsersSection() {
               value={audience ? String(audience.with_balance) : "—"}
               hint={
                 audience
-                  ? `${formatTON(audience.balances_nanoton)} + ${formatTON(audience.promo_balances_nanoton)} promo`
+                  ? formatTON(audience.balances_nanoton)
                   : undefined
               }
             />

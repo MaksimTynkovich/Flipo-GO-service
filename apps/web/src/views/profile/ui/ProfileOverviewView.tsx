@@ -21,7 +21,6 @@ import {
   formatTON,
   getMe,
 } from "@/lib/api";
-import { hasPromoBalance, mainBalanceNanoton } from "@/lib/balance";
 import { PROMO_REQUIRED_CHANNEL, promoChannelMention, promoChannelUrl } from "@/lib/promo-channel";
 import { shortenTonWalletAddress } from "@/lib/wallet";
 import { TonIcon } from "@/components/icons/TonIcon";
@@ -44,7 +43,6 @@ export function ProfileOverviewView() {
   const promoInputRef = useRef<HTMLInputElement | null>(null);
 
   const walletConnected = Boolean(user?.ton_wallet?.trim());
-  const showPromoBalance = !loading && user && hasPromoBalance(user);
 
   useEffect(() => {
     if (!promoOpen) return;
@@ -125,14 +123,9 @@ export function ProfileOverviewView() {
             <p className="text-[11px] font-medium text-muted">Баланс</p>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="inline-flex items-center gap-1 text-[1.125rem] font-semibold tabular-nums leading-none">
-                {loading ? "…" : user ? formatTON(mainBalanceNanoton(user)) : "—"}
+                {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
                 <TonIcon variant="brand" className="h-5 w-5" />
               </span>
-              {showPromoBalance ? (
-                <span className="text-xs font-semibold tabular-nums text-accent">
-                  +{formatTON(user.promo_balance ?? 0)} бонус
-                </span>
-              ) : null}
             </div>
           </div>
           <Link

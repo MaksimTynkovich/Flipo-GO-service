@@ -144,7 +144,6 @@ export function WheelView() {
         prev
           ? patchUserBalance(prev, {
               betting_balance: pendingBalance.betting_balance,
-              promo_balance: pendingBalance.promo_balance,
             })
           : prev,
       );
@@ -216,7 +215,6 @@ export function WheelView() {
         prev
           ? patchUserBalance(prev, {
               betting_balance: pendingBalance.betting_balance,
-              promo_balance: pendingBalance.promo_balance,
             })
           : prev,
       );

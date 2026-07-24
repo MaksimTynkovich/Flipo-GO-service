@@ -18,12 +18,7 @@ export function AppTabBar() {
       aria-label="Основная навигация"
       className="app-tabbar absolute bottom-0 left-0 right-0 z-50 bg-background pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] hairline-top"
     >
-      <div
-        className={cn(
-          "app-container grid h-[3.25rem] items-stretch",
-          tabs.length === 5 ? "grid-cols-5" : "grid-cols-4",
-        )}
-      >
+      <div className="app-container flex h-[3.25rem] items-stretch">
         {tabs.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname);
 
@@ -34,7 +29,7 @@ export function AppTabBar() {
               aria-current={active ? "page" : undefined}
               onClick={() => haptics.selectionChanged()}
               className={cn(
-                "app-control flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-xl",
+                "app-control flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl",
                 active ? "text-accent" : "text-muted",
               )}
             >

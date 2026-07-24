@@ -2,7 +2,6 @@
 
 export type WheelPrizeBalancePatch = {
   betting_balance: number;
-  promo_balance?: number;
   delta_nanoton?: number;
 };
 

@@ -33,8 +33,7 @@ export function CasesFeaturesProvider({ children }: { children: ReactNode }) {
       setCasesEnabled(Boolean(features.enabled));
       setBannersEnabled(Boolean(features.banners_enabled));
     } catch {
-      // Keep last known / optimistic default so nav does not flicker off on blips.
-      setCasesEnabled(true);
+      // Keep last known value — do not force-enable on transient errors.
     } finally {
       setReady(true);
     }
@@ -43,6 +42,19 @@ export function CasesFeaturesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady || !user) return;
     void refresh();
+  }, [authReady, user, refresh]);
+
+  useEffect(() => {
+    if (!authReady || !user) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [authReady, user, refresh]);
 
   const value = useMemo(

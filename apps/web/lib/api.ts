@@ -62,7 +62,6 @@ export type User = {
   first_name: string;
   photo_url?: string;
   betting_balance: number;
-  promo_balance?: number;
   staking_tier: "base" | "boost";
   ton_wallet?: string;
   is_admin?: boolean;
@@ -820,7 +819,7 @@ export async function cancelMarketListing(id: string) {
 
 export async function buyMarketListing(id: string) {
   try {
-    const result = await api<{ balance: number; promo_balance: number }>(`/api/v1/market/listings/${id}/buy`, {
+    const result = await api<{ balance: number }>(`/api/v1/market/listings/${id}/buy`, {
       method: "POST",
     });
     trackEvent({
@@ -1156,7 +1155,6 @@ export type AdminTreasuryStatus = {
 export type AdminPromoCode = {
   code: string;
   bonus_nanoton: number;
-  wager_multiplier: number;
   max_uses: number;
   used_count: number;
   active: boolean;
@@ -1214,7 +1212,6 @@ export type AdminUser = {
   first_name: string;
   last_name?: string;
   betting_balance: number;
-  promo_balance?: number;
   staking_tier?: string;
   ton_wallet?: string;
   is_banned: boolean;
@@ -1266,7 +1263,6 @@ export type AdminUserAudience = {
   boost_tier_users: number;
   staking_tvl_nanoton: number;
   balances_nanoton: number;
-  promo_balances_nanoton: number;
   staking_accrued_yield_nanoton: number;
   staking_daily_yield_nanoton: number;
   staking_weekly_yield_nanoton: number;
@@ -1884,10 +1880,6 @@ export type PromoStatus = {
   active: boolean;
   promo_code?: string;
   bonus_nanoton?: number;
-  wager_required_nanoton?: number;
-  wager_progress_nanoton?: number;
-  remaining_nanoton?: number;
-  replaced_promo_code?: string;
 };
 
 export async function activatePromoCode(code: string) {

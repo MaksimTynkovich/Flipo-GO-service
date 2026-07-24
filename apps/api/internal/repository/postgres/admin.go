@@ -616,7 +616,7 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 		Where("telegram_id > 0 AND referrer_id IS NOT NULL AND created_at >= ?", weekAgo).
 		Count(&out.Referred7d).Error
 	_ = r.db.WithContext(ctx).Model(&domain.User{}).
-		Where("telegram_id > 0 AND (betting_balance > 0 OR promo_balance > 0)").
+		Where("telegram_id > 0 AND betting_balance > 0").
 		Count(&out.WithBalance).Error
 	_ = r.db.WithContext(ctx).Model(&domain.User{}).
 		Where("telegram_id > 0 AND ton_wallet <> ''").
@@ -628,10 +628,6 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 		Where("telegram_id > 0").
 		Select("COALESCE(SUM(betting_balance), 0)").
 		Scan(&out.BalancesNanoton).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
-		Where("telegram_id > 0").
-		Select("COALESCE(SUM(promo_balance), 0)").
-		Scan(&out.PromoBalancesNanoton).Error
 
 	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
 		Where("is_active = ?", true).

@@ -1426,15 +1426,6 @@ body::-webkit-scrollbar,
     font-variant-numeric: tabular-nums;
   }
 
-  .balance-pill__bonus {
-    flex-shrink: 0;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    color: var(--accent);
-  }
-
   .balance-pill__deposit {
     display: flex;
     width: 1.625rem;

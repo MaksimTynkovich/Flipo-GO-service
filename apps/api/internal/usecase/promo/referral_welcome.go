@@ -31,14 +31,6 @@ func (s *Service) ActivateReferralWelcome(ctx context.Context, userID uuid.UUID)
 		return nil
 	}
 
-	active, err := s.platform.GetActiveRedemption(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if active != nil {
-		return nil
-	}
-
 	promo, err := s.platform.GetPromoCode(ctx, domain.RefWelcomePromoCode)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
@@ -50,47 +42,23 @@ func (s *Service) ActivateReferralWelcome(ctx context.Context, userID uuid.UUID)
 		return nil
 	}
 
-	wagerRequired := int64(float64(promo.BonusNanoton) * promo.WagerMultiplier)
-	if wagerRequired <= 0 {
-		wagerRequired = promo.BonusNanoton
-	}
-
+	now := time.Now().UTC()
 	redemptionID := uuid.New()
 	if _, err := s.balance.Credit(ctx, userID, promo.BonusNanoton, domain.LedgerPromoBonus, "promo_code", redemptionID); err != nil {
 		return err
 	}
 
 	redemption := &domain.PromoRedemption{
-		ID:                   redemptionID,
-		UserID:               userID,
-		PromoCode:            promo.Code,
-		BonusNanoton:         promo.BonusNanoton,
-		WagerRequiredNanoton: wagerRequired,
-		MaxCashoutNanoton:    domain.RefWelcomeMaxCashoutNano,
-		Status:               "active",
+		ID:           redemptionID,
+		UserID:       userID,
+		PromoCode:    promo.Code,
+		BonusNanoton: promo.BonusNanoton,
+		Status:       "completed",
+		CompletedAt:  &now,
 	}
 	if err := s.platform.CreateRedemption(ctx, redemption); err != nil {
 		return err
 	}
 	_ = s.platform.IncrementPromoUsed(ctx, promo.Code)
 	return nil
-}
-
-func (s *Service) applyPromoCashoutCap(ctx context.Context, userID uuid.UUID, redemption *domain.PromoRedemption) {
-	if redemption == nil || redemption.MaxCashoutNanoton <= 0 {
-		return
-	}
-	user, err := s.users.FindByID(ctx, userID)
-	if err != nil {
-		return
-	}
-	allowed := redemption.BonusNanoton + redemption.MaxCashoutNanoton
-	if user.BettingBalance <= allowed {
-		return
-	}
-	excess := user.BettingBalance - allowed
-	if excess <= 0 {
-		return
-	}
-	_, _ = s.users.UpdateBalance(ctx, userID, -excess, domain.LedgerBet, "promo_cap", redemption.ID)
 }
