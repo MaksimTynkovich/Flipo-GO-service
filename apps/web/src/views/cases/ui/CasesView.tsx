@@ -27,7 +27,7 @@ function prependLiveDrop(prev: CaseLiveDrop[], drop: CaseLiveDrop): CaseLiveDrop
 
 export function CasesView() {
   const router = useRouter();
-  const { casesEnabled, ready: featuresReady } = useCasesFeatures();
+  const { casesVisible, ready: featuresReady } = useCasesFeatures();
   const { showToast } = useToast();
   const [data, setData] = useState<CasesCatalog | null>(null);
   const [live, setLive] = useState<CaseLiveDrop[]>([]);
@@ -35,10 +35,10 @@ export function CasesView() {
 
   useEffect(() => {
     if (!featuresReady) return;
-    if (!casesEnabled) {
+    if (!casesVisible) {
       router.replace(APP_ROUTES.games);
     }
-  }, [featuresReady, casesEnabled, router]);
+  }, [featuresReady, casesVisible, router]);
 
   const loadLive = useCallback(async () => {
     try {
@@ -68,12 +68,12 @@ export function CasesView() {
   }, [showToast]);
 
   useEffect(() => {
-    if (!featuresReady || !casesEnabled) return;
+    if (!featuresReady || !casesVisible) return;
     void load();
-  }, [load, featuresReady, casesEnabled]);
+  }, [load, featuresReady, casesVisible]);
 
   useEffect(() => {
-    if (!featuresReady || !casesEnabled) return;
+    if (!featuresReady || !casesVisible) return;
     return connectGameWS(
       "cases",
       (msg) => {
@@ -84,9 +84,9 @@ export function CasesView() {
       },
       { onOpen: () => void loadLive() },
     );
-  }, [loadLive, featuresReady, casesEnabled]);
+  }, [loadLive, featuresReady, casesVisible]);
 
-  if (!featuresReady || !casesEnabled) {
+  if (!featuresReady || !casesVisible) {
     return null;
   }
 

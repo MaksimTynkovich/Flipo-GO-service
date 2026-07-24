@@ -7,12 +7,12 @@ import { APP_ROUTES } from "@/src/shared/config/navigation";
 
 export default function HomePage() {
   const router = useRouter();
-  const { casesEnabled, ready } = useCasesFeatures();
+  const { casesVisible, ready } = useCasesFeatures();
 
   useEffect(() => {
     if (!ready) return;
-    router.replace(casesEnabled ? APP_ROUTES.cases : APP_ROUTES.games);
-  }, [ready, casesEnabled, router]);
+    router.replace(casesVisible ? APP_ROUTES.cases : APP_ROUTES.games);
+  }, [ready, casesVisible, router]);
 
   return null;
 }

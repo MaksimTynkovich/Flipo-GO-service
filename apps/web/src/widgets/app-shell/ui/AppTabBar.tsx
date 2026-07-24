@@ -10,8 +10,8 @@ import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 export function AppTabBar() {
   const pathname = usePathname();
   const haptics = useTelegramHaptics();
-  const { casesEnabled } = useCasesFeatures();
-  const tabs = getMainTabs({ casesEnabled });
+  const { casesVisible } = useCasesFeatures();
+  const tabs = getMainTabs({ casesEnabled: casesVisible });
 
   return (
     <nav

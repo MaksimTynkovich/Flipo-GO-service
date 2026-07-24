@@ -13,7 +13,10 @@ import { getCasesFeatures } from "@/lib/api";
 import { useAuth } from "@/components/providers/AuthProvider";
 
 type CasesFeaturesState = {
+  /** Platform flag from admin settings (false when section is turned off for players). */
   casesEnabled: boolean;
+  /** Whether the current user should see cases (admins always true). */
+  casesVisible: boolean;
   bannersEnabled: boolean;
   ready: boolean;
   refresh: () => Promise<void>;
@@ -57,9 +60,11 @@ export function CasesFeaturesProvider({ children }: { children: ReactNode }) {
     };
   }, [authReady, user, refresh]);
 
+  const casesVisible = Boolean(user?.is_admin) || casesEnabled;
+
   const value = useMemo(
-    () => ({ casesEnabled, bannersEnabled, ready, refresh }),
-    [casesEnabled, bannersEnabled, ready, refresh],
+    () => ({ casesEnabled, casesVisible, bannersEnabled, ready, refresh }),
+    [casesEnabled, casesVisible, bannersEnabled, ready, refresh],
   );
 
   return (

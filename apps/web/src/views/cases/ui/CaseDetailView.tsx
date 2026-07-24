@@ -50,7 +50,7 @@ export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
   const { user, setUser } = useAuth();
-  const { casesEnabled, ready: featuresReady } = useCasesFeatures();
+  const { casesVisible, ready: featuresReady } = useCasesFeatures();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
   const idOrSlug = String(params?.id || "");
@@ -77,10 +77,10 @@ export function CaseDetailView() {
 
   useEffect(() => {
     if (!featuresReady) return;
-    if (!casesEnabled) {
+    if (!casesVisible) {
       router.replace(APP_ROUTES.games);
     }
-  }, [featuresReady, casesEnabled, router]);
+  }, [featuresReady, casesVisible, router]);
 
   const load = useCallback(async () => {
     if (!idOrSlug) return;
@@ -95,9 +95,9 @@ export function CaseDetailView() {
   }, [idOrSlug, notifyError]);
 
   useEffect(() => {
-    if (!featuresReady || !casesEnabled) return;
+    if (!featuresReady || !casesVisible) return;
     void load();
-  }, [load, featuresReady, casesEnabled]);
+  }, [load, featuresReady, casesVisible]);
 
   useEffect(() => {
     const iso = caseItem?.next_available_at;
@@ -256,7 +256,7 @@ export function CaseDetailView() {
     return "Открыть бесплатно";
   }
 
-  if (!featuresReady || !casesEnabled) {
+  if (!featuresReady || !casesVisible) {
     return null;
   }
 

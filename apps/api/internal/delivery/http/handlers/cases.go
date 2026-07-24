@@ -32,7 +32,8 @@ func (h *CasesHandler) Features(c *gin.Context) {
 
 func (h *CasesHandler) Catalog(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	out, err := h.cases.Catalog(c.Request.Context(), userID)
+	telegramID := middleware.GetTelegramID(c)
+	out, err := h.cases.Catalog(c.Request.Context(), userID, telegramID)
 	if err != nil {
 		writeCasesError(c, err)
 		return
@@ -42,7 +43,8 @@ func (h *CasesHandler) Catalog(c *gin.Context) {
 
 func (h *CasesHandler) Get(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	out, err := h.cases.Get(c.Request.Context(), c.Param("id"), userID)
+	telegramID := middleware.GetTelegramID(c)
+	out, err := h.cases.Get(c.Request.Context(), c.Param("id"), userID, telegramID)
 	if err != nil {
 		writeCasesError(c, err)
 		return
@@ -52,6 +54,7 @@ func (h *CasesHandler) Get(c *gin.Context) {
 
 func (h *CasesHandler) Open(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	telegramID := middleware.GetTelegramID(c)
 	var req struct {
 		IdempotencyKey string `json:"idempotency_key"`
 		PromoCode      string `json:"promo_code"`
@@ -63,7 +66,7 @@ func (h *CasesHandler) Open(c *gin.Context) {
 	if strings.TrimSpace(req.IdempotencyKey) == "" {
 		req.IdempotencyKey = uuid.NewString()
 	}
-	result, err := h.cases.Open(c.Request.Context(), userID, c.Param("id"), req.IdempotencyKey, req.PromoCode)
+	result, err := h.cases.Open(c.Request.Context(), userID, telegramID, c.Param("id"), req.IdempotencyKey, req.PromoCode)
 	if err != nil {
 		writeCasesError(c, err)
 		return
@@ -73,7 +76,8 @@ func (h *CasesHandler) Open(c *gin.Context) {
 
 func (h *CasesHandler) Opens(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	out, err := h.cases.ListOpens(c.Request.Context(), userID, 50)
+	telegramID := middleware.GetTelegramID(c)
+	out, err := h.cases.ListOpens(c.Request.Context(), userID, telegramID, 50)
 	if err != nil {
 		writeCasesError(c, err)
 		return
@@ -85,7 +89,8 @@ func (h *CasesHandler) Opens(c *gin.Context) {
 }
 
 func (h *CasesHandler) Live(c *gin.Context) {
-	out, err := h.cases.LiveFeed(c.Request.Context(), 6)
+	telegramID := middleware.GetTelegramID(c)
+	out, err := h.cases.LiveFeed(c.Request.Context(), telegramID, 6)
 	if err != nil {
 		if errors.Is(err, domain.ErrCasesDisabled) {
 			c.JSON(http.StatusOK, []domain.CaseLiveDrop{})
