@@ -203,53 +203,74 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 		return err
 	}
 
+	type colorAgg struct {
+		userID uuid.UUID
+		color  string
+		count  int
+		stake  int64
+		payout int64
+		won    bool
+	}
+	// One admin notification per user per color (multiple bets on the same color → one row).
+	aggs := make(map[string]*colorAgg, len(bets))
+
 	for _, bet := range bets {
 		var sel map[string]string
 		_ = json.Unmarshal(bet.Selection, &sel)
 		betColor := sel["color"]
-		resultLbl := fmt.Sprintf("выпало %s (%d)", rouletteColorLabel(result), resultNumber)
 
-		if betColor == result {
+		var credit int64
+		won := betColor == result
+		if won {
 			gross := provablyfair.RoulettePayout(result, bet.AmountNanoton)
-			credit := s.funding.WinTONCredit(bet, gross)
+			credit = s.funding.WinTONCredit(bet, gross)
 			_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetWon, credit, nil)
 			if credit > 0 {
 				_, _ = s.balance.Credit(ctx, bet.UserID, credit, domain.LedgerWin, "game_bet", bet.ID)
 			}
 			_ = s.funding.ReleaseOnWin(ctx, bet)
-			if s.admin != nil {
-				s.admin.NotifyGameResult(
-					ctx,
-					s.actorForUser(ctx, bet.UserID),
-					"roulette",
-					"win",
-					rouletteColorLabel(betColor),
-					bet.AmountNanoton,
-					credit,
-					nil,
-					nil,
-					resultLbl,
-				)
-			}
 		} else {
 			_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
 			_ = s.funding.SettleLoss(ctx, bet)
-			if s.admin != nil {
-				s.admin.NotifyGameResult(
-					ctx,
-					s.actorForUser(ctx, bet.UserID),
-					"roulette",
-					"lose",
-					rouletteColorLabel(betColor),
-					bet.AmountNanoton,
-					0,
-					nil,
-					nil,
-					resultLbl,
-				)
+		}
+
+		key := bet.UserID.String() + "|" + betColor
+		agg := aggs[key]
+		if agg == nil {
+			agg = &colorAgg{userID: bet.UserID, color: betColor, won: won}
+			aggs[key] = agg
+		}
+		agg.count++
+		agg.stake += bet.AmountNanoton
+		agg.payout += credit
+	}
+
+	if s.admin != nil && len(aggs) > 0 {
+		resultLbl := fmt.Sprintf("выпало %s (%d)", rouletteColorLabel(result), resultNumber)
+		for _, agg := range aggs {
+			outcome := "lose"
+			if agg.won {
+				outcome = "win"
 			}
+			selection := rouletteColorLabel(agg.color)
+			if agg.count > 1 {
+				selection = fmt.Sprintf("%s · %s", selection, rouletteBetsCountLabel(agg.count))
+			}
+			s.admin.NotifyGameResult(
+				ctx,
+				s.actorForUser(ctx, agg.userID),
+				"roulette",
+				outcome,
+				selection,
+				agg.stake,
+				agg.payout,
+				nil,
+				nil,
+				resultLbl,
+			)
 		}
 	}
+
 	_ = s.PublishBets(ctx, roundID)
 	return nil
 }
@@ -264,6 +285,24 @@ func rouletteColorLabel(color string) string {
 		return "зелёное"
 	default:
 		return color
+	}
+}
+
+func rouletteBetsCountLabel(n int) string {
+	if n <= 1 {
+		return ""
+	}
+	mod100 := n % 100
+	mod10 := n % 10
+	switch {
+	case mod100 >= 11 && mod100 <= 14:
+		return fmt.Sprintf("%d ставок", n)
+	case mod10 == 1:
+		return fmt.Sprintf("%d ставка", n)
+	case mod10 >= 2 && mod10 <= 4:
+		return fmt.Sprintf("%d ставки", n)
+	default:
+		return fmt.Sprintf("%d ставок", n)
 	}
 }
 
