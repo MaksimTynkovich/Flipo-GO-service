@@ -43,6 +43,7 @@ type Chat struct {
 
 type WebAppURLResolver func(ctx context.Context) string
 type WebAppButtonTextResolver func(ctx context.Context) string
+type TermsURLResolver func(ctx context.Context) (url, buttonText string)
 
 // UserLookup finds whether a Telegram user is already registered.
 type UserLookup interface {
@@ -59,6 +60,7 @@ type BotUpdates struct {
 	welcomeText              string
 	webAppURLResolver        WebAppURLResolver
 	webAppButtonTextResolver WebAppButtonTextResolver
+	termsURLResolver         TermsURLResolver
 	adminNotifier            *AdminNotifier
 	adminLogin               AdminLoginApprover
 	users                    UserLookup
@@ -89,6 +91,10 @@ func (h *BotUpdates) SetWebAppURLResolver(resolver WebAppURLResolver) {
 
 func (h *BotUpdates) SetWebAppButtonTextResolver(resolver WebAppButtonTextResolver) {
 	h.webAppButtonTextResolver = resolver
+}
+
+func (h *BotUpdates) SetTermsURLResolver(resolver TermsURLResolver) {
+	h.termsURLResolver = resolver
 }
 
 func (h *BotUpdates) SetAdminNotifier(notifier *AdminNotifier) {
@@ -258,6 +264,8 @@ func (u UserRepoLookup) FindByTelegramID(ctx context.Context, telegramID int64) 
 	return false, err
 }
 
+const startTermsNotice = "Заходя в проект, вы соглашаетесь с пользовательским соглашением."
+
 func (h *BotUpdates) sendStartWelcome(ctx context.Context, chatID int64, startPayload string) error {
 	text := strings.ReplaceAll(h.welcomeText, "\\n", "\n")
 	if text == "" {
@@ -266,18 +274,26 @@ func (h *BotUpdates) sendStartWelcome(ctx context.Context, chatID int64, startPa
 			"🎁 Стейкинг Telegram Gifts\n" +
 			"💰 TON депозиты и вывод\n\n" +
 			"Нажмите кнопку ниже, чтобы открыть приложение."
-		text = "*" + text + "*"
-	} else {
-		text = "*" + text + "*"
 	}
+	text = strings.TrimSpace(text)
+	if !strings.Contains(text, startTermsNotice) {
+		text = text + "\n\n" + startTermsNotice
+	}
+	text = "*" + text + "*"
 
 	return h.api.sendMessage(ctx, chatID, text, h.startMenuMarkup(ctx, startPayload), "Markdown")
 }
 
 func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload string) map[string]any {
-	rows := make([][]map[string]any, 0, 3)
+	rows := make([][]map[string]any, 0, 4)
 
 	rows = append(rows, []map[string]any{h.openAppButton(ctx, startPayload)})
+
+	if termsURL, termsLabel := h.resolvedTerms(ctx); termsURL != "" {
+		rows = append(rows, []map[string]any{
+			{"text": termsLabel, "url": termsURL},
+		})
+	}
 
 	if h.channelURL != "" {
 		rows = append(rows, []map[string]any{
@@ -298,6 +314,18 @@ func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload string) m
 	return map[string]any{
 		"inline_keyboard": rows,
 	}
+}
+
+func (h *BotUpdates) resolvedTerms(ctx context.Context) (url, buttonText string) {
+	if h.termsURLResolver != nil {
+		url, buttonText = h.termsURLResolver(ctx)
+	}
+	url = strings.TrimSpace(url)
+	buttonText = strings.TrimSpace(buttonText)
+	if buttonText == "" {
+		buttonText = "📄 Пользовательское соглашение"
+	}
+	return url, buttonText
 }
 
 func (h *BotUpdates) resolvedWebAppURL(ctx context.Context) string {

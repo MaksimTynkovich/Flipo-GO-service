@@ -426,6 +426,16 @@ func (s *Service) GetBotSettings(ctx context.Context) (*domain.TelegramBotSettin
 }
 
 func (s *Service) UpdateBotSettings(ctx context.Context, adminID uuid.UUID, settings domain.TelegramBotSettings) error {
+	settings.WebAppURL = strings.TrimSpace(settings.WebAppURL)
+	settings.WebAppButtonText = strings.TrimSpace(settings.WebAppButtonText)
+	settings.TermsURL = strings.TrimSpace(settings.TermsURL)
+	settings.TermsButtonText = strings.TrimSpace(settings.TermsButtonText)
+	if len(settings.TermsButtonText) > 64 {
+		settings.TermsButtonText = settings.TermsButtonText[:64]
+	}
+	if len(settings.WebAppButtonText) > 64 {
+		settings.WebAppButtonText = settings.WebAppButtonText[:64]
+	}
 	if err := s.platform.UpdateBotSettings(ctx, &settings); err != nil {
 		return err
 	}

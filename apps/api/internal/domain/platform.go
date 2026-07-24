@@ -114,6 +114,8 @@ type TelegramBotSettings struct {
 	SpamProtectionLevel int       `gorm:"not null;default:1" json:"spam_protection_level"`
 	WebAppURL           string    `gorm:"column:web_app_url;size:512" json:"webapp_url"`
 	WebAppButtonText    string    `gorm:"column:web_app_button_text;size:64" json:"webapp_button_text"`
+	TermsURL            string    `gorm:"column:terms_url;size:512;not null;default:''" json:"terms_url"`
+	TermsButtonText     string    `gorm:"column:terms_button_text;size:64;not null;default:''" json:"terms_button_text"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 

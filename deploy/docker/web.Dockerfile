@@ -20,6 +20,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
 COPY apps/web/package.json apps/web/package-lock.json* ./
 RUN npm ci
 COPY apps/web/ ./
+COPY docs/TERMS.ru.md ./docs/TERMS.ru.md
 RUN npm run build
 
 FROM node:20-alpine

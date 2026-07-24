@@ -101,8 +101,6 @@ export function CaseWinModal({
       />
 
       <div className="case-win-modal__body">
-        <p className="case-win-modal__eyebrow">Вы выбили</p>
-
         <div className="case-win-modal__prize" aria-hidden>
           <span className="case-win-modal__aura" />
           {isTon ? (
@@ -155,7 +153,7 @@ export function CaseWinModal({
             disabled={selling}
             onClick={() => closeThen(onAgain)}
           >
-            Ещё раз
+            Продолжить
           </button>
         </div>
       </div>

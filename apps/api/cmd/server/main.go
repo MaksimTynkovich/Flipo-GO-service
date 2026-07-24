@@ -348,6 +348,13 @@ func main() {
 		}
 		return settings.WebAppButtonText
 	})
+	botUpdates.SetTermsURLResolver(func(ctx context.Context) (string, string) {
+		settings, err := platformRepo.GetBotSettings(ctx)
+		if err != nil {
+			return "", ""
+		}
+		return settings.TermsURL, settings.TermsButtonText
+	})
 	if cfg.TelegramWebhookURL != "" {
 		if err := botAPI.SetWebhook(ctx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
 			slog.Warn("telegram webhook registration failed", "error", err)

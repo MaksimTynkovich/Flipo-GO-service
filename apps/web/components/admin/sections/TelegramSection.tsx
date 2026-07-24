@@ -18,6 +18,8 @@ const DEFAULT_SETTINGS: AdminBotSettings = {
   spam_protection_level: 2,
   webapp_url: "",
   webapp_button_text: "",
+  terms_url: "",
+  terms_button_text: "",
 };
 
 export default function TelegramSection() {
@@ -34,8 +36,18 @@ export default function TelegramSection() {
     setSettingsLoading(true);
     try {
       const data = await loadCached("admin:telegram:settings", getAdminBotSettings);
-      setSettings(data);
-      primeCache("admin:telegram:settings", data);
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...data,
+        terms_url: data.terms_url ?? "",
+        terms_button_text: data.terms_button_text ?? "",
+      });
+      primeCache("admin:telegram:settings", {
+        ...DEFAULT_SETTINGS,
+        ...data,
+        terms_url: data.terms_url ?? "",
+        terms_button_text: data.terms_button_text ?? "",
+      });
     } finally {
       setSettingsLoading(false);
     }
@@ -131,6 +143,31 @@ export default function TelegramSection() {
                 value={formSettings.webapp_button_text}
                 onChange={(e) => setSettings({ ...formSettings, webapp_button_text: e.target.value })}
                 placeholder="🚀 Открыть приложение"
+                maxLength={64}
+              />
+            </AdminField>
+
+            <AdminField
+              label="Ссылка на соглашение"
+              hint="Inline-кнопка в /start. Укажите публичный URL (например https://ваш-домен/terms). Если пусто — кнопка не показывается."
+            >
+              <input
+                className="input-field"
+                value={formSettings.terms_url}
+                onChange={(e) => setSettings({ ...formSettings, terms_url: e.target.value })}
+                placeholder="https://..."
+              />
+            </AdminField>
+
+            <AdminField
+              label="Текст кнопки соглашения"
+              hint="Если пусто — «📄 Пользовательское соглашение»."
+            >
+              <input
+                className="input-field"
+                value={formSettings.terms_button_text}
+                onChange={(e) => setSettings({ ...formSettings, terms_button_text: e.target.value })}
+                placeholder="📄 Пользовательское соглашение"
                 maxLength={64}
               />
             </AdminField>

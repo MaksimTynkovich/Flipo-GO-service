@@ -1168,6 +1168,8 @@ export type AdminBotSettings = {
   spam_protection_level: number;
   webapp_url: string;
   webapp_button_text: string;
+  terms_url: string;
+  terms_button_text: string;
 };
 
 export type MaintenanceStatus = {

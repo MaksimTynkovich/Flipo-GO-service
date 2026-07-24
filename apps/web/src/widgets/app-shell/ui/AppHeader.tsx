@@ -39,9 +39,9 @@ export function AppHeader() {
         <div className="relative z-10 flex min-w-0 items-center overflow-visible">
           <div className="balance-pill">
             <div className="balance-pill__amount">
-              <TonIcon className="h-6 w-6 shrink-0 text-[var(--accent)]" />
+              <TonIcon className="balance-pill__ton h-6 w-6 shrink-0" />
               <span className="balance-pill__value truncate">
-                {loading ? "…" : user ? `${formatTON(mainBalance)} TON` : "—"}
+                {loading ? "…" : user ? `${formatTON(mainBalance)}` : "—"}
               </span>
               {!loading && user && hasPromoBalance(user) ? (
                 <span className="balance-pill__bonus">+{formatTON(promoBalance)}</span>
