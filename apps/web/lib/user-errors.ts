@@ -12,7 +12,20 @@ export function formatUserError(
   if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("load failed")) {
     return "Нет связи с сервером. Проверьте интернет.";
   }
-  if (raw.startsWith("Key:") || lower.includes("binding") || lower.includes("field validation")) {
+  if (
+    raw.startsWith("Key:") ||
+    lower.includes("binding") ||
+    lower.includes("field validation") ||
+    lower.includes("telegram_gift_id") ||
+    lower.includes("fulfill") ||
+    lower.includes("nanoton") ||
+    lower.includes("mtproto") ||
+    lower.includes("unbacked") ||
+    /\bstars\b/i.test(raw) ||
+    lower.includes("аккаунте депозита") ||
+    lower.includes("аккаунте бота") ||
+    lower.includes("бот закупа")
+  ) {
     return fallback;
   }
 
@@ -78,8 +91,8 @@ export function formatUserError(
     ["подарок участвует в игре", "Подарок участвует в игре — дождитесь окончания раунда"],
     ["request failed", fallback],
     ["auth failed", "Не удалось войти"],
-    ["internal server error", "Внутренняя ошибка сервера"],
-    ["внутренняя ошибка сервера", "Внутренняя ошибка сервера"],
+    ["internal server error", fallback],
+    ["внутренняя ошибка сервера", fallback],
   ];
 
   for (const [needle, text] of rules) {
@@ -90,8 +103,8 @@ export function formatUserError(
     }
   }
 
-  // Prefer Russian messages from API as-is; hide leftover English.
-  if (/[а-яё]/i.test(raw)) return raw;
+  // Prefer known Russian copy from API; hide leftover English / opaque internals.
+  if (/[а-яё]/i.test(raw) && raw.length <= 120 && !/[_{}=<>]/.test(raw)) return raw;
   if (/^[A-Za-z0-9 ,.'"%:+\-_/()]+$/.test(raw)) return fallback;
-  return raw;
+  return fallback;
 }

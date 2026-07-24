@@ -96,7 +96,7 @@ export function InventorySection() {
       closeSheet();
       load();
     } catch (e) {
-      setListError(formatUserError(e, "Ошибка"));
+      setListError(formatUserError(e, "Не удалось продать подарок"));
     } finally {
       setLiquidating(false);
     }
@@ -120,7 +120,7 @@ export function InventorySection() {
         load();
       }
     } catch (e) {
-      setListError(formatUserError(e, "Ошибка"));
+      setListError(formatUserError(e, "Не удалось вывести подарок"));
     } finally {
       setWithdrawing(false);
     }

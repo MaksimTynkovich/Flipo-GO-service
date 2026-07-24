@@ -103,13 +103,7 @@ export function CaseWinModal({
           </p>
         ) : null}
 
-        {!result.backed ? (
-          <p className="case-win-modal__note">
-            В инвентаре. При выводе бот закупит подарок при необходимости.
-          </p>
-        ) : (
-          <p className="case-win-modal__note">Подарок уже в инвентаре</p>
-        )}
+        <p className="case-win-modal__note">Подарок уже в инвентаре</p>
 
         <div className="case-win-modal__actions">
           <button

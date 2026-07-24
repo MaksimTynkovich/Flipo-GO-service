@@ -28,6 +28,7 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { REFERRAL_MONTHLY_SHARE_PERCENT } from "@/lib/referral";
+import { formatUserError } from "@/lib/user-errors";
 import { cn } from "@/lib/utils";
 
 export function ProfileOverviewView() {
@@ -89,7 +90,7 @@ export function ProfileOverviewView() {
       closeModal?.();
       setPromoOpen(false);
     } catch (e) {
-      setPromoError(e instanceof Error ? e.message : "Не удалось активировать");
+      setPromoError(formatUserError(e, "Не удалось активировать"));
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
         const channel = e.channel || PROMO_REQUIRED_CHANNEL;
         const url = promoChannelUrl(channel);

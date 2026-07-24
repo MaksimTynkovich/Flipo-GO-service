@@ -7542,6 +7542,11 @@ body::-webkit-scrollbar,
   will-change: transform;
 }
 
+/* Transitions on every tile kill the opening rush on phones. */
+.case-reveal__track--spinning .case-reveal__item {
+  transition: none;
+}
+
 .case-reveal__item {
   flex: 0 0 auto;
   display: flex;

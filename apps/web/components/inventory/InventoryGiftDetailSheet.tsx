@@ -172,7 +172,7 @@ export function InventoryGiftDetailSheet({
 
           {item.status === "withdraw_pending" && (
             <p className="mb-3 text-center text-sm text-muted">
-              Ожидайте, бот закупает подарок
+              Вывод в обработке
             </p>
           )}
 

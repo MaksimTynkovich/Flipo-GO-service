@@ -217,7 +217,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 				LastName:   user.LastName,
 			}, item.Name, item.CollectionSlug, "needs_purchase", item.FloorPriceNanoton)
 		}
-		return true, "Ожидайте, бот закупает подарок", nil
+		return true, "Вывод в обработке", nil
 	}
 
 	if item.TelegramGiftID == "" {
@@ -241,7 +241,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 					LastName:   user.LastName,
 				}, item.Name, item.CollectionSlug, "held", item.FloorPriceNanoton)
 			}
-			return true, "", nil
+			return true, "Вывод в обработке", nil
 		}
 	}
 
@@ -262,9 +262,10 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 			return false, "", fmt.Errorf("подарок недоступен для вывода")
 		}
 		if errors.Is(err, telegram.ErrInsufficientStars) {
-			return false, "", fmt.Errorf("недостаточно Stars на аккаунте депозита")
+			return false, "", fmt.Errorf("вывод подарков временно недоступен")
 		}
-		return false, "", err
+		// Do not leak raw Telegram/MTProto errors to the client.
+		return false, "", fmt.Errorf("вывод подарков временно недоступен")
 	}
 
 	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn); err != nil {
