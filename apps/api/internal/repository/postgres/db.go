@@ -117,6 +117,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateCasesColumnFix(db); err != nil {
 		return err
 	}
+	if err := migrateDropPromoWager(db); err != nil {
+		return err
+	}
 	return nil
 }
 
