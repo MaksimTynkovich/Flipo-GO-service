@@ -62,7 +62,6 @@ export type CaseDetailPlayerPreviewProps = {
   loot: CaseLootPreview[];
   ctaLabel: string;
   ctaDisabled?: boolean;
-  ctaTopUp?: boolean;
   onCtaClick?: () => void;
   showCatalogLink?: boolean;
   /** Wrap in phone-like frame (admin). */
@@ -83,7 +82,6 @@ export function CaseDetailPlayerPreview({
   loot,
   ctaLabel,
   ctaDisabled = false,
-  ctaTopUp = false,
   onCtaClick,
   showCatalogLink = false,
   framed = false,
@@ -146,32 +144,11 @@ export function CaseDetailPlayerPreview({
 
       <button
         type="button"
-        className={cn("case-detail-cta app-control", ctaTopUp && "case-detail-cta--topup")}
+        className="case-detail-cta app-control"
         disabled={ctaDisabled}
         onClick={onCtaClick}
       >
-        {ctaTopUp ? (
-          <span className="inline-flex items-center gap-2">
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M19 7V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v1" />
-              <path d="M3 11v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6" />
-              <path d="M16 14h.01" />
-            </svg>
-            {ctaLabel}
-          </span>
-        ) : (
-          ctaLabel
-        )}
+        {ctaLabel}
       </button>
 
       <section className="case-detail__collections">

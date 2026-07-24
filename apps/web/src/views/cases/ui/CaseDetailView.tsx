@@ -12,11 +12,13 @@ import {
   ApiRequestError,
   getCase,
   getMe,
+  liquidateItem,
   openCase,
   type CaseLootPreview,
   type CaseOpenResult,
   type CaseView,
 } from "@/lib/api";
+import { patchUserBalance } from "@/lib/apply-balance";
 import { mainBalanceNanoton } from "@/lib/balance";
 import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
@@ -153,6 +155,7 @@ export function CaseDetailView() {
         setChannelSheetOpen(true);
         void load();
       } else if (e instanceof ApiRequestError && e.code === "insufficient_funds") {
+        notifyError(formatUserError(e, "Недостаточно средств"));
         router.push(APP_ROUTES.deposit);
       } else if (
         e instanceof ApiRequestError &&
@@ -172,6 +175,7 @@ export function CaseDetailView() {
     if (!caseItem || opening || phase !== "idle" || cooldownBlocked) return;
 
     if (needsTopUp) {
+      notifyError("Недостаточно средств");
       router.push(APP_ROUTES.deposit);
       return;
     }
@@ -217,12 +221,23 @@ export function CaseDetailView() {
     setPhase("idle");
   }
 
+  async function handleSellPrize() {
+    if (!result) return;
+    try {
+      const { balance } = await liquidateItem(result.item.id);
+      setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: balance }) : prev));
+      haptics.notificationOccurred("success");
+    } catch (e) {
+      notifyError(formatUserError(e, "Не удалось продать подарок"));
+      throw e;
+    }
+  }
+
   function ctaLabel(): string {
     if (opening || phase === "revealing") return "Открываем…";
     if (cooldownBlocked) {
       return cooldownMs > 0 ? formatCountdown(cooldownMs) : "00:00:00";
     }
-    if (needsTopUp) return "Пополнить баланс";
     if (needsChannel) return "Подписаться и открыть";
     if (isPromo) return "Открыть по промокоду";
     if (caseItem && caseItem.price_nanoton > 0) {
@@ -264,7 +279,6 @@ export function CaseDetailView() {
             phase === "revealing" ||
             (isPromo && !promoCode.trim())
           }
-          ctaTopUp={needsTopUp && phase === "idle"}
           onCtaClick={() => void handleOpen()}
           showCatalogLink={phase === "idle"}
           showPromoCodeInput={isPromo && phase === "idle"}
@@ -282,7 +296,7 @@ export function CaseDetailView() {
           result={result}
           accent={accent}
           onAgain={handleAgain}
-          onInventory={() => router.push(APP_ROUTES.inventory)}
+          onSell={handleSellPrize}
         />
       ) : null}
 
