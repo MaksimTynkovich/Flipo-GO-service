@@ -55,6 +55,7 @@ type Service struct {
 	live            LiveDropPublisher
 	feedBuf         *liveDropBuffer
 	liveSim         *LiveSim
+	isAdmin         func(telegramID int64) bool
 }
 
 type AdminCaseNotifier interface {
@@ -92,6 +93,14 @@ func (s *Service) LiveSim() *LiveSim { return s.liveSim }
 func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) {
 	s.requiredChannel = strings.TrimSpace(channel)
 	s.channelChecker = checker
+}
+
+func (s *Service) SetAdminChecker(isAdmin func(telegramID int64) bool) {
+	s.isAdmin = isAdmin
+}
+
+func (s *Service) telegramIsAdmin(telegramID int64) bool {
+	return s.isAdmin != nil && telegramID > 0 && s.isAdmin(telegramID)
 }
 
 type LootPreview struct {
@@ -190,7 +199,10 @@ func (s *Service) Features(ctx context.Context) (*FeaturesView, error) {
 	}, nil
 }
 
-func (s *Service) ensureCasesEnabled(ctx context.Context) error {
+func (s *Service) ensureCasesEnabled(ctx context.Context, telegramID int64) error {
+	if s.telegramIsAdmin(telegramID) {
+		return nil
+	}
 	settings, err := s.cases.GetCatalogSettings(ctx)
 	if err != nil {
 		return err
@@ -201,8 +213,8 @@ func (s *Service) ensureCasesEnabled(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, error) {
-	if err := s.ensureCasesEnabled(ctx); err != nil {
+func (s *Service) Catalog(ctx context.Context, userID uuid.UUID, telegramID int64) (*CatalogView, error) {
+	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
 		return nil, err
 	}
 	rows, err := s.cases.ListActive(ctx)
@@ -263,8 +275,8 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, 
 	return out, nil
 }
 
-func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID) (*CaseView, error) {
-	if err := s.ensureCasesEnabled(ctx); err != nil {
+func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID, telegramID int64) (*CaseView, error) {
+	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
 		return nil, err
 	}
 	c, err := s.findCase(ctx, idOrSlug)
@@ -286,8 +298,8 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID) (*
 	return &view, nil
 }
 
-func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempotencyKey, promoCode string) (*OpenResult, error) {
-	if err := s.ensureCasesEnabled(ctx); err != nil {
+func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, idOrSlug, idempotencyKey, promoCode string) (*OpenResult, error) {
+	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
 		return nil, err
 	}
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
@@ -515,8 +527,8 @@ func (s *Service) validateCasePromo(ctx context.Context, userID, caseID uuid.UUI
 	return promo, nil
 }
 
-func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, limit int) ([]OpenResult, error) {
-	if err := s.ensureCasesEnabled(ctx); err != nil {
+func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, telegramID int64, limit int) ([]OpenResult, error) {
+	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
 		return nil, err
 	}
 	opens, err := s.cases.ListOpensByUser(ctx, userID, limit)
@@ -534,8 +546,8 @@ func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, limit int) ([
 	return out, nil
 }
 
-func (s *Service) LiveFeed(ctx context.Context, limit int) ([]domain.CaseLiveDrop, error) {
-	if err := s.ensureCasesEnabled(ctx); err != nil {
+func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]domain.CaseLiveDrop, error) {
+	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
 		return nil, err
 	}
 	if limit <= 0 {

@@ -771,7 +771,9 @@ export default function CasesSection() {
       <p className="text-[11px] text-muted">
         Раздел кейсов для игроков:{" "}
         <span className="text-foreground/80">
-          {casesEnabled ? "включён (иконка в навбаре видна)" : "выключен (навбар и API скрыты)"}
+          {casesEnabled
+            ? "включён (иконка в навбаре у игроков)"
+            : "выключен для игроков (админы по-прежнему видят раздел)"}
         </span>
         . Баннеры featured/daily:{" "}
         <span className="text-foreground/80">

@@ -214,6 +214,7 @@ func main() {
 	invSvc.SetWithdrawHoldChecker(riskSvc)
 	caseRepo := postgres.NewCaseRepo(db)
 	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
+	caseSvc.SetAdminChecker(authSvc.IsAdmin)
 	caseSvc.SetValuator(giftValuator)
 	caseSvc.SetBotResolver(marketRepo)
 	caseSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
