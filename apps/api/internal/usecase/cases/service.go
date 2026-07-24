@@ -119,6 +119,7 @@ type CaseView struct {
 	ChannelSubscribed *bool         `json:"channel_subscribed,omitempty"`
 	Loot              []LootPreview `json:"loot,omitempty"`
 	DailyAvailable    *bool         `json:"daily_available,omitempty"`
+	NextAvailableAt   *time.Time    `json:"next_available_at,omitempty"`
 }
 
 // AdminLootEntry — loot row for admin CRUD (includes weight).
@@ -178,10 +179,6 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, 
 	if settings, err := s.cases.GetCatalogSettings(ctx); err == nil && settings != nil {
 		out.BannersEnabled = settings.BannersEnabled
 	}
-	var dailyAvail bool
-	if userID != uuid.Nil {
-		dailyAvail, _ = s.dailyAvailable(ctx, userID)
-	}
 	var channelCached *bool
 	channelStatus := func() *bool {
 		if channelCached != nil {
@@ -208,13 +205,18 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID) (*CatalogView, 
 				view.ChannelSubscribed = &v
 			}
 		}
+		if userID != uuid.Nil && (row.Kind == domain.CaseKindDaily || isFreeChannelCase(row)) {
+			avail, next, _ := s.caseOpenCooldownAvailability(ctx, userID, row.ID)
+			view.DailyAvailable = &avail
+			if !avail {
+				view.NextAvailableAt = next
+			}
+		}
 		switch row.Kind {
 		case domain.CaseKindFeatured:
 			out.Featured = append(out.Featured, view)
 		case domain.CaseKindDaily:
 			v := view
-			avail := dailyAvail
-			v.DailyAvailable = &avail
 			out.Daily = &v
 		default:
 			out.Catalog = append(out.Catalog, view)
@@ -232,9 +234,12 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID) (*
 		return nil, domain.ErrCaseUnavailable
 	}
 	view := s.toCaseView(ctx, *c, true)
-	if c.Kind == domain.CaseKindDaily && userID != uuid.Nil {
-		avail, _ := s.dailyAvailable(ctx, userID)
+	if userID != uuid.Nil && (c.Kind == domain.CaseKindDaily || isFreeChannelCase(*c)) {
+		avail, next, _ := s.caseOpenCooldownAvailability(ctx, userID, c.ID)
 		view.DailyAvailable = &avail
+		if !avail {
+			view.NextAvailableAt = next
+		}
 	}
 	s.attachChannelStatus(ctx, &view, userID)
 	return &view, nil
@@ -283,17 +288,24 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 	case c.Kind == domain.CaseKindDaily:
 		source = domain.CaseOpenSourceDaily
 		price = 0
-		ok, err := s.dailyAvailable(ctx, userID)
+		ok, err := s.caseOpenCooldownAvailable(ctx, userID, c.ID)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			return nil, domain.ErrCaseDailyUsed
+			return nil, domain.ErrCaseCooldown
 		}
 	case price <= 0:
 		// Free catalog/featured cases must require channel subscription.
 		if !c.RequireChannel {
 			return nil, domain.ErrInvalidAmount
+		}
+		ok, err := s.caseOpenCooldownAvailable(ctx, userID, c.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, domain.ErrCaseCooldown
 		}
 		source = domain.CaseOpenSourceFree
 		price = 0
@@ -343,18 +355,6 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, idOrSlug, idempote
 			return s.openResultFromExisting(ctx, existing)
 		}
 		return nil, err
-	}
-
-	if c.Kind == domain.CaseKindDaily {
-		state, err := s.cases.GetOrCreateState(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		day := mskCalendarDate(time.Now())
-		state.LastDailyOpenDate = &day
-		if err := s.cases.SaveState(ctx, state); err != nil {
-			return nil, err
-		}
 	}
 
 	if promo != nil {
@@ -784,17 +784,41 @@ func (s *Service) findCase(ctx context.Context, idOrSlug string) (*domain.Case, 
 	return c, nil
 }
 
-func (s *Service) dailyAvailable(ctx context.Context, userID uuid.UUID) (bool, error) {
-	state, err := s.cases.GetOrCreateState(ctx, userID)
+func (s *Service) caseOpenCooldownAvailability(ctx context.Context, userID, caseID uuid.UUID) (bool, *time.Time, error) {
+	open, err := s.cases.FindLatestOpenByUserCase(ctx, userID, caseID)
 	if err != nil {
-		return false, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return true, nil, nil
+		}
+		return false, nil, err
 	}
-	today := mskCalendarDate(time.Now())
-	if state.LastDailyOpenDate == nil {
-		return true, nil
+	now := time.Now().UTC()
+	next := open.CreatedAt.UTC().Add(caseOpenCooldown)
+	if !now.Before(next) {
+		return true, nil, nil
 	}
-	last := state.LastDailyOpenDate.UTC()
-	return !(last.Year() == today.Year() && last.Month() == today.Month() && last.Day() == today.Day()), nil
+	return false, &next, nil
+}
+
+func (s *Service) caseOpenCooldownAvailable(ctx context.Context, userID, caseID uuid.UUID) (bool, error) {
+	ok, _, err := s.caseOpenCooldownAvailability(ctx, userID, caseID)
+	return ok, err
+}
+
+const caseOpenCooldown = 24 * time.Hour
+
+func isFreeChannelCase(c domain.Case) bool {
+	if c.Kind == domain.CaseKindDaily || c.Kind == domain.CaseKindPromo {
+		return false
+	}
+	return c.PriceNanoton <= 0 && c.RequireChannel
+}
+
+func caseOpenCooldownElapsed(lastOpenAt *time.Time, now time.Time) bool {
+	if lastOpenAt == nil {
+		return true
+	}
+	return !now.UTC().Before(lastOpenAt.UTC().Add(caseOpenCooldown))
 }
 
 func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) CaseView {
@@ -959,10 +983,4 @@ func secureIntn(n int) (int, error) {
 		return 0, err
 	}
 	return int(binary.BigEndian.Uint64(b[:]) % uint64(n)), nil
-}
-
-func mskCalendarDate(now time.Time) time.Time {
-	msk := time.FixedZone("MSK", 3*60*60)
-	local := now.In(msk)
-	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
 }

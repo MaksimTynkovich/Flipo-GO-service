@@ -12,15 +12,12 @@ function priceLabel(caseItem: CaseView): { text: string; free: boolean; muted?: 
   const isDaily = caseItem.kind === "daily";
   const isPromo = caseItem.kind === "promo";
   const isFree = isDaily || isPromo || caseItem.price_nanoton <= 0;
-  if (isDaily && caseItem.daily_available === false) {
-    return { text: "Завтра", free: true, muted: true };
-  }
   if (isPromo) {
     return { text: "Промокод", free: true };
   }
   if (isFree) {
     return {
-      text: caseItem.require_channel ? "Free · подписка" : "Бесплатно",
+      text: "Бесплатно",
       free: true,
     };
   }
@@ -77,10 +74,10 @@ export function CaseCard({
         aria-hidden
       />
 
-      <div className="absolute inset-x-0 bottom-0 z-[1] flex items-end justify-between gap-2 p-2.5">
+      <div className="absolute inset-x-0 bottom-0 z-[1] flex items-baseline justify-between gap-2 p-2.5">
         <h3
           className={cn(
-            "min-w-0 flex-1 line-clamp-2 font-bold leading-[1.15] tracking-[-0.02em] text-white",
+            "min-w-0 flex-1 truncate font-bold leading-none tracking-[-0.02em] text-white",
             "drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
             layout === "wide" ? "text-[16px]" : "text-[14px]",
           )}
@@ -89,16 +86,18 @@ export function CaseCard({
         </h3>
         <span
           className={cn(
-            "inline-flex h-7 shrink-0 max-w-[55%] items-center gap-1 truncate rounded-[8px] px-2.5 text-[11px] font-bold tabular-nums shadow-[0_2px_8px_rgba(0,0,0,0.45)]",
+            "inline-flex shrink-0 max-w-[55%] items-baseline gap-1 truncate px-0.5 font-bold leading-none tabular-nums",
+            "drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
+            layout === "wide" ? "text-[16px]" : "text-[14px]",
             price.muted
-              ? "bg-black/70 text-white/70 ring-white/10"
+              ? "text-white/70"
               : price.free
-                ? "bg-emerald-500/25 text-emerald-100 ring-emerald-400/35"
-                : "bg-black/80 text-white ring-white/20",
+                ? "text-emerald-200"
+                : "text-white",
           )}
         >
           {!price.free && !price.muted ? (
-            <TonIcon variant="brand" className="h-3.5 w-3.5 shrink-0" />
+            <TonIcon variant="brand" className="relative top-[0.05em] h-[0.95em] w-[0.95em] shrink-0" />
           ) : null}
           <span className="truncate">{price.text}</span>
         </span>

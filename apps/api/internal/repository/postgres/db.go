@@ -117,7 +117,7 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateCasesColumnFix(db); err != nil {
 		return err
 	}
-	return migrateCases(db)
+	return nil
 }
 
 func migrateCasesColumnFix(db *gorm.DB) error {

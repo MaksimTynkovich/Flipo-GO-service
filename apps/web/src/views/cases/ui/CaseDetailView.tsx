@@ -29,6 +29,21 @@ import { Gift } from "lucide-react";
 
 type Phase = "idle" | "revealing" | "won";
 
+function msUntil(iso?: string | null): number {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, t - Date.now());
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
@@ -45,6 +60,7 @@ export function CaseDetailView() {
   const [revealLoot, setRevealLoot] = useState<CaseLootPreview[]>([]);
   const [channelSheetOpen, setChannelSheetOpen] = useState(false);
   const [promoCode, setPromoCode] = useState("");
+  const [cooldownMs, setCooldownMs] = useState(0);
 
   const notifyError = useCallback(
     (message: string) => {
@@ -72,11 +88,30 @@ export function CaseDetailView() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const iso = caseItem?.next_available_at;
+    if (!iso || caseItem?.daily_available !== false) {
+      setCooldownMs(0);
+      return;
+    }
+    let reloaded = false;
+    const tick = () => {
+      const left = msUntil(iso);
+      setCooldownMs(left);
+      if (left <= 0 && !reloaded) {
+        reloaded = true;
+        void load();
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [caseItem?.next_available_at, caseItem?.daily_available, load]);
+
   const accent = caseItem?.accent_color || "#3390ec";
   const loot = caseItem?.loot || [];
   const isPromo = caseItem?.kind === "promo";
-  const dailyBlocked =
-    caseItem?.kind === "daily" && caseItem.daily_available === false;
+  const cooldownBlocked = caseItem?.daily_available === false;
   const isFree =
     Boolean(caseItem) &&
     (caseItem!.kind === "daily" ||
@@ -119,6 +154,12 @@ export function CaseDetailView() {
         void load();
       } else if (e instanceof ApiRequestError && e.code === "insufficient_funds") {
         router.push(APP_ROUTES.deposit);
+      } else if (
+        e instanceof ApiRequestError &&
+        (e.code === "case_cooldown" || e.code === "case_daily_used")
+      ) {
+        notifyError(formatUserError(e, "Кейс пока недоступен"));
+        void load();
       } else {
         notifyError(formatUserError(e, "Не удалось открыть кейс"));
       }
@@ -128,7 +169,7 @@ export function CaseDetailView() {
   }
 
   async function handleOpen() {
-    if (!caseItem || opening || phase !== "idle") return;
+    if (!caseItem || opening || phase !== "idle" || cooldownBlocked) return;
 
     if (needsTopUp) {
       router.push(APP_ROUTES.deposit);
@@ -178,7 +219,9 @@ export function CaseDetailView() {
 
   function ctaLabel(): string {
     if (opening || phase === "revealing") return "Открываем…";
-    if (dailyBlocked) return "Завтра";
+    if (cooldownBlocked) {
+      return cooldownMs > 0 ? formatCountdown(cooldownMs) : "00:00:00";
+    }
     if (needsTopUp) return "Пополнить баланс";
     if (needsChannel) return "Подписаться и открыть";
     if (isPromo) return "Открыть по промокоду";
@@ -216,7 +259,7 @@ export function CaseDetailView() {
           loot={loot}
           ctaLabel={ctaLabel()}
           ctaDisabled={
-            dailyBlocked ||
+            cooldownBlocked ||
             opening ||
             phase === "revealing" ||
             (isPromo && !promoCode.trim())

@@ -149,6 +149,18 @@ func (r *CaseRepo) FindOpenByIdempotency(ctx context.Context, key string) (*doma
 	return &open, nil
 }
 
+func (r *CaseRepo) FindLatestOpenByUserCase(ctx context.Context, userID, caseID uuid.UUID) (*domain.CaseOpen, error) {
+	var open domain.CaseOpen
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND case_id = ?", userID, caseID).
+		Order("created_at DESC").
+		First(&open).Error
+	if err != nil {
+		return nil, err
+	}
+	return &open, nil
+}
+
 func (r *CaseRepo) ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.CaseOpen, error) {
 	if limit <= 0 {
 		limit = 50

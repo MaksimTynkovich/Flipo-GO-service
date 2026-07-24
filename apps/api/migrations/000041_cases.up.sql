@@ -1,4 +1,4 @@
--- Companion SQL for cases feature (applied via GORM AutoMigrate + migrateCases seed).
+-- Companion SQL for cases feature (applied via GORM AutoMigrate).
 -- Kept for documentation parity with numbered migrations.
 
 CREATE TABLE IF NOT EXISTS cases (

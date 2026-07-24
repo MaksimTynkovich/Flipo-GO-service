@@ -70,6 +70,7 @@ type CaseRepository interface {
 	SaveState(ctx context.Context, state *UserCaseState) error
 	CreateOpen(ctx context.Context, open *CaseOpen) error
 	FindOpenByIdempotency(ctx context.Context, key string) (*CaseOpen, error)
+	FindLatestOpenByUserCase(ctx context.Context, userID, caseID uuid.UUID) (*CaseOpen, error)
 	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
 	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
@@ -163,8 +164,6 @@ type WheelRepository interface {
 	TryAddReferralBonusSpin(ctx context.Context, userID uuid.UUID, day time.Time, dailyLimit int) (granted bool, err error)
 	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	CreateSpin(ctx context.Context, spin *WheelSpin) error
-	ListRecentWins(ctx context.Context, limit int) ([]WheelRecentWin, error)
-	ListTopWinsSince(ctx context.Context, since time.Time, limit int) ([]WheelRecentWin, error)
 	SumPrizesSince(ctx context.Context, since time.Time) (int64, error)
 	CountSpinsGlobalSince(ctx context.Context, since time.Time) (int64, error)
 	AdminPeriodStats(ctx context.Context, since time.Time) (WheelPeriodStats, error)

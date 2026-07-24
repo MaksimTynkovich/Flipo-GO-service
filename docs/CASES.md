@@ -31,8 +31,3 @@ Reject возвращает приз в инвентарь (`available`) без 
 | PUT | `/api/v1/admin/cases/:id/loot` | Заменить loot table |
 
 Админка: `/admin/cases` — CRUD кейса и таблицы лута (веса → шансы).
-
-
-## Seed
-
-При миграции создаются Premium, Daily и каталог (Starter … Legendary) с макета. Цены и веса правятся через админ API.

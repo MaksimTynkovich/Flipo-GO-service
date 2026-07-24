@@ -1906,14 +1906,6 @@ export type WheelSegment = {
   sort_order: number;
 };
 
-export type WheelRecentWin = {
-  display_name: string;
-  photo_url?: string;
-  prize_nanoton: number;
-  segment_label: string;
-  created_at: string;
-};
-
 export type WheelStatus = {
   channel_subscribed: boolean;
   required_channel?: string;
@@ -1924,7 +1916,6 @@ export type WheelStatus = {
   unlimited_spins?: boolean;
   next_daily_reset_at: string;
   segments: WheelSegment[];
-  recent_wins: WheelRecentWin[];
 };
 
 export type WheelSpinResult = {
@@ -2042,6 +2033,7 @@ export type CaseView = {
   channel_subscribed?: boolean;
   loot?: CaseLootPreview[];
   daily_available?: boolean;
+  next_available_at?: string;
 };
 
 export type CasesCatalog = {

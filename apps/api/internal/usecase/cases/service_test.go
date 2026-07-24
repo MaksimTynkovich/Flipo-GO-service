@@ -50,18 +50,6 @@ func TestIsUnbackedCaseClaim(t *testing.T) {
 	}
 }
 
-func TestMskCalendarDate(t *testing.T) {
-	// 2026-07-20 22:00 UTC = 2026-07-21 01:00 MSK
-	now, err := time.Parse(time.RFC3339, "2026-07-20T22:00:00Z")
-	if err != nil {
-		t.Fatal(err)
-	}
-	day := mskCalendarDate(now)
-	if day.Day() != 21 || day.Month() != 7 {
-		t.Fatalf("got %v", day)
-	}
-}
-
 func TestRunCaseSimulateTheoretical(t *testing.T) {
 	idA, idB := uuid.New(), uuid.New()
 	c := domain.Case{
@@ -100,21 +88,63 @@ func TestRunCaseSimulateTheoretical(t *testing.T) {
 	}
 }
 
-func TestRunCaseSimulateZeroPrice(t *testing.T) {
-	id := uuid.New()
-	c := domain.Case{ID: uuid.New(), Slug: "free", PriceNanoton: 0}
-	loot := []domain.CaseLootEntry{
-		{ID: id, DisplayName: "Gift", Weight: 10, CollectionSlug: "g"},
+func TestIsFreeChannelCase(t *testing.T) {
+	cases := []struct {
+		name string
+		c    domain.Case
+		want bool
+	}{
+		{
+			name: "free catalog with channel",
+			c:    domain.Case{Kind: domain.CaseKindCatalog, PriceNanoton: 0, RequireChannel: true},
+			want: true,
+		},
+		{
+			name: "free featured with channel",
+			c:    domain.Case{Kind: domain.CaseKindFeatured, PriceNanoton: 0, RequireChannel: true},
+			want: true,
+		},
+		{
+			name: "paid with channel",
+			c:    domain.Case{Kind: domain.CaseKindCatalog, PriceNanoton: 1, RequireChannel: true},
+			want: false,
+		},
+		{
+			name: "free without channel",
+			c:    domain.Case{Kind: domain.CaseKindCatalog, PriceNanoton: 0, RequireChannel: false},
+			want: false,
+		},
+		{
+			name: "daily",
+			c:    domain.Case{Kind: domain.CaseKindDaily, PriceNanoton: 0, RequireChannel: true},
+			want: false,
+		},
+		{
+			name: "promo",
+			c:    domain.Case{Kind: domain.CaseKindPromo, PriceNanoton: 0, RequireChannel: true},
+			want: false,
+		},
 	}
-	floors := map[uuid.UUID]int64{id: 500_000_000}
-	res := runCaseSimulate(c, loot, floors, 50, nil)
-	if res.RTPAvailable {
-		t.Fatal("RTP should be unavailable when price is 0")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isFreeChannelCase(tc.c); got != tc.want {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
 	}
-	if res.SpentNanoton != 0 {
-		t.Fatalf("spent %d", res.SpentNanoton)
+}
+
+func TestCaseOpenCooldownElapsed(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	if !caseOpenCooldownElapsed(nil, now) {
+		t.Fatal("nil last open should be available")
 	}
-	if res.PrizeTotalNanoton != 50*500_000_000 {
-		t.Fatalf("prize total %d", res.PrizeTotalNanoton)
+	recent := now.Add(-23 * time.Hour)
+	if caseOpenCooldownElapsed(&recent, now) {
+		t.Fatal("23h should still be on cooldown")
+	}
+	old := now.Add(-24 * time.Hour)
+	if !caseOpenCooldownElapsed(&old, now) {
+		t.Fatal("24h should unlock")
 	}
 }

@@ -105,25 +105,16 @@ type SegmentView struct {
 	SortOrder     int    `json:"sort_order"`
 }
 
-type RecentWinView struct {
-	DisplayName   string    `json:"display_name"`
-	PhotoURL      string    `json:"photo_url,omitempty"`
-	PrizeNanoton  int64     `json:"prize_nanoton"`
-	SegmentLabel  string    `json:"segment_label"`
-	CreatedAt     time.Time `json:"created_at"`
-}
-
 type StatusView struct {
-	ChannelSubscribed bool            `json:"channel_subscribed"`
-	RequiredChannel   string          `json:"required_channel,omitempty"`
-	DailyAvailable    bool            `json:"daily_available"`
-	BonusSpins        int             `json:"bonus_spins"`
-	SpinsToday        int             `json:"spins_today"`
-	CanSpin           bool            `json:"can_spin"`
-	UnlimitedSpins    bool            `json:"unlimited_spins"`
-	NextDailyResetAt  time.Time       `json:"next_daily_reset_at"`
-	Segments          []SegmentView   `json:"segments"`
-	RecentWins        []RecentWinView `json:"recent_wins"`
+	ChannelSubscribed bool          `json:"channel_subscribed"`
+	RequiredChannel   string        `json:"required_channel,omitempty"`
+	DailyAvailable    bool          `json:"daily_available"`
+	BonusSpins        int           `json:"bonus_spins"`
+	SpinsToday        int           `json:"spins_today"`
+	CanSpin           bool          `json:"can_spin"`
+	UnlimitedSpins    bool          `json:"unlimited_spins"`
+	NextDailyResetAt  time.Time     `json:"next_daily_reset_at"`
+	Segments          []SegmentView `json:"segments"`
 }
 
 type SpinResult struct {
@@ -233,11 +224,6 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID, telegramID int64
 	// Admins keep unlimited spins, but still must be subscribed to the channel.
 	canSpin := subscribed && (hasSpinStock || admin)
 
-	wins, err := s.wheel.ListTopWinsSince(ctx, time.Now().UTC().Add(-24*time.Hour), 5)
-	if err != nil {
-		return nil, err
-	}
-
 	return &StatusView{
 		ChannelSubscribed: subscribed,
 		RequiredChannel:   s.requiredChannel,
@@ -248,7 +234,6 @@ func (s *Service) Status(ctx context.Context, userID uuid.UUID, telegramID int64
 		UnlimitedSpins:    admin,
 		NextDailyResetAt:  today.Add(24 * time.Hour),
 		Segments:          mapSegments(segments),
-		RecentWins:        mapRecentWins(wins),
 	}, nil
 }
 
@@ -748,31 +733,6 @@ func mapSegments(segments []domain.WheelSegment) []SegmentView {
 			AmountNanoton: seg.AmountNanoton,
 			Weight:        seg.Weight,
 			SortOrder:     seg.SortOrder,
-		})
-	}
-	return out
-}
-
-func mapRecentWins(wins []domain.WheelRecentWin) []RecentWinView {
-	out := make([]RecentWinView, 0, len(wins))
-	for _, w := range wins {
-		name := strings.TrimSpace(w.FirstName)
-		if name == "" {
-			name = strings.TrimSpace(w.Username)
-		}
-		if name == "" {
-			name = "Игрок"
-		}
-		if len([]rune(name)) > 12 {
-			runes := []rune(name)
-			name = string(runes[:11]) + "…"
-		}
-		out = append(out, RecentWinView{
-			DisplayName:  name,
-			PhotoURL:     strings.TrimSpace(w.PhotoURL),
-			PrizeNanoton: w.PrizeNanoton,
-			SegmentLabel: w.SegmentLabel,
-			CreatedAt:    w.CreatedAt,
 		})
 	}
 	return out

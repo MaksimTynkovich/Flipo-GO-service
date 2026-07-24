@@ -102,44 +102,6 @@ function StatValue({
 const CTA_BASE =
   "app-control wheel-cta flex h-14 w-full items-center justify-center gap-2 text-[15px] font-semibold tracking-tight";
 
-function winInitial(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "?";
-  return trimmed.charAt(0).toUpperCase();
-}
-
-function winAvatarTone(name: string): number {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return hash % 5;
-}
-
-function WheelFeedAvatar({ name, photoUrl }: { name: string; photoUrl?: string }) {
-  const [imgError, setImgError] = useState(false);
-  const showPhoto = Boolean(photoUrl) && !imgError;
-  return (
-    <span
-      className={cn(
-        "wheel-feed__avatar",
-        !showPhoto && `wheel-feed__avatar--${winAvatarTone(name)}`,
-      )}
-      aria-hidden
-    >
-      {showPhoto ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={photoUrl}
-          alt=""
-          className="wheel-feed__avatar-img"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        winInitial(name)
-      )}
-    </span>
-  );
-}
-
 export function WheelView() {
   const { user, setUser } = useAuth();
   const { showToast } = useToast();
@@ -383,8 +345,6 @@ export function WheelView() {
     resetMs,
   });
 
-  const topWins = status?.recent_wins?.slice(0, 5) ?? [];
-
   return (
     <PageShell flush>
       <div className="wheel-page flex flex-col gap-3.5">
@@ -523,48 +483,6 @@ export function WheelView() {
             </nav>
           ) : null}
         </div>
-
-        {topWins.length > 0 && !loading ? (
-          <section className="wheel-feed" aria-label="Топ выигрышей за 24 часа">
-            <div className="wheel-feed__head">
-              <span className="wheel-feed__spark" aria-hidden />
-              <p className="wheel-feed__label">Топ выигрышей за 24ч</p>
-            </div>
-            <ul className="wheel-feed__list">
-              {topWins.map((win, i) => {
-                const tier = prizeTierForAmount(win.prize_nanoton);
-                const rank = i + 1;
-                const name = win.display_name?.trim() || "Игрок";
-                return (
-                  <li
-                    key={`${win.created_at}-${i}`}
-                    className={cn(
-                      "wheel-feed__row",
-                      rank === 1 && "wheel-feed__row--gold",
-                      rank === 2 && "wheel-feed__row--silver",
-                      rank === 3 && "wheel-feed__row--bronze",
-                    )}
-                  >
-                    <span
-                      className={cn("wheel-feed__rank", rank <= 3 && `wheel-feed__rank--${rank}`)}
-                      aria-label={`Место ${rank}`}
-                    >
-                      {rank}
-                    </span>
-                    <WheelFeedAvatar name={name} photoUrl={win.photo_url} />
-                    <span className="wheel-feed__meta">
-                      <span className="wheel-feed__name">{name}</span>
-                    </span>
-                    <span className={cn("wheel-feed__amount", `wheel-feed__amount--${tier}`)}>
-                      {formatTON(win.prize_nanoton)}
-                      <TonIcon variant="brand" className="h-3.5 w-3.5" />
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ) : null}
       </div>
 
       {channelSheetOpen ? (

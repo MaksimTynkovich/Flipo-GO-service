@@ -104,6 +104,8 @@ func writeCasesError(c *gin.Context, err error) {
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Кейс недоступен", "code": "case_unavailable"})
 	case errors.Is(err, domain.ErrCaseDailyUsed):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Ежедневный кейс уже открыт сегодня", "code": "case_daily_used"})
+	case errors.Is(err, domain.ErrCaseCooldown):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Кейс можно открыть раз в 24 часа", "code": "case_cooldown"})
 	case errors.Is(err, domain.ErrCaseNoLoot):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "У кейса нет призов", "code": "case_no_loot"})
 	case errors.Is(err, domain.ErrInsufficientFunds):
