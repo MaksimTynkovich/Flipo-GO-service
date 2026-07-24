@@ -1,6 +1,7 @@
 package roulette
 
 import (
+	"crypto/rand"
 	"encoding/json"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -42,18 +43,33 @@ func HousePnLIfColor(color string, red, green, black, total int64) int64 {
 	return total - provablyfair.RoulettePayout(color, onColor)
 }
 
-// PickBestHouseColor chooses the wheel color that maximizes house PnL
-// given current stakes. Ties prefer green, then red, then black.
+// PickBestHouseColor chooses red or black to maximize house PnL given stakes.
+// Green is never auto-picked: thin green books make it the "optimal" drain almost
+// every round and look obviously rigged (~1/15 natural rate).
 func PickBestHouseColor(bets []domain.GameBet) string {
 	red, green, black, total := ColorStakeTotals(bets)
-	best := "green"
-	bestPnL := HousePnLIfColor("green", red, green, black, total)
-	for _, color := range []string{"red", "black"} {
-		pnl := HousePnLIfColor(color, red, green, black, total)
-		if pnl > bestPnL {
-			best = color
-			bestPnL = pnl
-		}
+	redPnL := HousePnLIfColor("red", red, green, black, total)
+	blackPnL := HousePnLIfColor("black", red, green, black, total)
+	if redPnL > blackPnL {
+		return "red"
 	}
-	return best
+	if blackPnL > redPnL {
+		return "black"
+	}
+	// Equal PnL: lean to the lighter book; if still tied, coin flip.
+	if red < black {
+		return "red"
+	}
+	if black < red {
+		return "black"
+	}
+	return randomRedOrBlack()
+}
+
+func randomRedOrBlack() string {
+	var b [1]byte
+	if _, err := rand.Read(b[:]); err != nil || b[0]%2 == 0 {
+		return "red"
+	}
+	return "black"
 }

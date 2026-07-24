@@ -25,15 +25,39 @@ func TestPickBestHouseColor_HeavyRedPrefersBlack(t *testing.T) {
 		betOn("black", 10),
 		betOn("green", 5),
 	}
-	// red: 115-200=-85; green: 115-70=45; black: 115-20=95
 	if got := PickBestHouseColor(bets); got != "black" {
 		t.Fatalf("got %q, want black", got)
 	}
 }
 
-func TestPickBestHouseColor_EmptyBookPrefersGreen(t *testing.T) {
-	if got := PickBestHouseColor(nil); got != "green" {
-		t.Fatalf("got %q, want green", got)
+func TestPickBestHouseColor_HeavyBlackPrefersRed(t *testing.T) {
+	bets := []domain.GameBet{
+		betOn("black", 100),
+		betOn("red", 10),
+	}
+	if got := PickBestHouseColor(bets); got != "red" {
+		t.Fatalf("got %q, want red", got)
+	}
+}
+
+func TestPickBestHouseColor_NeverGreen(t *testing.T) {
+	// Green would maximize PnL (185-70=115 vs black 95), but must not be chosen.
+	bets := []domain.GameBet{
+		betOn("red", 100),
+		betOn("black", 10),
+		betOn("green", 5),
+	}
+	for i := 0; i < 20; i++ {
+		if got := PickBestHouseColor(bets); got == "green" {
+			t.Fatalf("green must not be auto-picked, got green")
+		}
+	}
+	// Empty book: only red/black.
+	for i := 0; i < 20; i++ {
+		got := PickBestHouseColor(nil)
+		if got != "red" && got != "black" {
+			t.Fatalf("empty book got %q, want red or black", got)
+		}
 	}
 }
 
