@@ -26,6 +26,7 @@ export function AdminTonField({
   min = 0,
   step = 0.001,
   decimals = 3,
+  allowNegative = false,
 }: {
   label: string;
   valueNanoton: number;
@@ -34,6 +35,7 @@ export function AdminTonField({
   min?: number;
   step?: number;
   decimals?: number;
+  allowNegative?: boolean;
 }) {
   const formatted = nanotonToTonInput(valueNanoton, decimals);
   const [focused, setFocused] = useState(false);
@@ -50,7 +52,7 @@ export function AdminTonField({
         className="admin-input mt-1"
         type="text"
         inputMode="decimal"
-        min={min}
+        min={allowNegative ? undefined : min}
         step={step}
         value={focused ? text : formatted}
         onFocus={() => {
@@ -60,11 +62,11 @@ export function AdminTonField({
         onChange={(e) => {
           const next = e.target.value.replace(",", ".");
           setText(next);
-          if (next.trim() === "" || next === "." || next.endsWith(".")) return;
-          onChangeNanoton(tonInputToNanoton(next));
+          if (next.trim() === "" || next === "." || next === "-" || next.endsWith(".")) return;
+          onChangeNanoton(tonInputToNanoton(next, { allowNegative }));
         }}
         onBlur={() => {
-          const n = tonInputToNanoton(text);
+          const n = tonInputToNanoton(text, { allowNegative });
           onChangeNanoton(n);
           setText(nanotonToTonInput(n, decimals));
           setFocused(false);

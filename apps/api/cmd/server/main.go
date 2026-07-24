@@ -259,6 +259,7 @@ func main() {
 	betFundingSvc := betfunding.NewService(invRepo, marketRepo, balanceSvc, giftValuator)
 
 	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
+	rouletteSvc.SetPlatform(platformRepo)
 	crashSvc := crash.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
 	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, betFundingSvc, invRepo, cfg.PlatformFeeBps)

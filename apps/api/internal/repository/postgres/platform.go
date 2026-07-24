@@ -8,6 +8,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PlatformRepo struct {
@@ -49,7 +50,32 @@ func (r *PlatformRepo) GetRiskSettings(ctx context.Context) (*domain.PlatformRis
 func (r *PlatformRepo) UpdateRiskSettings(ctx context.Context, settings *domain.PlatformRiskSettings) error {
 	settings.ID = 1
 	settings.UpdatedAt = time.Now().UTC()
+	domain.SyncRouletteRecoveryHysteresis(settings)
 	return r.db.WithContext(ctx).Save(settings).Error
+}
+
+// ApplyRouletteBankDelta adds delta (stakes - payouts) to the roulette house bank
+// and updates the recovery hysteresis flag atomically.
+func (r *PlatformRepo) ApplyRouletteBankDelta(ctx context.Context, delta int64) (*domain.PlatformRiskSettings, error) {
+	var out domain.PlatformRiskSettings
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var settings domain.PlatformRiskSettings
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&settings, "id = ?", 1).Error; err != nil {
+			return err
+		}
+		settings.RouletteBankNanoton += delta
+		domain.SyncRouletteRecoveryHysteresis(&settings)
+		settings.UpdatedAt = time.Now().UTC()
+		if err := tx.Save(&settings).Error; err != nil {
+			return err
+		}
+		out = settings
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 func (r *PlatformRepo) GetActiveSeed(ctx context.Context, gameType domain.GameType) (*domain.ProvablyFairSeedSession, error) {

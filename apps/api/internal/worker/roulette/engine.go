@@ -7,20 +7,20 @@ import (
 	"log/slog"
 	"time"
 
-	rouletteuc "github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	outcomeuc "github.com/flipo/flipo/apps/api/internal/usecase/outcome"
+	rouletteuc "github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 )
 
 type Engine struct {
-	svc              *rouletteuc.Service
-	games            domain.GameRepository
-	outcome          *outcomeuc.Service
-	bettingS         int
-	spinS            int
-	resultPauseS     int
-	resultDisplayS   int
+	svc            *rouletteuc.Service
+	games          domain.GameRepository
+	outcome        *outcomeuc.Service
+	bettingS       int
+	spinS          int
+	resultPauseS   int
+	resultDisplayS int
 }
 
 func NewEngine(svc *rouletteuc.Service, games domain.GameRepository, bettingS, spinS, resultPauseS, resultDisplayS int, outcomeSvc *outcomeuc.Service) *Engine {
@@ -49,6 +49,8 @@ func (e *Engine) runRound(ctx context.Context) {
 
 	serverSeed := ""
 	adminInfluenced := false
+	deferredSeed := false
+
 	if e.outcome != nil {
 		if override, ok, oerr := e.outcome.TakePending(ctx, domain.GameRoulette); oerr == nil && ok {
 			if t, terr := e.outcome.DecodeRouletteTarget(override); terr == nil {
@@ -62,12 +64,25 @@ func (e *Engine) runRound(ctx context.Context) {
 			}
 		}
 	}
+
 	if serverSeed == "" {
-		seedBytes := make([]byte, 32)
-		_, _ = rand.Read(seedBytes)
-		serverSeed = hex.EncodeToString(seedBytes)
+		recoveryActive, biasWeight, rerr := e.svc.RecoverySnapshot(ctx)
+		if rerr != nil {
+			slog.Warn("roulette recovery snapshot", "error", rerr)
+		}
+		if recoveryActive {
+			deferredSeed = true
+			// Seed chosen after betting against live exposure (bias_weight may still skip).
+			_ = biasWeight
+		} else {
+			serverSeed = randomServerSeed()
+		}
 	}
-	serverSeedHash := provablyfair.HashSHA256(serverSeed)
+
+	serverSeedHash := ""
+	if serverSeed != "" {
+		serverSeedHash = provablyfair.HashSHA256(serverSeed)
+	}
 
 	round, err := e.svc.CreateRound(ctx, serverSeed, serverSeedHash, roundNum)
 	if err != nil {
@@ -77,13 +92,41 @@ func (e *Engine) runRound(ctx context.Context) {
 	}
 
 	if adminInfluenced {
-		round.AdminInfluenced = true
-		if uerr := e.games.UpdateRound(ctx, round); uerr != nil {
+		if uerr := e.svc.MarkAdminInfluenced(ctx, round.ID); uerr != nil {
 			slog.Warn("mark roulette round admin-influenced", "error", uerr)
 		}
 	}
 
 	time.Sleep(time.Duration(e.bettingS) * time.Second)
+
+	if deferredSeed {
+		recoveryActive, biasWeight, _ := e.svc.RecoverySnapshot(ctx)
+		serverSeed = ""
+		adminInfluenced = false
+		if recoveryActive && outcomeuc.ShouldApply(outcomeuc.ModeBias, biasWeight) {
+			bets, berr := e.games.ListPendingBetsByRound(ctx, round.ID)
+			if berr != nil {
+				slog.Warn("roulette recovery list bets", "error", berr)
+			} else {
+				color := rouletteuc.PickBestHouseColor(bets)
+				if found, foundOk := provablyfair.FindRouletteSeed(color, nil, roundNum, 100000); foundOk {
+					serverSeed = found
+					adminInfluenced = true
+					slog.Info("roulette recovery seed", "color", color, "round", roundNum)
+				}
+			}
+		}
+		if serverSeed == "" {
+			serverSeed = randomServerSeed()
+		}
+		hash, aerr := e.svc.AttachRoundSeed(ctx, round.ID, serverSeed, adminInfluenced)
+		if aerr != nil {
+			slog.Error("attach roulette seed", "error", aerr)
+			time.Sleep(time.Second)
+			return
+		}
+		serverSeedHash = hash
+	}
 
 	resultIndex := provablyfair.RouletteResultIndex(serverSeed, roundNum)
 	resultNumber := provablyfair.RouletteWheelNumber(resultIndex)
@@ -119,4 +162,10 @@ func (e *Engine) runRound(ctx context.Context) {
 	}
 	_ = e.svc.UpdatePhase(ctx, resultState)
 	time.Sleep(time.Duration(e.resultDisplayS) * time.Second)
+}
+
+func randomServerSeed() string {
+	seedBytes := make([]byte, 32)
+	_, _ = rand.Read(seedBytes)
+	return hex.EncodeToString(seedBytes)
 }

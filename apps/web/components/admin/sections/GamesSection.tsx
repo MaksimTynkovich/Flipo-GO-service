@@ -66,7 +66,7 @@ export default function GamesSection() {
     setLoading(true);
     try {
       const [statsData, configsData, riskData, simData, wheelData] = await loadCached(
-        "admin:games:v3",
+        "admin:games:v4",
         () =>
           Promise.all([
             getAdminGameStats(),
@@ -416,6 +416,91 @@ export default function GamesSection() {
               }}
             >
               Сохранить лимиты
+            </AdminButton>
+          </AdminToolbar>
+        </AdminPanel>
+      ) : null}
+
+      {risk ? (
+        <AdminPanel
+          title="Рулетка — отыгрыш дома"
+          description="Накопительный банк рулетки. При убытке ниже порога включается recovery: часть раундов после ставок смещается против экспозиции, пока банк не достигнет цели."
+        >
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-[var(--admin-muted,#8b98a8)]">
+            <label className="inline-flex items-center gap-2 text-[var(--admin-fg,#e8eef7)]">
+              <input
+                type="checkbox"
+                checked={Boolean(risk.roulette_recovery_enabled)}
+                onChange={(e) =>
+                  setRisk({ ...risk, roulette_recovery_enabled: e.target.checked })
+                }
+              />
+              Включить auto-recovery
+            </label>
+            <span>
+              Статус:{" "}
+              <strong className="text-[var(--admin-fg,#e8eef7)]">
+                {risk.roulette_recovery_active ? "recovery активен" : "обычный режим"}
+              </strong>
+            </span>
+            <AdminInfoHint
+              label="Как это работает"
+              hint="Банк += ставки − выплаты после каждого раунда. Вход в recovery при банке ≤ порога, выход при банке ≥ цели. Смягчение — % раундов с подкруткой в recovery (остальные честные)."
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <AdminTonField
+              label="Текущий банк (TON)"
+              valueNanoton={risk.roulette_bank_nanoton ?? 0}
+              onChangeNanoton={(v) => setRisk({ ...risk, roulette_bank_nanoton: v })}
+              allowNegative
+              hint="Можно скорректировать вручную. Обновляется автоматически после раундов."
+            />
+            <AdminTonField
+              label="Порог входа (TON)"
+              valueNanoton={risk.roulette_loss_threshold_nanoton ?? -50_000_000_000}
+              onChangeNanoton={(v) => setRisk({ ...risk, roulette_loss_threshold_nanoton: v })}
+              allowNegative
+              hint="Обычно отрицательный, напр. -50. Recovery включается при банке ≤ этого значения."
+            />
+            <AdminTonField
+              label="Цель выхода (TON)"
+              valueNanoton={risk.roulette_recovery_target_nanoton ?? 0}
+              onChangeNanoton={(v) => setRisk({ ...risk, roulette_recovery_target_nanoton: v })}
+              allowNegative
+              hint="Recovery выключается, когда банк снова ≥ цели (часто 0)."
+            />
+            <AdminIntField
+              label="Смягчение bias (%)"
+              value={risk.roulette_recovery_bias_weight ?? 50}
+              onChange={(v) =>
+                setRisk({
+                  ...risk,
+                  roulette_recovery_bias_weight: Math.max(0, Math.min(100, v)),
+                })
+              }
+              hint="0 = в recovery без подкрутки, 100 = каждый recovery-раунд против экспозиции."
+            />
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--admin-muted,#8b98a8)]">
+            Сейчас банк: {formatTON(risk.roulette_bank_nanoton ?? 0)} TON
+          </p>
+          <AdminToolbar>
+            <AdminButton
+              variant="secondary"
+              onClick={() => setRisk({ ...risk, roulette_bank_nanoton: 0 })}
+            >
+              Обнулить банк
+            </AdminButton>
+            <AdminButton
+              onClick={async () => {
+                await updateAdminRiskSettings(risk);
+                showToast({ variant: "success", title: "Recovery settings сохранены" });
+                const fresh = await getAdminRiskSettings();
+                setRisk(fresh);
+              }}
+            >
+              Сохранить recovery
             </AdminButton>
           </AdminToolbar>
         </AdminPanel>

@@ -1140,6 +1140,12 @@ export type AdminRiskSettings = {
   hot_wallet_max_balance_nanoton: number;
   hot_wallet_sweep_threshold_nanoton: number;
   cold_wallet_address: string;
+  roulette_recovery_enabled?: boolean;
+  roulette_recovery_active?: boolean;
+  roulette_bank_nanoton?: number;
+  roulette_loss_threshold_nanoton?: number;
+  roulette_recovery_target_nanoton?: number;
+  roulette_recovery_bias_weight?: number;
 };
 
 export type AdminTreasuryStatus = {

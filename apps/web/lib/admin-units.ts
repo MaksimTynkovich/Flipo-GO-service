@@ -11,11 +11,12 @@ export function nanotonToTonInput(nanoton: number, decimals = 3): string {
   return fixed.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "").replace(/\.$/, "") || "0";
 }
 
-export function tonInputToNanoton(ton: string): number {
+export function tonInputToNanoton(ton: string, opts?: { allowNegative?: boolean }): number {
   const raw = ton.trim().replace(",", ".");
   if (raw === "" || raw === "." || raw === "-" || raw === "-.") return 0;
   const parsed = Number.parseFloat(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  if (!Number.isFinite(parsed)) return 0;
+  if (parsed < 0 && !opts?.allowNegative) return 0;
   return Math.round(parsed * NANOTON_PER_TON);
 }
 

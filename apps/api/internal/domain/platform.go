@@ -32,10 +32,42 @@ type PlatformRiskSettings struct {
 	HotWalletMaxBalanceNanoton int64     `gorm:"not null" json:"hot_wallet_max_balance_nanoton"`
 	HotWalletSweepThreshold    int64     `gorm:"not null" json:"hot_wallet_sweep_threshold_nanoton"`
 	ColdWalletAddress          string    `gorm:"size:128" json:"cold_wallet_address"`
-	UpdatedAt                  time.Time `json:"updated_at"`
+	// Roulette house bank / auto-recovery (admin-tunable).
+	RouletteRecoveryEnabled       bool  `gorm:"not null;default:false" json:"roulette_recovery_enabled"`
+	RouletteRecoveryActive        bool  `gorm:"not null;default:false" json:"roulette_recovery_active"`
+	RouletteBankNanoton           int64 `gorm:"not null;default:0" json:"roulette_bank_nanoton"`
+	RouletteLossThresholdNanoton  int64 `gorm:"not null;default:-50000000000" json:"roulette_loss_threshold_nanoton"`
+	RouletteRecoveryTargetNanoton int64 `gorm:"not null;default:0" json:"roulette_recovery_target_nanoton"`
+	RouletteRecoveryBiasWeight    int   `gorm:"not null;default:50" json:"roulette_recovery_bias_weight"`
+	UpdatedAt                     time.Time `json:"updated_at"`
 }
 
 func (PlatformRiskSettings) TableName() string { return "platform_risk_settings" }
+
+// SyncRouletteRecoveryHysteresis updates RouletteRecoveryActive from bank vs thresholds.
+// Enter when bank <= loss threshold; exit when bank >= recovery target.
+func SyncRouletteRecoveryHysteresis(s *PlatformRiskSettings) {
+	if s == nil {
+		return
+	}
+	if s.RouletteRecoveryBiasWeight < 0 {
+		s.RouletteRecoveryBiasWeight = 0
+	}
+	if s.RouletteRecoveryBiasWeight > 100 {
+		s.RouletteRecoveryBiasWeight = 100
+	}
+	if !s.RouletteRecoveryEnabled {
+		s.RouletteRecoveryActive = false
+		return
+	}
+	if s.RouletteRecoveryActive {
+		if s.RouletteBankNanoton >= s.RouletteRecoveryTargetNanoton {
+			s.RouletteRecoveryActive = false
+		}
+	} else if s.RouletteBankNanoton <= s.RouletteLossThresholdNanoton {
+		s.RouletteRecoveryActive = true
+	}
+}
 
 // ProvablyFairSeedSession — active/revealed server seed chain per game.
 type ProvablyFairSeedSession struct {

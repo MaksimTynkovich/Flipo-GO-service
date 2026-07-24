@@ -76,6 +76,7 @@ type RoundBetsState struct {
 type Service struct {
 	games     domain.GameRepository
 	users     domain.UserRepository
+	platform  domain.PlatformRepository
 	balance   *balance.Service
 	funding   *betfunding.Service
 	inventory domain.InventoryRepository
@@ -112,6 +113,10 @@ func NewService(
 	bettingS, spinS int,
 ) *Service {
 	return &Service{games: games, balance: balance, funding: funding, inventory: inventory, cache: cache, bettingS: bettingS, spinS: spinS}
+}
+
+func (s *Service) SetPlatform(platform domain.PlatformRepository) {
+	s.platform = platform
 }
 
 func (s *Service) SetBetOverlay(overlay BetOverlay) {
@@ -243,6 +248,18 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 		agg.count++
 		agg.stake += bet.AmountNanoton
 		agg.payout += credit
+	}
+
+	if s.platform != nil {
+		var stakes, payouts int64
+		for _, agg := range aggs {
+			stakes += agg.stake
+			payouts += agg.payout
+		}
+		if _, err := s.platform.ApplyRouletteBankDelta(ctx, stakes-payouts); err != nil {
+			// Bank tracking must not fail settlement; log via returning only on hard errors above.
+			_ = err
+		}
 	}
 
 	if s.admin != nil && len(aggs) > 0 {
@@ -479,6 +496,48 @@ func (s *Service) CreateRound(ctx context.Context, serverSeed, serverSeedHash st
 	}
 	_ = s.PublishBets(ctx, round.ID)
 	return round, nil
+}
+
+// AttachRoundSeed stores the server seed after deferred commitment (recovery mode).
+func (s *Service) AttachRoundSeed(ctx context.Context, roundID uuid.UUID, serverSeed string, adminInfluenced bool) (string, error) {
+	round, err := s.games.GetRoundByID(ctx, roundID)
+	if err != nil {
+		return "", err
+	}
+	hash := provablyfair.HashSHA256(serverSeed)
+	round.ServerSeed = serverSeed
+	round.ServerSeedHash = hash
+	if adminInfluenced {
+		round.AdminInfluenced = true
+	}
+	if err := s.games.UpdateRound(ctx, round); err != nil {
+		return "", err
+	}
+	return hash, nil
+}
+
+func (s *Service) MarkAdminInfluenced(ctx context.Context, roundID uuid.UUID) error {
+	round, err := s.games.GetRoundByID(ctx, roundID)
+	if err != nil {
+		return err
+	}
+	round.AdminInfluenced = true
+	return s.games.UpdateRound(ctx, round)
+}
+
+// RecoverySnapshot reads whether auto-recovery should defer seed selection this round.
+func (s *Service) RecoverySnapshot(ctx context.Context) (active bool, biasWeight int, err error) {
+	if s.platform == nil {
+		return false, 0, nil
+	}
+	settings, err := s.platform.GetRiskSettings(ctx)
+	if err != nil || settings == nil {
+		return false, 0, err
+	}
+	if !settings.RouletteRecoveryEnabled {
+		return false, 0, nil
+	}
+	return settings.RouletteRecoveryActive, settings.RouletteRecoveryBiasWeight, nil
 }
 
 func (s *Service) UpdatePhase(ctx context.Context, state *RoundState) error {
