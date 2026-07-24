@@ -1173,6 +1173,35 @@ func (h *AdminHandler) ReplaceCaseLoot(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *AdminHandler) SimulateCase(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	var req struct {
+		Iterations int `json:"iterations"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	result, err := h.cases.AdminSimulateCase(c.Request.Context(), caseID, req.Iterations)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "кейс не найден"})
+		case errors.Is(err, domain.ErrCaseNoLoot):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "у кейса нет лута"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *AdminHandler) ListCasePromoCodes(c *gin.Context) {
 	if h.cases == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})

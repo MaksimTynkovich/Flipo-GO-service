@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { CasesCatalogScreen } from "@/components/cases/CasesCatalogScreen";
 import { CasesLiveFeed } from "@/components/cases/CasesLiveFeed";
+import { useToast } from "@/components/providers/ToastProvider";
 import {
   getCasesCatalog,
   getCasesLiveFeed,
@@ -22,9 +23,9 @@ function prependLiveDrop(prev: CaseLiveDrop[], drop: CaseLiveDrop): CaseLiveDrop
 }
 
 export function CasesView() {
+  const { showToast } = useToast();
   const [data, setData] = useState<CasesCatalog | null>(null);
   const [live, setLive] = useState<CaseLiveDrop[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadLive = useCallback(async () => {
@@ -37,7 +38,6 @@ export function CasesView() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const [catalog, feed] = await Promise.all([
         getCasesCatalog(),
@@ -46,11 +46,14 @@ export function CasesView() {
       setData(catalog);
       setLive(feed);
     } catch (e) {
-      setError(formatUserError(e, "Не удалось загрузить кейсы"));
+      showToast({
+        variant: "error",
+        title: formatUserError(e, "Не удалось загрузить кейсы"),
+      });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     void load();
@@ -80,8 +83,6 @@ export function CasesView() {
   return (
     <PageShell flush>
       <div className="space-y-4 pb-2">
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
-
         {live.length > 0 ? <CasesLiveFeed items={live} /> : null}
 
         {loading && !data ? (

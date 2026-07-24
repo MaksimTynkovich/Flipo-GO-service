@@ -231,6 +231,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.PUT("/cases/promos", deps.AdminHandler.UpsertCasePromoCode)
 			adminAuthed.DELETE("/cases/promos/:code", deps.AdminHandler.DeleteCasePromoCode)
 			adminAuthed.PUT("/cases/:id/loot", deps.AdminHandler.ReplaceCaseLoot)
+			adminAuthed.POST("/cases/:id/simulate", deps.AdminHandler.SimulateCase)
 			adminAuthed.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
 			adminAuthed.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
 			adminAuthed.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)

@@ -61,3 +61,60 @@ func TestMskCalendarDate(t *testing.T) {
 		t.Fatalf("got %v", day)
 	}
 }
+
+func TestRunCaseSimulateTheoretical(t *testing.T) {
+	idA, idB := uuid.New(), uuid.New()
+	c := domain.Case{
+		ID:           uuid.New(),
+		Slug:         "sim-test",
+		PriceNanoton: 2_000_000_000,
+		TargetRTPBPS: 9000,
+	}
+	loot := []domain.CaseLootEntry{
+		{ID: idA, DisplayName: "Cheap", Weight: 1, CollectionSlug: "a"},
+		{ID: idB, DisplayName: "Fat", Weight: 1, CollectionSlug: "b"},
+	}
+	floors := map[uuid.UUID]int64{
+		idA: 1_000_000_000,
+		idB: 3_000_000_000,
+	}
+	res := runCaseSimulate(c, loot, floors, 200, nil)
+	if res.TheoreticalRTPBPS != 10_000 {
+		t.Fatalf("theoretical RTP want 10000 got %d", res.TheoreticalRTPBPS)
+	}
+	if res.SpentNanoton != 200*2_000_000_000 {
+		t.Fatalf("spent %d", res.SpentNanoton)
+	}
+	if !res.RTPAvailable {
+		t.Fatal("expected RTP available")
+	}
+	if res.HouseEdgeNanoton != res.SpentNanoton-res.PrizeTotalNanoton {
+		t.Fatalf("house edge mismatch")
+	}
+	var hitSum int
+	for _, e := range res.Entries {
+		hitSum += e.Hits
+	}
+	if hitSum != 200 {
+		t.Fatalf("hits sum %d", hitSum)
+	}
+}
+
+func TestRunCaseSimulateZeroPrice(t *testing.T) {
+	id := uuid.New()
+	c := domain.Case{ID: uuid.New(), Slug: "free", PriceNanoton: 0}
+	loot := []domain.CaseLootEntry{
+		{ID: id, DisplayName: "Gift", Weight: 10, CollectionSlug: "g"},
+	}
+	floors := map[uuid.UUID]int64{id: 500_000_000}
+	res := runCaseSimulate(c, loot, floors, 50, nil)
+	if res.RTPAvailable {
+		t.Fatal("RTP should be unavailable when price is 0")
+	}
+	if res.SpentNanoton != 0 {
+		t.Fatalf("spent %d", res.SpentNanoton)
+	}
+	if res.PrizeTotalNanoton != 50*500_000_000 {
+		t.Fatalf("prize total %d", res.PrizeTotalNanoton)
+	}
+}

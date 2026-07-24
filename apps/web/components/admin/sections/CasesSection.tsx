@@ -20,6 +20,7 @@ import {
 } from "@/lib/changes-gifts";
 import { giftImageUrl } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
+import { chancePercentFromWeight, applyChancePercentWeights } from "@/lib/admin-units";
 import {
   candyTileBackgroundForLoot,
   getCatalogAccent,
@@ -45,10 +46,13 @@ import {
   uploadAdminCaseImage,
   upsertAdminCase,
   upsertAdminCasePromoCode,
+  simulateAdminCase,
+  formatTON,
   type AdminCase,
   type AdminCaseLiveFeedSettings,
   type AdminCaseLootEntry,
   type AdminCasePromoCode,
+  type AdminCaseSimulateResult,
   type AdminCaseUpsert,
 } from "@/lib/api";
 import { Upload } from "lucide-react";
@@ -59,6 +63,12 @@ const KINDS = [
   { value: "daily", label: "Баннер (Daily)" },
   { value: "promo", label: "Промокод" },
 ] as const;
+
+const SIM_ITERATIONS = 100;
+
+function bpsPct(bps: number): string {
+  return `${(bps / 100).toFixed(2)}%`;
+}
 
 const EMPTY_CASE_PROMO: Omit<AdminCasePromoCode, "used_count" | "created_at"> = {
   code: "",
@@ -164,12 +174,74 @@ function giftToLootRow(gift: ChangesGiftModel, sortOrder: number): LootDraft {
   };
 }
 
-function chanceLabel(weight: number, total: number): string {
-  if (total <= 0 || weight <= 0) return "—";
-  const pct = (weight / total) * 100;
-  if (pct >= 10) return `${pct.toFixed(1)}%`;
-  if (pct >= 1) return `${pct.toFixed(2)}%`;
-  return `${pct.toFixed(3)}%`;
+function formatChanceInput(weight: number, total: number): string {
+  const pct = chancePercentFromWeight(weight, total);
+  if (pct <= 0) return "0";
+  if (pct >= 10) return pct.toFixed(1);
+  if (pct >= 1) return pct.toFixed(2);
+  return pct.toFixed(3);
+}
+
+function LootChanceField({
+  rowKey,
+  weight,
+  weightTotal,
+  loot,
+  onApplyWeights,
+}: {
+  rowKey: string;
+  weight: number;
+  weightTotal: number;
+  loot: { _key: string; weight: number }[];
+  onApplyWeights: (weights: Record<string, number>) => void;
+}) {
+  const formatted = formatChanceInput(weight, weightTotal);
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState(formatted);
+
+  useEffect(() => {
+    if (!focused) setText(formatted);
+  }, [formatted, focused]);
+
+  function applyPercent(raw: string) {
+    const parsed = Number.parseFloat(raw.trim().replace(",", "."));
+    if (!Number.isFinite(parsed)) return;
+    onApplyWeights(
+      applyChancePercentWeights(
+        parsed,
+        rowKey,
+        loot.map((r) => ({ key: r._key, weight: r.weight })),
+      ),
+    );
+  }
+
+  return (
+    <AdminField
+      label="шанс %"
+      hint="Задаёт долю этого приза; остальные веса пересчитываются пропорционально"
+    >
+      <input
+        className="input-field tabular-nums"
+        type="text"
+        inputMode="decimal"
+        value={focused ? text : formatted}
+        onFocus={() => {
+          setFocused(true);
+          setText(formatted);
+        }}
+        onChange={(e) => {
+          const next = e.target.value.replace(",", ".");
+          setText(next);
+          if (next.trim() === "" || next === "." || next.endsWith(".")) return;
+          applyPercent(next);
+        }}
+        onBlur={() => {
+          applyPercent(text);
+          setFocused(false);
+        }}
+      />
+    </AdminField>
+  );
 }
 
 export default function CasesSection() {
@@ -195,6 +267,8 @@ export default function CasesSection() {
   const [liveSettings, setLiveSettings] = useState<AdminCaseLiveFeedSettings>(DEFAULT_LIVE_SETTINGS);
   const [liveSettingsLoading, setLiveSettingsLoading] = useState(true);
   const [savingLiveSettings, setSavingLiveSettings] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [simResult, setSimResult] = useState<AdminCaseSimulateResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -250,6 +324,7 @@ export default function CasesSection() {
     setLoot(lootToDraft(c.loot));
     setExpandedKey(null);
     setCasePromoDraft({ ...EMPTY_CASE_PROMO, case_id: c.id });
+    setSimResult(null);
   }
 
   function startNew() {
@@ -259,6 +334,31 @@ export default function CasesSection() {
     setExpandedKey(null);
     setCasePromos([]);
     setCasePromoDraft(EMPTY_CASE_PROMO);
+    setSimResult(null);
+  }
+
+  async function runSimulate() {
+    if (!draft.id) return;
+    setSimulating(true);
+    try {
+      const result = await simulateAdminCase(draft.id, SIM_ITERATIONS);
+      setSimResult(result);
+      const rtpLine = result.rtp_available
+        ? `RTP ${bpsPct(result.simulated_rtp_bps)} (теор ${bpsPct(result.theoretical_rtp_bps)})`
+        : "RTP — (цена 0)";
+      showToast({
+        title: `Тест · ${result.iterations} открытий`,
+        subtitle: `Spent ${formatTON(result.spent_nanoton)} · Prize ${formatTON(result.prize_total_nanoton)} · ${rtpLine}`,
+        variant: "success",
+      });
+    } catch (e) {
+      showToast({
+        title: formatUserError(e, "Не удалось прогнать симуляцию"),
+        variant: "error",
+      });
+    } finally {
+      setSimulating(false);
+    }
   }
 
   const loadCasePromos = useCallback(
@@ -448,6 +548,14 @@ export default function CasesSection() {
 
   function updateLoot(key: string, patch: Partial<LootDraft>) {
     setLoot((prev) => prev.map((row) => (row._key === key ? { ...row, ...patch } : row)));
+  }
+
+  function applyLootWeights(weights: Record<string, number>) {
+    setLoot((prev) =>
+      prev.map((row) =>
+        weights[row._key] != null ? { ...row, weight: Math.max(1, Math.round(weights[row._key])) } : row,
+      ),
+    );
   }
 
   function moveLoot(key: string, dir: -1 | 1) {
@@ -944,7 +1052,66 @@ export default function CasesSection() {
               <AdminButton disabled={savingCase} onClick={() => void saveCase()}>
                 {savingCase ? "…" : draft.id ? "Сохранить кейс" : "Создать кейс"}
               </AdminButton>
+              <AdminButton
+                variant="secondary"
+                disabled={!draft.id || simulating || loot.length === 0}
+                onClick={() => void runSimulate()}
+              >
+                {simulating ? "…" : `Тест · ${SIM_ITERATIONS}`}
+              </AdminButton>
             </div>
+            {simResult ? (
+              <div className="mt-3 space-y-2 rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 font-medium">
+                  <span>Симуляция · {simResult.iterations} открытий</span>
+                  <span className="text-xs font-normal text-muted">
+                    сохранённый лут (сохраните лут перед тестом правок)
+                  </span>
+                </div>
+                <p className="text-xs text-muted">
+                  Spent {formatTON(simResult.spent_nanoton)} TON · Prize{" "}
+                  {formatTON(simResult.prize_total_nanoton)} TON · Edge{" "}
+                  {formatTON(simResult.house_edge_nanoton)} TON
+                </p>
+                <p className="text-xs text-muted">
+                  RTP sim{" "}
+                  {simResult.rtp_available ? bpsPct(simResult.simulated_rtp_bps) : "—"} · теор{" "}
+                  {simResult.rtp_available ? bpsPct(simResult.theoretical_rtp_bps) : "—"} · target{" "}
+                  {bpsPct(simResult.target_rtp_bps)}
+                </p>
+                {simResult.warnings && simResult.warnings.length > 0 ? (
+                  <p className="text-xs text-amber-400/90">{simResult.warnings.join(" · ")}</p>
+                ) : null}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[28rem] border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="text-muted">
+                        <th className="py-1 pr-2 font-medium">Приз</th>
+                        <th className="py-1 pr-2 font-medium">Ожид.</th>
+                        <th className="py-1 pr-2 font-medium">Факт</th>
+                        <th className="py-1 pr-2 font-medium">Hits</th>
+                        <th className="py-1 pr-2 font-medium">Floor</th>
+                        <th className="py-1 font-medium">Σ prize</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {simResult.entries.map((row) => (
+                        <tr key={row.loot_entry_id} className="border-t border-white/[0.04]">
+                          <td className="max-w-[10rem] truncate py-1 pr-2" title={row.display_name}>
+                            {row.display_name}
+                          </td>
+                          <td className="py-1 pr-2 tabular-nums">{bpsPct(row.expected_pct_bps)}</td>
+                          <td className="py-1 pr-2 tabular-nums">{bpsPct(row.actual_pct_bps)}</td>
+                          <td className="py-1 pr-2 tabular-nums">{row.hits}</td>
+                          <td className="py-1 pr-2 tabular-nums">{formatTON(row.floor_price_nanoton)}</td>
+                          <td className="py-1 tabular-nums">{formatTON(row.prize_sum_nanoton)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
           </AdminPanel>
 
           {draft.kind === "promo" ? (
@@ -1126,11 +1293,13 @@ export default function CasesSection() {
                                   }
                                 />
                               </AdminField>
-                              <AdminField label="шанс">
-                                <div className="input-field flex items-center tabular-nums text-muted">
-                                  {chanceLabel(row.weight, weightTotal)}
-                                </div>
-                              </AdminField>
+                              <LootChanceField
+                                rowKey={row._key}
+                                weight={row.weight}
+                                weightTotal={weightTotal}
+                                loot={loot}
+                                onApplyWeights={applyLootWeights}
+                              />
                               <AdminTonField
                                 label="цена (TON)"
                                 valueNanoton={row.floor_price_nanoton ?? 0}

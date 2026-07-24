@@ -2208,6 +2208,44 @@ export async function replaceAdminCaseLoot(caseId: string, entries: AdminCaseLoo
   });
 }
 
+export type AdminCaseSimulateEntry = {
+  loot_entry_id: string;
+  display_name: string;
+  collection_slug: string;
+  weight: number;
+  expected_pct_bps: number;
+  hits: number;
+  actual_pct_bps: number;
+  floor_price_nanoton: number;
+  prize_sum_nanoton: number;
+};
+
+export type AdminCaseSimulateResult = {
+  case_id: string;
+  slug: string;
+  iterations: number;
+  price_nanoton: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+  house_edge_nanoton: number;
+  simulated_rtp_bps: number;
+  theoretical_rtp_bps: number;
+  target_rtp_bps: number;
+  rtp_available: boolean;
+  entries: AdminCaseSimulateEntry[];
+  warnings?: string[];
+};
+
+export async function simulateAdminCase(caseId: string, iterations = 100) {
+  return api<AdminCaseSimulateResult>(
+    `/api/v1/admin/cases/${encodeURIComponent(caseId)}/simulate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ iterations }),
+    },
+  );
+}
+
 export type AdminCasePromoCode = {
   code: string;
   case_id: string;

@@ -29,13 +29,6 @@ import { Gift } from "lucide-react";
 
 type Phase = "idle" | "revealing" | "won";
 
-const PROMO_OPEN_ERROR_CODES = new Set([
-  "promo_invalid",
-  "promo_expired",
-  "promo_exhausted",
-  "promo_already_redeemed",
-]);
-
 export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
@@ -45,7 +38,6 @@ export function CaseDetailView() {
   const idOrSlug = String(params?.id || "");
 
   const [caseItem, setCaseItem] = useState<CaseView | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -54,18 +46,27 @@ export function CaseDetailView() {
   const [channelSheetOpen, setChannelSheetOpen] = useState(false);
   const [promoCode, setPromoCode] = useState("");
 
+  const notifyError = useCallback(
+    (message: string) => {
+      showToast({ variant: "error", title: message });
+      haptics.notificationOccurred("error");
+    },
+    // haptics object is recreated each render; API is fire-and-forget
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showToast],
+  );
+
   const load = useCallback(async () => {
     if (!idOrSlug) return;
     setLoading(true);
-    setError(null);
     try {
       setCaseItem(await getCase(idOrSlug));
     } catch (e) {
-      setError(formatUserError(e, "Кейс не найден"));
+      notifyError(formatUserError(e, "Кейс не найден"));
     } finally {
       setLoading(false);
     }
-  }, [idOrSlug]);
+  }, [idOrSlug, notifyError]);
 
   useEffect(() => {
     void load();
@@ -93,14 +94,8 @@ export function CaseDetailView() {
     caseItem!.price_nanoton > 0 &&
     balance < caseItem!.price_nanoton;
 
-  function notifyPromoError(message: string) {
-    showToast({ variant: "error", title: message });
-    haptics.notificationOccurred("error");
-  }
-
   async function runOpen(fresh: CaseView) {
     setOpening(true);
-    setError(null);
     haptics.impactOccurred("medium");
     try {
       const res = await openCase(fresh.slug, {
@@ -121,19 +116,11 @@ export function CaseDetailView() {
     } catch (e) {
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
         setChannelSheetOpen(true);
-        setError(null);
         void load();
       } else if (e instanceof ApiRequestError && e.code === "insufficient_funds") {
-        setError(null);
         router.push(APP_ROUTES.deposit);
-      } else if (
-        fresh.kind === "promo" ||
-        (e instanceof ApiRequestError && PROMO_OPEN_ERROR_CODES.has(e.code || ""))
-      ) {
-        notifyPromoError(formatUserError(e, "Не удалось открыть кейс"));
       } else {
-        setError(formatUserError(e, "Не удалось открыть кейс"));
-        haptics.notificationOccurred("error");
+        notifyError(formatUserError(e, "Не удалось открыть кейс"));
       }
     } finally {
       setOpening(false);
@@ -149,7 +136,7 @@ export function CaseDetailView() {
     }
 
     if (caseItem.kind === "promo" && !promoCode.trim()) {
-      notifyPromoError("Введите промокод");
+      notifyError("Введите промокод");
       return;
     }
 
@@ -168,12 +155,12 @@ export function CaseDetailView() {
       setCaseItem(fresh);
       if (fresh.require_channel && fresh.channel_subscribed === false) {
         setChannelSheetOpen(true);
-        setError("Подписка не найдена — подпишитесь и нажмите снова");
+        notifyError("Подписка не найдена — подпишитесь и нажмите снова");
         return;
       }
       await runOpen(fresh);
     } catch (e) {
-      setError(formatUserError(e, "Не удалось проверить подписку"));
+      notifyError(formatUserError(e, "Не удалось проверить подписку"));
     }
   }
 
@@ -221,10 +208,6 @@ export function CaseDetailView() {
             ))}
           </div>
         </div>
-      ) : null}
-
-      {error && phase === "idle" ? (
-        <p className="mb-3 text-sm text-red-400">{error}</p>
       ) : null}
 
       {caseItem && (phase === "idle" || phase === "revealing") ? (
