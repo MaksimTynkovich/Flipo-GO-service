@@ -173,23 +173,27 @@ export function InventorySection() {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-semibold">Инвентарь пуст</p>
-              <p className="text-xs leading-relaxed text-muted">
-                Отправьте подарок боту {depositBotMention()} — он появится здесь.
-              </p>
+              {GIFT_DEPOSIT_ENABLED ? (
+                <p className="text-xs leading-relaxed text-muted">
+                  Отправьте подарок боту {depositBotMention()} — он появится здесь.
+                </p>
+              ) : null}
             </div>
-            <Button
-              variant="accent"
-              className="mt-1 h-11 rounded-xl px-5"
-              onClick={() => {
-                const url = depositBotTelegramUrl();
-                if (!openTelegramLink(url)) {
-                  window.open(url, "_blank", "noopener,noreferrer");
-                }
-              }}
-            >
-              Открыть бота
-              <ArrowUpRight className="ml-1.5 h-4 w-4" />
-            </Button>
+            {GIFT_DEPOSIT_ENABLED ? (
+              <Button
+                variant="accent"
+                className="mt-1 h-11 rounded-xl px-5"
+                onClick={() => {
+                  const url = depositBotTelegramUrl();
+                  if (!openTelegramLink(url)) {
+                    window.open(url, "_blank", "noopener,noreferrer");
+                  }
+                }}
+              >
+                Открыть бота
+                <ArrowUpRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
         )}
       </section>
