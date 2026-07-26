@@ -53,6 +53,7 @@ type CaseLootEntry struct {
 	CaseID              uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
 	PrizeType           string    `gorm:"size:16;not null;default:gift" json:"prize_type"`
 	CollectionSlug      string    `gorm:"size:128;not null;default:''" json:"collection_slug"`
+	CollectionName      string    `gorm:"size:128;not null;default:''" json:"collection_name"`
 	ModelName           string    `gorm:"size:128;not null;default:''" json:"model_name"`
 	Weight              int       `gorm:"not null" json:"weight"`
 	DisplayName         string    `gorm:"size:128;not null" json:"display_name"`

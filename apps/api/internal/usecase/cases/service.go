@@ -107,6 +107,7 @@ type LootPreview struct {
 	ID                  uuid.UUID `json:"id"`
 	PrizeType           string    `json:"prize_type"`
 	CollectionSlug      string    `json:"collection_slug"`
+	CollectionName      string    `json:"collection_name,omitempty"`
 	ModelName           string    `json:"model_name,omitempty"`
 	DisplayName         string    `json:"display_name"`
 	ImageURL            string    `json:"image_url"`
@@ -139,6 +140,7 @@ type AdminLootEntry struct {
 	ID                  uuid.UUID `json:"id"`
 	PrizeType           string    `json:"prize_type"`
 	CollectionSlug      string    `json:"collection_slug"`
+	CollectionName      string    `json:"collection_name,omitempty"`
 	ModelName           string    `json:"model_name,omitempty"`
 	DisplayName         string    `json:"display_name"`
 	ImageURL            string    `json:"image_url"`
@@ -643,6 +645,7 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 					ID:                  e.ID,
 					PrizeType:           preview.PrizeType,
 					CollectionSlug:      e.CollectionSlug,
+					CollectionName:      e.CollectionName,
 					ModelName:           e.ModelName,
 					DisplayName:         preview.DisplayName,
 					ImageURL:            preview.ImageURL,
@@ -779,6 +782,7 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 				return domain.ErrInvalidAmount
 			}
 			entries[i].CollectionSlug = ""
+			entries[i].CollectionName = ""
 			entries[i].ModelName = ""
 			if entries[i].DisplayName == "" {
 				entries[i].DisplayName = "TON"
@@ -792,10 +796,20 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 		if entries[i].CollectionSlug == "" {
 			return domain.ErrInvalidAmount
 		}
+		entries[i].CollectionName = strings.TrimSpace(entries[i].CollectionName)
 		entries[i].ModelName = strings.TrimSpace(entries[i].ModelName)
 		entries[i].AmountNanoton = 0
+		if entries[i].CollectionName == "" {
+			// Prefer human title in display_name when it isn't just the slug/model.
+			dn := entries[i].DisplayName
+			if dn != "" && !strings.EqualFold(dn, entries[i].CollectionSlug) && dn != entries[i].ModelName {
+				entries[i].CollectionName = dn
+			}
+		}
 		if entries[i].DisplayName == "" {
-			if entries[i].ModelName != "" {
+			if entries[i].CollectionName != "" {
+				entries[i].DisplayName = entries[i].CollectionName
+			} else if entries[i].ModelName != "" {
 				entries[i].DisplayName = entries[i].ModelName
 			} else {
 				entries[i].DisplayName = entries[i].CollectionSlug
@@ -1130,10 +1144,21 @@ func toLootPreview(e domain.CaseLootEntry) LootPreview {
 	} else if img == "" && e.CollectionSlug != "" {
 		img = giftimage.FragmentURL(e.CollectionSlug)
 	}
+	collectionName := strings.TrimSpace(e.CollectionName)
+	if collectionName == "" && prizeType != domain.CasePrizeTypeTon {
+		// Legacy rows: display_name held the collection title when no model was set.
+		if name != "" && !strings.EqualFold(name, e.CollectionSlug) && name != strings.TrimSpace(e.ModelName) {
+			collectionName = name
+		}
+	}
+	if collectionName != "" && (name == "" || name == strings.TrimSpace(e.ModelName) || strings.EqualFold(name, e.CollectionSlug)) {
+		name = collectionName
+	}
 	return LootPreview{
 		ID:                  e.ID,
 		PrizeType:           prizeType,
 		CollectionSlug:      e.CollectionSlug,
+		CollectionName:      collectionName,
 		ModelName:           strings.TrimSpace(e.ModelName),
 		DisplayName:         name,
 		ImageURL:            img,
