@@ -198,10 +198,10 @@ export function GiftPickerModal({
             </h2>
             <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
               {inModels
-                ? "Любая модель = рандом из коллекции · или конкретная модель"
+                ? "Коллекция = original · модель = своя картинка"
                 : title?.trim()
                   ? "Выберите коллекцию или вернитесь к смене модели"
-                  : "Сначала коллекция · каталог api.changes.tg"}
+                  : "Сначала коллекция · превью original с api.changes.tg"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -370,6 +370,10 @@ export function GiftPickerModal({
             </div>
           )}
         </div>
+
+        <footer className="border-t border-[var(--admin-border)] px-4 py-2 text-[10px] text-[var(--admin-muted)]">
+          thanks to @GiftChanges for this API (api.changes.tg)
+        </footer>
       </div>
     </div>,
     document.body,

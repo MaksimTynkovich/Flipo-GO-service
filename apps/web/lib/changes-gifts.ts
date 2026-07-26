@@ -46,8 +46,8 @@ export function modelNameToCollectionSlug(modelName: string): string {
   return giftNameToCollectionSlug(modelName);
 }
 
-export function changesGiftCollectionImageUrl(collectionSlug: string): string {
-  return `/static/gifts/${collectionSlug.toLowerCase()}.medium.jpg`;
+export function changesGiftCollectionImageUrl(collectionName: string): string {
+  return `${CHANGES_API}/original/${encodeURIComponent(collectionName)}.png?size=256`;
 }
 
 export function changesGiftModelVariantImageUrl(collectionName: string, modelName: string): string {
@@ -66,7 +66,8 @@ export function changesGiftModelImageUrl(modelName: string): string {
 export function isChangesGiftImageUrl(url?: string): boolean {
   return Boolean(
     url?.includes("cdn.changes.tg/gifts/models/") ||
-      url?.includes("api.changes.tg/model/"),
+      url?.includes("api.changes.tg/model/") ||
+      url?.includes("api.changes.tg/original/"),
   );
 }
 
@@ -95,7 +96,7 @@ function toCollection(name: string): ChangesGiftCollection {
   return {
     name,
     collectionSlug,
-    previewUrl: changesGiftCollectionImageUrl(collectionSlug),
+    previewUrl: changesGiftCollectionImageUrl(name),
   };
 }
 
