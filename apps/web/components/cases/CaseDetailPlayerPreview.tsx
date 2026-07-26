@@ -12,7 +12,7 @@ import {
   getCaseTheme,
 } from "@/components/cases/case-ui";
 import { formatTON, type CaseLootPreview, type CaseView } from "@/lib/api";
-import { giftImageUrl } from "@/lib/gifts";
+import { formatCollectionSlug, giftImageUrl } from "@/lib/gifts";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { cn } from "@/lib/utils";
 
@@ -26,12 +26,34 @@ export function caseDetailHeading(title: string): string {
   return title.toLowerCase().includes("кейс") ? title : `${title} Кейс`;
 }
 
+function collectionNameFromOriginalUrl(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/original\/([^/?#]+?)(?:\.png)?(?:[?#]|$)/i);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]).replace(/\+/g, " ").trim() || null;
+  } catch {
+    return match[1].replace(/\+/g, " ").trim() || null;
+  }
+}
+
+/** Collection title for loot card; model name is shown separately. */
+function lootCollectionLabel(entry: CaseLootPreview): string {
+  const model = entry.model_name?.trim();
+  const display = entry.display_name?.trim();
+  const fromUrl = collectionNameFromOriginalUrl(entry.image_url);
+  if (display && (!model || display !== model)) return display;
+  if (fromUrl) return fromUrl;
+  return formatCollectionSlug(entry.collection_slug) || entry.collection_slug;
+}
+
 function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
   const isTon = entry.prize_type === "ton";
   const floor =
     isTon
       ? entry.amount_nanoton || entry.floor_price_nanoton || 0
       : entry.floor_price_nanoton ?? 0;
+  const model = entry.model_name?.trim();
 
   return (
     <article className="case-loot-card">
@@ -53,7 +75,7 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={giftImageUrl(entry.collection_slug, entry.image_url)}
-            alt={entry.display_name}
+            alt={lootCollectionLabel(entry)}
             className="case-loot-card__img"
             draggable={false}
           />
@@ -61,14 +83,10 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
       </div>
       <div className="case-loot-card__meta">
         <p className="case-loot-card__name">
-          {isTon ? entry.display_name || "TON" : entry.display_name}
+          {isTon ? entry.display_name || "TON" : lootCollectionLabel(entry)}
         </p>
         <p className="case-loot-card__hint">
-          {isTon
-            ? "На баланс"
-            : entry.model_name?.trim()
-              ? entry.model_name.trim()
-              : "Случайная модель"}
+          {isTon ? "На баланс" : model || "рандом"}
         </p>
       </div>
     </article>

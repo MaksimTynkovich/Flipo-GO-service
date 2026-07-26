@@ -185,7 +185,7 @@ function giftToLootRow(gift: GiftPickerSelection, sortOrder: number): LootDraft 
     prize_type: "gift",
     collection_slug: gift.collectionSlug,
     model_name: modelName,
-    display_name: gift.displayName,
+    display_name: gift.collectionName,
     image_url: gift.previewUrl,
     rarity_label: "",
     tile_background_color: "",
@@ -706,7 +706,7 @@ export default function CasesSection() {
         collection_slug: gift.collectionSlug,
         model_name: modelName,
         _modelName: modelName || undefined,
-        display_name: gift.displayName,
+        display_name: gift.collectionName,
         image_url: gift.previewUrl,
       });
       setEditingLootKey(null);
@@ -1432,14 +1432,14 @@ export default function CasesSection() {
                                 <p className="admin-loot-card__title">
                                   {isTon
                                     ? row.display_name || "TON"
-                                    : row.display_name || row._modelName || row.collection_slug}
+                                    : row.display_name || row.collection_slug}
                                 </p>
                                 <p className="admin-loot-card__slug">
                                   {isTon
                                     ? "приз · TON"
                                     : row.model_name || row._modelName
-                                      ? `${row.collection_slug} · ${row.model_name || row._modelName}`
-                                      : `${row.collection_slug} · любая модель`}
+                                      ? row.model_name || row._modelName
+                                      : "рандом"}
                                 </p>
                               </div>
                               <div className="flex flex-wrap gap-1">
