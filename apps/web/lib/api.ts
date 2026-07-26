@@ -2020,6 +2020,7 @@ export type CaseLootPreview = {
   id: string;
   prize_type?: "gift" | "ton" | string;
   collection_slug: string;
+  model_name?: string;
   display_name: string;
   image_url: string;
   rarity_label?: string;
@@ -2116,6 +2117,7 @@ export type AdminCaseLootEntry = {
   id?: string;
   prize_type?: "gift" | "ton" | string;
   collection_slug: string;
+  model_name?: string;
   display_name: string;
   image_url?: string;
   rarity_label?: string;
@@ -2221,6 +2223,12 @@ export async function upsertAdminCase(body: AdminCaseUpsert) {
   return api<{ ok: boolean; id: string }>("/api/v1/admin/cases", {
     method: "PUT",
     body: JSON.stringify(body),
+  });
+}
+
+export async function deleteAdminCase(caseId: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/cases/${encodeURIComponent(caseId)}`, {
+    method: "DELETE",
   });
 }
 

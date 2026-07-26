@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -83,6 +84,25 @@ func (r *CaseRepo) UpdateCase(ctx context.Context, c *domain.Case) error {
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+func (r *CaseRepo) DeleteCase(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Delete(&domain.Case{}, "id = ?", id)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domain.ErrNotFound
+		}
+		// Soft-deleted cases stay for FK (opens); deactivate linked promos.
+		if err := tx.Model(&domain.CasePromoCode{}).
+			Where("case_id = ?", id).
+			Update("active", false).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (r *CaseRepo) ListLootByCase(ctx context.Context, caseID uuid.UUID) ([]domain.CaseLootEntry, error) {
@@ -395,32 +415,45 @@ func (r *CaseRepo) IncrementCasePromoUsed(ctx context.Context, code string) erro
 var _ domain.CaseRepository = (*CaseRepo)(nil)
 
 func (r *InventoryRepo) TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug string) (*domain.InventoryItem, error) {
+	return r.takeHouseGift(ctx, botUserID, toUserID, collectionSlug, "")
+}
+
+func (r *InventoryRepo) TakeHouseGiftForModel(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName string) (*domain.InventoryItem, error) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return r.takeHouseGift(ctx, botUserID, toUserID, collectionSlug, modelName)
+}
+
+func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName string) (*domain.InventoryItem, error) {
 	var item domain.InventoryItem
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		q := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
-			Where("user_id = ? AND collection_slug = ? AND status IN ? AND telegram_gift_id <> ''",
-				botUserID, collectionSlug, []domain.InventoryStatus{domain.InvAvailable, domain.InvLocked}).
-			Order("deposited_at ASC").
-			Limit(1).
-			Find(&item)
-		if q.Error != nil {
-			return q.Error
+			Where("user_id = ? AND LOWER(collection_slug) = LOWER(?) AND status IN ? AND telegram_gift_id <> ''",
+				botUserID, collectionSlug, []domain.InventoryStatus{domain.InvAvailable, domain.InvLocked})
+		if modelName != "" {
+			q = q.Where("metadata->>'model' = ?", modelName)
 		}
-		if q.RowsAffected == 0 || item.ID == uuid.Nil {
+		res := q.Order("deposited_at ASC").Limit(1).Find(&item)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 || item.ID == uuid.Nil {
 			return gorm.ErrRecordNotFound
 		}
 		now := time.Now().UTC()
-		res := tx.Model(&domain.InventoryItem{}).
+		upd := tx.Model(&domain.InventoryItem{}).
 			Where("id = ? AND user_id = ?", item.ID, botUserID).
 			Updates(map[string]any{
 				"user_id":    toUserID,
 				"status":     domain.InvAvailable,
 				"updated_at": now,
 			})
-		if res.Error != nil {
-			return res.Error
+		if upd.Error != nil {
+			return upd.Error
 		}
-		if res.RowsAffected == 0 {
+		if upd.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
 		}
 		item.UserID = toUserID

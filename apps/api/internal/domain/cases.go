@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 const (
@@ -29,19 +30,20 @@ const (
 )
 
 type Case struct {
-	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Slug            string    `gorm:"size:64;not null;uniqueIndex" json:"slug"`
-	Title           string    `gorm:"size:128;not null" json:"title"`
-	ImageURL        string    `gorm:"size:512" json:"image_url"`
-	AccentColor     string    `gorm:"size:32" json:"accent_color"`
-	PriceNanoton    int64     `gorm:"not null" json:"price_nanoton"`
-	Kind            string    `gorm:"size:16;not null;index" json:"kind"`
-	SortOrder       int       `gorm:"not null;default:0" json:"sort_order"`
-	Active          bool      `gorm:"not null;default:true;index" json:"active"`
-	RequireChannel  bool      `gorm:"not null;default:false" json:"require_channel"`
-	TargetRTPBPS    int       `gorm:"column:target_rtp_bps;not null;default:9000" json:"target_rtp_bps"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Slug            string         `gorm:"size:64;not null;index" json:"slug"`
+	Title           string         `gorm:"size:128;not null" json:"title"`
+	ImageURL        string         `gorm:"size:512" json:"image_url"`
+	AccentColor     string         `gorm:"size:32" json:"accent_color"`
+	PriceNanoton    int64          `gorm:"not null" json:"price_nanoton"`
+	Kind            string         `gorm:"size:16;not null;index" json:"kind"`
+	SortOrder       int            `gorm:"not null;default:0" json:"sort_order"`
+	Active          bool           `gorm:"not null;default:true;index" json:"active"`
+	RequireChannel  bool           `gorm:"not null;default:false" json:"require_channel"`
+	TargetRTPBPS    int            `gorm:"column:target_rtp_bps;not null;default:9000" json:"target_rtp_bps"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Case) TableName() string { return "cases" }
@@ -51,6 +53,7 @@ type CaseLootEntry struct {
 	CaseID              uuid.UUID `gorm:"type:uuid;not null;index" json:"case_id"`
 	PrizeType           string    `gorm:"size:16;not null;default:gift" json:"prize_type"`
 	CollectionSlug      string    `gorm:"size:128;not null;default:''" json:"collection_slug"`
+	ModelName           string    `gorm:"size:128;not null;default:''" json:"model_name"`
 	Weight              int       `gorm:"not null" json:"weight"`
 	DisplayName         string    `gorm:"size:128;not null" json:"display_name"`
 	ImageURL            string    `gorm:"size:512" json:"image_url"`

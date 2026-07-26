@@ -117,6 +117,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateCasesColumnFix(db); err != nil {
 		return err
 	}
+	if err := migrateCasesSoftDelete(db); err != nil {
+		return err
+	}
 	if err := migrateDropPromoWager(db); err != nil {
 		return err
 	}
@@ -143,6 +146,23 @@ func migrateCasesColumnFix(db *gorm.DB) error {
 	for _, stmt := range statements {
 		if err := db.Exec(stmt).Error; err != nil {
 			return fmt.Errorf("migrate cases column fix: %w", err)
+		}
+	}
+	return nil
+}
+
+func migrateCasesSoftDelete(db *gorm.DB) error {
+	statements := []string{
+		`ALTER TABLE cases ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+		`CREATE INDEX IF NOT EXISTS idx_cases_deleted_at ON cases (deleted_at)`,
+		`ALTER TABLE cases DROP CONSTRAINT IF EXISTS cases_slug_key`,
+		`DROP INDEX IF EXISTS idx_cases_slug`,
+		`DROP INDEX IF EXISTS uni_cases_slug`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_cases_slug_active ON cases (slug) WHERE deleted_at IS NULL`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("migrate cases soft delete: %w", err)
 		}
 	}
 	return nil

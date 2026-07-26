@@ -70,7 +70,7 @@ func (s *Service) AdminSimulateCase(ctx context.Context, caseID uuid.UUID, itera
 	for _, e := range loot {
 		floor := domain.CaseLootPrizeValueNanoton(e)
 		if floor <= 0 && domain.NormalizeCasePrizeType(e.PrizeType) != domain.CasePrizeTypeTon {
-			floor = s.quoteCollectionFloor(ctx, e.CollectionSlug)
+			floor = s.quoteLootFloor(ctx, e)
 		}
 		floors[e.ID] = floor
 		if floor <= 0 && e.Weight > 0 {

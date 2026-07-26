@@ -107,6 +107,7 @@ type LootPreview struct {
 	ID                  uuid.UUID `json:"id"`
 	PrizeType           string    `json:"prize_type"`
 	CollectionSlug      string    `json:"collection_slug"`
+	ModelName           string    `json:"model_name,omitempty"`
 	DisplayName         string    `json:"display_name"`
 	ImageURL            string    `json:"image_url"`
 	RarityLabel         string    `json:"rarity_label"`
@@ -138,6 +139,7 @@ type AdminLootEntry struct {
 	ID                  uuid.UUID `json:"id"`
 	PrizeType           string    `json:"prize_type"`
 	CollectionSlug      string    `json:"collection_slug"`
+	ModelName           string    `json:"model_name,omitempty"`
 	DisplayName         string    `json:"display_name"`
 	ImageURL            string    `json:"image_url"`
 	RarityLabel         string    `json:"rarity_label"`
@@ -641,6 +643,7 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 					ID:                  e.ID,
 					PrizeType:           preview.PrizeType,
 					CollectionSlug:      e.CollectionSlug,
+					ModelName:           e.ModelName,
 					DisplayName:         preview.DisplayName,
 					ImageURL:            preview.ImageURL,
 					RarityLabel:         e.RarityLabel,
@@ -675,6 +678,13 @@ func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
 		return s.cases.CreateCase(ctx, c)
 	}
 	return s.cases.UpdateCase(ctx, c)
+}
+
+func (s *Service) AdminDeleteCase(ctx context.Context, id uuid.UUID) error {
+	if id == uuid.Nil {
+		return domain.ErrNotFound
+	}
+	return s.cases.DeleteCase(ctx, id)
 }
 
 func (s *Service) AdminListCasePromoCodes(ctx context.Context, caseID *uuid.UUID) ([]domain.CasePromoCode, error) {
@@ -769,6 +779,7 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 				return domain.ErrInvalidAmount
 			}
 			entries[i].CollectionSlug = ""
+			entries[i].ModelName = ""
 			if entries[i].DisplayName == "" {
 				entries[i].DisplayName = "TON"
 			}
@@ -781,9 +792,14 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 		if entries[i].CollectionSlug == "" {
 			return domain.ErrInvalidAmount
 		}
+		entries[i].ModelName = strings.TrimSpace(entries[i].ModelName)
 		entries[i].AmountNanoton = 0
 		if entries[i].DisplayName == "" {
-			entries[i].DisplayName = entries[i].CollectionSlug
+			if entries[i].ModelName != "" {
+				entries[i].DisplayName = entries[i].ModelName
+			} else {
+				entries[i].DisplayName = entries[i].CollectionSlug
+			}
 		}
 	}
 	if err := s.cases.ReplaceLoot(ctx, caseID, entries); err != nil {
@@ -803,40 +819,55 @@ func (s *Service) grantPrize(
 ) (*domain.InventoryItem, bool, error) {
 	floor := entry.FloorPriceNanoton
 	if floor <= 0 {
-		floor = s.quoteCollectionFloor(ctx, entry.CollectionSlug)
+		floor = s.quoteLootFloor(ctx, entry)
 	}
 	txRef := domain.CaseClaimTxRefPrefix + openID.String()
 	imageURL := entry.ImageURL
 	if imageURL == "" {
 		imageURL = giftimage.FragmentURL(entry.CollectionSlug)
 	}
+	modelName := strings.TrimSpace(entry.ModelName)
 
 	// Best-effort: take a real gift from bot house stock.
 	if s.bot != nil {
 		if botUser, err := s.bot.EnsureBotUser(ctx); err == nil && botUser != nil {
-			if house, err := s.inventory.TakeHouseGiftForCollection(ctx, botUser.ID, userID, entry.CollectionSlug); err == nil && house != nil {
-				meta, _ := json.Marshal(map[string]any{
-					"fulfillment":    domain.CaseFulfillmentBacked,
-					"case_id":        c.ID.String(),
-					"case_slug":      c.Slug,
-					"loot_entry_id":  entry.ID.String(),
-					"collection":     entry.CollectionSlug,
-				})
+			var house *domain.InventoryItem
+			var takeErr error
+			if modelName != "" {
+				house, takeErr = s.inventory.TakeHouseGiftForModel(ctx, botUser.ID, userID, entry.CollectionSlug, modelName)
+			} else {
+				house, takeErr = s.inventory.TakeHouseGiftForCollection(ctx, botUser.ID, userID, entry.CollectionSlug)
+			}
+			if takeErr == nil && house != nil {
+				metaMap := map[string]any{
+					"fulfillment":   domain.CaseFulfillmentBacked,
+					"case_id":       c.ID.String(),
+					"case_slug":     c.Slug,
+					"loot_entry_id": entry.ID.String(),
+					"collection":    entry.CollectionSlug,
+				}
+				if modelName != "" {
+					metaMap["model"] = modelName
+				}
+				meta, _ := json.Marshal(metaMap)
 				_ = s.inventory.BindTelegramGift(ctx, house.ID, house.TelegramGiftID, house.ImageURL, meta, domain.CaseFulfillmentBacked)
-				// Stamp case tx_ref via promote-style update is not available; leave original tx_ref.
 				house.Metadata = datatypes.JSON(meta)
 				return house, true, nil
 			}
 		}
 	}
 
-	meta, _ := json.Marshal(map[string]any{
+	metaMap := map[string]any{
 		"fulfillment":   domain.CaseFulfillmentUnbacked,
 		"case_id":       c.ID.String(),
 		"case_slug":     c.Slug,
 		"loot_entry_id": entry.ID.String(),
 		"collection":    entry.CollectionSlug,
-	})
+	}
+	if modelName != "" {
+		metaMap["model"] = modelName
+	}
+	meta, _ := json.Marshal(metaMap)
 	now := time.Now().UTC()
 	item := &domain.InventoryItem{
 		ID:                uuid.New(),
@@ -858,6 +889,21 @@ func (s *Service) grantPrize(
 		return nil, false, err
 	}
 	return item, false, nil
+}
+
+func (s *Service) quoteLootFloor(ctx context.Context, entry domain.CaseLootEntry) int64 {
+	modelName := strings.TrimSpace(entry.ModelName)
+	if modelName != "" && s.valuator != nil {
+		sg := gifts.ScannedGiftFromItem(domain.InventoryItem{
+			CollectionSlug: entry.CollectionSlug,
+			Name:           entry.DisplayName,
+			Metadata:       datatypes.JSON(gifts.ItemMetadata(telegram.GiftAttributes{Model: modelName})),
+		})
+		if price, _ := s.valuator.QuoteBuyback(ctx, sg); price > 0 {
+			return price
+		}
+	}
+	return s.quoteCollectionFloor(ctx, entry.CollectionSlug)
 }
 
 func (s *Service) quoteCollectionFloor(ctx context.Context, collectionSlug string) int64 {
@@ -955,7 +1001,7 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 			for _, e := range loot {
 				preview := toLootPreview(e)
 				if preview.PrizeType != domain.CasePrizeTypeTon && preview.FloorPriceNanoton <= 0 {
-					preview.FloorPriceNanoton = s.quoteCollectionFloor(ctx, e.CollectionSlug)
+					preview.FloorPriceNanoton = s.quoteLootFloor(ctx, e)
 				}
 				view.Loot = append(view.Loot, preview)
 			}
@@ -1088,6 +1134,7 @@ func toLootPreview(e domain.CaseLootEntry) LootPreview {
 		ID:                  e.ID,
 		PrizeType:           prizeType,
 		CollectionSlug:      e.CollectionSlug,
+		ModelName:           strings.TrimSpace(e.ModelName),
 		DisplayName:         name,
 		ImageURL:            img,
 		RarityLabel:         e.RarityLabel,

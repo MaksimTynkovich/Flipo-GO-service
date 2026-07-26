@@ -1153,6 +1153,28 @@ func (h *AdminHandler) UpsertCase(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "id": req.ID})
 }
 
+func (h *AdminHandler) DeleteCase(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	if err := h.cases.AdminDeleteCase(c.Request.Context(), caseID); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Кейс не найден"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (h *AdminHandler) ReplaceCaseLoot(c *gin.Context) {
 	if h.cases == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})

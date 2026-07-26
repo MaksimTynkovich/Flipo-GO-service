@@ -1,0 +1,2 @@
+ALTER TABLE case_loot_entries
+    ADD COLUMN IF NOT EXISTS model_name VARCHAR(128) NOT NULL DEFAULT '';

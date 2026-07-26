@@ -6,6 +6,7 @@ type LootDraftLike = {
   id?: string;
   prize_type?: string;
   collection_slug: string;
+  model_name?: string;
   display_name: string;
   image_url?: string;
   rarity_label?: string;
@@ -34,6 +35,7 @@ export function lootDraftsToPreview(rows: LootDraftLike[]): CaseLootPreview[] {
       id: row.id || row._key,
       prize_type: prizeType,
       collection_slug: row.collection_slug,
+      model_name: prizeType === "gift" ? row.model_name || undefined : undefined,
       display_name: row.display_name || (prizeType === "ton" ? "TON" : ""),
       image_url: row.image_url || "",
       rarity_label: row.rarity_label || undefined,

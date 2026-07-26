@@ -15,8 +15,9 @@ import { AdminFloatField, AdminPercentField, AdminTonField, AdminIntField } from
 import { useToast } from "@/components/providers/ToastProvider";
 import {
   changesGiftModelImageUrl,
+  isChangesGiftImageUrl,
   modelNameFromChangesImageUrl,
-  type ChangesGiftModel,
+  type GiftPickerSelection,
 } from "@/lib/changes-gifts";
 import { giftImageUrl } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
@@ -46,6 +47,7 @@ import {
   uploadAdminCaseImage,
   upsertAdminCase,
   upsertAdminCasePromoCode,
+  deleteAdminCase,
   simulateAdminCase,
   formatTON,
   type AdminCase,
@@ -99,6 +101,12 @@ type LootDraft = AdminCaseLootEntry & {
   _modelName?: string;
 };
 
+function lootExcludeKey(collectionSlug: string, modelName = ""): string {
+  const slug = collectionSlug.trim().toLowerCase();
+  const model = modelName.trim();
+  return model ? `${slug}\0${model}` : slug;
+}
+
 function emptyCaseDraft(): CaseDraft {
   return {
     slug: "",
@@ -131,21 +139,24 @@ function caseToDraft(c: AdminCase): CaseDraft {
 }
 
 function inferModelName(entry: AdminCaseLootEntry): string | undefined {
-  const fromUrl = modelNameFromChangesImageUrl(entry.image_url);
-  if (fromUrl) return fromUrl;
-  if (entry.display_name?.trim()) return entry.display_name.trim();
-  return undefined;
+  if (entry.model_name?.trim()) return entry.model_name.trim();
+  // Legacy rows: only treat CDN model URLs as model (not display_name — that was collection).
+  return modelNameFromChangesImageUrl(entry.image_url) || undefined;
 }
 
 function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
   return (entries || []).map((e, i) => {
     const prizeType = e.prize_type === "ton" ? "ton" : "gift";
+    const modelName = prizeType === "gift" ? inferModelName(e) : undefined;
     return {
-      _key: e.id || `new-${i}-${prizeType}-${e.collection_slug || e.amount_nanoton || i}`,
-      _modelName: prizeType === "gift" ? inferModelName(e) : undefined,
+      _key:
+        e.id ||
+        `new-${i}-${prizeType}-${e.collection_slug || e.amount_nanoton || i}-${modelName || "any"}`,
+      _modelName: modelName,
       id: e.id,
       prize_type: prizeType,
       collection_slug: e.collection_slug || "",
+      model_name: modelName || "",
       display_name: e.display_name,
       image_url: e.image_url || "",
       rarity_label: e.rarity_label || "",
@@ -160,17 +171,20 @@ function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
 
 function lootPreviewUrl(row: LootDraft): string {
   if (row.prize_type === "ton") return "";
-  if (row.image_url?.includes("cdn.changes.tg")) return row.image_url;
-  if (row._modelName) return changesGiftModelImageUrl(row._modelName);
+  if (row.image_url && isChangesGiftImageUrl(row.image_url)) return row.image_url;
+  if (row.image_url?.includes("api.changes.tg")) return row.image_url;
+  if (row._modelName && !row.model_name) return changesGiftModelImageUrl(row._modelName);
   return giftImageUrl(row.collection_slug || "unknown", row.image_url);
 }
 
-function giftToLootRow(gift: ChangesGiftModel, sortOrder: number): LootDraft {
+function giftToLootRow(gift: GiftPickerSelection, sortOrder: number): LootDraft {
+  const modelName = gift.modelName.trim();
   return {
-    _key: `new-${Date.now()}-${gift.collectionSlug}`,
-    _modelName: gift.modelName,
+    _key: `new-${Date.now()}-${gift.collectionSlug}-${modelName || "any"}`,
+    _modelName: modelName || undefined,
     prize_type: "gift",
     collection_slug: gift.collectionSlug,
+    model_name: modelName,
     display_name: gift.displayName,
     image_url: gift.previewUrl,
     rarity_label: "",
@@ -276,6 +290,7 @@ export default function CasesSection() {
   const [draft, setDraft] = useState<CaseDraft>(emptyCaseDraft());
   const [loot, setLoot] = useState<LootDraft[]>([]);
   const [savingCase, setSavingCase] = useState(false);
+  const [deletingCase, setDeletingCase] = useState(false);
   const [savingLoot, setSavingLoot] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [bannersEnabled, setBannersEnabled] = useState(false);
@@ -284,6 +299,7 @@ export default function CasesSection() {
   const [savingCasesEnabled, setSavingCasesEnabled] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editingLootKey, setEditingLootKey] = useState<string | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [casePromos, setCasePromos] = useState<AdminCasePromoCode[]>([]);
   const [casePromosLoading, setCasePromosLoading] = useState(false);
@@ -453,9 +469,26 @@ export default function CasesSection() {
     [loot],
   );
 
-  const lootSlugs = useMemo(
-    () => new Set(loot.map((row) => row.collection_slug).filter(Boolean)),
-    [loot],
+  const lootKeys = useMemo(() => {
+    const editing = editingLootKey
+      ? loot.find((row) => row._key === editingLootKey)
+      : null;
+    const skipKey = editing
+      ? lootExcludeKey(editing.collection_slug, editing.model_name || editing._modelName || "")
+      : null;
+    const keys = new Set<string>();
+    for (const row of loot) {
+      if (row.prize_type === "ton" || !row.collection_slug) continue;
+      const key = lootExcludeKey(row.collection_slug, row.model_name || row._modelName || "");
+      if (skipKey && key === skipKey) continue;
+      keys.add(key);
+    }
+    return keys;
+  }, [loot, editingLootKey]);
+
+  const editingLootRow = useMemo(
+    () => (editingLootKey ? loot.find((row) => row._key === editingLootKey) ?? null : null),
+    [loot, editingLootKey],
   );
 
   async function saveCase() {
@@ -504,6 +537,27 @@ export default function CasesSection() {
       showToast({ title: formatUserError(e, "Не удалось сохранить кейс"), variant: "error" });
     } finally {
       setSavingCase(false);
+    }
+  }
+
+  async function removeCase() {
+    if (!draft.id) return;
+    const label = draft.title.trim() || draft.slug || draft.id;
+    if (!window.confirm(`Удалить кейс «${label}»? История открытий сохранится.`)) return;
+    setDeletingCase(true);
+    try {
+      await deleteAdminCase(draft.id);
+      showToast({ title: "Кейс удалён", variant: "success" });
+      const data = await load();
+      if (data.length > 0) {
+        selectCase(data[0]);
+      } else {
+        startNew();
+      }
+    } catch (e) {
+      showToast({ title: formatUserError(e, "Не удалось удалить кейс"), variant: "error" });
+    } finally {
+      setDeletingCase(false);
     }
   }
 
@@ -571,6 +625,7 @@ export default function CasesSection() {
           ...(row.id ? { id: row.id } : {}),
           prize_type: "ton",
           collection_slug: "",
+          model_name: "",
           display_name: row.display_name.trim() || "TON",
           image_url: "",
           rarity_label: row.rarity_label?.trim() || "",
@@ -591,6 +646,7 @@ export default function CasesSection() {
         ...(row.id ? { id: row.id } : {}),
         prize_type: "gift",
         collection_slug: slug,
+        model_name: (row.model_name || row._modelName || "").trim(),
         display_name: row.display_name.trim() || slug,
         image_url: row.image_url?.trim() || "",
         rarity_label: row.rarity_label?.trim() || "",
@@ -639,8 +695,39 @@ export default function CasesSection() {
     });
   }
 
-  function addGift(gift: ChangesGiftModel) {
+  function addGift(gift: GiftPickerSelection) {
     setLoot((prev) => [...prev, giftToLootRow(gift, prev.length)]);
+  }
+
+  function applyGiftSelection(gift: GiftPickerSelection) {
+    if (editingLootKey) {
+      const modelName = gift.modelName.trim();
+      updateLoot(editingLootKey, {
+        collection_slug: gift.collectionSlug,
+        model_name: modelName,
+        _modelName: modelName || undefined,
+        display_name: gift.displayName,
+        image_url: gift.previewUrl,
+      });
+      setEditingLootKey(null);
+      return;
+    }
+    addGift(gift);
+  }
+
+  function openAddGiftPicker() {
+    setEditingLootKey(null);
+    setPickerOpen(true);
+  }
+
+  function openEditModelPicker(key: string) {
+    setEditingLootKey(key);
+    setPickerOpen(true);
+  }
+
+  function closeGiftPicker() {
+    setPickerOpen(false);
+    setEditingLootKey(null);
   }
 
   function addTonPrize() {
@@ -738,7 +825,7 @@ export default function CasesSection() {
   return (
     <AdminPage
       title="Кейсы"
-      description="Метаданные кейса и визуальное наполнение лута. Подарки выбираются из каталога cdn.changes.tg."
+      description="Метаданные кейса и визуальное наполнение лута. Подарки: коллекция (рандом) или конкретная модель."
     >
       <AdminToolbar>
         <AdminButton variant="secondary" disabled={loading} onClick={() => void load()}>
@@ -1139,16 +1226,25 @@ export default function CasesSection() {
               </label>
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
-              <AdminButton disabled={savingCase} onClick={() => void saveCase()}>
+              <AdminButton disabled={savingCase || deletingCase} onClick={() => void saveCase()}>
                 {savingCase ? "…" : draft.id ? "Сохранить кейс" : "Создать кейс"}
               </AdminButton>
               <AdminButton
                 variant="secondary"
-                disabled={!draft.id || simulating || loot.length === 0}
+                disabled={!draft.id || simulating || loot.length === 0 || deletingCase}
                 onClick={() => void runSimulate()}
               >
                 {simulating ? "…" : `Тест · ${SIM_ITERATIONS}`}
               </AdminButton>
+              {draft.id ? (
+                <AdminButton
+                  variant="danger"
+                  disabled={savingCase || deletingCase}
+                  onClick={() => void removeCase()}
+                >
+                  {deletingCase ? "…" : "Удалить"}
+                </AdminButton>
+              ) : null}
             </div>
             {simResult ? (
               <div className="mt-3 space-y-2 rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
@@ -1339,10 +1435,23 @@ export default function CasesSection() {
                                     : row.display_name || row._modelName || row.collection_slug}
                                 </p>
                                 <p className="admin-loot-card__slug">
-                                  {isTon ? "приз · TON" : row.collection_slug}
+                                  {isTon
+                                    ? "приз · TON"
+                                    : row.model_name || row._modelName
+                                      ? `${row.collection_slug} · ${row.model_name || row._modelName}`
+                                      : `${row.collection_slug} · любая модель`}
                                 </p>
                               </div>
                               <div className="flex flex-wrap gap-1">
+                                {!isTon ? (
+                                  <AdminButton
+                                    variant="secondary"
+                                    className="!h-8 !px-2.5 text-xs"
+                                    onClick={() => openEditModelPicker(row._key)}
+                                  >
+                                    Модель
+                                  </AdminButton>
+                                ) : null}
                                 <AdminButton
                                   variant="secondary"
                                   className="!h-8 !px-2"
@@ -1505,7 +1614,7 @@ export default function CasesSection() {
                                 </AdminField>
                                 {!isTon ? (
                                   <>
-                                    <AdminField label="collection_slug" hint="обычно авто из модели">
+                                    <AdminField label="collection_slug" hint="Telegram-коллекция">
                                       <input
                                         className="input-field"
                                         value={row.collection_slug}
@@ -1513,15 +1622,31 @@ export default function CasesSection() {
                                           updateLoot(row._key, {
                                             collection_slug: e.target.value
                                               .toLowerCase()
-                                              .replace(/[^a-z0-9-]/g, ""),
+                                              .replace(/[^a-z0-9]/g, ""),
                                           })
                                         }
                                       />
                                     </AdminField>
                                     <AdminField
+                                      label="model_name"
+                                      hint="пусто = любая модель из коллекции"
+                                    >
+                                      <input
+                                        className="input-field"
+                                        value={row.model_name || row._modelName || ""}
+                                        onChange={(e) =>
+                                          updateLoot(row._key, {
+                                            model_name: e.target.value,
+                                            _modelName: e.target.value.trim() || undefined,
+                                          })
+                                        }
+                                        placeholder="например Celestia"
+                                      />
+                                    </AdminField>
+                                    <AdminField
                                       label="image_url"
                                       className="sm:col-span-2"
-                                      hint="CDN URL, заполняется автоматически"
+                                      hint="CDN / API URL, заполняется автоматически"
                                     >
                                       <input
                                         className="input-field font-mono text-xs"
@@ -1543,7 +1668,7 @@ export default function CasesSection() {
                 )}
 
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <AdminButton variant="secondary" onClick={() => setPickerOpen(true)}>
+                  <AdminButton variant="secondary" onClick={openAddGiftPicker}>
                     + Добавить подарок
                   </AdminButton>
                   <AdminButton variant="secondary" onClick={addTonPrize}>
@@ -1576,9 +1701,11 @@ export default function CasesSection() {
 
       <GiftPickerModal
         open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={addGift}
-        excludeSlugs={lootSlugs}
+        onClose={closeGiftPicker}
+        onSelect={applyGiftSelection}
+        excludeKeys={lootKeys}
+        initialCollectionSlug={editingLootRow?.collection_slug}
+        title={editingLootRow ? "Сменить модель" : undefined}
       />
     </AdminPage>
   );

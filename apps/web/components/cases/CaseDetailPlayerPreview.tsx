@@ -63,7 +63,13 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
         <p className="case-loot-card__name">
           {isTon ? entry.display_name || "TON" : entry.display_name}
         </p>
-        <p className="case-loot-card__hint">{isTon ? "На баланс" : "Случайная модель"}</p>
+        <p className="case-loot-card__hint">
+          {isTon
+            ? "На баланс"
+            : entry.model_name?.trim()
+              ? entry.model_name.trim()
+              : "Случайная модель"}
+        </p>
       </div>
     </article>
   );

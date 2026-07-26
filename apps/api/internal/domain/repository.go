@@ -51,6 +51,8 @@ type InventoryRepository interface {
 	TransferOwnership(ctx context.Context, itemID, newUserID uuid.UUID, fromStatus InventoryStatus) error
 	// TakeHouseGiftForCollection transfers one bot-owned gift of the collection to the user (available).
 	TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug string) (*InventoryItem, error)
+	// TakeHouseGiftForModel transfers one bot-owned gift matching collection + metadata.model.
+	TakeHouseGiftForModel(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName string) (*InventoryItem, error)
 	BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment string) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
 	SetFloorPrice(ctx context.Context, slug string, price int64) error
@@ -63,6 +65,7 @@ type CaseRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*Case, error)
 	CreateCase(ctx context.Context, c *Case) error
 	UpdateCase(ctx context.Context, c *Case) error
+	DeleteCase(ctx context.Context, id uuid.UUID) error
 	ListLootByCase(ctx context.Context, caseID uuid.UUID) ([]CaseLootEntry, error)
 	ReplaceLoot(ctx context.Context, caseID uuid.UUID, entries []CaseLootEntry) error
 	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserCaseState, error)
