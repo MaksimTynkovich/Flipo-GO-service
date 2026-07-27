@@ -20,6 +20,8 @@ import {
   type AdminNotificationCategory,
 } from "@/lib/api";
 
+const PAGE_SIZE = 50;
+
 const CATEGORIES: { id: AdminNotificationCategory; label: string }[] = [
   { id: "all", label: "Все" },
   { id: "finance", label: "Финансы" },
@@ -147,6 +149,10 @@ function metaRows(n: AdminNotification): Array<{ label: string; value: string }>
 export default function NotificationsSection() {
   const router = useRouter();
   const [category, setCategory] = useState<AdminNotificationCategory>("all");
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
   const [items, setItems] = useState<AdminNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -157,16 +163,37 @@ export default function NotificationsSection() {
     [items, selectedId],
   );
 
-  async function load(nextCategory = category) {
+  const pageCount = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
+  const pageIndex = Math.floor(offset / PAGE_SIZE) + 1;
+
+  async function load(opts?: {
+    category?: AdminNotificationCategory;
+    q?: string;
+    offset?: number;
+    withUnread?: boolean;
+  }) {
+    const nextCategory = opts?.category ?? category;
+    const nextQuery = opts?.q ?? query;
+    const nextOffset = opts?.offset ?? offset;
     setLoading(true);
     try {
-      const [list, countRes] = await Promise.all([
-        getAdminNotifications({ category: nextCategory, limit: 150 }),
-        getAdminNotificationUnreadCount(),
-      ]);
-      setItems(list);
-      setUnread(countRes.count);
-      window.dispatchEvent(new CustomEvent("admin-notifications-unread", { detail: countRes.count }));
+      const listPromise = getAdminNotifications({
+        category: nextCategory,
+        q: nextQuery,
+        limit: PAGE_SIZE,
+        offset: nextOffset,
+      });
+      if (opts?.withUnread !== false) {
+        const [list, countRes] = await Promise.all([listPromise, getAdminNotificationUnreadCount()]);
+        setItems(list.items);
+        setTotal(list.total);
+        setUnread(countRes.count);
+        window.dispatchEvent(new CustomEvent("admin-notifications-unread", { detail: countRes.count }));
+      } else {
+        const list = await listPromise;
+        setItems(list.items);
+        setTotal(list.total);
+      }
     } finally {
       setLoading(false);
     }
@@ -174,23 +201,30 @@ export default function NotificationsSection() {
 
   const categoryRef = useRef(category);
   categoryRef.current = category;
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
 
   useEffect(() => {
-    load().catch(() => {});
+    load({ withUnread: true }).catch(() => {});
     // Slow HTTP fallback; live updates arrive via admin WS.
     const timer = window.setInterval(() => {
-      load().catch(() => {});
+      load({ withUnread: true }).catch(() => {});
     }, 120_000);
 
     function onRealtime(e: Event) {
       const notif = (e as CustomEvent<AdminNotification>).detail;
       if (!notif?.id) return;
+      // Only prepend onto the first page when there is no active search.
+      if (offsetRef.current !== 0 || queryRef.current.trim()) return;
       const currentCategory = categoryRef.current;
       setItems((prev) => {
         if (prev.some((row) => row.id === notif.id)) return prev;
         if (currentCategory !== "all" && notif.category !== currentCategory) return prev;
-        return [notif, ...prev].slice(0, 150);
+        return [notif, ...prev].slice(0, PAGE_SIZE);
       });
+      setTotal((n) => n + 1);
     }
     function onUnread(e: Event) {
       const detail = (e as CustomEvent<number>).detail;
@@ -203,19 +237,40 @@ export default function NotificationsSection() {
       window.removeEventListener("admin-notification", onRealtime);
       window.removeEventListener("admin-notifications-unread", onUnread);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once; category via ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once; category/query/offset via refs
   }, []);
+
+  const searchSkipInitial = useRef(true);
+  useEffect(() => {
+    if (searchSkipInitial.current) {
+      searchSkipInitial.current = false;
+      return;
+    }
+    const trimmed = queryInput.trim();
+    if (trimmed.length > 0 && trimmed.length < 3) return;
+    const next = trimmed.length >= 3 ? trimmed : "";
+    const timer = window.setTimeout(() => {
+      if (next === queryRef.current && offsetRef.current === 0) return;
+      setQuery(next);
+      setOffset(0);
+      setSelectedId(null);
+      load({ q: next, offset: 0, withUnread: false }).catch(() => {});
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce on input only
+  }, [queryInput]);
 
   async function selectCategory(next: AdminNotificationCategory) {
     setCategory(next);
+    setOffset(0);
     setSelectedId(null);
-    setLoading(true);
-    try {
-      const list = await getAdminNotifications({ category: next, limit: 150 });
-      setItems(list);
-    } finally {
-      setLoading(false);
-    }
+    await load({ category: next, offset: 0, withUnread: false });
+  }
+
+  async function goPage(nextOffset: number) {
+    setOffset(nextOffset);
+    setSelectedId(null);
+    await load({ offset: nextOffset, withUnread: false });
   }
 
   async function openItem(item: AdminNotification) {
@@ -280,7 +335,7 @@ export default function NotificationsSection() {
           <AdminButton
             variant="secondary"
             className="!h-9 text-xs"
-            onClick={() => load().catch(() => {})}
+            onClick={() => load({ withUnread: true }).catch(() => {})}
           >
             {loading ? "Обновляем…" : "Обновить"}
           </AdminButton>
@@ -297,10 +352,31 @@ export default function NotificationsSection() {
         </div>
       </AdminToolbar>
 
+      <AdminToolbar>
+        <input
+          value={queryInput}
+          onChange={(e) => setQueryInput(e.target.value)}
+          className="input-field h-8 min-w-[180px] flex-1"
+          placeholder="Поиск: заголовок, текст, username или ID"
+        />
+        {query ? (
+          <AdminChip
+            active
+            onClick={() => {
+              setQueryInput("");
+            }}
+          >
+            «{query}» ×
+          </AdminChip>
+        ) : null}
+      </AdminToolbar>
+
       <div className={cn("admin-notif-layout", selected && "admin-notif-layout--split")}>
         <div className="admin-notif-feed">
           {items.length === 0 ? (
-            <AdminEmpty>{loading ? "Загрузка…" : "Уведомлений пока нет"}</AdminEmpty>
+            <AdminEmpty>
+              {loading ? "Загрузка…" : query ? "Ничего не найдено" : "Уведомлений пока нет"}
+            </AdminEmpty>
           ) : (
             items.map((item) => {
               const unreadRow = !item.read_at;
@@ -341,6 +417,39 @@ export default function NotificationsSection() {
               );
             })
           )}
+
+          {total > PAGE_SIZE ? (
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <p className="text-xs text-[var(--admin-muted)]">
+                Стр. {pageIndex} / {pageCount}
+                <span className="opacity-70"> · {total}</span>
+              </p>
+              <div className="flex gap-2">
+                <AdminButton
+                  variant="secondary"
+                  className="!h-9 text-xs"
+                  disabled={offset <= 0 || loading}
+                  onClick={() => {
+                    goPage(Math.max(0, offset - PAGE_SIZE)).catch(() => {});
+                  }}
+                >
+                  Назад
+                </AdminButton>
+                <AdminButton
+                  variant="secondary"
+                  className="!h-9 text-xs"
+                  disabled={offset + PAGE_SIZE >= total || loading}
+                  onClick={() => {
+                    goPage(offset + PAGE_SIZE).catch(() => {});
+                  }}
+                >
+                  Далее
+                </AdminButton>
+              </div>
+            </div>
+          ) : total > 0 ? (
+            <p className="pt-2 text-xs text-[var(--admin-muted)]">{total} уведомлений</p>
+          ) : null}
         </div>
 
         {selected ? (

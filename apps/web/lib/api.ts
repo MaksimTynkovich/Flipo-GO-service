@@ -1459,17 +1459,28 @@ export type AdminNotification = {
   created_at: string;
 };
 
+export type AdminNotificationList = {
+  items: AdminNotification[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export async function getAdminNotifications(opts?: {
   category?: string;
   unreadOnly?: boolean;
+  q?: string;
   limit?: number;
+  offset?: number;
 }) {
   const params = new URLSearchParams();
   if (opts?.category && opts.category !== "all") params.set("category", opts.category);
   if (opts?.unreadOnly) params.set("unread", "1");
-  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
   const q = params.toString();
-  return api<AdminNotification[]>(`/api/v1/admin/notifications${q ? `?${q}` : ""}`);
+  return api<AdminNotificationList>(`/api/v1/admin/notifications${q ? `?${q}` : ""}`);
 }
 
 export async function getAdminNotificationUnreadCount(category?: string) {

@@ -122,7 +122,9 @@ func (AdminNotification) TableName() string { return "admin_notifications" }
 type AdminNotificationFilter struct {
 	Category   string
 	UnreadOnly bool
+	Query      string
 	Limit      int
+	Offset     int
 }
 
 // PromoCode — marketing bonus codes credited to the main balance.

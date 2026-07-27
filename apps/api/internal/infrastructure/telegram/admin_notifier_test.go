@@ -26,6 +26,10 @@ func (s *countingStore) ListAdminNotifications(ctx context.Context, filter domai
 	return nil, nil
 }
 
+func (s *countingStore) CountAdminNotifications(ctx context.Context, filter domain.AdminNotificationFilter) (int64, error) {
+	return 0, nil
+}
+
 func (s *countingStore) CountUnreadAdminNotifications(ctx context.Context, category string) (int64, error) {
 	return 0, nil
 }

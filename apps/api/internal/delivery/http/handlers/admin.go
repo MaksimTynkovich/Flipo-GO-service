@@ -336,16 +336,15 @@ func (h *AdminHandler) AuditLogs(c *gin.Context) {
 func (h *AdminHandler) ListNotifications(c *gin.Context) {
 	category := strings.TrimSpace(c.Query("category"))
 	unreadOnly := c.Query("unread") == "1" || strings.EqualFold(c.Query("unread"), "true")
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
-	items, err := h.admin.ListNotifications(c.Request.Context(), category, unreadOnly, limit)
+	query := strings.TrimSpace(c.Query("q"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	result, err := h.admin.ListNotifications(c.Request.Context(), category, unreadOnly, query, limit, offset)
 	if err != nil {
 		respondInternal(c, err)
 		return
 	}
-	if items == nil {
-		items = []domain.AdminNotification{}
-	}
-	c.JSON(http.StatusOK, items)
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *AdminHandler) UnreadNotificationCount(c *gin.Context) {

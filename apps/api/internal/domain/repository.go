@@ -261,6 +261,7 @@ type AdminRepository interface {
 type AdminNotificationRepository interface {
 	CreateAdminNotification(ctx context.Context, n *AdminNotification) error
 	ListAdminNotifications(ctx context.Context, filter AdminNotificationFilter) ([]AdminNotification, error)
+	CountAdminNotifications(ctx context.Context, filter AdminNotificationFilter) (int64, error)
 	CountUnreadAdminNotifications(ctx context.Context, category string) (int64, error)
 	MarkAdminNotificationRead(ctx context.Context, id uuid.UUID) error
 	MarkAllAdminNotificationsRead(ctx context.Context, category string) (int64, error)

@@ -82,15 +82,45 @@ func (s *Service) AuditLogs(ctx context.Context) ([]domain.AdminAuditLog, error)
 	return s.admin.ListAuditLogs(ctx, 30)
 }
 
-func (s *Service) ListNotifications(ctx context.Context, category string, unreadOnly bool, limit int) ([]domain.AdminNotification, error) {
-	if s.notifications == nil {
-		return []domain.AdminNotification{}, nil
+type NotificationListResult struct {
+	Items  []domain.AdminNotification `json:"items"`
+	Total  int64                      `json:"total"`
+	Limit  int                        `json:"limit"`
+	Offset int                        `json:"offset"`
+}
+
+func (s *Service) ListNotifications(ctx context.Context, category string, unreadOnly bool, query string, limit, offset int) (*NotificationListResult, error) {
+	if limit <= 0 {
+		limit = 50
 	}
-	return s.notifications.ListAdminNotifications(ctx, domain.AdminNotificationFilter{
+	if limit > 300 {
+		limit = 300
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if s.notifications == nil {
+		return &NotificationListResult{Items: []domain.AdminNotification{}, Limit: limit, Offset: offset}, nil
+	}
+	filter := domain.AdminNotificationFilter{
 		Category:   category,
 		UnreadOnly: unreadOnly,
+		Query:      query,
 		Limit:      limit,
-	})
+		Offset:     offset,
+	}
+	items, err := s.notifications.ListAdminNotifications(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	total, err := s.notifications.CountAdminNotifications(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []domain.AdminNotification{}
+	}
+	return &NotificationListResult{Items: items, Total: total, Limit: limit, Offset: offset}, nil
 }
 
 func (s *Service) UnreadNotificationCount(ctx context.Context, category string) (int64, error) {
