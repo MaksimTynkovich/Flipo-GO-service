@@ -479,12 +479,8 @@ export default function UsersSection() {
               }
             />
             <AdminMetric
-              label="Выплата / день"
+              label="Выплата / сутки"
               value={audience ? `${formatTON(audience.staking_daily_yield_nanoton)} TON` : "—"}
-            />
-            <AdminMetric
-              label="Выплата / неделю"
-              value={audience ? `${formatTON(audience.staking_weekly_yield_nanoton)} TON` : "—"}
             />
             <AdminMetric
               label="Выплачено за эпоху"

@@ -17,19 +17,21 @@ func MoscowLocation() *time.Location {
 	return moscowLocation
 }
 
-// CurrentEpochBounds returns [start, end) for the staking week in MSK (Mon 00:00 – next Mon 00:00).
+// legacyEpochMaxDuration marks weekly epochs from before the daily staking redesign.
+const legacyEpochMaxDuration = 25 * time.Hour
+
+// CurrentEpochBounds returns [start, end) for the current calendar day in MSK.
 func CurrentEpochBounds(now time.Time) (time.Time, time.Time) {
 	m := now.In(moscowLocation)
-	weekday := int(m.Weekday())
-	if weekday == 0 {
-		weekday = 7
-	}
-	daysFromMonday := weekday - 1
-	start := time.Date(m.Year(), m.Month(), m.Day(), 0, 0, 0, 0, moscowLocation).AddDate(0, 0, -daysFromMonday)
-	end := start.AddDate(0, 0, 7)
+	start := time.Date(m.Year(), m.Month(), m.Day(), 0, 0, 0, 0, moscowLocation)
+	end := start.AddDate(0, 0, 1)
 	return start.UTC(), end.UTC()
 }
 
 func IsEpochEnded(epochEndsAt time.Time, now time.Time) bool {
 	return !now.Before(epochEndsAt)
+}
+
+func isLegacyEpoch(startsAt, endsAt time.Time) bool {
+	return endsAt.Sub(startsAt) > legacyEpochMaxDuration
 }

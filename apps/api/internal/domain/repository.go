@@ -136,6 +136,7 @@ type StakingRepository interface {
 	SumCompletedQuestRewards(ctx context.Context, userID uuid.UUID) (int64, error)
 	HasAnyGameBet(ctx context.Context, userID uuid.UUID) (bool, error)
 	SumWagerByGame(ctx context.Context, userID uuid.UUID, gameType GameType) (int64, error)
+	SumTotalWager(ctx context.Context, userID uuid.UUID) (int64, error)
 	HasPvPMatch(ctx context.Context, userID uuid.UUID) (bool, error)
 	CountPvPMatches(ctx context.Context, userID uuid.UUID) (int64, error)
 	SumDeposits(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -256,6 +257,9 @@ type AdminRepository interface {
 	UserBetsSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserBetsSummary, error)
 	ListUserTransfers(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]TonTransfer, error)
 	UserTransfersSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserTransfersSummary, error)
+	StakingOverview(ctx context.Context) (*AdminStakingOverview, error)
+	ListStakingEpochs(ctx context.Context, limit, offset int) ([]AdminStakingEpochRow, int64, error)
+	ListStakingPositions(ctx context.Context, filter AdminStakingPositionFilter) ([]AdminStakingPositionRow, int64, error)
 }
 
 type AdminNotificationRepository interface {

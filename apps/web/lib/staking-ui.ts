@@ -1,7 +1,6 @@
 export type StakingTier = "base" | "boost";
 
 const MSK = "Europe/Moscow";
-export const STAKING_DAYS_PER_WEEK = 7;
 export const STAKING_DAYS_PER_MONTH = 30;
 export const STAKING_MONTHS_PER_YEAR = 12;
 
@@ -20,21 +19,15 @@ export function aprFromTier(tier?: StakingTier | null): number {
   return 0;
 }
 
-/** Доход за неделю из дневного начисления (7 дней эпохи). */
-export function weeklyYieldNanoton(dailyNanoton: number): number {
-  return dailyNanoton * STAKING_DAYS_PER_WEEK;
+/** Доход за сутки из месячной оценки API. */
+export function dailyYieldFromMonthly(monthlyNanoton: number): number {
+  return Math.round(monthlyNanoton / STAKING_DAYS_PER_MONTH);
 }
 
-/** Доход за неделю из месячной оценки API. */
-export function weeklyYieldFromMonthly(monthlyNanoton: number): number {
-  return Math.round((monthlyNanoton * STAKING_DAYS_PER_WEEK) / STAKING_DAYS_PER_MONTH);
-}
-
-/** «понедельник, 6 июля» + «00:00 МСК» для баннера недели. */
+/** «28 июля» + «00:00 МСК» для баннера суточной эпохи. */
 export function formatStakingEpochEnd(iso: string): { dateLine: string; timeLine: string } {
   const date = new Date(iso);
   const dateLine = date.toLocaleDateString("ru-RU", {
-    weekday: "long",
     day: "numeric",
     month: "long",
     timeZone: MSK,
@@ -94,6 +87,11 @@ export function stakingBoostReferralTarget(): number {
 /** Пояснение, что подарки для стейка не нужно передавать боту. */
 export function stakingNoTransferHint(): string {
   return "Подарки остаются у вас в профиле — передавать боту для стейкинга не нужно";
+}
+
+/** Что стейкинг и доход — ежедневный цикл. */
+export function stakingDailyCycleHint(): string {
+  return "Стейкинг ежедневный: застейкайте сегодня → ночью выплата → завтра снова добавьте в стейк";
 }
 
 export function pluralizePeople(count: number): string {

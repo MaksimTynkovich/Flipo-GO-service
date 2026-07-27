@@ -3,7 +3,6 @@ package staking
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
-	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/google/uuid"
 )
 
@@ -144,7 +142,7 @@ func (s *Service) Stake(ctx context.Context, userID, itemID uuid.UUID) (*domain.
 }
 
 func (s *Service) Unstake(ctx context.Context, userID, positionID uuid.UUID) error {
-	return errors.New("вывод из стейка доступен только в конце недели")
+	return errors.New("вывод из стейка доступен только в конце дня (после 00:05 МСК)")
 }
 
 func (s *Service) ListPositions(ctx context.Context, userID uuid.UUID) ([]domain.StakingPosition, error) {
@@ -225,238 +223,7 @@ func endOfMonthMSK(now time.Time) time.Time {
 	return time.Date(t.Year(), t.Month()+1, 1, 0, 0, 0, 0, msk)
 }
 
-func (s *Service) AccrueDailyYield(ctx context.Context) error {
-	if _, err := s.EnsureCurrentEpoch(ctx); err != nil {
-		return err
-	}
-
-	positions, err := s.staking.ListAllActive(ctx)
-	if err != nil {
-		return err
-	}
-
-	msk := MoscowLocation()
-	now := time.Now().In(msk)
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, msk)
-	payoutRefID := dailyPayoutRefID(todayStart)
-
-	userYield := make(map[uuid.UUID]int64)
-	basePercent, boostPercent := s.monthlyRatePercents(ctx)
-	sharePercent := referral.DefaultSharePercent
-	if s.platform != nil {
-		if settings, err := s.platform.GetYieldSettings(ctx); err == nil && settings != nil && settings.ReferralSharePercent >= 0 {
-			sharePercent = settings.ReferralSharePercent
-		}
-	}
-
-	profileSlugCache := make(map[int64]map[string]bool)
-
-	for _, pos := range positions {
-		lastInMsk := pos.LastAccrualAt.In(msk)
-		if !lastInMsk.Before(todayStart) {
-			continue
-		}
-		if !pos.StakedAt.Before(todayStart) {
-			continue
-		}
-
-		user, err := s.users.FindByID(ctx, pos.UserID)
-		if err != nil {
-			continue
-		}
-
-		owned, err := s.giftStillOwned(ctx, &pos, user, profileSlugCache)
-		if err != nil {
-			slog.Warn("staking ownership check failed", "position_id", pos.ID, "error", err)
-			continue
-		}
-		if !owned {
-			slog.Info("staking gift missing, revoking",
-				"position_id", pos.ID,
-				"user_id", pos.UserID,
-				"gift_slug", pos.GiftSlug,
-				"source", pos.Source,
-			)
-			if err := s.revokePosition(ctx, &pos, domain.StakingRevokedGiftMissing); err != nil {
-				slog.Warn("staking gift-missing revoke failed", "position_id", pos.ID, "error", err)
-			}
-			continue
-		}
-
-		rate := monthlyRateFraction(user.StakingTier, basePercent, boostPercent)
-		if s.referralRewards != nil {
-			rate += s.referralRewards.StakingBoostMonthlyPercent(ctx, pos.UserID) / 100
-		}
-
-		dailyYield := int64(float64(pos.PrincipalNanoton) * rate / DaysPerMonth)
-		if dailyYield <= 0 {
-			continue
-		}
-
-		if err := s.staking.UpdateAccrual(ctx, pos.ID, dailyYield); err != nil {
-			return err
-		}
-		userYield[pos.UserID] += dailyYield
-	}
-
-	for userID, yield := range userYield {
-		if yield <= 0 {
-			continue
-		}
-		if _, err := s.users.UpdateBalance(ctx, userID, yield, domain.LedgerStakeYield, "staking_daily", payoutRefID); err != nil {
-			slog.Warn("daily staking payout failed", "user_id", userID, "error", err)
-			continue
-		}
-		balance.NotifyUser(ctx, s.users, s.balanceNotifier, userID, yield, domain.LedgerStakeYield)
-		if user, err := s.users.FindByID(ctx, userID); err == nil {
-			s.analytics.Track(ctx, analyticsuc.EventInput{
-				UserID:        &userID,
-				ReferrerID:    user.ReferrerID,
-				TelegramID:    &user.TelegramID,
-				Source:        "worker",
-				EventName:     "staking_yield_paid",
-				EventCategory: "staking",
-				Status:        "success",
-				StakingTier:   string(user.StakingTier),
-				Properties: map[string]any{
-					"amount_nanoton": yield,
-				},
-			})
-		}
-	}
-
-	referrerBonuses := make(map[uuid.UUID]int64)
-	for userID, yield := range userYield {
-		if yield <= 0 {
-			continue
-		}
-		user, err := s.users.FindByID(ctx, userID)
-		if err != nil || user.ReferrerID == nil {
-			continue
-		}
-		bonus := referral.BonusFromYield(yield, sharePercent)
-		if bonus > 0 {
-			referrerBonuses[*user.ReferrerID] += bonus
-		}
-	}
-	for referrerID, bonus := range referrerBonuses {
-		if _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, "referral_daily", payoutRefID); err != nil {
-			slog.Warn("daily referral payout failed", "referrer_id", referrerID, "error", err)
-			continue
-		}
-		balance.NotifyUser(ctx, s.users, s.balanceNotifier, referrerID, bonus, domain.LedgerReferralBonus)
-		if user, err := s.users.FindByID(ctx, referrerID); err == nil {
-			s.analytics.Track(ctx, analyticsuc.EventInput{
-				UserID:        &referrerID,
-				ReferrerID:    user.ReferrerID,
-				TelegramID:    &user.TelegramID,
-				Source:        "worker",
-				EventName:     "referral_bonus_paid",
-				EventCategory: "staking",
-				Status:        "success",
-				StakingTier:   string(user.StakingTier),
-				Properties: map[string]any{
-					"amount_nanoton": bonus,
-				},
-			})
-		}
-	}
-
-	if s.referralRewards != nil {
-		if err := s.referralRewards.AccrueDailyGGRShare(ctx, todayStart); err != nil {
-			slog.Warn("referral ggr accrual failed", "error", err)
-		}
-	}
-
-	if s.notifier != nil {
-		notifyUsers := make(map[uuid.UUID]struct{}, len(userYield)+len(referrerBonuses))
-		for userID := range userYield {
-			notifyUsers[userID] = struct{}{}
-		}
-		for referrerID := range referrerBonuses {
-			notifyUsers[referrerID] = struct{}{}
-		}
-		for userID := range notifyUsers {
-			yield := userYield[userID]
-			bonus := referrerBonuses[userID]
-			if yield <= 0 && bonus <= 0 {
-				continue
-			}
-			user, err := s.users.FindByID(ctx, userID)
-			if err != nil {
-				continue
-			}
-			if err := s.notifier.SendDailyStakingYield(ctx, user.TelegramID, yield, bonus); err != nil {
-				continue
-			}
-		}
-	}
-
-	return nil
-}
-
-func dailyPayoutRefID(day time.Time) uuid.UUID {
-	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("staking-daily:"+day.Format("2006-01-02")))
-}
-
 func isProfileItem(item domain.InventoryItem) bool {
 	return strings.HasPrefix(item.TelegramTxRef, "profile:")
 }
 
-func (s *Service) giftStillOwned(
-	ctx context.Context,
-	pos *domain.StakingPosition,
-	user *domain.User,
-	profileSlugCache map[int64]map[string]bool,
-) (bool, error) {
-	item, err := s.inventory.FindByID(ctx, pos.InventoryItemID)
-	if err != nil {
-		return false, nil
-	}
-	if item.UserID != pos.UserID {
-		return false, nil
-	}
-
-	switch pos.Source {
-	case domain.StakingSourceInventory:
-		if isProfileItem(*item) {
-			return s.profileGiftPresent(ctx, user, pos.GiftSlug, profileSlugCache)
-		}
-		return item.Status == domain.InvStaked, nil
-	case domain.StakingSourceProfile:
-		return s.profileGiftPresent(ctx, user, pos.GiftSlug, profileSlugCache)
-	default:
-		if isProfileItem(*item) {
-			return s.profileGiftPresent(ctx, user, pos.GiftSlug, profileSlugCache)
-		}
-		return item.Status == domain.InvStaked, nil
-	}
-}
-
-func (s *Service) profileGiftPresent(
-	ctx context.Context,
-	user *domain.User,
-	slug string,
-	cache map[int64]map[string]bool,
-) (bool, error) {
-	if slugs, ok := cache[user.TelegramID]; ok {
-		return slugs[slug], nil
-	}
-	if s.scanner == nil {
-		cache[user.TelegramID] = map[string]bool{}
-		return false, nil
-	}
-	scanned, err := s.scanner.ScanProfileGifts(ctx, telegram.ProfileGiftScanRequest{
-		TelegramUserID: user.TelegramID,
-		Username:       user.Username,
-	})
-	if err != nil {
-		return false, err
-	}
-	slugs := make(map[string]bool, len(scanned))
-	for _, g := range scanned {
-		slugs[g.Slug] = true
-	}
-	cache[user.TelegramID] = slugs
-	return slugs[slug], nil
-}

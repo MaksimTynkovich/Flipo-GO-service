@@ -8,22 +8,19 @@ import (
 )
 
 const (
-	QuestFirstGameBet      = "first_game_bet"
-	QuestRouletteWager5    = "roulette_wager_5"
-	QuestRouletteWager25   = "roulette_wager_25"
-	QuestCrashWager5       = "crash_wager_5"
-	QuestCrashWager25      = "crash_wager_25"
-	QuestPvPOneMatch       = "pvp_one_match"
-	QuestPvPFiveMatches    = "pvp_five_matches"
-	QuestDeposit5          = "deposit_5"
-	QuestDeposit30         = "deposit_30"
-	QuestReferralActive1   = "referral_active_1"
-	QuestReferralActive3   = "referral_active_3"
-	QuestFullEpochStake    = "full_epoch_stake"
+	QuestFirstGameBet    = "first_game_bet"
+	QuestWager5          = "wager_5"
+	QuestWager25         = "wager_25"
+	QuestDeposit5        = "deposit_5"
+	QuestDeposit30       = "deposit_30"
+	QuestDeposit50       = "deposit_50"
+	QuestReferralActive1 = "referral_active_1"
+	QuestReferralActive5 = "referral_active_5"
 
 	questTarget5TON  = 5_000_000_000
 	questTarget25TON = 25_000_000_000
 	questTarget30TON = 30_000_000_000
+	questTarget50TON = 50_000_000_000
 )
 
 type QuestProgressView struct {
@@ -68,7 +65,13 @@ func (s *Service) ListQuests(ctx context.Context, userID uuid.UUID) (*QuestsResp
 	}
 
 	views := make([]QuestProgressView, 0, len(quests))
-	var maxLimit int64 = domain.DefaultStakingPersonalLimitNano
+	baseLimit := domain.DefaultStakingPersonalLimitNano
+	if s.platform != nil {
+		if settings, err := s.platform.GetYieldSettings(ctx); err == nil && settings != nil && settings.StakingPersonalLimitNanoton > 0 {
+			baseLimit = settings.StakingPersonalLimitNanoton
+		}
+	}
+	var maxLimit int64 = baseLimit
 	for _, q := range quests {
 		maxLimit += q.RewardLimitNanoton
 		current, target := s.questProgress(ctx, userID, q.Code)
@@ -119,7 +122,7 @@ func (s *Service) ListQuests(ctx context.Context, userID uuid.UUID) (*QuestsResp
 		PersonalLimitNanoton:     limit,
 		PersonalUsedNanoton:      used,
 		PersonalRemainingNanoton: remaining,
-		BaseLimitNanoton:         domain.DefaultStakingPersonalLimitNano,
+		BaseLimitNanoton:         baseLimit,
 		MaxLimitNanoton:          maxLimit,
 		TVLNanoton:               tvl,
 		TVLCapNanoton:            cap,
@@ -170,41 +173,15 @@ func (s *Service) questProgress(ctx context.Context, userID uuid.UUID, code stri
 		if err == nil && ok {
 			current = 1
 		}
-	case QuestRouletteWager5:
+	case QuestWager5:
 		target = questTarget5TON
-		if v, err := s.staking.SumWagerByGame(ctx, userID, domain.GameRoulette); err == nil {
+		if v, err := s.staking.SumTotalWager(ctx, userID); err == nil {
 			current = v
 		}
-	case QuestRouletteWager25:
+	case QuestWager25:
 		target = questTarget25TON
-		if v, err := s.staking.SumWagerByGame(ctx, userID, domain.GameRoulette); err == nil {
+		if v, err := s.staking.SumTotalWager(ctx, userID); err == nil {
 			current = v
-		}
-	case QuestCrashWager5:
-		target = questTarget5TON
-		if v, err := s.staking.SumWagerByGame(ctx, userID, domain.GameCrash); err == nil {
-			current = v
-		}
-	case QuestCrashWager25:
-		target = questTarget25TON
-		if v, err := s.staking.SumWagerByGame(ctx, userID, domain.GameCrash); err == nil {
-			current = v
-		}
-	case QuestPvPOneMatch:
-		target = 1
-		if v, err := s.staking.CountPvPMatches(ctx, userID); err == nil {
-			current = v
-			if current > target {
-				current = target
-			}
-		}
-	case QuestPvPFiveMatches:
-		target = 5
-		if v, err := s.staking.CountPvPMatches(ctx, userID); err == nil {
-			current = v
-			if current > target {
-				current = target
-			}
 		}
 	case QuestDeposit5:
 		target = questTarget5TON
@@ -216,6 +193,11 @@ func (s *Service) questProgress(ctx context.Context, userID uuid.UUID, code stri
 		if v, err := s.staking.SumDeposits(ctx, userID); err == nil {
 			current = v
 		}
+	case QuestDeposit50:
+		target = questTarget50TON
+		if v, err := s.staking.SumDeposits(ctx, userID); err == nil {
+			current = v
+		}
 	case QuestReferralActive1:
 		target = 1
 		if v, err := s.staking.CountReferrals(ctx, userID); err == nil {
@@ -224,30 +206,16 @@ func (s *Service) questProgress(ctx context.Context, userID uuid.UUID, code stri
 				current = target
 			}
 		}
-	case QuestReferralActive3:
-		target = 3
+	case QuestReferralActive5:
+		target = 5
 		if v, err := s.staking.CountReferrals(ctx, userID); err == nil {
 			current = v
 			if current > target {
 				current = target
 			}
 		}
-	case QuestFullEpochStake:
-		target = 1
-		ok, err := s.staking.HasCompletedEpochStake(ctx, userID)
-		if err == nil && ok {
-			current = 1
-		}
 	default:
 		target = 1
 	}
 	return current, target
-}
-
-func (s *Service) maybeCompleteFullEpochQuest(ctx context.Context, userID uuid.UUID) {
-	ok, err := s.staking.HasCompletedEpochStake(ctx, userID)
-	if err != nil || !ok {
-		return
-	}
-	_ = s.staking.CompleteQuest(ctx, userID, QuestFullEpochStake)
 }

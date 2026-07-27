@@ -27,17 +27,13 @@ func (w *Worker) Start(ctx context.Context) {
 		}
 	})
 
-	// Daily yield accrual + yesterday report at 11:00 MSK.
-	_, _ = w.cron.AddFunc("0 0 11 * * *", func() {
-		if err := w.svc.AccrueDailyYield(ctx); err != nil {
-			slog.Error("yield accrual failed", "error", err)
-		}
-	})
-
-	// Weekly settlement at Monday 00:05 MSK.
-	_, _ = w.cron.AddFunc("0 5 0 * * 1", func() {
+	// Daily settle at 00:05 MSK: pay yield, unlock gifts, one Telegram message, open new epoch.
+	_, _ = w.cron.AddFunc("0 5 0 * * *", func() {
 		if err := w.svc.SettleEndedEpochs(ctx); err != nil {
-			slog.Error("epoch settlement failed", "error", err)
+			slog.Error("daily epoch settlement failed", "error", err)
+		}
+		if _, err := w.svc.EnsureCurrentEpoch(ctx); err != nil {
+			slog.Error("ensure current epoch after settle failed", "error", err)
 		}
 	})
 

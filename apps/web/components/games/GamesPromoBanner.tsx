@@ -56,7 +56,7 @@ function buildSlides(): PromoSlide[] {
       id: "referrals",
       tone: "referrals",
       title: "Приглашай друзей",
-      subtitle: "Получай долю от их стейкинга каждую неделю",
+      subtitle: "Получай долю от их стейкинга каждый день",
       cta: "Рефералы",
       icon: Users,
       href: APP_ROUTES.profileReferrals,

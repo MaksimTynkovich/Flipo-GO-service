@@ -40,8 +40,8 @@ const (
 )
 
 const (
-	DefaultStakingTVLCapNanoton     int64 = 1_500_000_000_000 // 1500 TON
-	DefaultStakingPersonalLimitNano int64 = 100_000_000_000 // 100 TON
+	DefaultStakingTVLCapNanoton     int64 = 500_000_000_000  // 500 TON (daily epoch pool)
+	DefaultStakingPersonalLimitNano int64 = 50_000_000_000   // 50 TON base personal limit
 )
 
 // StakingQuest — catalog entry for personal stake-limit quests.

@@ -120,10 +120,12 @@ func (r *StakingRepo) CompleteQuest(ctx context.Context, userID uuid.UUID, quest
 
 func (r *StakingRepo) SumCompletedQuestRewards(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var total int64
+	// Count all completions (including deactivated quests) so removing a quest
+	// from the catalog does not strip limit from users who already finished it.
 	err := r.db.WithContext(ctx).
 		Table("staking_quest_completions AS c").
 		Joins("JOIN staking_quests AS q ON q.code = c.quest_code").
-		Where("c.user_id = ? AND q.active = ?", userID, true).
+		Where("c.user_id = ?", userID).
 		Select("COALESCE(SUM(q.reward_limit_nanoton), 0)").
 		Scan(&total).Error
 	return total, err
@@ -162,6 +164,22 @@ func (r *StakingRepo) SumWagerByGame(ctx context.Context, userID uuid.UUID, game
 	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
 		Where("user_id = ? AND game_type = ?", userID, gameType).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+// SumTotalWager — volume across modes: crash/roulette bets, PvP stakes, paid case opens.
+func (r *StakingRepo) SumTotalWager(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			COALESCE((SELECT SUM(amount_nanoton) FROM game_bets WHERE user_id = ?), 0)
+			+ COALESCE((SELECT SUM(stake_nanoton) FROM pvp_room_players WHERE user_id = ?), 0)
+			+ COALESCE((
+				SELECT SUM(price_paid_nanoton)
+				FROM case_opens
+				WHERE user_id = ? AND price_paid_nanoton > 0
+			), 0)
+	`, userID, userID, userID).Scan(&total).Error
 	return total, err
 }
 

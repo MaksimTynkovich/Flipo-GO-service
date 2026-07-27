@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import {
   pluralizeGifts,
+  stakingDailyCycleHint,
   stakingNoTransferHint,
 } from "@/lib/staking-ui";
 import { trackFlowViewed } from "@/lib/analytics";
@@ -28,7 +29,7 @@ import { formatUserError } from "@/lib/user-errors";
 import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { cn } from "@/lib/utils";
-import { Gift } from "lucide-react";
+import { CalendarClock, Gift } from "lucide-react";
 
 const emptyStats: StakingStats = {
   staked_count: 0,
@@ -190,11 +191,19 @@ export function StakingSection() {
         <StakingOverview isBoost={isBoost} stats={stats} epochEndsAt={epochEndsAt} />
       )}
 
-      <section className="flex items-center gap-2 rounded-xl bg-surface-raised px-3 py-2.5">
-        <Gift className="h-4 w-4 shrink-0 text-muted" />
-        <p className="text-[11px] leading-snug text-muted">
-          {stakingNoTransferHint()}
-        </p>
+      <section className="space-y-2">
+        <div className="flex items-center gap-2 rounded-xl bg-surface-raised px-3 py-2.5">
+          <CalendarClock className="h-4 w-4 shrink-0 text-muted" />
+          <p className="text-[11px] leading-snug text-muted">
+            {stakingDailyCycleHint()}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-xl bg-surface-raised px-3 py-2.5">
+          <Gift className="h-4 w-4 shrink-0 text-muted" />
+          <p className="text-[11px] leading-snug text-muted">
+            {stakingNoTransferHint()}
+          </p>
+        </div>
       </section>
 
       {loading ? (

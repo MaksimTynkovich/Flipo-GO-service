@@ -7,7 +7,7 @@ import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, ProfileGift, StakingStats } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
-import { formatStakingApr, formatStakingEpochEnd, weeklyYieldNanoton } from "@/lib/staking-ui";
+import { formatStakingApr, formatStakingEpochEnd } from "@/lib/staking-ui";
 import { cn } from "@/lib/utils";
 import { Gift } from "lucide-react";
 
@@ -31,7 +31,6 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(gift.slug, gift.image_url);
   const epochEnd = epochEndsAt ? formatStakingEpochEnd(epochEndsAt) : null;
-  const weeklyYield = weeklyYieldNanoton(gift.daily_yield_nanoton);
 
   return (
     <ModalOverlay onClose={onClose} analyticsModalId="staking_gift_detail">
@@ -79,7 +78,7 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
           )}
         </div>
 
-        <div className="mb-5 grid grid-cols-3 gap-2">
+        <div className="mb-5 grid grid-cols-2 gap-2">
           {gift.is_staked && (
             <StatCell
               label="Заработано"
@@ -87,30 +86,26 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
               accent
             />
           )}
-          <StatCell label="В день" value={`+${formatTON(gift.daily_yield_nanoton)}`} />
-          <StatCell
-            label="За неделю"
-            value={<TonAmount amount={`+${formatTON(weeklyYield)}`} variant="brand" iconClassName="h-5 w-5" />}
-          />
+          <StatCell label="За сутки" value={`+${formatTON(gift.daily_yield_nanoton)}`} accent={!gift.is_staked} />
         </div>
 
         {gift.is_staked ? (
           <div className="rounded-xl bg-surface-raised px-3 py-3 text-center">
-            <p className="text-xs font-medium text-foreground">Заблокирован до конца недели</p>
+            <p className="text-xs font-medium text-foreground">Заблокирован до полуночи МСК</p>
             {epochEnd && (
               <p className="mt-1 text-xs text-muted">
                 До {epochEnd.dateLine}, {epochEnd.timeLine}
               </p>
             )}
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              Доход зачисляется на баланс каждый день
+              Ежедневный цикл: выплата и разблокировка в 00:05 МСК — потом снова застейкайте
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             <p className="rounded-xl bg-surface-raised px-3 py-3 text-center text-xs leading-relaxed text-muted">
               {formatStakingApr(stats.monthly_rate_percent)} от стоимости подарка.
-              Доход зачисляется на баланс каждый день.
+              Стейк на сутки: ночью выплата, на следующий день нужно застейкать снова.
             </p>
             {gift.source === "profile" ? (
               <p className="text-center text-[11px] leading-relaxed text-accent">

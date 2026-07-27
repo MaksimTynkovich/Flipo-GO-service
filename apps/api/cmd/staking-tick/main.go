@@ -17,11 +17,10 @@ import (
 )
 
 func main() {
-	daily := flag.Bool("daily", false, "backdate accrual timestamps and run daily yield + bot notification")
-	settle := flag.Bool("settle", false, "end active epoch now and run weekly payout + bot notification")
+	settle := flag.Bool("settle", false, "end active epoch now and run daily payout + unlock + bot notification")
 	flag.Parse()
 
-	if !*daily && !*settle {
+	if !*settle {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -69,41 +68,20 @@ func main() {
 	)
 	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))
 
-	if *daily {
-		if err := backdateForDailyAccrual(db); err != nil {
-			fmt.Fprintf(os.Stderr, "backdate: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("prepared active positions for daily accrual")
-		if err := stakeSvc.AccrueDailyYield(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "daily accrual: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("daily accrual done — check Telegram for yield message")
+	if err := endActiveEpochNow(db); err != nil {
+		fmt.Fprintf(os.Stderr, "end epoch: %v\n", err)
+		os.Exit(1)
 	}
-
-	if *settle {
-		if err := endActiveEpochNow(db); err != nil {
-			fmt.Fprintf(os.Stderr, "end epoch: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("active epoch end time moved to now")
-		if err := stakeSvc.SettleEndedEpochs(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "settle: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("weekly settlement done — stakes released, check Telegram")
+	fmt.Println("active epoch end time moved to now")
+	if err := stakeSvc.SettleEndedEpochs(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "settle: %v\n", err)
+		os.Exit(1)
 	}
-}
-
-func backdateForDailyAccrual(db *gorm.DB) error {
-	return db.Exec(`
-		UPDATE staking_positions
-		SET last_accrual_at = NOW() - INTERVAL '25 hours',
-		    staked_at = LEAST(staked_at, NOW() - INTERVAL '25 hours'),
-		    updated_at = NOW()
-		WHERE is_active = TRUE
-	`).Error
+	if _, err := stakeSvc.EnsureCurrentEpoch(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "ensure epoch: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("daily settlement done — stakes released, check Telegram")
 }
 
 func endActiveEpochNow(db *gorm.DB) error {

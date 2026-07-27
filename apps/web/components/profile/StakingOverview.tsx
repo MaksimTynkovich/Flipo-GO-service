@@ -8,9 +8,8 @@ import {
   formatStakingEpochEnd,
   formatStakingRate,
   pluralizeGifts,
+  dailyYieldFromMonthly,
   stakingBoostHint,
-  weeklyYieldFromMonthly,
-  weeklyYieldNanoton,
 } from "@/lib/staking-ui";
 import { cn } from "@/lib/utils";
 import { Sparkles } from "lucide-react";
@@ -48,8 +47,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
   const liveEarned = useLiveEarned(stats.earned_nanoton, stats.active_daily_yield_nanoton);
 
   const unstakedCount = Math.max(0, stats.total_count - stats.staked_count);
-  const activeWeeklyYield = weeklyYieldNanoton(stats.active_daily_yield_nanoton);
-  const unlockableWeeklyYield = weeklyYieldFromMonthly(stats.unlockable_monthly_nanoton);
+  const unlockableDailyYield = dailyYieldFromMonthly(stats.unlockable_monthly_nanoton);
 
   const boostPct =
     stats.boost_referral_target > 0
@@ -80,8 +78,8 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
             </p>
             <p className="mt-2 text-xs leading-relaxed text-muted">
               {hasPortfolio
-                ? "Начисление каждый день на баланс"
-                : "Добавьте подарки — доход пойдёт сам"}
+                ? "Ежедневный доход: выплата сегодня ночью · завтра снова застейкайте"
+                : "Стейкинг каждый день: застейкайте подарки — доход придёт ночью"}
             </p>
           </div>
           <span className={cn("chip shrink-0", isBoost ? "chip-accent" : "")}>
@@ -91,24 +89,14 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
 
         <div className="hairline-top" />
 
-        <div className="grid grid-cols-3">
+        <div className="grid grid-cols-2">
           <div className="px-3 py-3">
-            <p className="text-[10px] text-muted">В день</p>
+            <p className="text-[10px] text-muted">За сутки</p>
             <p className="mt-1 text-sm font-semibold tabular-nums text-success">
               +{formatTON(stats.active_daily_yield_nanoton)}
             </p>
           </div>
-          <div className="border-x border-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-3 py-3">
-            <p className="text-[10px] text-muted">За неделю</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">
-              <TonAmount
-                amount={`+${formatTON(activeWeeklyYield)}`}
-                variant="brand"
-                iconClassName="h-3.5 w-3.5"
-              />
-            </p>
-          </div>
-          <div className="px-3 py-3">
+          <div className="border-l border-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-3 py-3">
             <p className="text-[10px] text-muted">В стейке</p>
             <p className="mt-1 text-sm font-semibold tabular-nums">
               {stats.staked_count}
@@ -117,7 +105,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
           </div>
         </div>
 
-        {hasPortfolio && unstakedCount > 0 && unlockableWeeklyYield > 0 ? (
+        {hasPortfolio && unstakedCount > 0 && unlockableDailyYield > 0 ? (
           <>
             <div className="hairline-top" />
             <div className="space-y-1.5 px-4 py-3">
@@ -126,15 +114,18 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
                 <span className="inline-flex items-center gap-1 tabular-nums text-accent">
                   +
                   <TonAmount
-                    amount={formatTON(unlockableWeeklyYield)}
+                    amount={formatTON(unlockableDailyYield)}
                     variant="brand"
                     iconClassName="h-3.5 w-3.5"
                   />
-                  /нед
+                  /сутки
                 </span>
               </div>
               <ProgressBar
-                value={activeWeeklyYield / (activeWeeklyYield + unlockableWeeklyYield)}
+                value={
+                  stats.active_daily_yield_nanoton /
+                  (stats.active_daily_yield_nanoton + unlockableDailyYield)
+                }
               />
               <p className="text-[11px] text-muted">
                 Ещё {pluralizeGifts(unstakedCount)} вне стейка
@@ -143,15 +134,6 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
           </>
         ) : null}
 
-        {epoch ? (
-          <>
-            <div className="hairline-top" />
-            <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-              <p className="text-xs text-muted">Неделя до {epoch.dateLine}</p>
-              <p className="shrink-0 text-xs tabular-nums text-muted">{epoch.timeLine}</p>
-            </div>
-          </>
-        ) : null}
       </section>
 
       {tvlCap > 0 || personalLimit > 0 ? (

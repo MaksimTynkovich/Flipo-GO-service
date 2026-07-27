@@ -39,7 +39,7 @@ var (
 	ErrGiftValueMismatch     = errors.New("стоимость подарка не подходит для ставки")
 	ErrStakingPoolFull       = errors.New("пул стейкинга заполнен")
 	ErrStakingPersonalLimit  = errors.New("личный лимит стейкинга исчерпан — выполните задания чтобы увеличить лимит")
-	ErrGiftAlreadyStakedEpoch = errors.New("подарок уже застейкан на этой неделе")
+	ErrGiftAlreadyStakedEpoch = errors.New("подарок уже застейкан сегодня")
 	ErrCaseUnavailable        = errors.New("кейс недоступен")
 	ErrCasesDisabled          = errors.New("кейсы временно недоступны")
 	ErrCaseDailyUsed          = errors.New("ежедневный кейс уже открыт")

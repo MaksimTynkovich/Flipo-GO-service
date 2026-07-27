@@ -186,7 +186,8 @@ type PlatformYieldSettings struct {
 	ReferralMonthlyPayoutCapNanoton int64     `gorm:"not null;default:0" json:"referral_monthly_payout_cap_nanoton"`
 	StakingBaseMonthlyPercent       float64   `gorm:"type:decimal(6,2);not null;default:3" json:"staking_base_monthly_percent"`
 	StakingBoostMonthlyPercent      float64   `gorm:"type:decimal(6,2);not null;default:4" json:"staking_boost_monthly_percent"`
-	StakingTVLCapNanoton            int64     `gorm:"not null;default:1500000000000" json:"staking_tvl_cap_nanoton"`
+	StakingTVLCapNanoton            int64     `gorm:"not null;default:500000000000" json:"staking_tvl_cap_nanoton"`
+	StakingPersonalLimitNanoton     int64     `gorm:"not null;default:50000000000" json:"staking_personal_limit_nanoton"`
 	GiftBuyAdjustPercent            float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_buy_adjust_percent"`
 	GiftValuationAdjustPercent      float64   `gorm:"type:decimal(8,2);not null;default:0" json:"gift_valuation_adjust_percent"`
 	UpdatedAt                       time.Time `json:"updated_at"`
@@ -356,6 +357,61 @@ type AdminUserAudience struct {
 	StakingDailyYieldNanoton   int64               `json:"staking_daily_yield_nanoton"`
 	StakingWeeklyYieldNanoton  int64               `json:"staking_weekly_yield_nanoton"`
 	TopReferrers               []AdminReferrerStat `json:"top_referrers"`
+}
+
+// AdminStakingOverview — live daily-epoch staking dashboard for admin.
+type AdminStakingOverview struct {
+	EpochID                string    `json:"epoch_id,omitempty"`
+	EpochStartsAt          time.Time `json:"epoch_starts_at,omitempty"`
+	EpochEndsAt            time.Time `json:"epoch_ends_at,omitempty"`
+	EpochStatus            string    `json:"epoch_status,omitempty"`
+	TVLNanoton             int64     `json:"tvl_nanoton"`
+	TVLCapNanoton          int64     `json:"tvl_cap_nanoton"`
+	TVLRemainingNanoton    int64     `json:"tvl_remaining_nanoton"`
+	PersonalLimitNanoton   int64     `json:"personal_limit_nanoton"`
+	ActivePositions        int64     `json:"active_positions"`
+	ActiveStakers          int64     `json:"active_stakers"`
+	ProjectedPayoutNanoton int64     `json:"projected_payout_nanoton"`
+	PaidLast24hNanoton     int64     `json:"paid_last_24h_nanoton"`
+	BaseMonthlyPercent     float64   `json:"base_monthly_percent"`
+	BoostMonthlyPercent    float64   `json:"boost_monthly_percent"`
+}
+
+type AdminStakingEpochRow struct {
+	ID                  string    `json:"id"`
+	StartsAt            time.Time `json:"starts_at"`
+	EndsAt              time.Time `json:"ends_at"`
+	Status              string    `json:"status"`
+	Positions           int64     `json:"positions"`
+	PrincipalNanoton    int64     `json:"principal_nanoton"`
+	AccruedYieldNanoton int64     `json:"accrued_yield_nanoton"`
+}
+
+type AdminStakingPositionFilter struct {
+	Query         string
+	EpochID       string
+	RevokedReason string
+	ActiveOnly    bool
+	Limit         int
+	Offset        int
+}
+
+type AdminStakingPositionRow struct {
+	ID                  string     `json:"id"`
+	UserID              string     `json:"user_id"`
+	TelegramID          int64      `json:"telegram_id"`
+	Username            string     `json:"username"`
+	FirstName           string     `json:"first_name"`
+	GiftSlug            string     `json:"gift_slug"`
+	Source              string     `json:"source"`
+	PrincipalNanoton    int64      `json:"principal_nanoton"`
+	AccruedYieldNanoton int64      `json:"accrued_yield_nanoton"`
+	IsActive            bool       `json:"is_active"`
+	RevokedReason       string     `json:"revoked_reason,omitempty"`
+	StakedAt            time.Time  `json:"staked_at"`
+	LastAccrualAt       time.Time  `json:"last_accrual_at"`
+	UnstakedAt          *time.Time `json:"unstaked_at,omitempty"`
+	EpochID             string     `json:"epoch_id"`
 }
 
 // PromoRedemption — player promo activation history.

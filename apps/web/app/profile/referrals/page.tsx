@@ -21,7 +21,7 @@ import {
 } from "@/lib/referral";
 import { openTelegramShare } from "@/src/shared/lib/twa";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { Copy, Gamepad2, Gift, Link2, RotateCw, Send, Sparkles } from "lucide-react";
+import { Copy, Gamepad2, Gift, Link2, RotateCw, Send } from "lucide-react";
 
 export default function ProfileReferralsPage() {
   const { user } = useAuth();
@@ -125,12 +125,6 @@ export default function ProfileReferralsPage() {
             title={`${gamesPercent}% от игр`}
             hint="Доля от игры друзей"
             value={loading ? "…" : `${formatTON(stats?.ggr_earned_nanoton ?? 0)} TON`}
-          />
-          <InfoCard
-            icon={<Sparkles className="h-4 w-4" />}
-            title="За первую ставку друга"
-            hint="Бонус от 0.1 TON в игре"
-            value={loading ? "…" : `${formatTON(stats?.milestone_earned_nanoton ?? 0)} TON`}
           />
           <InfoCard
             icon={<RotateCw className="h-4 w-4" />}

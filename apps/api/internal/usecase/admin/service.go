@@ -551,6 +551,7 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 			StakingBaseMonthlyPercent:     3,
 			StakingBoostMonthlyPercent:    4,
 			StakingTVLCapNanoton:          domain.DefaultStakingTVLCapNanoton,
+			StakingPersonalLimitNanoton:   domain.DefaultStakingPersonalLimitNano,
 		}
 	}
 	existing.ReferralSharePercent = settings.ReferralSharePercent
@@ -562,6 +563,9 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 	existing.StakingBoostMonthlyPercent = settings.StakingBoostMonthlyPercent
 	if settings.StakingTVLCapNanoton > 0 {
 		existing.StakingTVLCapNanoton = settings.StakingTVLCapNanoton
+	}
+	if settings.StakingPersonalLimitNanoton > 0 {
+		existing.StakingPersonalLimitNanoton = settings.StakingPersonalLimitNanoton
 	}
 	if err := s.platform.UpdateYieldSettings(ctx, existing); err != nil {
 		return err
@@ -575,6 +579,7 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 		"staking_base_monthly_percent":       existing.StakingBaseMonthlyPercent,
 		"staking_boost_monthly_percent":      existing.StakingBoostMonthlyPercent,
 		"staking_tvl_cap_nanoton":            existing.StakingTVLCapNanoton,
+		"staking_personal_limit_nanoton":     existing.StakingPersonalLimitNanoton,
 	})
 }
 
@@ -745,4 +750,16 @@ func (s *Service) audit(ctx context.Context, adminID uuid.UUID, action, targetTy
 		TargetID:    targetID,
 		Meta:        raw,
 	})
+}
+
+func (s *Service) StakingOverview(ctx context.Context) (*domain.AdminStakingOverview, error) {
+	return s.admin.StakingOverview(ctx)
+}
+
+func (s *Service) ListStakingEpochs(ctx context.Context, limit, offset int) ([]domain.AdminStakingEpochRow, int64, error) {
+	return s.admin.ListStakingEpochs(ctx, limit, offset)
+}
+
+func (s *Service) ListStakingPositions(ctx context.Context, filter domain.AdminStakingPositionFilter) ([]domain.AdminStakingPositionRow, int64, error) {
+	return s.admin.ListStakingPositions(ctx, filter)
 }

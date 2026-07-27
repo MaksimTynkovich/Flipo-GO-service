@@ -21,7 +21,15 @@ func (s *Service) EnsureCurrentEpoch(ctx context.Context) (*domain.StakingEpoch,
 		return nil, err
 	}
 	if epoch != nil {
-		return epoch, nil
+		// Cutover: force-settle pre-redesign weekly epochs so the daily pool can open.
+		if isLegacyEpoch(epoch.StartsAt, epoch.EndsAt) {
+			slog.Info("staking forcing legacy weekly epoch cutover", "epoch_id", epoch.ID)
+			if err := s.settleEpoch(ctx, epoch); err != nil {
+				return nil, err
+			}
+		} else {
+			return epoch, nil
+		}
 	}
 
 	start, end := CurrentEpochBounds(now)
@@ -221,11 +229,17 @@ func (s *Service) checkStakeCaps(ctx context.Context, userID uuid.UUID, principa
 }
 
 func (s *Service) PersonalStakeLimit(ctx context.Context, userID uuid.UUID) (int64, error) {
+	base := domain.DefaultStakingPersonalLimitNano
+	if s.platform != nil {
+		if settings, err := s.platform.GetYieldSettings(ctx); err == nil && settings != nil && settings.StakingPersonalLimitNanoton > 0 {
+			base = settings.StakingPersonalLimitNanoton
+		}
+	}
 	rewards, err := s.staking.SumCompletedQuestRewards(ctx, userID)
 	if err != nil {
 		return 0, err
 	}
-	limit := domain.DefaultStakingPersonalLimitNano + rewards
+	limit := base + rewards
 	if s.referralRewards != nil {
 		limit += s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
 	}

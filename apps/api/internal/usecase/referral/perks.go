@@ -63,8 +63,7 @@ func (s *Service) activePerk(ctx context.Context, userID uuid.UUID) (*domain.Ref
 	return s.referrals.GetActivePerk(ctx, userID, time.Now().UTC())
 }
 
-// OnQualifyingBet handles milestone payouts and optional welcome promo activation.
+// OnQualifyingBet handles optional welcome promo activation after a qualifying bet.
 func (s *Service) OnQualifyingBet(ctx context.Context, userID uuid.UUID, betAmountNanoton int64) {
-	s.MaybePayMilestone(ctx, userID, betAmountNanoton)
 	s.MaybeActivateRefWelcome(ctx, userID)
 }

@@ -898,6 +898,7 @@ export type AdminYieldSettings = {
   referral_milestone_nanoton: number;
   referral_milestone_monthly_cap: number;
   referral_monthly_payout_cap_nanoton: number;
+  staking_personal_limit_nanoton?: number;
   staking_base_monthly_percent: number;
   staking_boost_monthly_percent: number;
   staking_tvl_cap_nanoton?: number;
@@ -1816,6 +1817,86 @@ export async function updateAdminYieldSettings(settings: AdminYieldSettings) {
     method: "PATCH",
     body: JSON.stringify(settings),
   });
+}
+
+export type AdminStakingOverview = {
+  epoch_id?: string;
+  epoch_starts_at?: string;
+  epoch_ends_at?: string;
+  epoch_status?: string;
+  tvl_nanoton: number;
+  tvl_cap_nanoton: number;
+  tvl_remaining_nanoton: number;
+  personal_limit_nanoton: number;
+  active_positions: number;
+  active_stakers: number;
+  projected_payout_nanoton: number;
+  paid_last_24h_nanoton: number;
+  base_monthly_percent: number;
+  boost_monthly_percent: number;
+};
+
+export type AdminStakingEpochRow = {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  status: string;
+  positions: number;
+  principal_nanoton: number;
+  accrued_yield_nanoton: number;
+};
+
+export type AdminStakingPositionRow = {
+  id: string;
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  gift_slug: string;
+  source: string;
+  principal_nanoton: number;
+  accrued_yield_nanoton: number;
+  is_active: boolean;
+  revoked_reason?: string;
+  staked_at: string;
+  last_accrual_at: string;
+  unstaked_at?: string | null;
+  epoch_id: string;
+};
+
+export async function getAdminStakingOverview() {
+  return api<AdminStakingOverview>("/api/v1/admin/staking/overview");
+}
+
+export async function getAdminStakingEpochs(opts?: { limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  const q = params.toString();
+  return api<{ items: AdminStakingEpochRow[]; total: number; limit: number; offset: number }>(
+    `/api/v1/admin/staking/epochs${q ? `?${q}` : ""}`,
+  );
+}
+
+export async function getAdminStakingPositions(opts?: {
+  q?: string;
+  epoch_id?: string;
+  active?: boolean;
+  revoked_reason?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  if (opts?.epoch_id) params.set("epoch_id", opts.epoch_id);
+  if (opts?.active) params.set("active", "1");
+  if (opts?.revoked_reason) params.set("revoked_reason", opts.revoked_reason);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  const q = params.toString();
+  return api<{ items: AdminStakingPositionRow[]; total: number; limit: number; offset: number }>(
+    `/api/v1/admin/staking/positions${q ? `?${q}` : ""}`,
+  );
 }
 
 export async function getAdminBotSettings() {

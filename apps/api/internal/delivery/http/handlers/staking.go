@@ -177,7 +177,7 @@ func stakingErrorDetails(err error) (code, msg string) {
 	case errors.Is(err, domain.ErrStakingPersonalLimit):
 		return "staking_personal_limit", "Личный лимит исчерпан — выполните задания, чтобы увеличить его."
 	case errors.Is(err, domain.ErrGiftAlreadyStakedEpoch):
-		return "gift_already_staked", "Подарок уже в стейке на этой неделе."
+		return "gift_already_staked", "Подарок уже в стейке сегодня."
 	case errors.Is(err, domain.ErrInvalidAmount):
 		return "invalid_stake", "Подарок недоступен для стейкинга."
 	case errors.Is(err, domain.ErrNotFound):

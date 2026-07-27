@@ -12,6 +12,7 @@ import SystemSection from "./sections/SystemSection";
 import TelegramSection from "./sections/TelegramSection";
 import UsersSection from "./sections/UsersSection";
 import OutcomeSection from "./sections/OutcomeSection";
+import StakingSection from "./sections/StakingSection";
 import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export type AdminSectionId =
@@ -24,6 +25,7 @@ export type AdminSectionId =
   | "market"
   | "finance"
   | "marketing"
+  | "staking"
   | "settings"
   | "telegram"
   | "outcome";
@@ -45,6 +47,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "outcome", href: "/admin/outcome", label: "Исходы" },
   { id: "market", href: "/admin/market", label: "Маркет", disabled: !MARKET_ENABLED },
   { id: "finance", href: "/admin/finance", label: "Операции" },
+  { id: "staking", href: "/admin/staking", label: "Стейкинг" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг" },
   { id: "settings", href: "/admin/system", label: "Система" },
   { id: "telegram", href: "/admin/telegram", label: "Telegram" },
@@ -59,6 +62,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   cases: CasesSection,
   market: MARKET_ENABLED ? MarketAdminSection : MarketDisabledSection,
   finance: FinanceSection,
+  staking: StakingSection,
   marketing: MarketingSection,
   settings: SystemSection,
   telegram: TelegramSection,
@@ -75,6 +79,7 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/outcome": "outcome",
   "/admin/market": "market",
   "/admin/finance": "finance",
+  "/admin/staking": "staking",
   "/admin/marketing": "marketing",
   "/admin/settings": "settings",
   "/admin/telegram": "telegram",

@@ -1399,6 +1399,51 @@ func (h *AdminHandler) GetYieldSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, settings)
 }
 
+func (h *AdminHandler) StakingOverview(c *gin.Context) {
+	out, err := h.admin.StakingOverview(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *AdminHandler) ListStakingEpochs(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	items, total, err := h.admin.ListStakingEpochs(c.Request.Context(), limit, offset)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.AdminStakingEpochRow{}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
+}
+
+func (h *AdminHandler) ListStakingPositions(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	filter := domain.AdminStakingPositionFilter{
+		Query:         strings.TrimSpace(c.Query("q")),
+		EpochID:       strings.TrimSpace(c.Query("epoch_id")),
+		RevokedReason: strings.TrimSpace(c.Query("revoked_reason")),
+		ActiveOnly:    c.Query("active") == "1" || strings.EqualFold(c.Query("active"), "true"),
+		Limit:         limit,
+		Offset:        offset,
+	}
+	items, total, err := h.admin.ListStakingPositions(c.Request.Context(), filter)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.AdminStakingPositionRow{}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
+}
+
 func (h *AdminHandler) GetSocialSimSettings(c *gin.Context) {
 	settings, err := h.admin.GetSocialSimSettings(c.Request.Context())
 	if err != nil {
