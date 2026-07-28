@@ -866,11 +866,20 @@ func (s *Service) grantPrize(
 					"loot_entry_id": entry.ID.String(),
 					"collection":    entry.CollectionSlug,
 				}
+				// Keep the real NFT traits from house stock; loot model/backdrop only override when set.
+				houseAttrs := gifts.ItemAttributes(house.Metadata)
 				if modelName != "" {
 					metaMap["model"] = modelName
+				} else if houseAttrs.Model != "" {
+					metaMap["model"] = houseAttrs.Model
 				}
 				if backdrop != "" {
 					metaMap["backdrop"] = backdrop
+				} else if houseAttrs.Backdrop != "" {
+					metaMap["backdrop"] = houseAttrs.Backdrop
+				}
+				if houseAttrs.Symbol != "" {
+					metaMap["symbol"] = houseAttrs.Symbol
 				}
 				meta, _ := json.Marshal(metaMap)
 				_ = s.inventory.BindTelegramGift(ctx, house.ID, house.TelegramGiftID, house.ImageURL, meta, domain.CaseFulfillmentBacked)

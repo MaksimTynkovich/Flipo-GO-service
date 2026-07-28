@@ -432,6 +432,7 @@ func (r *InventoryRepo) TakeHouseGiftForModel(ctx context.Context, botUserID, to
 func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName, backdrop string) (*domain.InventoryItem, error) {
 	var item domain.InventoryItem
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Available = free house stock; Locked = bot market listing (also used as case backing).
 		q := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 			Where("user_id = ? AND LOWER(collection_slug) = LOWER(?) AND status IN ? AND telegram_gift_id <> ''",
 				botUserID, collectionSlug, []domain.InventoryStatus{domain.InvAvailable, domain.InvLocked})
@@ -461,6 +462,15 @@ func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID u
 		}
 		if upd.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
+		}
+		// Case prize must leave the market — otherwise the listing stays active on a player-owned item.
+		if err := tx.Model(&domain.MarketListing{}).
+			Where("inventory_item_id = ? AND status = ?", item.ID, domain.ListingActive).
+			Updates(map[string]any{
+				"status":     domain.ListingCancelled,
+				"updated_at": now,
+			}).Error; err != nil {
+			return err
 		}
 		item.UserID = toUserID
 		item.Status = domain.InvAvailable

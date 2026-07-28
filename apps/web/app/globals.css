@@ -7107,7 +7107,6 @@ body::-webkit-scrollbar,
   isolation: isolate;
   padding: 0.9rem 0.85rem 0.85rem;
   border-radius: 1.125rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .case-detail-hero--skeleton {

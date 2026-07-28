@@ -167,6 +167,23 @@ func (s *Service) CancelListing(ctx context.Context, userID, listingID uuid.UUID
 	return s.market.CancelListing(ctx, listingID, userID)
 }
 
+func (s *Service) EnsureBotUser(ctx context.Context) (*domain.User, error) {
+	return s.market.EnsureBotUser(ctx)
+}
+
+// CancelActiveListingForItem cancels a bot/user listing for the item if one is active.
+// Skips the public market feature gate (internal reconcile / cleanup).
+func (s *Service) CancelActiveListingForItem(ctx context.Context, sellerID, itemID uuid.UUID) error {
+	listing, err := s.market.FindActiveByItemID(ctx, itemID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.market.CancelListing(ctx, listing.ID, sellerID)
+}
+
 func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (*domain.User, error) {
 	if err := domain.EnsureMarketEnabled(); err != nil {
 		return nil, err
