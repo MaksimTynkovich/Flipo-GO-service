@@ -6,6 +6,9 @@ export const STAKING_MONTHS_PER_YEAR = 12;
 
 export const STAKING_BASE_MONTHLY_PERCENT = 3;
 export const STAKING_BOOST_MONTHLY_PERCENT = 4;
+export const STAKING_STREAK_TARGET_DAYS = 6;
+export const STAKING_STREAK_BONUS_MULTIPLIER = 2;
+export const STAKING_STREAK_BONUS_PAYOUT_DAYS = 1;
 
 /** Simple APR from monthly percent (3 → 36, 4 → 48). */
 export function monthlyPercentToApr(monthlyPercent: number): number {
@@ -87,6 +90,26 @@ export function stakingBoostReferralTarget(): number {
 /** Пояснение, что подарки для стейка не нужно передавать боту. */
 export function stakingNoTransferHint(): string {
   return "Подарки остаются у вас в профиле — передавать боту для стейкинга не нужно";
+}
+
+/** Серия re-stake: 6 дней подряд → на 7-й день ×2 к доходу → сброс. */
+export function stakingStreakHint(
+  current = 0,
+  target = STAKING_STREAK_TARGET_DAYS,
+  bonusActive = false,
+  bonusDaysRemaining = 0,
+): string {
+  if (bonusActive && bonusDaysRemaining > 0) {
+    return `Бонусный день: доход ×${STAKING_STREAK_BONUS_MULTIPLIER} · застейкайте сегодня`;
+  }
+  if (current <= 0) {
+    return `Застейкайте ${target} дней подряд — на 7-й день доход ×${STAKING_STREAK_BONUS_MULTIPLIER}`;
+  }
+  const left = Math.max(0, target - current);
+  if (left === 0) {
+    return `Серия ${current}/${target} · завтра доход ×${STAKING_STREAK_BONUS_MULTIPLIER}`;
+  }
+  return `Серия ${current}/${target} · ещё ${left} ${left === 1 ? "день" : left < 5 ? "дня" : "дней"} до ×${STAKING_STREAK_BONUS_MULTIPLIER}`;
 }
 
 /** Что стейкинг и доход — ежедневный цикл. */

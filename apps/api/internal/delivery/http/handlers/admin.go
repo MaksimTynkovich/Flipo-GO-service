@@ -1444,6 +1444,26 @@ func (h *AdminHandler) ListStakingPositions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
 }
 
+func (h *AdminHandler) ListStakingActivity(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	filter := domain.AdminStakingActivityFilter{
+		Query:  strings.TrimSpace(c.Query("q")),
+		Status: strings.TrimSpace(c.Query("status")),
+		Limit:  limit,
+		Offset: offset,
+	}
+	items, total, err := h.admin.ListStakingActivity(c.Request.Context(), filter)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.AdminStakingActivityRow{}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
+}
+
 func (h *AdminHandler) GetSocialSimSettings(c *gin.Context) {
 	settings, err := h.admin.GetSocialSimSettings(c.Request.Context())
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
@@ -184,6 +185,10 @@ func stakingErrorDetails(err error) (code, msg string) {
 		return "not_found", "Подарок не найден."
 	default:
 		msg := err.Error()
+		if strings.Contains(msg, "idx_staking_positions_inventory_item_id") ||
+			strings.Contains(msg, "staking_positions_inventory_item_id") {
+			return "stake_conflict", "Этот подарок уже был в стейке — обновите страницу и попробуйте снова."
+		}
 		if msg == "" {
 			msg = "Не удалось застейкать подарок. Попробуйте ещё раз."
 		}

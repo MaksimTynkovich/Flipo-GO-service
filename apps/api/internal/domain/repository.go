@@ -146,6 +146,16 @@ type StakingRepository interface {
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	HasCompletedEpochStake(ctx context.Context, userID uuid.UUID) (bool, error)
 	HasQualifyingGameBet(ctx context.Context, userID uuid.UUID, minNanoton int64) (bool, error)
+
+	GetStreak(ctx context.Context, userID uuid.UUID) (*UserStakingStreak, error)
+	UpsertStreak(ctx context.Context, streak *UserStakingStreak) error
+	ConsumeStreakBonusPayout(ctx context.Context, userID uuid.UUID) error
+	ListUserIDsWithStreakBonus(ctx context.Context) ([]uuid.UUID, error)
+	// BreakStreaksExcept zeroes current_streak for users not in keepUserIDs.
+	BreakStreaksExcept(ctx context.Context, keepUserIDs []uuid.UUID) (int64, error)
+	// BackdateStreaks moves last_staked_msk_date one day back for every streak row.
+	// Dev-only helper so staking-tick can skip a calendar day even if nobody staked.
+	BackdateStreaks(ctx context.Context) (int64, error)
 }
 
 type ReferralRepository interface {
@@ -262,6 +272,7 @@ type AdminRepository interface {
 	StakingOverview(ctx context.Context) (*AdminStakingOverview, error)
 	ListStakingEpochs(ctx context.Context, limit, offset int) ([]AdminStakingEpochRow, int64, error)
 	ListStakingPositions(ctx context.Context, filter AdminStakingPositionFilter) ([]AdminStakingPositionRow, int64, error)
+	ListStakingActivity(ctx context.Context, filter AdminStakingActivityFilter) ([]AdminStakingActivityRow, int64, error)
 }
 
 type AdminNotificationRepository interface {

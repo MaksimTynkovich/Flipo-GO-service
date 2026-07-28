@@ -101,6 +101,26 @@ type StakingGiftClaim struct {
 
 func (StakingGiftClaim) TableName() string { return "staking_gift_claims" }
 
+const (
+	// StakingStreakTargetDays — сколько дней подряд нужно застейкать, чтобы открыть бонус.
+	StakingStreakTargetDays = 6
+	// StakingStreakBonusMultiplier — множитель дохода на бонусный день (7-й день цикла).
+	StakingStreakBonusMultiplier = 2.0
+	// StakingStreakBonusPayoutDays — сколько выплат подряд с множителем (потом сброс).
+	StakingStreakBonusPayoutDays = 1
+)
+
+// UserStakingStreak tracks daily re-stake streaks and temporary yield multipliers.
+type UserStakingStreak struct {
+	UserID                uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
+	CurrentStreak         int        `gorm:"not null;default:0" json:"current_streak"`
+	LastStakedMSKDate     *time.Time `gorm:"type:date" json:"last_staked_msk_date,omitempty"`
+	BonusPayoutsRemaining int        `gorm:"not null;default:0" json:"bonus_payouts_remaining"`
+	UpdatedAt             time.Time  `json:"updated_at"`
+}
+
+func (UserStakingStreak) TableName() string { return "user_staking_streaks" }
+
 type UserStakingSnapshot struct {
 	UserID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
 	Rolling7DayRouletteWager int64      `gorm:"not null;default:0" json:"rolling_7day_roulette_wager"`

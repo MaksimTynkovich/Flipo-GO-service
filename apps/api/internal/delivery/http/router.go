@@ -207,6 +207,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/staking/overview", deps.AdminHandler.StakingOverview)
 			adminAuthed.GET("/staking/epochs", deps.AdminHandler.ListStakingEpochs)
 			adminAuthed.GET("/staking/positions", deps.AdminHandler.ListStakingPositions)
+			adminAuthed.GET("/staking/activity", deps.AdminHandler.ListStakingActivity)
 			adminAuthed.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
 			adminAuthed.DELETE("/marketing/promos/:code", deps.AdminHandler.DeletePromoCode)
 			adminAuthed.GET("/marketing/wheel", deps.AdminHandler.WheelStats)

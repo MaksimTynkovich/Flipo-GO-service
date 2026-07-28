@@ -64,6 +64,7 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 	payoutRefID := dailyPayoutRefID(dayStart)
 
 	if payDays > 0 {
+		streakBonusUsers := make(map[uuid.UUID]struct{})
 		for _, pos := range positions {
 			user, err := s.users.FindByID(ctx, pos.UserID)
 			if err != nil {
@@ -74,6 +75,10 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 			if s.referralRewards != nil {
 				rate += s.referralRewards.StakingBoostMonthlyPercent(ctx, pos.UserID) / 100
 			}
+			if mult := s.streakBonusMultiplier(ctx, pos.UserID); mult > 1 {
+				rate *= mult
+				streakBonusUsers[pos.UserID] = struct{}{}
+			}
 			dailyYield := int64(float64(pos.PrincipalNanoton) * rate / DaysPerMonth)
 			if dailyYield <= 0 {
 				continue
@@ -82,6 +87,21 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 				return err
 			}
 			userYield[pos.UserID] += dailyYield
+		}
+		for userID := range streakBonusUsers {
+			if err := s.staking.ConsumeStreakBonusPayout(ctx, userID); err != nil {
+				slog.Warn("staking streak bonus consume failed", "user_id", userID, "error", err)
+			}
+		}
+		if bonusUserIDs, err := s.staking.ListUserIDsWithStreakBonus(ctx); err == nil {
+			for _, userID := range bonusUserIDs {
+				if _, applied := streakBonusUsers[userID]; applied {
+					continue
+				}
+				if err := s.staking.ConsumeStreakBonusPayout(ctx, userID); err != nil {
+					slog.Warn("staking streak bonus decay failed", "user_id", userID, "error", err)
+				}
+			}
 		}
 
 		for userID, yield := range userYield {
@@ -198,6 +218,22 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 		if err := s.revokePosition(ctx, &pos, domain.StakingRevokedEpochEnd); err != nil {
 			slog.Warn("staking epoch revoke failed", "position_id", pos.ID, "error", err)
 		}
+	}
+
+	// Серия только у тех, кто держал стейк в этой эпохе; остальные сбрасываем.
+	stakedUsers := make([]uuid.UUID, 0, len(positions))
+	seen := make(map[uuid.UUID]struct{}, len(positions))
+	for _, pos := range positions {
+		if _, ok := seen[pos.UserID]; ok {
+			continue
+		}
+		seen[pos.UserID] = struct{}{}
+		stakedUsers = append(stakedUsers, pos.UserID)
+	}
+	if n, err := s.staking.BreakStreaksExcept(ctx, stakedUsers); err != nil {
+		slog.Warn("staking streak break failed", "epoch_id", epoch.ID, "error", err)
+	} else if n > 0 {
+		slog.Info("staking streaks broken for missed day", "epoch_id", epoch.ID, "broken", n)
 	}
 
 	_ = s.staking.DeleteGiftClaimsByEpoch(ctx, epoch.ID)

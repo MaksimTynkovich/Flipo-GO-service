@@ -18,17 +18,48 @@ import {
   getAdminStakingEpochs,
   getAdminStakingOverview,
   getAdminStakingPositions,
+  getAdminStakingActivity,
   getAdminYieldSettings,
   updateAdminYieldSettings,
   type AdminStakingEpochRow,
   type AdminStakingOverview,
   type AdminStakingPositionRow,
+  type AdminStakingActivityRow,
   type AdminYieldSettings,
 } from "@/lib/api";
 import { giftImageUrl, telegramGiftUrl } from "@/lib/gifts";
 import { formatStakingEpochEnd } from "@/lib/staking-ui";
 
-type Tab = "overview" | "settings" | "epochs" | "positions";
+type Tab = "overview" | "settings" | "epochs" | "positions" | "activity";
+
+function formatActivityEvent(name: string): string {
+  switch (name) {
+    case "staking_started":
+      return "Стейк";
+    case "staking_yield_paid":
+      return "Выплата";
+    case "staking_unstake_requested":
+      return "Анстейк";
+    case "referral_bonus_paid":
+      return "Реф. бонус";
+    default:
+      return name;
+  }
+}
+
+function formatActivityTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 function StakingPositionItem({ row }: { row: AdminStakingPositionRow }) {
   const [imgError, setImgError] = useState(false);
@@ -102,6 +133,11 @@ export default function StakingSection() {
   const [positions, setPositions] = useState<AdminStakingPositionRow[]>([]);
   const [positionsTotal, setPositionsTotal] = useState(0);
   const [positionsOffset, setPositionsOffset] = useState(0);
+  const [activity, setActivity] = useState<AdminStakingActivityRow[]>([]);
+  const [activityTotal, setActivityTotal] = useState(0);
+  const [activityOffset, setActivityOffset] = useState(0);
+  const [activityStatus, setActivityStatus] = useState<"" | "success" | "error">("");
+  const [activityQuery, setActivityQuery] = useState("");
   const [query, setQuery] = useState("");
   const [activeOnly, setActiveOnly] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -137,10 +173,35 @@ export default function StakingSection() {
     setPositionsOffset(offset);
   }
 
+  async function loadActivity(opts?: {
+    offset?: number;
+    q?: string;
+    status?: "" | "success" | "error";
+  }) {
+    const offset = opts?.offset ?? activityOffset;
+    const q = opts?.q ?? activityQuery;
+    const status = opts?.status ?? activityStatus;
+    const data = await getAdminStakingActivity({
+      q,
+      status,
+      limit: PAGE_SIZE,
+      offset,
+    });
+    setActivity(data.items);
+    setActivityTotal(data.total);
+    setActivityOffset(offset);
+  }
+
   async function loadAll() {
     setLoading(true);
     try {
-      await Promise.all([loadOverview(), loadSettings(), loadEpochs(), loadPositions({ offset: 0 })]);
+      await Promise.all([
+        loadOverview(),
+        loadSettings(),
+        loadEpochs(),
+        loadPositions({ offset: 0 }),
+        loadActivity({ offset: 0 }),
+      ]);
     } finally {
       setLoading(false);
     }
@@ -186,6 +247,7 @@ export default function StakingSection() {
             ["settings", "Настройки"],
             ["epochs", "Эпохи"],
             ["positions", "Позиции"],
+            ["activity", "Логи"],
           ] as const
         ).map(([id, label]) => (
           <AdminChip key={id} active={tab === id} onClick={() => setTab(id)}>
@@ -398,6 +460,138 @@ export default function StakingSection() {
                     disabled={positionsOffset + PAGE_SIZE >= positionsTotal}
                     onClick={() =>
                       loadPositions({ offset: positionsOffset + PAGE_SIZE }).catch(() => {})
+                    }
+                  >
+                    Далее
+                  </AdminButton>
+                </div>
+              </div>
+            ) : null}
+          </AdminPanel>
+        </div>
+      ) : null}
+
+      {tab === "activity" ? (
+        <div className="space-y-3">
+          <AdminToolbar>
+            <input
+              value={activityQuery}
+              onChange={(e) => setActivityQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  loadActivity({ offset: 0, q: activityQuery }).catch(() => {});
+                }
+              }}
+              className="input-field h-8 min-w-[180px] flex-1"
+              placeholder="username, Telegram ID, slug, error"
+            />
+            <AdminChip
+              active={activityStatus === ""}
+              onClick={() => {
+                setActivityStatus("");
+                loadActivity({ offset: 0, status: "" }).catch(() => {});
+              }}
+            >
+              Все
+            </AdminChip>
+            <AdminChip
+              active={activityStatus === "success"}
+              onClick={() => {
+                setActivityStatus("success");
+                loadActivity({ offset: 0, status: "success" }).catch(() => {});
+              }}
+            >
+              Успех
+            </AdminChip>
+            <AdminChip
+              active={activityStatus === "error"}
+              onClick={() => {
+                setActivityStatus("error");
+                loadActivity({ offset: 0, status: "error" }).catch(() => {});
+              }}
+            >
+              Ошибки
+            </AdminChip>
+            <AdminChip onClick={() => loadActivity({ offset: 0 }).catch(() => {})}>Найти</AdminChip>
+          </AdminToolbar>
+
+          <AdminPanel title={`Логи стейкинга (${activityTotal})`}>
+            {activity.length === 0 ? (
+              <AdminEmpty>{loading ? "Загрузка…" : "Событий пока нет"}</AdminEmpty>
+            ) : (
+              <div className="space-y-1">
+                {activity.map((row) => {
+                  const userLabel = row.first_name || row.username || (row.telegram_id ? `tg ${row.telegram_id}` : "—");
+                  const isError = row.status === "error";
+                  return (
+                    <div
+                      key={row.id}
+                      className="rounded-md bg-surface-raised/40 px-2 py-2 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium">
+                          {formatActivityEvent(row.event_name)}
+                          {row.gift_slug ? ` · ${row.gift_slug}` : ""}
+                        </p>
+                        <span
+                          className={
+                            isError
+                              ? "text-xs font-medium text-danger"
+                              : "text-xs font-medium text-success"
+                          }
+                        >
+                          {isError ? "error" : "success"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--admin-muted)]">
+                        {formatActivityTime(row.occurred_at)} · {userLabel}
+                        {row.username ? ` (@${row.username})` : ""}
+                        {row.telegram_id ? ` · tg ${row.telegram_id}` : ""}
+                        {row.source ? ` · ${row.source}` : ""}
+                      </p>
+                      {isError ? (
+                        <p className="mt-1 text-xs text-danger">
+                          {row.error_code ? `[${row.error_code}] ` : ""}
+                          {row.error_message || "Ошибка без текста"}
+                        </p>
+                      ) : null}
+                      {row.request_id ? (
+                        <p className="mt-0.5 text-[10px] text-[var(--admin-muted)]">
+                          req {row.request_id}
+                          {row.item_id ? ` · item ${row.item_id}` : ""}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {activityTotal > PAGE_SIZE ? (
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <p className="text-xs text-[var(--admin-muted)]">
+                  Стр. {Math.floor(activityOffset / PAGE_SIZE) + 1} /{" "}
+                  {Math.max(1, Math.ceil(activityTotal / PAGE_SIZE))}
+                </p>
+                <div className="flex gap-2">
+                  <AdminButton
+                    variant="secondary"
+                    className="!h-8 text-xs"
+                    disabled={activityOffset <= 0}
+                    onClick={() =>
+                      loadActivity({ offset: Math.max(0, activityOffset - PAGE_SIZE) }).catch(
+                        () => {},
+                      )
+                    }
+                  >
+                    Назад
+                  </AdminButton>
+                  <AdminButton
+                    variant="secondary"
+                    className="!h-8 text-xs"
+                    disabled={activityOffset + PAGE_SIZE >= activityTotal}
+                    onClick={() =>
+                      loadActivity({ offset: activityOffset + PAGE_SIZE }).catch(() => {})
                     }
                   >
                     Далее

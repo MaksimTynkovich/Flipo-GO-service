@@ -414,6 +414,30 @@ type AdminStakingPositionRow struct {
 	EpochID             string     `json:"epoch_id"`
 }
 
+type AdminStakingActivityFilter struct {
+	Query    string
+	Status   string // success | error | ""
+	Limit    int
+	Offset   int
+}
+
+type AdminStakingActivityRow struct {
+	ID           string    `json:"id"`
+	OccurredAt   time.Time `json:"occurred_at"`
+	EventName    string    `json:"event_name"`
+	Status       string    `json:"status"`
+	ErrorCode    string    `json:"error_code,omitempty"`
+	ErrorMessage string    `json:"error_message,omitempty"`
+	UserID       string    `json:"user_id,omitempty"`
+	TelegramID   int64     `json:"telegram_id,omitempty"`
+	Username     string    `json:"username,omitempty"`
+	FirstName    string    `json:"first_name,omitempty"`
+	GiftSlug     string    `json:"gift_slug,omitempty"`
+	ItemID       string    `json:"item_id,omitempty"`
+	Source       string    `json:"source,omitempty"`
+	RequestID    string    `json:"request_id,omitempty"`
+}
+
 // PromoRedemption — player promo activation history.
 type PromoRedemption struct {
 	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`

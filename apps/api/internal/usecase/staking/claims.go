@@ -182,6 +182,10 @@ func (s *Service) createStake(
 		_ = s.referralRewards.OnFirstStake(ctx, userID)
 	}
 
+	if err := s.recordStakeForStreak(ctx, userID); err != nil {
+		slog.Warn("staking streak update failed", "user_id", userID, "error", err)
+	}
+
 	if s.admin != nil {
 		s.admin.NotifyStake(ctx, telegram.AdminActor{
 			TelegramID: user.TelegramID,

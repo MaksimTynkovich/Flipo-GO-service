@@ -18,9 +18,10 @@ import (
 
 func main() {
 	settle := flag.Bool("settle", false, "end active epoch now and run daily payout + unlock + bot notification")
+	advanceDay := flag.Bool("advance-day", false, "backdate today's streak stamps so the next stake counts as a new MSK day")
 	flag.Parse()
 
-	if !*settle {
+	if !*settle && !*advanceDay {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -68,20 +69,31 @@ func main() {
 	)
 	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))
 
-	if err := endActiveEpochNow(db); err != nil {
-		fmt.Fprintf(os.Stderr, "end epoch: %v\n", err)
-		os.Exit(1)
+	if *settle {
+		if err := endActiveEpochNow(db); err != nil {
+			fmt.Fprintf(os.Stderr, "end epoch: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("active epoch end time moved to now")
+		if err := stakeSvc.SettleEndedEpochs(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "settle: %v\n", err)
+			os.Exit(1)
+		}
+		if _, err := stakeSvc.EnsureCurrentEpoch(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "ensure epoch: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("daily settlement done — stakes released, check Telegram")
 	}
-	fmt.Println("active epoch end time moved to now")
-	if err := stakeSvc.SettleEndedEpochs(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "settle: %v\n", err)
-		os.Exit(1)
+
+	if *advanceDay {
+		n, err := stakeSvc.AdvanceStreakCalendarForDev(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "advance-day: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("streak calendar advanced by 1 day — %d streak row(s) updated\n", n)
 	}
-	if _, err := stakeSvc.EnsureCurrentEpoch(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "ensure epoch: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("daily settlement done — stakes released, check Telegram")
 }
 
 func endActiveEpochNow(db *gorm.DB) error {

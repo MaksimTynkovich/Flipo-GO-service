@@ -1,4 +1,4 @@
-.PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate api web test lint gift-quote gift-prices-refresh
+.PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate api web test lint gift-quote gift-prices-refresh staking-tick staking-tick-settle staking-tick-daily
 
 up:
 	docker compose -f deploy/docker-compose.yml --env-file .env up -d postgres redis
@@ -65,14 +65,15 @@ gift-prices-refresh:
 process-deposits:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/process-deposits
 
-staking-tick-daily:
-	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/staking-tick -daily
-
 staking-tick-settle:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/staking-tick -settle
 
+# Settle + advance streak calendar so the next restake counts as a new MSK day.
 staking-tick:
-	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/staking-tick -daily -settle
+	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/staking-tick -settle -advance-day
+
+# Alias: -daily was removed after daily staking redesign.
+staking-tick-daily: staking-tick
 
 test:
 	cd apps/api && go test ./...

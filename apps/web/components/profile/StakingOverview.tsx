@@ -10,9 +10,11 @@ import {
   pluralizeGifts,
   dailyYieldFromMonthly,
   stakingBoostHint,
+  stakingStreakHint,
+  STAKING_STREAK_TARGET_DAYS,
 } from "@/lib/staking-ui";
 import { cn } from "@/lib/utils";
-import { Sparkles } from "lucide-react";
+import { Flame, Sparkles } from "lucide-react";
 
 function ProgressBar({
   value,
@@ -62,6 +64,12 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
   const tvlUsed = stats.tvl_nanoton ?? 0;
   const personalLimit = stats.personal_limit_nanoton ?? 0;
   const personalUsed = stats.personal_used_nanoton ?? 0;
+  const streakTarget = stats.streak_target ?? STAKING_STREAK_TARGET_DAYS;
+  const streakCurrent = stats.streak_current ?? 0;
+  const streakBonusActive = stats.streak_bonus_active ?? false;
+  const streakBonusDaysRemaining = stats.streak_bonus_days_remaining ?? 0;
+  const streakProgress =
+    streakTarget > 0 ? Math.min(1, streakCurrent / streakTarget) : 0;
 
   return (
     <div className="space-y-3">
@@ -134,6 +142,34 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
           </>
         ) : null}
 
+      </section>
+
+      <section className="panel space-y-2 p-3.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="inline-flex items-center gap-1.5 text-sm font-medium">
+            <Flame className={cn("h-3.5 w-3.5", streakBonusActive ? "text-success" : "text-accent")} />
+            {streakBonusActive ? "Бонус серии" : "Серия"}
+          </p>
+          <span className="text-xs tabular-nums text-muted">
+            {streakBonusActive
+              ? `×${stats.streak_bonus_multiplier ?? 2}`
+              : `${streakCurrent}/${streakTarget}`}
+          </span>
+        </div>
+        {!streakBonusActive ? <ProgressBar value={streakProgress} tone="success" /> : null}
+        <p className="text-[11px] leading-relaxed text-muted">
+          {stakingStreakHint(
+            streakCurrent,
+            streakTarget,
+            streakBonusActive,
+            streakBonusDaysRemaining,
+          )}
+        </p>
+        {!stats.staked_today && !streakBonusActive && streakCurrent > 0 ? (
+          <p className="text-[11px] font-medium text-accent">
+            Застейкайте сегодня, чтобы не сбросить серию
+          </p>
+        ) : null}
       </section>
 
       {tvlCap > 0 || personalLimit > 0 ? (

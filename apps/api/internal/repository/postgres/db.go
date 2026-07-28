@@ -44,6 +44,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.StakingPosition{},
 		&domain.StakingGiftClaim{},
 		&domain.UserStakingSnapshot{},
+		&domain.UserStakingStreak{},
 		&domain.StakingQuest{},
 		&domain.StakingQuestCompletion{},
 		&domain.GameRound{},
@@ -122,6 +123,24 @@ func AutoMigrate(db *gorm.DB) error {
 	}
 	if err := migrateDropPromoWager(db); err != nil {
 		return err
+	}
+	if err := migrateStakingPositionItemIndex(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func migrateStakingPositionItemIndex(db *gorm.DB) error {
+	statements := []string{
+		`DROP INDEX IF EXISTS idx_staking_positions_inventory_item_id`,
+		`ALTER TABLE staking_positions DROP CONSTRAINT IF EXISTS staking_positions_inventory_item_id_key`,
+		`CREATE INDEX IF NOT EXISTS idx_staking_positions_inventory_item_id ON staking_positions (inventory_item_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_staking_positions_item_active ON staking_positions (inventory_item_id) WHERE is_active = TRUE`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("migrate staking position item index: %w", err)
+		}
 	}
 	return nil
 }

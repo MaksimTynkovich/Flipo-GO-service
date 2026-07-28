@@ -46,6 +46,12 @@ const emptyStats: StakingStats = {
   tvl_remaining_nanoton: 1_500_000_000_000,
   personal_limit_nanoton: 100_000_000_000,
   personal_used_nanoton: 0,
+  streak_current: 0,
+  streak_target: 6,
+  streak_bonus_active: false,
+  streak_bonus_days_remaining: 0,
+  streak_bonus_multiplier: 0,
+  staked_today: false,
 };
 
 type Tab = "staked" | "add";

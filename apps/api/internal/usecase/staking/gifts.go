@@ -56,6 +56,12 @@ type StakingStats struct {
 	ReferralPerkPending      bool    `json:"referral_perk_pending"`
 	ReferralLimitBonusNanoton int64  `json:"referral_limit_bonus_nanoton"`
 	ReferralBoostPercent     float64 `json:"referral_boost_percent"`
+	StreakCurrent            int     `json:"streak_current"`
+	StreakTarget             int     `json:"streak_target"`
+	StreakBonusActive        bool    `json:"streak_bonus_active"`
+	StreakBonusDaysRemaining int     `json:"streak_bonus_days_remaining"`
+	StreakBonusMultiplier    float64 `json:"streak_bonus_multiplier"`
+	StakedToday              bool    `json:"staked_today"`
 }
 
 type ProfileGiftsResponse struct {
@@ -119,6 +125,11 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		referralLimitBonus = s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
 		rate += referralBoost / 100
 	}
+	streakRecord, _ := s.staking.GetStreak(ctx, userID)
+	streak := streakView(streakRecord)
+	if streak.BonusActive {
+		rate *= domain.StakingStreakBonusMultiplier
+	}
 	perkActive := referralLimitBonus > 0
 	perkPending := user.ReferrerID != nil && !perkActive
 	displayBoost := referralBoost
@@ -160,6 +171,12 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			ReferralPerkPending:       perkPending,
 			ReferralLimitBonusNanoton: displayLimitBonus,
 			ReferralBoostPercent:      displayBoost,
+			StreakCurrent:             streak.CurrentStreak,
+			StreakTarget:              streak.TargetDays,
+			StreakBonusActive:         streak.BonusActive,
+			StreakBonusDaysRemaining:  streak.BonusDaysRemaining,
+			StreakBonusMultiplier:     streak.BonusMultiplier,
+			StakedToday:               streak.StakedToday,
 		},
 	}
 	if subscribed, subErr := s.isChannelSubscribed(ctx, userID); subErr == nil {
@@ -193,9 +210,18 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		}
 	}
 
+	giftYields := func(priceNanoton int64) (daily, monthly int64) {
+		daily, monthly = calcYields(priceNanoton, user.StakingTier, basePercent, boostPercent)
+		if streak.BonusActive {
+			daily = int64(float64(daily) * domain.StakingStreakBonusMultiplier)
+			monthly = int64(float64(monthly) * domain.StakingStreakBonusMultiplier)
+		}
+		return daily, monthly
+	}
+
 	for _, g := range scanned {
 		displayPrice := s.giftDisplayPrice(ctx, g)
-		daily, monthly := calcYields(displayPrice, user.StakingTier, basePercent, boostPercent)
+		daily, monthly := giftYields(displayPrice)
 		pg := ProfileGift{
 			Slug:                g.Slug,
 			Name:                g.Name,
@@ -236,7 +262,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 		}
 
 		displayPrice := s.itemDisplayPrice(ctx, item)
-		daily, monthly := calcYields(displayPrice, user.StakingTier, basePercent, boostPercent)
+		daily, monthly := giftYields(displayPrice)
 		id := item.ID.String()
 		pg := ProfileGift{
 			Slug:                item.TelegramGiftID,
@@ -266,7 +292,7 @@ func (s *Service) ListProfileGifts(ctx context.Context, userID uuid.UUID) (*Prof
 			continue
 		}
 		displayPrice := s.itemDisplayPrice(ctx, *item)
-		daily, monthly := calcYields(displayPrice, user.StakingTier, basePercent, boostPercent)
+		daily, monthly := giftYields(displayPrice)
 		id := item.ID.String()
 		addGift(ProfileGift{
 			Slug:                item.TelegramGiftID,

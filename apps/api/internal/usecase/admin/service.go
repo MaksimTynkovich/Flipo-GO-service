@@ -763,3 +763,7 @@ func (s *Service) ListStakingEpochs(ctx context.Context, limit, offset int) ([]d
 func (s *Service) ListStakingPositions(ctx context.Context, filter domain.AdminStakingPositionFilter) ([]domain.AdminStakingPositionRow, int64, error) {
 	return s.admin.ListStakingPositions(ctx, filter)
 }
+
+func (s *Service) ListStakingActivity(ctx context.Context, filter domain.AdminStakingActivityFilter) ([]domain.AdminStakingActivityRow, int64, error) {
+	return s.admin.ListStakingActivity(ctx, filter)
+}

@@ -629,6 +629,12 @@ export type StakingStats = {
   referral_perk_pending?: boolean;
   referral_limit_bonus_nanoton?: number;
   referral_boost_percent?: number;
+  streak_current?: number;
+  streak_target?: number;
+  streak_bonus_active?: boolean;
+  streak_bonus_days_remaining?: number;
+  streak_bonus_multiplier?: number;
+  staked_today?: boolean;
 };
 
 export type StakingQuestProgress = {
@@ -1864,6 +1870,23 @@ export type AdminStakingPositionRow = {
   epoch_id: string;
 };
 
+export type AdminStakingActivityRow = {
+  id: string;
+  occurred_at: string;
+  event_name: string;
+  status: string;
+  error_code?: string;
+  error_message?: string;
+  user_id?: string;
+  telegram_id?: number;
+  username?: string;
+  first_name?: string;
+  gift_slug?: string;
+  item_id?: string;
+  source?: string;
+  request_id?: string;
+};
+
 export async function getAdminStakingOverview() {
   return api<AdminStakingOverview>("/api/v1/admin/staking/overview");
 }
@@ -1896,6 +1919,23 @@ export async function getAdminStakingPositions(opts?: {
   const q = params.toString();
   return api<{ items: AdminStakingPositionRow[]; total: number; limit: number; offset: number }>(
     `/api/v1/admin/staking/positions${q ? `?${q}` : ""}`,
+  );
+}
+
+export async function getAdminStakingActivity(opts?: {
+  q?: string;
+  status?: "success" | "error" | "";
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  if (opts?.status) params.set("status", opts.status);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  const q = params.toString();
+  return api<{ items: AdminStakingActivityRow[]; total: number; limit: number; offset: number }>(
+    `/api/v1/admin/staking/activity${q ? `?${q}` : ""}`,
   );
 }
 

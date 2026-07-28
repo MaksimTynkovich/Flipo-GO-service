@@ -238,3 +238,108 @@ func (r *AdminRepo) ListStakingPositions(ctx context.Context, filter domain.Admi
 	}
 	return out, total, nil
 }
+
+func (r *AdminRepo) ListStakingActivity(ctx context.Context, filter domain.AdminStakingActivityFilter) ([]domain.AdminStakingActivityRow, int64, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	q := r.db.WithContext(ctx).Table("analytics_events AS e").
+		Joins("LEFT JOIN users u ON u.id = e.user_id AND u.deleted_at IS NULL").
+		Where("e.event_category = ?", "staking").
+		Where("e.event_name IN ?", []string{
+			"staking_started",
+			"staking_yield_paid",
+			"staking_unstake_requested",
+			"referral_bonus_paid",
+		})
+
+	switch strings.ToLower(strings.TrimSpace(filter.Status)) {
+	case "success", "error":
+		q = q.Where("e.status = ?", strings.ToLower(strings.TrimSpace(filter.Status)))
+	}
+	if search := strings.TrimSpace(filter.Query); search != "" {
+		like := "%" + search + "%"
+		q = q.Where(`(
+			u.username ILIKE ? OR
+			u.first_name ILIKE ? OR
+			CAST(u.telegram_id AS TEXT) ILIKE ? OR
+			e.error_code ILIKE ? OR
+			e.error_message ILIKE ? OR
+			COALESCE(e.properties->>'slug', '') ILIKE ? OR
+			e.event_name ILIKE ?
+		)`, like, like, like, like, like, like, like)
+	}
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	type row struct {
+		ID           uuid.UUID  `gorm:"column:id"`
+		OccurredAt   time.Time  `gorm:"column:occurred_at"`
+		EventName    string     `gorm:"column:event_name"`
+		Status       string     `gorm:"column:status"`
+		ErrorCode    string     `gorm:"column:error_code"`
+		ErrorMessage string     `gorm:"column:error_message"`
+		UserID       *uuid.UUID `gorm:"column:user_id"`
+		TelegramID   *int64     `gorm:"column:telegram_id"`
+		Username     string     `gorm:"column:username"`
+		FirstName    string     `gorm:"column:first_name"`
+		RequestID    string     `gorm:"column:request_id"`
+		Source       string     `gorm:"column:source"`
+		GiftSlug     string     `gorm:"column:gift_slug"`
+		ItemID       string     `gorm:"column:item_id"`
+	}
+	var rows []row
+	err := q.Select(`
+		e.id, e.occurred_at, e.event_name, e.status, e.error_code, e.error_message,
+		e.user_id, COALESCE(e.telegram_id, u.telegram_id) AS telegram_id,
+		COALESCE(u.username, '') AS username, COALESCE(u.first_name, '') AS first_name,
+		e.request_id, e.source,
+		COALESCE(e.properties->>'slug', '') AS gift_slug,
+		COALESCE(e.properties->>'item_id', '') AS item_id
+	`).
+		Order("e.occurred_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	out := make([]domain.AdminStakingActivityRow, 0, len(rows))
+	for _, item := range rows {
+		rowOut := domain.AdminStakingActivityRow{
+			ID:           item.ID.String(),
+			OccurredAt:   item.OccurredAt,
+			EventName:    item.EventName,
+			Status:       item.Status,
+			ErrorCode:    item.ErrorCode,
+			ErrorMessage: item.ErrorMessage,
+			Username:     item.Username,
+			FirstName:    item.FirstName,
+			GiftSlug:     item.GiftSlug,
+			ItemID:       item.ItemID,
+			Source:       item.Source,
+			RequestID:    item.RequestID,
+		}
+		if item.UserID != nil {
+			rowOut.UserID = item.UserID.String()
+		}
+		if item.TelegramID != nil {
+			rowOut.TelegramID = *item.TelegramID
+		}
+		out = append(out, rowOut)
+	}
+	return out, total, nil
+}

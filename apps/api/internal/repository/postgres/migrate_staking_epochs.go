@@ -130,6 +130,16 @@ func migrateStakingEpochs(db *gorm.DB) error {
 	if err := db.Exec(`ALTER TABLE staking_positions DROP CONSTRAINT IF EXISTS staking_positions_inventory_item_id_key`).Error; err != nil {
 		return err
 	}
+	// GORM historically left a unique index that blocked daily restakes of the same gift.
+	if err := db.Exec(`DROP INDEX IF EXISTS idx_staking_positions_inventory_item_id`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_staking_positions_inventory_item_id
+		ON staking_positions(inventory_item_id)
+	`).Error; err != nil {
+		return err
+	}
 	if err := db.Exec(`
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_staking_positions_item_active
 		ON staking_positions(inventory_item_id) WHERE is_active = TRUE
