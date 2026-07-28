@@ -40,8 +40,10 @@ const (
 )
 
 const (
-	DefaultStakingTVLCapNanoton     int64 = 500_000_000_000  // 500 TON (daily epoch pool)
-	DefaultStakingPersonalLimitNano int64 = 50_000_000_000   // 50 TON base personal limit
+	DefaultStakingTVLCapNanoton     int64 = 500_000_000_000 // 500 TON (daily epoch pool)
+	DefaultStakingPersonalLimitNano int64 = 50_000_000_000  // 50 TON base personal limit
+	// MaxStakingPersonalLimitNano — hard cap: base + all active quest rewards (+ referral perk).
+	MaxStakingPersonalLimitNano int64 = 100_000_000_000 // 100 TON
 )
 
 // StakingQuest — catalog entry for personal stake-limit quests.

@@ -104,6 +104,9 @@ func (s *Service) ListQuests(ctx context.Context, userID uuid.UUID) (*QuestsResp
 	if err != nil {
 		return nil, err
 	}
+	if maxLimit > domain.MaxStakingPersonalLimitNano {
+		maxLimit = domain.MaxStakingPersonalLimitNano
+	}
 	used, err := s.staking.SumActivePrincipalByUser(ctx, userID)
 	if err != nil {
 		return nil, err

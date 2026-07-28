@@ -247,6 +247,9 @@ func (s *Service) PersonalStakeLimit(ctx context.Context, userID uuid.UUID) (int
 	if s.referralRewards != nil {
 		limit += s.referralRewards.StakeLimitBonusNanoton(ctx, userID)
 	}
+	if limit > domain.MaxStakingPersonalLimitNano {
+		limit = domain.MaxStakingPersonalLimitNano
+	}
 	return limit, nil
 }
 

@@ -120,12 +120,12 @@ func (r *StakingRepo) CompleteQuest(ctx context.Context, userID uuid.UUID, quest
 
 func (r *StakingRepo) SumCompletedQuestRewards(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var total int64
-	// Count all completions (including deactivated quests) so removing a quest
-	// from the catalog does not strip limit from users who already finished it.
+	// Only active quests: retired catalog rewards must not inflate the personal limit
+	// past MaxStakingPersonalLimitNano (legacy completions remain for history/carry-over).
 	err := r.db.WithContext(ctx).
 		Table("staking_quest_completions AS c").
 		Joins("JOIN staking_quests AS q ON q.code = c.quest_code").
-		Where("c.user_id = ?", userID).
+		Where("c.user_id = ? AND q.active = TRUE", userID).
 		Select("COALESCE(SUM(q.reward_limit_nanoton), 0)").
 		Scan(&total).Error
 	return total, err
