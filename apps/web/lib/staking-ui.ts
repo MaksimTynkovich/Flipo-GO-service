@@ -109,7 +109,7 @@ export function stakingStreakHint(
   if (left === 0) {
     return `Серия ${current}/${target} · завтра доход ×${STAKING_STREAK_BONUS_MULTIPLIER}`;
   }
-  return `Серия ${current}/${target} · ещё ${left} ${left === 1 ? "день" : left < 5 ? "дня" : "дней"} до ×${STAKING_STREAK_BONUS_MULTIPLIER}`;
+  return `Соберите серию и получите бонус на 7-й день`;
 }
 
 /** Что стейкинг и доход — ежедневный цикл. */
