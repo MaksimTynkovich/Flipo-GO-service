@@ -286,6 +286,7 @@ export function CaseDetailView() {
         <CaseDetailPlayerPreview
           caseItem={caseItem}
           loot={loot}
+          hideTitle
           ctaLabel={ctaLabel()}
           ctaDisabled={
             cooldownBlocked ||

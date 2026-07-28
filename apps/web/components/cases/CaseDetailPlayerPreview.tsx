@@ -107,6 +107,8 @@ export type CaseDetailPlayerPreviewProps = {
   ctaDisabled?: boolean;
   onCtaClick?: () => void;
   showCatalogLink?: boolean;
+  /** Hide the case title heading (player detail page). */
+  hideTitle?: boolean;
   /** Wrap in phone-like frame (admin). */
   framed?: boolean;
   revealMode?: "idle" | "spin";
@@ -127,6 +129,7 @@ export function CaseDetailPlayerPreview({
   ctaDisabled = false,
   onCtaClick,
   showCatalogLink = false,
+  hideTitle = false,
   framed = false,
   revealMode = "idle",
   revealLoot,
@@ -146,7 +149,7 @@ export function CaseDetailPlayerPreview({
 
   const content = (
     <div className={cn("case-detail space-y-4", className)}>
-      <h1 className="case-detail__title">{heading}</h1>
+      {!hideTitle ? <h1 className="case-detail__title">{heading}</h1> : null}
 
       <section className="case-detail-hero" style={caseHeroStyle(theme)}>
         <FeaturedPattern
