@@ -70,23 +70,14 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
           <p className="mt-1 inline-flex items-center gap-1 text-sm tabular-nums text-muted">
             Стоимость <TonAmount amount={formatTON(gift.price_nanoton)} variant="brand" iconClassName="h-5 w-5" />
           </p>
-          {gift.source === "profile" && (
-            <p className="mt-1 text-xs text-muted">Из профиля · без передачи боту</p>
-          )}
-          {gift.source === "inventory" && (
-            <p className="mt-1 text-xs text-muted">Из инвентаря</p>
-          )}
         </div>
 
-        <div className="mb-5 grid grid-cols-2 gap-2">
-          {gift.is_staked && (
-            <StatCell
-              label="Заработано"
-              value={`+${formatTON(gift.earned_nanoton)}`}
-              accent
-            />
-          )}
-          <StatCell label="За сутки" value={`+${formatTON(gift.daily_yield_nanoton)}`} accent={!gift.is_staked} />
+        <div className="mb-5">
+          <StatCell
+            label={gift.is_staked ? "Ежедневная выплата" : "Выплата за сутки"}
+            value={`+${formatTON(gift.daily_yield_nanoton)}`}
+            accent
+          />
         </div>
 
         {gift.is_staked ? (

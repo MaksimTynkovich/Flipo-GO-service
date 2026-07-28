@@ -122,6 +122,10 @@ export function CaseWinModal({
           {isTon && value > 0 ? `${formatTON(value)} TON` : name}
         </h2>
 
+        {!isTon && result.loot_entry.backdrop ? (
+          <p className="case-win-modal__note">{result.loot_entry.backdrop}</p>
+        ) : null}
+
         {!isTon && value > 0 ? (
           <p className="case-win-modal__value">
             <TonIcon variant="brand" className="h-4 w-4" />

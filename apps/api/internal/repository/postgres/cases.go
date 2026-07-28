@@ -206,6 +206,7 @@ func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.Cas
 		ImageURL            string
 		RarityLabel         string
 		TileBackgroundColor string
+		Backdrop            string
 		FloorPriceNanoton   int64
 		CreatedAt           time.Time
 	}
@@ -219,6 +220,7 @@ func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.Cas
 			e.image_url,
 			e.rarity_label,
 			e.tile_background_color,
+			e.backdrop,
 			CASE
 				WHEN COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift') = 'ton'
 					THEN COALESCE(NULLIF(o.prize_nanoton, 0), NULLIF(e.amount_nanoton, 0), e.floor_price_nanoton)
@@ -242,6 +244,7 @@ func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.Cas
 			ImageURL:            row.ImageURL,
 			RarityLabel:         row.RarityLabel,
 			TileBackgroundColor: row.TileBackgroundColor,
+			Backdrop:            row.Backdrop,
 			FloorPriceNanoton:   row.FloorPriceNanoton,
 			CreatedAt:           row.CreatedAt,
 		})
@@ -414,19 +417,19 @@ func (r *CaseRepo) IncrementCasePromoUsed(ctx context.Context, code string) erro
 
 var _ domain.CaseRepository = (*CaseRepo)(nil)
 
-func (r *InventoryRepo) TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug string) (*domain.InventoryItem, error) {
-	return r.takeHouseGift(ctx, botUserID, toUserID, collectionSlug, "")
+func (r *InventoryRepo) TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, backdrop string) (*domain.InventoryItem, error) {
+	return r.takeHouseGift(ctx, botUserID, toUserID, collectionSlug, "", backdrop)
 }
 
-func (r *InventoryRepo) TakeHouseGiftForModel(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName string) (*domain.InventoryItem, error) {
+func (r *InventoryRepo) TakeHouseGiftForModel(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName, backdrop string) (*domain.InventoryItem, error) {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
-	return r.takeHouseGift(ctx, botUserID, toUserID, collectionSlug, modelName)
+	return r.takeHouseGift(ctx, botUserID, toUserID, collectionSlug, modelName, backdrop)
 }
 
-func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName string) (*domain.InventoryItem, error) {
+func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName, backdrop string) (*domain.InventoryItem, error) {
 	var item domain.InventoryItem
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		q := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
@@ -434,6 +437,9 @@ func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID u
 				botUserID, collectionSlug, []domain.InventoryStatus{domain.InvAvailable, domain.InvLocked})
 		if modelName != "" {
 			q = q.Where("metadata->>'model' = ?", modelName)
+		}
+		if backdrop = strings.TrimSpace(backdrop); backdrop != "" {
+			q = q.Where("LOWER(COALESCE(metadata->>'backdrop', '')) = LOWER(?)", backdrop)
 		}
 		res := q.Order("deposited_at ASC").Limit(1).Find(&item)
 		if res.Error != nil {

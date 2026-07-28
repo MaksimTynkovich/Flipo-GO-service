@@ -1,4 +1,4 @@
-import { normalizeLootTileColor, formatCasePrice } from "@/components/cases/case-ui";
+import { normalizeLootTileColor, normalizeLootBackdrop, formatCasePrice } from "@/components/cases/case-ui";
 import type { CaseLootPreview } from "@/lib/api";
 
 type LootDraftLike = {
@@ -7,6 +7,7 @@ type LootDraftLike = {
   prize_type?: string;
   collection_slug: string;
   model_name?: string;
+  backdrop?: string;
   display_name: string;
   image_url?: string;
   rarity_label?: string;
@@ -36,6 +37,8 @@ export function lootDraftsToPreview(rows: LootDraftLike[]): CaseLootPreview[] {
       prize_type: prizeType,
       collection_slug: row.collection_slug,
       model_name: prizeType === "gift" ? row.model_name || undefined : undefined,
+      backdrop:
+        prizeType === "gift" ? normalizeLootBackdrop(row.backdrop) || undefined : undefined,
       display_name: row.display_name || (prizeType === "ton" ? "TON" : ""),
       image_url: row.image_url || "",
       rarity_label: row.rarity_label || undefined,

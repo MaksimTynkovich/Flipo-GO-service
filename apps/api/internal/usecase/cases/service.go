@@ -109,6 +109,7 @@ type LootPreview struct {
 	CollectionSlug      string    `json:"collection_slug"`
 	CollectionName      string    `json:"collection_name,omitempty"`
 	ModelName           string    `json:"model_name,omitempty"`
+	Backdrop            string    `json:"backdrop,omitempty"`
 	DisplayName         string    `json:"display_name"`
 	ImageURL            string    `json:"image_url"`
 	RarityLabel         string    `json:"rarity_label"`
@@ -142,6 +143,7 @@ type AdminLootEntry struct {
 	CollectionSlug      string    `json:"collection_slug"`
 	CollectionName      string    `json:"collection_name,omitempty"`
 	ModelName           string    `json:"model_name,omitempty"`
+	Backdrop            string    `json:"backdrop,omitempty"`
 	DisplayName         string    `json:"display_name"`
 	ImageURL            string    `json:"image_url"`
 	RarityLabel         string    `json:"rarity_label"`
@@ -647,6 +649,7 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 					CollectionSlug:      e.CollectionSlug,
 					CollectionName:      e.CollectionName,
 					ModelName:           e.ModelName,
+					Backdrop:            preview.Backdrop,
 					DisplayName:         preview.DisplayName,
 					ImageURL:            preview.ImageURL,
 					RarityLabel:         e.RarityLabel,
@@ -776,6 +779,7 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 		entries[i].PrizeType = prizeType
 		entries[i].DisplayName = strings.TrimSpace(entries[i].DisplayName)
 		entries[i].TileBackgroundColor = domain.NormalizeLootTileBackgroundColor(entries[i].TileBackgroundColor)
+		entries[i].Backdrop = domain.NormalizeCaseLootBackdrop(entries[i].Backdrop)
 
 		if prizeType == domain.CasePrizeTypeTon {
 			if entries[i].AmountNanoton <= 0 {
@@ -784,6 +788,7 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 			entries[i].CollectionSlug = ""
 			entries[i].CollectionName = ""
 			entries[i].ModelName = ""
+			entries[i].Backdrop = ""
 			if entries[i].DisplayName == "" {
 				entries[i].DisplayName = "TON"
 			}
@@ -841,6 +846,7 @@ func (s *Service) grantPrize(
 		imageURL = giftimage.FragmentURL(entry.CollectionSlug)
 	}
 	modelName := strings.TrimSpace(entry.ModelName)
+	backdrop := domain.NormalizeCaseLootBackdrop(entry.Backdrop)
 
 	// Best-effort: take a real gift from bot house stock.
 	if s.bot != nil {
@@ -848,9 +854,9 @@ func (s *Service) grantPrize(
 			var house *domain.InventoryItem
 			var takeErr error
 			if modelName != "" {
-				house, takeErr = s.inventory.TakeHouseGiftForModel(ctx, botUser.ID, userID, entry.CollectionSlug, modelName)
+				house, takeErr = s.inventory.TakeHouseGiftForModel(ctx, botUser.ID, userID, entry.CollectionSlug, modelName, backdrop)
 			} else {
-				house, takeErr = s.inventory.TakeHouseGiftForCollection(ctx, botUser.ID, userID, entry.CollectionSlug)
+				house, takeErr = s.inventory.TakeHouseGiftForCollection(ctx, botUser.ID, userID, entry.CollectionSlug, backdrop)
 			}
 			if takeErr == nil && house != nil {
 				metaMap := map[string]any{
@@ -862,6 +868,9 @@ func (s *Service) grantPrize(
 				}
 				if modelName != "" {
 					metaMap["model"] = modelName
+				}
+				if backdrop != "" {
+					metaMap["backdrop"] = backdrop
 				}
 				meta, _ := json.Marshal(metaMap)
 				_ = s.inventory.BindTelegramGift(ctx, house.ID, house.TelegramGiftID, house.ImageURL, meta, domain.CaseFulfillmentBacked)
@@ -880,6 +889,9 @@ func (s *Service) grantPrize(
 	}
 	if modelName != "" {
 		metaMap["model"] = modelName
+	}
+	if backdrop != "" {
+		metaMap["backdrop"] = backdrop
 	}
 	meta, _ := json.Marshal(metaMap)
 	now := time.Now().UTC()
@@ -907,11 +919,15 @@ func (s *Service) grantPrize(
 
 func (s *Service) quoteLootFloor(ctx context.Context, entry domain.CaseLootEntry) int64 {
 	modelName := strings.TrimSpace(entry.ModelName)
-	if modelName != "" && s.valuator != nil {
+	backdrop := domain.NormalizeCaseLootBackdrop(entry.Backdrop)
+	if (modelName != "" || backdrop != "") && s.valuator != nil {
 		sg := gifts.ScannedGiftFromItem(domain.InventoryItem{
 			CollectionSlug: entry.CollectionSlug,
 			Name:           entry.DisplayName,
-			Metadata:       datatypes.JSON(gifts.ItemMetadata(telegram.GiftAttributes{Model: modelName})),
+			Metadata: datatypes.JSON(gifts.ItemMetadata(telegram.GiftAttributes{
+				Model:    modelName,
+				Backdrop: backdrop,
+			})),
 		})
 		if price, _ := s.valuator.QuoteBuyback(ctx, sg); price > 0 {
 			return price
@@ -1160,6 +1176,7 @@ func toLootPreview(e domain.CaseLootEntry) LootPreview {
 		CollectionSlug:      e.CollectionSlug,
 		CollectionName:      collectionName,
 		ModelName:           strings.TrimSpace(e.ModelName),
+		Backdrop:            domain.NormalizeCaseLootBackdrop(e.Backdrop),
 		DisplayName:         name,
 		ImageURL:            img,
 		RarityLabel:         e.RarityLabel,
@@ -1180,6 +1197,7 @@ func liveDropFromEntry(openID uuid.UUID, entry domain.CaseLootEntry, createdAt t
 		ImageURL:            preview.ImageURL,
 		RarityLabel:         preview.RarityLabel,
 		TileBackgroundColor: preview.TileBackgroundColor,
+		Backdrop:            preview.Backdrop,
 		FloorPriceNanoton:   domain.CaseLootPrizeValueNanoton(entry),
 		CreatedAt:           createdAt,
 	}

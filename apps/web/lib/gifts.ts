@@ -33,6 +33,12 @@ export function giftImageUrlFromURL(imageUrl?: string): string {
   return giftImageUrl("", imageUrl);
 }
 
+export function telegramGiftUrl(slug: string): string {
+  const normalized = slug.trim();
+  if (!normalized) return "";
+  return `https://t.me/nft/${normalized}`;
+}
+
 export function giftGradient(slug: string): string {
   let hash = 0;
   for (let i = 0; i < slug.length; i++) {

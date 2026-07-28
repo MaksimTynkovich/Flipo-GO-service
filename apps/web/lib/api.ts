@@ -2113,6 +2113,8 @@ export type CaseLootPreview = {
   prize_type?: "gift" | "ton" | string;
   collection_slug: string;
   model_name?: string;
+  /** Price-sensitive gift backdrop: Black / Onyx Black. */
+  backdrop?: string;
   display_name: string;
   image_url: string;
   rarity_label?: string;
@@ -2131,6 +2133,7 @@ export type CaseLiveDrop = {
   image_url: string;
   rarity_label?: string;
   tile_background_color?: string;
+  backdrop?: string;
   floor_price_nanoton: number;
   created_at: string;
 };
@@ -2210,6 +2213,8 @@ export type AdminCaseLootEntry = {
   prize_type?: "gift" | "ton" | string;
   collection_slug: string;
   model_name?: string;
+  /** Price-sensitive gift backdrop: Black / Onyx Black. */
+  backdrop?: string;
   display_name: string;
   image_url?: string;
   rarity_label?: string;

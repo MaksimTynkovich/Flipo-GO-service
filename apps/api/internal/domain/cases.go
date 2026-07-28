@@ -55,6 +55,7 @@ type CaseLootEntry struct {
 	CollectionSlug      string    `gorm:"size:128;not null;default:''" json:"collection_slug"`
 	CollectionName      string    `gorm:"size:128;not null;default:''" json:"collection_name"`
 	ModelName           string    `gorm:"size:128;not null;default:''" json:"model_name"`
+	Backdrop            string    `gorm:"size:32;not null;default:''" json:"backdrop"`
 	Weight              int       `gorm:"not null" json:"weight"`
 	DisplayName         string    `gorm:"size:128;not null" json:"display_name"`
 	ImageURL            string    `gorm:"size:512" json:"image_url"`
@@ -138,6 +139,7 @@ type CaseLiveDrop struct {
 	ImageURL            string    `json:"image_url"`
 	RarityLabel         string    `json:"rarity_label,omitempty"`
 	TileBackgroundColor string    `json:"tile_background_color,omitempty"`
+	Backdrop            string    `json:"backdrop,omitempty"`
 	FloorPriceNanoton   int64     `json:"floor_price_nanoton"`
 	CreatedAt           time.Time `json:"created_at"`
 }
@@ -209,30 +211,41 @@ func CaseLootPrizeValueNanoton(e CaseLootEntry) int64 {
 	return e.FloorPriceNanoton
 }
 
-// Allowed loot tile background colors (admin picker). Empty string = use rarity default.
+// AllowedLootTileColors — preset palette in admin (any #rrggbb is also allowed).
 var AllowedLootTileColors = []string{
 	"#f77091", "#ff9ebb", "#ff6b8b", "#ffb7b2", "#ff8e72", "#fdffb6",
 	"#cff4d2", "#a8f0d3", "#70d6ff", "#54bbf0", "#a0c4ff", "#bdb2ff",
-	"#9d8df1", "#3d348b", "#1a2642", "#111a2e",
+	"#9d8df1", "#3d348b", "#1a2642", "#111a2e", "#151616", "#424748",
 }
 
-var allowedLootTileColorSet map[string]struct{}
-
-func init() {
-	allowedLootTileColorSet = make(map[string]struct{}, len(AllowedLootTileColors))
-	for _, c := range AllowedLootTileColors {
-		allowedLootTileColorSet[c] = struct{}{}
-	}
-}
-
-// NormalizeLootTileBackgroundColor returns a whitelisted hex or "".
+// NormalizeLootTileBackgroundColor returns a normalized #rrggbb hex or "".
+// Empty string = use rarity default. Accepts any valid 6-digit hex (palette or custom).
 func NormalizeLootTileBackgroundColor(raw string) string {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	if s == "" {
 		return ""
 	}
-	if _, ok := allowedLootTileColorSet[s]; ok {
+	if len(s) == 7 && s[0] == '#' {
+		for i := 1; i < 7; i++ {
+			c := s[i]
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+				return ""
+			}
+		}
 		return s
 	}
 	return ""
+}
+
+// NormalizeCaseLootBackdrop returns a price-sensitive black backdrop or "".
+// Only Black / Onyx Black are allowed on case loot (premium trait).
+func NormalizeCaseLootBackdrop(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "black":
+		return "Black"
+	case "onyx black":
+		return "Onyx Black"
+	default:
+		return ""
+	}
 }

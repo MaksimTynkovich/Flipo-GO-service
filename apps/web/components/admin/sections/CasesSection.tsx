@@ -25,7 +25,10 @@ import { chancePercentFromWeight, applyChancePercentWeights } from "@/lib/admin-
 import {
   candyTileBackgroundForLoot,
   getCatalogAccent,
+  CASE_ACCENT_COLOR_OPTIONS,
+  LOOT_BACKDROP_OPTIONS,
   LOOT_TILE_COLOR_OPTIONS,
+  normalizeLootBackdrop,
   normalizeLootTileColor,
 } from "@/components/cases/case-ui";
 import { CaseDetailPlayerPreview } from "@/components/cases/CaseDetailPlayerPreview";
@@ -95,6 +98,53 @@ const DEFAULT_LIVE_SETTINGS: AdminCaseLiveFeedSettings = {
 
 const RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
 
+const CYR_TO_LAT: Record<string, string> = {
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  е: "e",
+  ё: "e",
+  ж: "zh",
+  з: "z",
+  и: "i",
+  й: "y",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  ф: "f",
+  х: "h",
+  ц: "ts",
+  ч: "ch",
+  ш: "sh",
+  щ: "sch",
+  ъ: "",
+  ы: "y",
+  ь: "",
+  э: "e",
+  ю: "yu",
+  я: "ya",
+};
+
+/** URL slug from case title (latin + digits; Cyrillic transliterated). */
+function slugFromTitle(title: string): string {
+  let out = "";
+  for (const ch of title.trim().toLowerCase()) {
+    if (CYR_TO_LAT[ch] !== undefined) out += CYR_TO_LAT[ch];
+    else if (/[a-z0-9]/.test(ch)) out += ch;
+    else if (/\s|_/.test(ch) || ch === "-") out += "-";
+  }
+  return out.replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+}
+
 type CaseDraft = AdminCaseUpsert & { id?: string };
 type LootDraft = AdminCaseLootEntry & {
   _key: string;
@@ -161,6 +211,7 @@ function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
       image_url: e.image_url || "",
       rarity_label: e.rarity_label || "",
       tile_background_color: e.tile_background_color || "",
+      backdrop: normalizeLootBackdrop(e.backdrop),
       sort_order: e.sort_order ?? i,
       weight: e.weight > 0 ? e.weight : 1,
       floor_price_nanoton: e.floor_price_nanoton ?? 0,
@@ -189,6 +240,7 @@ function giftToLootRow(gift: GiftPickerSelection, sortOrder: number): LootDraft 
     image_url: gift.previewUrl,
     rarity_label: "",
     tile_background_color: "",
+    backdrop: "",
     sort_order: sortOrder,
     weight: 1,
     floor_price_nanoton: 0,
@@ -205,6 +257,7 @@ function tonToLootRow(sortOrder: number): LootDraft {
     image_url: "",
     rarity_label: "",
     tile_background_color: "",
+    backdrop: "",
     sort_order: sortOrder,
     weight: 1,
     floor_price_nanoton: 1_000_000_000,
@@ -492,10 +545,14 @@ export default function CasesSection() {
   );
 
   async function saveCase() {
-    const slug = draft.slug.trim().toLowerCase();
     const title = draft.title.trim();
-    if (!slug || !title) {
-      showToast({ title: "Нужны slug и title", variant: "error" });
+    const slug = (draft.id ? draft.slug : slugFromTitle(title) || draft.slug).trim().toLowerCase();
+    if (!title) {
+      showToast({ title: "Укажите название", variant: "error" });
+      return;
+    }
+    if (!slug) {
+      showToast({ title: "Не удалось сделать slug из названия — добавьте латиницу или цифры", variant: "error" });
       return;
     }
     const isPromo = draft.kind === "promo";
@@ -630,6 +687,7 @@ export default function CasesSection() {
           image_url: "",
           rarity_label: row.rarity_label?.trim() || "",
           tile_background_color: normalizeLootTileColor(row.tile_background_color),
+          backdrop: "",
           sort_order: i,
           weight: Math.round(row.weight),
           floor_price_nanoton: amount,
@@ -651,6 +709,7 @@ export default function CasesSection() {
         image_url: row.image_url?.trim() || "",
         rarity_label: row.rarity_label?.trim() || "",
         tile_background_color: normalizeLootTileColor(row.tile_background_color),
+        backdrop: normalizeLootBackdrop(row.backdrop),
         sort_order: i,
         weight: Math.round(row.weight),
         floor_price_nanoton: Math.max(0, Math.round(row.floor_price_nanoton ?? 0)),
@@ -1018,28 +1077,31 @@ export default function CasesSection() {
           <div className="min-w-0 space-y-4">
           <AdminPanel
             title={selectedId === "new" ? "Новый кейс" : `Кейс · ${selected?.slug || draft.slug}`}
-            description="Slug после создания не меняется. Цена 0 — бесплатный / daily."
+            description="Slug берётся из названия при создании и больше не меняется. Цена 0 — бесплатный / daily."
           >
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              <AdminField label="Slug" hint="латиница, уникальный">
-                <input
-                  className="input-field"
-                  value={draft.slug}
-                  disabled={Boolean(draft.id)}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
-                    }))
-                  }
-                  placeholder="starter"
-                />
-              </AdminField>
-              <AdminField label="Название">
+              <AdminField
+                label="Название"
+                hint={
+                  draft.id
+                    ? `slug: ${draft.slug}`
+                    : draft.slug
+                      ? `slug: ${draft.slug}`
+                      : "slug появится из названия"
+                }
+              >
                 <input
                   className="input-field"
                   value={draft.title}
-                  onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                  onChange={(e) => {
+                    const title = e.target.value;
+                    setDraft((d) => ({
+                      ...d,
+                      title,
+                      ...(d.id ? {} : { slug: slugFromTitle(title) }),
+                    }));
+                  }}
+                  placeholder="Стартовый кейс"
                 />
               </AdminField>
               <AdminField
@@ -1100,19 +1162,51 @@ export default function CasesSection() {
                   }
                 />
               </AdminField>
-              <AdminField label="Фон (accent #hex)" hint="градиент карточки, если нет картинки или под ней">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    className="h-9 w-10 cursor-pointer rounded-md border border-white/10 bg-transparent"
-                    value={/^#[0-9a-fA-F]{6}$/.test(draft.accent_color || "") ? draft.accent_color! : "#3b82f6"}
-                    onChange={(e) => setDraft((d) => ({ ...d, accent_color: e.target.value }))}
-                  />
-                  <input
-                    className="input-field flex-1"
-                    value={draft.accent_color || ""}
-                    onChange={(e) => setDraft((d) => ({ ...d, accent_color: e.target.value }))}
-                  />
+              <AdminField
+                label="Фон карточки"
+                className="sm:col-span-2 lg:col-span-3"
+                hint="Палитра или свой #hex — градиент карточки и hero"
+              >
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {CASE_ACCENT_COLOR_OPTIONS.map((color) => {
+                      const selected =
+                        (draft.accent_color || "").trim().toLowerCase() === color;
+                      return (
+                        <button
+                          key={color}
+                          type="button"
+                          title={color}
+                          aria-label={color}
+                          className={
+                            selected
+                              ? "h-7 w-7 rounded-lg ring-2 ring-[var(--admin-accent)] ring-offset-1 ring-offset-[var(--admin-panel)]"
+                              : "h-7 w-7 rounded-lg ring-1 ring-white/15 hover:ring-white/35"
+                          }
+                          style={{ backgroundColor: color }}
+                          onClick={() => setDraft((d) => ({ ...d, accent_color: color }))}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      className="h-9 w-10 cursor-pointer rounded-md border border-white/10 bg-transparent"
+                      value={
+                        /^#[0-9a-fA-F]{6}$/.test(draft.accent_color || "")
+                          ? draft.accent_color!
+                          : "#3b82f6"
+                      }
+                      onChange={(e) => setDraft((d) => ({ ...d, accent_color: e.target.value }))}
+                    />
+                    <input
+                      className="input-field flex-1"
+                      value={draft.accent_color || ""}
+                      onChange={(e) => setDraft((d) => ({ ...d, accent_color: e.target.value }))}
+                      placeholder="#3b82f6"
+                    />
+                  </div>
                 </div>
               </AdminField>
               <AdminPercentField
@@ -1558,47 +1652,120 @@ export default function CasesSection() {
                                   />
                                 </div>
                               </AdminField>
-                              <AdminField label="фон плитки" className="col-span-2 sm:col-span-3">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    title="По редкости"
-                                    className={
-                                      !normalizeLootTileColor(row.tile_background_color)
-                                        ? "rounded-lg border border-[var(--admin-accent)] bg-[var(--admin-accent-subtle)] px-2 py-1 text-[10px] text-[var(--admin-fg)]"
-                                        : "rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-[var(--admin-muted)] hover:text-[var(--admin-fg)]"
-                                    }
-                                    onClick={() =>
-                                      updateLoot(row._key, { tile_background_color: "" })
-                                    }
-                                  >
-                                    авто
-                                  </button>
-                                  {LOOT_TILE_COLOR_OPTIONS.map((color) => {
-                                    const selected =
-                                      normalizeLootTileColor(row.tile_background_color) === color;
-                                    return (
-                                      <button
-                                        key={color}
-                                        type="button"
-                                        title={color}
-                                        aria-label={color}
-                                        className={
-                                          selected
-                                            ? "h-7 w-7 rounded-lg ring-2 ring-[var(--admin-accent)] ring-offset-1 ring-offset-[var(--admin-panel)]"
-                                            : "h-7 w-7 rounded-lg ring-1 ring-white/15 hover:ring-white/35"
-                                        }
-                                        style={{ backgroundColor: color }}
-                                        onClick={() =>
-                                          updateLoot(row._key, {
-                                            tile_background_color: selected ? "" : color,
-                                          })
-                                        }
-                                      />
-                                    );
-                                  })}
+                              <AdminField
+                                label="цвет фона"
+                                className="col-span-2 sm:col-span-3"
+                                hint="Палитра или свой #hex — фон карточки приза (иначе по редкости)"
+                              >
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      title="По редкости"
+                                      className={
+                                        !normalizeLootTileColor(row.tile_background_color)
+                                          ? "rounded-lg border border-[var(--admin-accent)] bg-[var(--admin-accent-subtle)] px-2 py-1 text-[10px] text-[var(--admin-fg)]"
+                                          : "rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-[var(--admin-muted)] hover:text-[var(--admin-fg)]"
+                                      }
+                                      onClick={() =>
+                                        updateLoot(row._key, { tile_background_color: "" })
+                                      }
+                                    >
+                                      авто
+                                    </button>
+                                    {LOOT_TILE_COLOR_OPTIONS.map((color) => {
+                                      const selected =
+                                        normalizeLootTileColor(row.tile_background_color) === color;
+                                      return (
+                                        <button
+                                          key={color}
+                                          type="button"
+                                          title={color}
+                                          aria-label={color}
+                                          className={
+                                            selected
+                                              ? "h-7 w-7 rounded-lg ring-2 ring-[var(--admin-accent)] ring-offset-1 ring-offset-[var(--admin-panel)]"
+                                              : "h-7 w-7 rounded-lg ring-1 ring-white/15 hover:ring-white/35"
+                                          }
+                                          style={{ backgroundColor: color }}
+                                          onClick={() =>
+                                            updateLoot(row._key, {
+                                              tile_background_color: selected ? "" : color,
+                                            })
+                                          }
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="color"
+                                      className="h-9 w-10 cursor-pointer rounded-md border border-white/10 bg-transparent"
+                                      value={
+                                        normalizeLootTileColor(row.tile_background_color) ||
+                                        "#3b82f6"
+                                      }
+                                      onChange={(e) =>
+                                        updateLoot(row._key, {
+                                          tile_background_color: e.target.value.toLowerCase(),
+                                        })
+                                      }
+                                    />
+                                    <input
+                                      className="input-field flex-1"
+                                      value={row.tile_background_color || ""}
+                                      onChange={(e) =>
+                                        updateLoot(row._key, {
+                                          tile_background_color: e.target.value,
+                                        })
+                                      }
+                                      placeholder="#hex или пусто = авто"
+                                    />
+                                  </div>
                                 </div>
                               </AdminField>
+                              {!isTon ? (
+                                <AdminField
+                                  label="трейт фона"
+                                  className="col-span-2 sm:col-span-3"
+                                  hint="Black / Onyx Black — премиум-трейт Telegram-подарка (дороже)"
+                                >
+                                  <div className="flex flex-wrap gap-1">
+                                    <button
+                                      type="button"
+                                      className={
+                                        !normalizeLootBackdrop(row.backdrop)
+                                          ? "rounded-lg bg-[var(--admin-accent-subtle)] px-2 py-1 text-xs text-[var(--admin-fg)]"
+                                          : "rounded-lg bg-black/20 px-2 py-1 text-xs text-[var(--admin-muted)] hover:text-[var(--admin-fg)]"
+                                      }
+                                      onClick={() => updateLoot(row._key, { backdrop: "" })}
+                                    >
+                                      любой
+                                    </button>
+                                    {LOOT_BACKDROP_OPTIONS.map((bg) => {
+                                      const selected = normalizeLootBackdrop(row.backdrop) === bg;
+                                      return (
+                                        <button
+                                          key={bg}
+                                          type="button"
+                                          className={
+                                            selected
+                                              ? "rounded-lg bg-[var(--admin-accent-subtle)] px-2 py-1 text-xs text-[var(--admin-fg)]"
+                                              : "rounded-lg bg-black/20 px-2 py-1 text-xs text-[var(--admin-muted)] hover:text-[var(--admin-fg)]"
+                                          }
+                                          onClick={() =>
+                                            updateLoot(row._key, {
+                                              backdrop: selected ? "" : bg,
+                                            })
+                                          }
+                                        >
+                                          {bg}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </AdminField>
+                              ) : null}
                             </div>
 
                             {expanded ? (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ExternalLink, Gift } from "lucide-react";
 import {
   AdminButton,
   AdminChip,
@@ -24,9 +25,71 @@ import {
   type AdminStakingPositionRow,
   type AdminYieldSettings,
 } from "@/lib/api";
+import { giftImageUrl, telegramGiftUrl } from "@/lib/gifts";
 import { formatStakingEpochEnd } from "@/lib/staking-ui";
 
 type Tab = "overview" | "settings" | "epochs" | "positions";
+
+function StakingPositionItem({ row }: { row: AdminStakingPositionRow }) {
+  const [imgError, setImgError] = useState(false);
+  const userLabel = row.first_name || row.username || `id ${row.telegram_id}`;
+  const imageSrc = giftImageUrl(row.gift_slug);
+  const nftUrl = telegramGiftUrl(row.gift_slug);
+
+  return (
+    <div className="flex items-start gap-3 rounded-md bg-surface-raised/40 px-2 py-2 text-sm">
+      <a
+        href={nftUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Открыть подарок в Telegram"
+        className="shrink-0"
+      >
+        {!imgError ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt={row.gift_slug}
+            className="h-14 w-14 rounded-lg object-cover transition-opacity hover:opacity-85"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-surface-raised text-muted transition-opacity hover:opacity-85">
+            <Gift className="h-5 w-5 opacity-50" />
+          </div>
+        )}
+      </a>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-medium">
+            {userLabel}
+            {row.username ? ` (@${row.username})` : ""}
+          </p>
+          <span className="text-xs text-[var(--admin-muted)]">
+            {row.is_active ? "active" : row.revoked_reason || "closed"}
+          </span>
+        </div>
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-[var(--admin-muted)]">
+          <span className="truncate">{row.gift_slug}</span>
+          <a
+            href={nftUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-0.5 text-accent hover:underline"
+            title="Открыть в Telegram"
+          >
+            t.me/nft
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </p>
+        <p className="text-xs text-[var(--admin-muted)]">
+          {formatTON(row.principal_nanoton)} TON · yield {formatTON(row.accrued_yield_nanoton)} ·{" "}
+          {row.source} · tg {row.telegram_id}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 const PAGE_SIZE = 30;
 
@@ -304,30 +367,9 @@ export default function StakingSection() {
               <AdminEmpty>{loading ? "Загрузка…" : "Ничего не найдено"}</AdminEmpty>
             ) : (
               <div className="space-y-1">
-                {positions.map((row) => {
-                  const name = row.first_name || row.username || `id ${row.telegram_id}`;
-                  return (
-                    <div
-                      key={row.id}
-                      className="rounded-md bg-surface-raised/40 px-2 py-2 text-sm"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium">
-                          {name}
-                          {row.username ? ` (@${row.username})` : ""} · {row.gift_slug}
-                        </p>
-                        <span className="text-xs text-[var(--admin-muted)]">
-                          {row.is_active ? "active" : row.revoked_reason || "closed"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[var(--admin-muted)]">
-                        {formatTON(row.principal_nanoton)} TON · yield{" "}
-                        {formatTON(row.accrued_yield_nanoton)} · {row.source} · tg{" "}
-                        {row.telegram_id}
-                      </p>
-                    </div>
-                  );
-                })}
+                {positions.map((row) => (
+                  <StakingPositionItem key={row.id} row={row} />
+                ))}
               </div>
             )}
 

@@ -54,6 +54,10 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
       ? entry.amount_nanoton || entry.floor_price_nanoton || 0
       : entry.floor_price_nanoton ?? 0;
   const model = entry.model_name?.trim();
+  const backdrop = entry.backdrop?.trim();
+  const hintParts = isTon
+    ? ["На баланс"]
+    : [model || "рандом", backdrop].filter(Boolean);
 
   return (
     <article className="case-loot-card">
@@ -65,6 +69,11 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
           <span className="case-loot-card__price">
             <TonIcon variant="brand" className="case-loot-card__price-icon" aria-hidden />
             {formatTON(floor)}
+          </span>
+        ) : null}
+        {backdrop ? (
+          <span className="case-loot-card__backdrop" title={backdrop}>
+            {backdrop}
           </span>
         ) : null}
         {isTon ? (
@@ -85,9 +94,7 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
         <p className="case-loot-card__name">
           {isTon ? entry.display_name || "TON" : lootCollectionLabel(entry)}
         </p>
-        <p className="case-loot-card__hint">
-          {isTon ? "На баланс" : model || "рандом"}
-        </p>
+        <p className="case-loot-card__hint">{hintParts.join(" · ")}</p>
       </div>
     </article>
   );

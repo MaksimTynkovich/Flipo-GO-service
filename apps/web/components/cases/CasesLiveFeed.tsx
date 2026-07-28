@@ -8,12 +8,18 @@ import { cn } from "@/lib/utils";
 
 function LiveTile({ drop }: { drop: CaseLiveDrop }) {
   const isTon = drop.prize_type === "ton";
+  const title = [drop.display_name, drop.backdrop?.trim()].filter(Boolean).join(" · ");
   return (
-    <article className="cases-live-feed__tile" title={drop.display_name}>
+    <article className="cases-live-feed__tile" title={title}>
       <div
         className="cases-live-feed__frame"
         style={{ background: candyTileBackgroundForLoot(drop) }}
       >
+        {drop.backdrop ? (
+          <span className="cases-live-feed__backdrop" aria-hidden>
+            {drop.backdrop === "Onyx Black" ? "Onyx" : "Black"}
+          </span>
+        ) : null}
         {isTon ? (
           <span className="cases-live-feed__ton">
             <TonIcon variant="brand" className="cases-live-feed__ton-icon" title="TON" />

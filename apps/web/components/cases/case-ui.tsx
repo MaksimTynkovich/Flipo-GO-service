@@ -21,14 +21,31 @@ export const LOOT_TILE_COLOR_OPTIONS = [
   "#3d348b",
   "#1a2642",
   "#111a2e",
+  "#151616",
+  "#424748",
 ] as const;
 
 export type LootTileColor = (typeof LOOT_TILE_COLOR_OPTIONS)[number];
 
+/** Case card accent presets (same quick colors as loot tiles). */
+export const CASE_ACCENT_COLOR_OPTIONS = LOOT_TILE_COLOR_OPTIONS;
+
 export function normalizeLootTileColor(value?: string): string {
   const v = value?.trim().toLowerCase() ?? "";
   if (!v) return "";
-  return (LOOT_TILE_COLOR_OPTIONS as readonly string[]).includes(v) ? v : "";
+  if (/^#[0-9a-f]{6}$/.test(v)) return v;
+  return "";
+}
+
+/** Price-sensitive Telegram gift backdrops allowed on case loot. */
+export const LOOT_BACKDROP_OPTIONS = ["Black", "Onyx Black"] as const;
+export type LootBackdrop = (typeof LOOT_BACKDROP_OPTIONS)[number];
+
+export function normalizeLootBackdrop(value?: string): string {
+  const v = value?.trim().toLowerCase() ?? "";
+  if (v === "black") return "Black";
+  if (v === "onyx black") return "Onyx Black";
+  return "";
 }
 
 function hexToRgb(hex: string): [number, number, number] {

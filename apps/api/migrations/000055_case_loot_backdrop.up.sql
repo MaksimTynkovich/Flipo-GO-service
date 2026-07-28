@@ -1,0 +1,2 @@
+ALTER TABLE case_loot_entries
+    ADD COLUMN IF NOT EXISTS backdrop VARCHAR(32) NOT NULL DEFAULT '';
