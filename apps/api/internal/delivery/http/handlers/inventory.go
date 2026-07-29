@@ -77,10 +77,34 @@ func (h *InventoryHandler) Liquidate(c *gin.Context) {
 			})
 			return
 		}
+		if errors.Is(err, domain.ErrCaseClaimCashoutOnly) {
+			httperr.Respond(c, http.StatusConflict, err, gin.H{
+				"error": err.Error(),
+				"code":  "case_claim_cashout_only",
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_liquidated", "success", "", "", map[string]any{"item_id": itemID.String(), "balance_after": balance})
+	c.JSON(http.StatusOK, gin.H{"balance": balance})
+}
+
+func (h *InventoryHandler) LiquidateCaseClaim(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	itemID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID"})
+		return
+	}
+	balance, err := h.inventory.LiquidateCaseClaim(c.Request.Context(), userID, itemID)
+	if err != nil {
+		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_case_claim_liquidated", "error", "case_claim_liquidate_failed", err.Error(), map[string]any{"item_id": itemID.String()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_case_claim_liquidated", "success", "", "", map[string]any{"item_id": itemID.String(), "balance_after": balance})
 	c.JSON(http.StatusOK, gin.H{"balance": balance})
 }
 

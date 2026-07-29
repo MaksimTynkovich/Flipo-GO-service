@@ -14,30 +14,30 @@ import (
 )
 
 type Deps struct {
-	DB                  *gorm.DB
-	Auth                *auth.Service
-	AuthHandler         *handlers.AuthHandler
-	InventoryHandler    *handlers.InventoryHandler
-	StakingHandler      *handlers.StakingHandler
-	GameHandler         *handlers.GameHandler
-	MarketHandler       *handlers.MarketHandler
-	ReferralHandler     *handlers.ReferralHandler
-	WalletHandler       *handlers.WalletHandler
-	TelegramHandler     *handlers.TelegramHandler
-	PromoHandler        *handlers.PromoHandler
-	WheelHandler        *handlers.WheelHandler
-	CasesHandler        *handlers.CasesHandler
-	AdminHandler        *handlers.AdminHandler
-	AnalyticsHandler    *handlers.AnalyticsHandler
-	PresenceHandler     *handlers.PresenceHandler
-	MaintenanceHandler  *handlers.MaintenanceHandler
-	MaintenanceState    *middleware.MaintenanceState
-	AdminTelegramIDs    []int64
-	Hub                 *websocket.Hub
-	BotsDataDir         string
-	CasesUploadDir      string
-	GiftImageHandler    *handlers.GiftImageHandler
-	CORSOrigins         []string
+	DB                 *gorm.DB
+	Auth               *auth.Service
+	AuthHandler        *handlers.AuthHandler
+	InventoryHandler   *handlers.InventoryHandler
+	StakingHandler     *handlers.StakingHandler
+	GameHandler        *handlers.GameHandler
+	MarketHandler      *handlers.MarketHandler
+	ReferralHandler    *handlers.ReferralHandler
+	WalletHandler      *handlers.WalletHandler
+	TelegramHandler    *handlers.TelegramHandler
+	PromoHandler       *handlers.PromoHandler
+	WheelHandler       *handlers.WheelHandler
+	CasesHandler       *handlers.CasesHandler
+	AdminHandler       *handlers.AdminHandler
+	AnalyticsHandler   *handlers.AnalyticsHandler
+	PresenceHandler    *handlers.PresenceHandler
+	MaintenanceHandler *handlers.MaintenanceHandler
+	MaintenanceState   *middleware.MaintenanceState
+	AdminTelegramIDs   []int64
+	Hub                *websocket.Hub
+	BotsDataDir        string
+	CasesUploadDir     string
+	GiftImageHandler   *handlers.GiftImageHandler
+	CORSOrigins        []string
 }
 
 func NewRouter(deps Deps) *gin.Engine {
@@ -108,6 +108,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/inventory", deps.InventoryHandler.List)
 			authed.POST("/inventory/deposit", deps.InventoryHandler.Deposit)
 			authed.POST("/inventory/:id/liquidate", deps.InventoryHandler.Liquidate)
+			authed.POST("/inventory/:id/case-liquidate", deps.InventoryHandler.LiquidateCaseClaim)
 			authed.POST("/inventory/:id/withdraw", deps.InventoryHandler.Withdraw)
 
 			authed.GET("/market/listings/mine", deps.MarketHandler.ListMine)

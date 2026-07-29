@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	applog "github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	applog "github.com/flipo/flipo/apps/api/internal/infrastructure/log"
 	"github.com/gin-gonic/gin"
 )
 
@@ -97,6 +97,7 @@ func isExpectedClientError(err error, status int) bool {
 		domain.ErrStakingPersonalLimit,
 		domain.ErrGiftAlreadyStakedEpoch,
 		domain.ErrUnbackedBuyback,
+		domain.ErrCaseClaimCashoutOnly,
 	}
 	for _, target := range expected {
 		if errors.Is(err, target) {

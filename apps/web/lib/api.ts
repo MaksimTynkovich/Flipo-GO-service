@@ -76,6 +76,7 @@ export type InventoryItem = {
   floor_price_nanoton: number;
   buyback_price_nanoton?: number;
   valuation_nanoton?: number;
+  case_cashout_nanoton?: number;
   model?: string;
   symbol?: string;
   backdrop?: string;
@@ -300,6 +301,31 @@ export async function liquidateItem(id: string) {
       status: "error",
       error_code: "liquidate_failed",
       error_message: error instanceof Error ? error.message : "liquidate_failed",
+      properties: { item_id: id },
+    });
+    throw error;
+  }
+}
+
+export async function liquidateCaseClaimItem(id: string) {
+  try {
+    const result = await api<{ balance: number }>(`/api/v1/inventory/${id}/case-liquidate`, {
+      method: "POST",
+    });
+    trackEvent({
+      event_name: "inventory_case_claim_liquidated",
+      event_category: "inventory",
+      status: "success",
+      properties: { item_id: id, balance_after: result.balance },
+    });
+    return result;
+  } catch (error) {
+    trackEvent({
+      event_name: "inventory_case_claim_liquidated",
+      event_category: "inventory",
+      status: "error",
+      error_code: "case_claim_liquidate_failed",
+      error_message: error instanceof Error ? error.message : "case_claim_liquidate_failed",
       properties: { item_id: id },
     });
     throw error;
@@ -2243,6 +2269,7 @@ export type CaseOpenResult = {
   source: string;
   prize_type?: "gift" | "ton" | string;
   prize_nanoton?: number;
+  guaranteed_cashout_nanoton?: number;
   item?: InventoryItem | null;
   loot_entry: CaseLootPreview;
   backed: boolean;

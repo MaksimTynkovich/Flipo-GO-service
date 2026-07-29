@@ -83,8 +83,8 @@ func NewService(
 	return s
 }
 
-func (s *Service) SetValuator(v *gifts.Valuator) { s.valuator = v }
-func (s *Service) SetBotResolver(bot BotUserResolver) { s.bot = bot }
+func (s *Service) SetValuator(v *gifts.Valuator)               { s.valuator = v }
+func (s *Service) SetBotResolver(bot BotUserResolver)          { s.bot = bot }
 func (s *Service) SetAdminNotifier(notifier AdminCaseNotifier) { s.admin = notifier }
 func (s *Service) SetLiveDropPublisher(publisher LiveDropPublisher) {
 	s.live = NewBufferingLivePublisher(publisher, s.feedBuf)
@@ -184,14 +184,15 @@ type FeaturesView struct {
 }
 
 type OpenResult struct {
-	OpenID       uuid.UUID           `json:"open_id"`
-	CaseID       uuid.UUID           `json:"case_id"`
-	Source       string              `json:"source"`
-	PrizeType    string              `json:"prize_type"`
-	PrizeNanoton int64               `json:"prize_nanoton,omitempty"`
-	Item         *inventory.ItemView `json:"item,omitempty"`
-	LootEntry    LootPreview         `json:"loot_entry"`
-	Backed       bool                `json:"backed"`
+	OpenID                   uuid.UUID           `json:"open_id"`
+	CaseID                   uuid.UUID           `json:"case_id"`
+	Source                   string              `json:"source"`
+	PrizeType                string              `json:"prize_type"`
+	PrizeNanoton             int64               `json:"prize_nanoton,omitempty"`
+	GuaranteedCashoutNanoton int64               `json:"guaranteed_cashout_nanoton,omitempty"`
+	Item                     *inventory.ItemView `json:"item,omitempty"`
+	LootEntry                LootPreview         `json:"loot_entry"`
+	Backed                   bool                `json:"backed"`
 }
 
 func (s *Service) Features(ctx context.Context) (*FeaturesView, error) {
@@ -420,6 +421,7 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	var item *domain.InventoryItem
 	var itemView *inventory.ItemView
 	var backed bool
+	var guaranteedCashoutNanoton int64
 	var prizeNanoton int64
 
 	if prizeType == domain.CasePrizeTypeTon {
@@ -443,7 +445,11 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 			return nil, err
 		}
 	} else {
-		granted, isBacked, err := s.grantPrize(ctx, userID, openID, *c, entry)
+		guaranteedCashoutNanoton = entry.FloorPriceNanoton
+		if guaranteedCashoutNanoton <= 0 {
+			guaranteedCashoutNanoton = s.quoteLootFloor(ctx, entry)
+		}
+		granted, isBacked, err := s.grantPrize(ctx, userID, openID, *c, entry, guaranteedCashoutNanoton)
 		if err != nil {
 			if price > 0 {
 				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
@@ -506,14 +512,15 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	}
 
 	result := &OpenResult{
-		OpenID:       openID,
-		CaseID:       c.ID,
-		Source:       source,
-		PrizeType:    prizeType,
-		PrizeNanoton: prizeNanoton,
-		Item:         itemView,
-		LootEntry:    toLootPreview(entry),
-		Backed:       backed,
+		OpenID:                   openID,
+		CaseID:                   c.ID,
+		Source:                   source,
+		PrizeType:                prizeType,
+		PrizeNanoton:             prizeNanoton,
+		GuaranteedCashoutNanoton: guaranteedCashoutNanoton,
+		Item:                     itemView,
+		LootEntry:                toLootPreview(entry),
+		Backed:                   backed,
 	}
 	if s.live != nil {
 		s.live.PublishCaseLiveDrop(ctx, liveDropFromEntry(openID, entry, open.CreatedAt))
@@ -955,6 +962,7 @@ func (s *Service) grantPrize(
 	userID, openID uuid.UUID,
 	c domain.Case,
 	entry domain.CaseLootEntry,
+	guaranteedCashoutNanoton int64,
 ) (*domain.InventoryItem, bool, error) {
 	floor := entry.FloorPriceNanoton
 	if floor <= 0 {
@@ -980,26 +988,27 @@ func (s *Service) grantPrize(
 			}
 			if takeErr == nil && house != nil {
 				metaMap := map[string]any{
-					"fulfillment":   domain.CaseFulfillmentBacked,
-					"case_id":       c.ID.String(),
-					"case_slug":     c.Slug,
-					"loot_entry_id": entry.ID.String(),
-					"collection":    entry.CollectionSlug,
+					domain.CaseClaimMetaFulfillment:    domain.CaseFulfillmentBacked,
+					domain.CaseClaimMetaCaseID:         c.ID.String(),
+					domain.CaseClaimMetaCaseSlug:       c.Slug,
+					domain.CaseClaimMetaLootEntryID:    entry.ID.String(),
+					domain.CaseClaimMetaCollection:     entry.CollectionSlug,
+					domain.CaseClaimMetaCashoutNanoton: guaranteedCashoutNanoton,
 				}
 				// Keep the real NFT traits from house stock; loot model/backdrop only override when set.
 				houseAttrs := gifts.ItemAttributes(house.Metadata)
 				if modelName != "" {
-					metaMap["model"] = modelName
+					metaMap[domain.CaseClaimMetaModel] = modelName
 				} else if houseAttrs.Model != "" {
-					metaMap["model"] = houseAttrs.Model
+					metaMap[domain.CaseClaimMetaModel] = houseAttrs.Model
 				}
 				if backdrop != "" {
-					metaMap["backdrop"] = backdrop
+					metaMap[domain.CaseClaimMetaBackdrop] = backdrop
 				} else if houseAttrs.Backdrop != "" {
-					metaMap["backdrop"] = houseAttrs.Backdrop
+					metaMap[domain.CaseClaimMetaBackdrop] = houseAttrs.Backdrop
 				}
 				if houseAttrs.Symbol != "" {
-					metaMap["symbol"] = houseAttrs.Symbol
+					metaMap[domain.CaseClaimMetaSymbol] = houseAttrs.Symbol
 				}
 				meta, _ := json.Marshal(metaMap)
 				_ = s.inventory.BindTelegramGift(ctx, house.ID, house.TelegramGiftID, house.ImageURL, meta, domain.CaseFulfillmentBacked)
@@ -1010,17 +1019,18 @@ func (s *Service) grantPrize(
 	}
 
 	metaMap := map[string]any{
-		"fulfillment":   domain.CaseFulfillmentUnbacked,
-		"case_id":       c.ID.String(),
-		"case_slug":     c.Slug,
-		"loot_entry_id": entry.ID.String(),
-		"collection":    entry.CollectionSlug,
+		domain.CaseClaimMetaFulfillment:    domain.CaseFulfillmentUnbacked,
+		domain.CaseClaimMetaCaseID:         c.ID.String(),
+		domain.CaseClaimMetaCaseSlug:       c.Slug,
+		domain.CaseClaimMetaLootEntryID:    entry.ID.String(),
+		domain.CaseClaimMetaCollection:     entry.CollectionSlug,
+		domain.CaseClaimMetaCashoutNanoton: guaranteedCashoutNanoton,
 	}
 	if modelName != "" {
-		metaMap["model"] = modelName
+		metaMap[domain.CaseClaimMetaModel] = modelName
 	}
 	if backdrop != "" {
-		metaMap["backdrop"] = backdrop
+		metaMap[domain.CaseClaimMetaBackdrop] = backdrop
 	}
 	meta, _ := json.Marshal(metaMap)
 	now := time.Now().UTC()
@@ -1265,6 +1275,7 @@ func (s *Service) openResultFromExisting(ctx context.Context, open *domain.CaseO
 	view := inventory.BuildItemView(ctx, s.valuator, *item)
 	result.Item = &view
 	result.Backed = !domain.IsUnbackedCaseClaim(*item)
+	result.GuaranteedCashoutNanoton = domain.CaseClaimCashoutNanoton(item.Metadata)
 	if result.PrizeNanoton <= 0 {
 		result.PrizeNanoton = view.ValuationNanoton
 		if result.PrizeNanoton <= 0 {

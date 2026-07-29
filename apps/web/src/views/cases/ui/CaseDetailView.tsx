@@ -12,6 +12,7 @@ import {
   ApiRequestError,
   getCase,
   getMe,
+  liquidateCaseClaimItem,
   liquidateItem,
   openCase,
   type CaseLootPreview,
@@ -231,10 +232,14 @@ export function CaseDetailView() {
   }
 
   async function handleSellPrize() {
-    const itemId = result?.item?.id;
-    if (!itemId) return;
+    const item = result?.item;
+    const itemId = item?.id;
+    if (!itemId || !item) return;
     try {
-      const { balance } = await liquidateItem(itemId);
+      const { balance } =
+        item.case_cashout_nanoton && item.case_cashout_nanoton > 0
+          ? await liquidateCaseClaimItem(itemId)
+          : await liquidateItem(itemId);
       setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: balance }) : prev));
       haptics.notificationOccurred("success");
     } catch (e) {
@@ -296,7 +301,7 @@ export function CaseDetailView() {
           }
           onCtaClick={() => void handleOpen()}
           showCatalogLink={phase === "idle"}
-          showPromoCodeInput={isPromo && phase === "idle"}
+          showPromoCodeInput={isPromo}
           promoCode={promoCode}
           onPromoCodeChange={setPromoCode}
           revealMode={phase === "revealing" ? "spin" : "idle"}

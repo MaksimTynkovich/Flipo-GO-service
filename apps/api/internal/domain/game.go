@@ -20,19 +20,19 @@ const (
 var AllGameModes = []GameType{GameWheel, GameCrash, GameRoulette, GamePvP}
 
 type GameRound struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	GameType       GameType       `gorm:"type:varchar(16);not null;index" json:"game_type"`
-	RoundNumber    int64          `gorm:"not null;index" json:"round_number"`
-	Status         string         `gorm:"type:varchar(32);not null" json:"status"`
-	StartedAt      time.Time      `json:"started_at"`
-	EndedAt        *time.Time     `json:"ended_at,omitempty"`
-	ResultPayload  datatypes.JSON `gorm:"type:jsonb" json:"result_payload,omitempty"`
-	ServerSeedHash string         `gorm:"size:64" json:"server_seed_hash"`
-	ServerSeed     string         `gorm:"size:128" json:"server_seed,omitempty"`
-	ClientSeed     string         `gorm:"size:128" json:"client_seed"`
-	Nonce          int64          `gorm:"default:0" json:"nonce"`
-	AdminInfluenced bool          `gorm:"not null;default:false" json:"-"`
-	CreatedAt      time.Time      `json:"created_at"`
+	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	GameType        GameType       `gorm:"type:varchar(16);not null;index" json:"game_type"`
+	RoundNumber     int64          `gorm:"not null;index" json:"round_number"`
+	Status          string         `gorm:"type:varchar(32);not null" json:"status"`
+	StartedAt       time.Time      `json:"started_at"`
+	EndedAt         *time.Time     `json:"ended_at,omitempty"`
+	ResultPayload   datatypes.JSON `gorm:"type:jsonb" json:"result_payload,omitempty"`
+	ServerSeedHash  string         `gorm:"size:64" json:"server_seed_hash"`
+	ServerSeed      string         `gorm:"size:128" json:"server_seed,omitempty"`
+	ClientSeed      string         `gorm:"size:128" json:"client_seed"`
+	Nonce           int64          `gorm:"default:0" json:"nonce"`
+	AdminInfluenced bool           `gorm:"not null;default:false" json:"-"`
+	CreatedAt       time.Time      `json:"created_at"`
 
 	Bets []GameBet `gorm:"foreignKey:RoundID" json:"-"`
 }
@@ -130,21 +130,22 @@ type PvPRoomPlayerGift struct {
 type LedgerType string
 
 const (
-	LedgerDeposit    LedgerType = "deposit"
-	LedgerLiquidate  LedgerType = "liquidate"
-	LedgerBet        LedgerType = "bet"
-	LedgerWin        LedgerType = "win"
+	LedgerDeposit       LedgerType = "deposit"
+	LedgerLiquidate     LedgerType = "liquidate"
+	LedgerCaseCashout   LedgerType = "case_cashout"
+	LedgerBet           LedgerType = "bet"
+	LedgerWin           LedgerType = "win"
 	LedgerStakeYield    LedgerType = "stake_yield"
 	LedgerReferralBonus LedgerType = "referral_bonus"
 	LedgerPromoBonus    LedgerType = "promo_bonus"
 	LedgerWheelPrize    LedgerType = "wheel_prize"
 	LedgerCaseOpen      LedgerType = "case_open"
 	LedgerCasePrize     LedgerType = "case_prize"
-	LedgerWithdraw   LedgerType = "withdraw"
-	LedgerRefund     LedgerType = "refund"
-	LedgerMarketBuy  LedgerType = "market_buy"
-	LedgerMarketSell LedgerType = "market_sell"
-	LedgerAdminAdjust LedgerType = "admin_adjust"
+	LedgerWithdraw      LedgerType = "withdraw"
+	LedgerRefund        LedgerType = "refund"
+	LedgerMarketBuy     LedgerType = "market_buy"
+	LedgerMarketSell    LedgerType = "market_sell"
+	LedgerAdminAdjust   LedgerType = "admin_adjust"
 )
 
 type BalanceLedger struct {

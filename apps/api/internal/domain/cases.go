@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -27,23 +28,33 @@ const (
 
 	CasePrizeTypeGift = "gift"
 	CasePrizeTypeTon  = "ton"
+
+	CaseClaimMetaCollection     = "collection"
+	CaseClaimMetaModel          = "model"
+	CaseClaimMetaBackdrop       = "backdrop"
+	CaseClaimMetaSymbol         = "symbol"
+	CaseClaimMetaFulfillment    = "fulfillment"
+	CaseClaimMetaCashoutNanoton = "case_cashout_nanoton"
+	CaseClaimMetaCaseID         = "case_id"
+	CaseClaimMetaCaseSlug       = "case_slug"
+	CaseClaimMetaLootEntryID    = "loot_entry_id"
 )
 
 type Case struct {
-	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Slug            string         `gorm:"size:64;not null;index" json:"slug"`
-	Title           string         `gorm:"size:128;not null" json:"title"`
-	ImageURL        string         `gorm:"size:512" json:"image_url"`
-	AccentColor     string         `gorm:"size:32" json:"accent_color"`
-	PriceNanoton    int64          `gorm:"not null" json:"price_nanoton"`
-	Kind            string         `gorm:"size:16;not null;index" json:"kind"`
-	SortOrder       int            `gorm:"not null;default:0" json:"sort_order"`
-	Active          bool           `gorm:"not null;default:true;index" json:"active"`
-	RequireChannel  bool           `gorm:"not null;default:false" json:"require_channel"`
-	TargetRTPBPS    int            `gorm:"column:target_rtp_bps;not null;default:9000" json:"target_rtp_bps"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Slug           string         `gorm:"size:64;not null;index" json:"slug"`
+	Title          string         `gorm:"size:128;not null" json:"title"`
+	ImageURL       string         `gorm:"size:512" json:"image_url"`
+	AccentColor    string         `gorm:"size:32" json:"accent_color"`
+	PriceNanoton   int64          `gorm:"not null" json:"price_nanoton"`
+	Kind           string         `gorm:"size:16;not null;index" json:"kind"`
+	SortOrder      int            `gorm:"not null;default:0" json:"sort_order"`
+	Active         bool           `gorm:"not null;default:true;index" json:"active"`
+	RequireChannel bool           `gorm:"not null;default:false" json:"require_channel"`
+	TargetRTPBPS   int            `gorm:"column:target_rtp_bps;not null;default:9000" json:"target_rtp_bps"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Case) TableName() string { return "cases" }
@@ -132,11 +143,11 @@ func (CaseCatalogSettings) TableName() string { return "case_catalog_settings" }
 
 // CaseOpenStats — aggregate P&L from case_opens for admin.
 type CaseOpenStats struct {
-	OpensCount       int64 `json:"opens_count"`
-	SpentNanoton     int64 `json:"spent_nanoton"`
+	OpensCount        int64 `json:"opens_count"`
+	SpentNanoton      int64 `json:"spent_nanoton"`
 	PrizeTotalNanoton int64 `json:"prize_total_nanoton"`
-	HouseEdgeNanoton int64 `json:"house_edge_nanoton"`
-	ActualRTPBPS     int   `json:"actual_rtp_bps"`
+	HouseEdgeNanoton  int64 `json:"house_edge_nanoton"`
+	ActualRTPBPS      int   `json:"actual_rtp_bps"`
 }
 
 // CasePoolKind selects which economy pool backs an open.
@@ -204,13 +215,13 @@ func SyncCaseBankHysteresis(s *CaseCatalogSettings) {
 
 // CasePoolSnapshot is the active pool balance + gate knobs for one open.
 type CasePoolSnapshot struct {
-	Kind         CasePoolKind
-	Enabled      bool
-	Balance      int64
-	MaxPrizeBps  int
-	BiasWeight   int
-	Recovery     bool
-	FatPaused    bool
+	Kind          CasePoolKind
+	Enabled       bool
+	Balance       int64
+	MaxPrizeBps   int
+	BiasWeight    int
+	Recovery      bool
+	FatPaused     bool
 	TargetBalance int64 // paid bank target; 0 for daily/promo
 }
 
@@ -348,6 +359,26 @@ func IsUnbackedCaseClaim(item InventoryItem) bool {
 		return true
 	}
 	return CaseClaimFulfillment(item.Metadata) == CaseFulfillmentUnbacked
+}
+
+func CaseClaimCashoutNanoton(meta datatypes.JSON) int64 {
+	if len(meta) == 0 {
+		return 0
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(meta, &raw); err != nil {
+		return 0
+	}
+	switch value := raw[CaseClaimMetaCashoutNanoton].(type) {
+	case float64:
+		return int64(value)
+	case int64:
+		return value
+	case int:
+		return int64(value)
+	default:
+		return 0
+	}
 }
 
 // NormalizeCasePrizeType returns gift|ton (empty → gift).

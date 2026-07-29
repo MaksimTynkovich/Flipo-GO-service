@@ -37,7 +37,7 @@ const REVENUE_SERIES: Array<{
   dataKey: keyof RevenueChartPoint;
   color: string;
 }> = [
-  { id: "revenue", label: "Revenue", dataKey: "revenueNanoton", color: "#2dd4bf" },
+  { id: "revenue", label: "Чистая прибыль", dataKey: "revenueNanoton", color: "#2dd4bf" },
   { id: "deposits", label: "Депозиты", dataKey: "depositsNanoton", color: "#60a5fa" },
   { id: "withdrawals", label: "Выводы", dataKey: "withdrawalsNanoton", color: "#f59e0b" },
   { id: "bets", label: "Ставки", dataKey: "gameBetsNanoton", color: "#a78bfa" },
@@ -99,7 +99,7 @@ function RevenueTooltip({
     <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] px-3 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
       <p className="text-xs text-[var(--admin-muted)]">{point.period}</p>
       <p className="mt-1 font-semibold tabular-nums text-[var(--admin-fg)]">
-        {formatTON(point.revenueNanoton)} TON
+        Чистая прибыль: {formatTON(point.revenueNanoton)} TON
       </p>
       <p className="mt-1 text-xs text-[var(--admin-muted)]">
         Депозиты: {formatTON(point.depositsNanoton)} TON
@@ -248,9 +248,9 @@ export default function DashboardSection() {
 
       <section className="grid grid-cols-4 gap-4">
         <AdminMetric
-          label="Выручка"
+          label="Чистая прибыль"
           value={summary ? `${formatTON(summary.net_revenue_nanoton)} TON` : "—"}
-          hint="Чистый доход"
+          hint="Депозиты минус выводы"
           accent
         />
         <AdminMetric
@@ -286,7 +286,7 @@ export default function DashboardSection() {
         />
       </section>
 
-      <AdminPanel title="Доход за период" description="Суммарный revenue по дням в выбранном периоде.">
+      <AdminPanel title="Доход за период" description="Чистая прибыль, депозиты, выводы и ставки по дням в выбранном периоде.">
         <div className="flex flex-wrap items-center gap-2">
           {(Object.keys(REVENUE_PERIODS) as RevenuePeriodId[]).map((id) => (
             <AdminChip key={id} active={periodId === id} onClick={() => setPeriodId(id)}>
@@ -331,7 +331,7 @@ export default function DashboardSection() {
                   </p>
                 </div>
                 <p className="max-w-xs text-right text-xs leading-relaxed text-[var(--admin-muted)]">
-                  {periodId === "all" ? "Для длинного периода точки агрегируются по диапазонам." : "Помесячный срез не нужен: показываем динамику по дням."}
+                  {periodId === "all" ? "Для длинного периода точки агрегируются по диапазонам." : "Чистая прибыль считается как депозиты минус выводы."}
                 </p>
               </div>
 

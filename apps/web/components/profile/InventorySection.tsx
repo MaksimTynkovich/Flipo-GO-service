@@ -12,6 +12,7 @@ import {
   getInventory,
   getMyMarketListings,
   InventoryItem,
+  liquidateCaseClaimItem,
   liquidateItem,
   MarketListing,
   withdrawGiftItem,
@@ -90,7 +91,10 @@ export function InventorySection() {
     if (!selected) return;
     setLiquidating(true);
     try {
-      const { balance } = await liquidateItem(selected.id);
+      const { balance } =
+        selected.case_cashout_nanoton && selected.case_cashout_nanoton > 0
+          ? await liquidateCaseClaimItem(selected.id)
+          : await liquidateItem(selected.id);
       setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: balance }) : prev));
       markModalCompleted("inventory_gift_detail");
       closeSheet();

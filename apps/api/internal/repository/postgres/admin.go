@@ -64,7 +64,7 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 	summary.GGRNanoton = summary.GameBetsNanoton - summary.GameWinsNanoton
 	summary.NGRNanoton = summary.GGRNanoton + summary.WithdrawalFeesNanoton + summary.PvPFeesNanoton +
 		summary.MarketFeesNanoton - summary.ReferralExpenseNanoton - summary.StakingExpenseNanoton
-	summary.NetRevenueNanoton = summary.NGRNanoton
+	summary.NetRevenueNanoton = summary.DepositsNanoton - summary.WithdrawalsNanoton
 	summary.HotWalletExposureNanoton = summary.PendingLiabilityNanoton
 
 	since := time.Now().UTC().Add(-24 * time.Hour)
@@ -190,7 +190,7 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 		bets := betsByDay[period]
 		points = append(points, domain.RevenueTimeseriesPoint{
 			Period:             period,
-			RevenueNanoton:     deposits,
+			RevenueNanoton:     deposits - withdrawals,
 			DepositsNanoton:    deposits,
 			WithdrawalsNanoton: withdrawals,
 			GameBetsNanoton:    bets,

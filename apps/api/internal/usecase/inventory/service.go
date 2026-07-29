@@ -15,11 +15,12 @@ import (
 
 type ItemView struct {
 	domain.InventoryItem
-	BuybackPriceNanoton  int64  `json:"buyback_price_nanoton"`
-	ValuationNanoton     int64  `json:"valuation_nanoton"`
-	Model                string `json:"model,omitempty"`
-	Symbol               string `json:"symbol,omitempty"`
-	Backdrop             string `json:"backdrop,omitempty"`
+	BuybackPriceNanoton int64  `json:"buyback_price_nanoton"`
+	ValuationNanoton    int64  `json:"valuation_nanoton"`
+	CaseCashoutNanoton  int64  `json:"case_cashout_nanoton,omitempty"`
+	Model               string `json:"model,omitempty"`
+	Symbol              string `json:"symbol,omitempty"`
+	Backdrop            string `json:"backdrop,omitempty"`
 }
 
 type Service struct {
@@ -33,6 +34,8 @@ type Service struct {
 	depositNotifier GiftDepositNotifier
 	withdrawHold    WithdrawHoldChecker
 }
+
+var fetchGiftTraits = telegram.FetchNFTPageTraits
 
 // WithdrawHoldChecker reports silent withdrawal holds (global or per-user).
 type WithdrawHoldChecker interface {
@@ -99,6 +102,7 @@ func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.In
 	view.Model = attrs.Model
 	view.Symbol = attrs.Symbol
 	view.Backdrop = attrs.Backdrop
+	view.CaseCashoutNanoton = domain.CaseClaimCashoutNanoton(item.Metadata)
 
 	if valuator == nil {
 		view.BuybackPriceNanoton = item.FloorPriceNanoton
@@ -163,6 +167,9 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	if isProfileVirtualItem(*item) {
 		return 0, domain.ErrInvalidAmount
 	}
+	if domain.IsCaseClaimItem(*item) && domain.CaseClaimCashoutNanoton(item.Metadata) > 0 {
+		return 0, domain.ErrCaseClaimCashoutOnly
+	}
 	if domain.IsUnbackedCaseClaim(*item) {
 		return 0, domain.ErrUnbackedBuyback
 	}
@@ -182,6 +189,30 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	}
 
 	return s.market.BuybackFromUser(ctx, userID, itemID, payout, payout)
+}
+
+func (s *Service) LiquidateCaseClaim(ctx context.Context, userID, itemID uuid.UUID) (int64, error) {
+	item, err := s.inventory.FindByID(ctx, itemID)
+	if err != nil {
+		return 0, err
+	}
+	if item.UserID != userID {
+		return 0, domain.ErrInvalidAmount
+	}
+	if item.Status != domain.InvAvailable {
+		return 0, domain.ErrInvalidAmount
+	}
+	if !domain.IsCaseClaimItem(*item) {
+		return 0, domain.ErrInvalidAmount
+	}
+	payout := domain.CaseClaimCashoutNanoton(item.Metadata)
+	if payout <= 0 {
+		return 0, domain.ErrInvalidAmount
+	}
+	if s.market == nil {
+		return 0, domain.ErrInvalidAmount
+	}
+	return s.market.SettleCaseClaim(ctx, userID, itemID, payout)
 }
 
 func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pending bool, message string, err error) {
@@ -368,11 +399,27 @@ func (s *Service) FulfillPendingWithdrawal(ctx context.Context, itemID uuid.UUID
 	if item.Status != domain.InvWithdrawPending {
 		return fmt.Errorf("подарок не в очереди вывода")
 	}
+	claimedAttrs := gifts.ItemAttributes(item.Metadata)
+	if claimedAttrs.Model != "" || claimedAttrs.Backdrop != "" {
+		actualAttrs, fetchErr := fetchGiftTraits(ctx, telegramGiftID)
+		if fetchErr != nil {
+			return fmt.Errorf("не удалось проверить traits подарка: %w", fetchErr)
+		}
+		if claimedAttrs.Model != "" && !strings.EqualFold(claimedAttrs.Model, actualAttrs.Model) {
+			return fmt.Errorf("slug не совпадает с обещанной моделью: нужен %s", claimedAttrs.Model)
+		}
+		if claimedAttrs.Backdrop != "" && !strings.EqualFold(claimedAttrs.Backdrop, actualAttrs.Backdrop) {
+			return fmt.Errorf("slug не совпадает с обещанным узором: нужен %s", claimedAttrs.Backdrop)
+		}
+	}
 
-	meta, _ := json.Marshal(map[string]any{
-		"fulfillment": domain.CaseFulfillmentBacked,
-		"collection":  item.CollectionSlug,
-	})
+	metaMap := map[string]any{}
+	if len(item.Metadata) > 0 {
+		_ = json.Unmarshal(item.Metadata, &metaMap)
+	}
+	metaMap[domain.CaseClaimMetaFulfillment] = domain.CaseFulfillmentBacked
+	metaMap[domain.CaseClaimMetaCollection] = item.CollectionSlug
+	meta, _ := json.Marshal(metaMap)
 	if err := s.inventory.BindTelegramGift(ctx, itemID, telegramGiftID, item.ImageURL, meta, domain.CaseFulfillmentBacked); err != nil {
 		return err
 	}

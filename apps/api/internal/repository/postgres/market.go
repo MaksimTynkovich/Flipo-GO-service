@@ -319,6 +319,59 @@ func (r *MarketRepo) SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, 
 	return newBalance, nil
 }
 
+func (r *MarketRepo) SettleCaseClaim(ctx context.Context, userID, itemID uuid.UUID, payout int64) (int64, error) {
+	if payout <= 0 {
+		return 0, domain.ErrInvalidAmount
+	}
+
+	var newBalance int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item domain.InventoryItem
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&item, "id = ? AND user_id = ? AND status = ?", itemID, userID, domain.InvAvailable).Error; err != nil {
+			return err
+		}
+		if !domain.IsCaseClaimItem(item) || domain.CaseClaimCashoutNanoton(item.Metadata) <= 0 {
+			return domain.ErrInvalidAmount
+		}
+
+		var user domain.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&user, "id = ?", userID).Error; err != nil {
+			return err
+		}
+
+		newBalance = user.BettingBalance + payout
+		if err := tx.Model(&user).Update("betting_balance", newBalance).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&domain.BalanceLedger{
+			UserID:        userID,
+			Type:          domain.LedgerCaseCashout,
+			AmountNanoton: payout,
+			BalanceAfter:  newBalance,
+			ReferenceType: "case_claim",
+			ReferenceID:   itemID,
+			CreatedAt:     time.Now().UTC(),
+		}).Error; err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		if err := tx.Model(&item).Updates(map[string]any{
+			"status":        domain.InvLiquidated,
+			"liquidated_at": now,
+			"updated_at":    now,
+		}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
 func (r *MarketRepo) AcquireGiftFromBet(ctx context.Context, itemID uuid.UUID) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var item domain.InventoryItem
