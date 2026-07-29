@@ -24,21 +24,21 @@ func (GameConfig) TableName() string { return "game_configs" }
 
 // PlatformRiskSettings — singleton row (id=1) for anti-whale and treasury limits.
 type PlatformRiskSettings struct {
-	ID                         int       `gorm:"primaryKey" json:"id"`
-	MaxDailyWinNanoton         int64     `gorm:"not null" json:"max_daily_win_nanoton"`
-	MaxRoundExposureNanoton    int64     `gorm:"not null" json:"max_round_exposure_nanoton"`
-	WhaleBetThresholdNanoton   int64     `gorm:"not null" json:"whale_bet_threshold_nanoton"`
-	AutoReviewWithdrawNanoton  int64     `gorm:"not null" json:"auto_review_withdraw_nanoton"`
-	HotWalletMaxBalanceNanoton int64     `gorm:"not null" json:"hot_wallet_max_balance_nanoton"`
-	HotWalletSweepThreshold    int64     `gorm:"not null" json:"hot_wallet_sweep_threshold_nanoton"`
-	ColdWalletAddress          string    `gorm:"size:128" json:"cold_wallet_address"`
+	ID                         int    `gorm:"primaryKey" json:"id"`
+	MaxDailyWinNanoton         int64  `gorm:"not null" json:"max_daily_win_nanoton"`
+	MaxRoundExposureNanoton    int64  `gorm:"not null" json:"max_round_exposure_nanoton"`
+	WhaleBetThresholdNanoton   int64  `gorm:"not null" json:"whale_bet_threshold_nanoton"`
+	AutoReviewWithdrawNanoton  int64  `gorm:"not null" json:"auto_review_withdraw_nanoton"`
+	HotWalletMaxBalanceNanoton int64  `gorm:"not null" json:"hot_wallet_max_balance_nanoton"`
+	HotWalletSweepThreshold    int64  `gorm:"not null" json:"hot_wallet_sweep_threshold_nanoton"`
+	ColdWalletAddress          string `gorm:"size:128" json:"cold_wallet_address"`
 	// Roulette house bank / auto-recovery (admin-tunable).
-	RouletteRecoveryEnabled       bool  `gorm:"not null;default:false" json:"roulette_recovery_enabled"`
-	RouletteRecoveryActive        bool  `gorm:"not null;default:false" json:"roulette_recovery_active"`
-	RouletteBankNanoton           int64 `gorm:"not null;default:0" json:"roulette_bank_nanoton"`
-	RouletteLossThresholdNanoton  int64 `gorm:"not null;default:-50000000000" json:"roulette_loss_threshold_nanoton"`
-	RouletteRecoveryTargetNanoton int64 `gorm:"not null;default:0" json:"roulette_recovery_target_nanoton"`
-	RouletteRecoveryBiasWeight    int   `gorm:"not null;default:50" json:"roulette_recovery_bias_weight"`
+	RouletteRecoveryEnabled       bool      `gorm:"not null;default:false" json:"roulette_recovery_enabled"`
+	RouletteRecoveryActive        bool      `gorm:"not null;default:false" json:"roulette_recovery_active"`
+	RouletteBankNanoton           int64     `gorm:"not null;default:0" json:"roulette_bank_nanoton"`
+	RouletteLossThresholdNanoton  int64     `gorm:"not null;default:-50000000000" json:"roulette_loss_threshold_nanoton"`
+	RouletteRecoveryTargetNanoton int64     `gorm:"not null;default:0" json:"roulette_recovery_target_nanoton"`
+	RouletteRecoveryBiasWeight    int       `gorm:"not null;default:50" json:"roulette_recovery_bias_weight"`
 	UpdatedAt                     time.Time `json:"updated_at"`
 }
 
@@ -71,15 +71,15 @@ func SyncRouletteRecoveryHysteresis(s *PlatformRiskSettings) {
 
 // ProvablyFairSeedSession — active/revealed server seed chain per game.
 type ProvablyFairSeedSession struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	GameType       GameType  `gorm:"type:varchar(16);not null;index" json:"game_type"`
-	ServerSeedHash string    `gorm:"size:64;not null" json:"server_seed_hash"`
-	ServerSeed     string    `gorm:"size:128" json:"server_seed,omitempty"`
-	ClientSeed     string    `gorm:"size:128" json:"client_seed"`
-	Nonce          int64     `gorm:"not null;default:0" json:"nonce"`
-	Active         bool      `gorm:"not null;default:true;index" json:"active"`
+	ID             uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	GameType       GameType   `gorm:"type:varchar(16);not null;index" json:"game_type"`
+	ServerSeedHash string     `gorm:"size:64;not null" json:"server_seed_hash"`
+	ServerSeed     string     `gorm:"size:128" json:"server_seed,omitempty"`
+	ClientSeed     string     `gorm:"size:128" json:"client_seed"`
+	Nonce          int64      `gorm:"not null;default:0" json:"nonce"`
+	Active         bool       `gorm:"not null;default:true;index" json:"active"`
 	RotatedAt      *time.Time `json:"rotated_at,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 func (ProvablyFairSeedSession) TableName() string { return "provably_fair_seed_sessions" }
@@ -216,10 +216,11 @@ type RevenueSummary struct {
 
 // RevenueTimeseriesPoint — daily revenue breakdown.
 type RevenueTimeseriesPoint struct {
-	Period           string `json:"period"`
-	RevenueNanoton   int64  `json:"revenue_nanoton"`
-	DepositsNanoton  int64  `json:"deposits_nanoton"`
-	GameBetsNanoton  int64  `json:"game_bets_nanoton"`
+	Period             string `json:"period"`
+	RevenueNanoton     int64  `json:"revenue_nanoton"`
+	DepositsNanoton    int64  `json:"deposits_nanoton"`
+	WithdrawalsNanoton int64  `json:"withdrawals_nanoton"`
+	GameBetsNanoton    int64  `json:"game_bets_nanoton"`
 }
 
 // AdminGameStat — per-game GGR and volume.
@@ -278,41 +279,41 @@ type AdminPendingGiftWithdraw struct {
 
 // AdminUserBetItem — readable bet row for the admin user card.
 type AdminUserBetItem struct {
-	ID              uuid.UUID `json:"id"`
-	GameType        GameType  `json:"game_type"`
-	Status          BetStatus `json:"status"`
-	AmountNanoton   int64     `json:"amount_nanoton"`
-	PayoutNanoton   int64     `json:"payout_nanoton"`
-	FundingType     string    `json:"funding_type"`
-	SelectionLabel  string    `json:"selection_label"`
-	CashoutMult     *float64  `json:"cashout_multiplier,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID             uuid.UUID `json:"id"`
+	GameType       GameType  `json:"game_type"`
+	Status         BetStatus `json:"status"`
+	AmountNanoton  int64     `json:"amount_nanoton"`
+	PayoutNanoton  int64     `json:"payout_nanoton"`
+	FundingType    string    `json:"funding_type"`
+	SelectionLabel string    `json:"selection_label"`
+	CashoutMult    *float64  `json:"cashout_multiplier,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // AdminUserBetsSummary — aggregates for a period (not limited to returned items).
 type AdminUserBetsSummary struct {
-	Bets           int64 `json:"bets"`
-	Won            int64 `json:"won"`
-	Lost           int64 `json:"lost"`
-	VolumeNanoton  int64 `json:"volume_nanoton"`
-	PayoutNanoton  int64 `json:"payout_nanoton"`
-	NetNanoton     int64 `json:"net_nanoton"`
+	Bets          int64 `json:"bets"`
+	Won           int64 `json:"won"`
+	Lost          int64 `json:"lost"`
+	VolumeNanoton int64 `json:"volume_nanoton"`
+	PayoutNanoton int64 `json:"payout_nanoton"`
+	NetNanoton    int64 `json:"net_nanoton"`
 }
 
 // AdminUserBetsResponse — period-filtered bets for one user.
 type AdminUserBetsResponse struct {
-	Period  string              `json:"period"`
+	Period  string               `json:"period"`
 	Summary AdminUserBetsSummary `json:"summary"`
-	Items   []AdminUserBetItem  `json:"items"`
+	Items   []AdminUserBetItem   `json:"items"`
 }
 
 // AdminUserTransfersSummary — deposit/withdraw aggregates for a period.
 type AdminUserTransfersSummary struct {
-	Deposits               int64 `json:"deposits"`
-	Withdrawals            int64 `json:"withdrawals"`
-	DepositVolumeNanoton   int64 `json:"deposit_volume_nanoton"`
+	Deposits                int64 `json:"deposits"`
+	Withdrawals             int64 `json:"withdrawals"`
+	DepositVolumeNanoton    int64 `json:"deposit_volume_nanoton"`
 	WithdrawalVolumeNanoton int64 `json:"withdrawal_volume_nanoton"`
-	Failed                 int64 `json:"failed"`
+	Failed                  int64 `json:"failed"`
 }
 
 // AdminUserTransfersResponse — period-filtered wallet transfers for one user.
@@ -324,14 +325,14 @@ type AdminUserTransfersResponse struct {
 
 // AdminReferrerStat — top invite sources for the admin users page.
 type AdminReferrerStat struct {
-	UserID            uuid.UUID `json:"user_id"`
-	TelegramID        int64     `json:"telegram_id"`
-	Username          string    `json:"username"`
-	FirstName         string    `json:"first_name"`
-	ReferralCode      string    `json:"referral_code"`
-	ReferralCount     int64     `json:"referral_count"`
-	ReferralCountToday int64    `json:"referral_count_today"`
-	ReferralCount7d   int64     `json:"referral_count_7d"`
+	UserID             uuid.UUID `json:"user_id"`
+	TelegramID         int64     `json:"telegram_id"`
+	Username           string    `json:"username"`
+	FirstName          string    `json:"first_name"`
+	ReferralCode       string    `json:"referral_code"`
+	ReferralCount      int64     `json:"referral_count"`
+	ReferralCountToday int64     `json:"referral_count_today"`
+	ReferralCount7d    int64     `json:"referral_count_7d"`
 }
 
 // AdminUserAudience — bot audience breakdown for the admin users page.
@@ -415,10 +416,10 @@ type AdminStakingPositionRow struct {
 }
 
 type AdminStakingActivityFilter struct {
-	Query    string
-	Status   string // success | error | ""
-	Limit    int
-	Offset   int
+	Query  string
+	Status string // success | error | ""
+	Limit  int
+	Offset int
 }
 
 type AdminStakingActivityRow struct {
@@ -446,15 +447,15 @@ type AdminStakingStakerFilter struct {
 
 // AdminStakingStakerRow — active staker aggregated by user for admin list.
 type AdminStakingStakerRow struct {
-	UserID                 string     `json:"user_id"`
-	TelegramID             int64      `json:"telegram_id"`
-	Username               string     `json:"username"`
-	FirstName              string     `json:"first_name"`
+	UserID                 string      `json:"user_id"`
+	TelegramID             int64       `json:"telegram_id"`
+	Username               string      `json:"username"`
+	FirstName              string      `json:"first_name"`
 	StakingTier            StakingTier `json:"staking_tier"`
-	Positions              int64      `json:"positions"`
-	PrincipalNanoton       int64      `json:"principal_nanoton"`
-	ProjectedPayoutNanoton int64      `json:"projected_payout_nanoton"`
-	StreakBonusActive      bool       `json:"streak_bonus_active"`
+	Positions              int64       `json:"positions"`
+	PrincipalNanoton       int64       `json:"principal_nanoton"`
+	ProjectedPayoutNanoton int64       `json:"projected_payout_nanoton"`
+	StreakBonusActive      bool        `json:"streak_bonus_active"`
 }
 
 // PromoRedemption — player promo activation history.

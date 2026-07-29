@@ -23,12 +23,25 @@ import {
 } from "@/lib/api";
 
 type RevenuePeriodId = "7d" | "30d" | "all";
+type RevenueSeriesId = "revenue" | "deposits" | "withdrawals" | "bets";
 
 const REVENUE_PERIODS: Record<RevenuePeriodId, { label: string; days: number }> = {
   "7d": { label: "7 дней", days: 7 },
   "30d": { label: "30 дней", days: 30 },
   all: { label: "Всё время", days: -1 },
 };
+
+const REVENUE_SERIES: Array<{
+  id: RevenueSeriesId;
+  label: string;
+  dataKey: keyof RevenueChartPoint;
+  color: string;
+}> = [
+  { id: "revenue", label: "Revenue", dataKey: "revenueNanoton", color: "#2dd4bf" },
+  { id: "deposits", label: "Депозиты", dataKey: "depositsNanoton", color: "#60a5fa" },
+  { id: "withdrawals", label: "Выводы", dataKey: "withdrawalsNanoton", color: "#f59e0b" },
+  { id: "bets", label: "Ставки", dataKey: "gameBetsNanoton", color: "#a78bfa" },
+];
 
 function downsampleRevenuePoints(points: AdminRevenuePoint[], targetMaxPoints: number): AdminRevenuePoint[] {
   if (points.length <= targetMaxPoints) return points;
@@ -42,6 +55,7 @@ function downsampleRevenuePoints(points: AdminRevenuePoint[], targetMaxPoints: n
       period: `${first.period}–${last.period}`,
       revenue_nanoton: chunk.reduce((sum, p) => sum + p.revenue_nanoton, 0),
       deposits_nanoton: chunk.reduce((sum, p) => sum + p.deposits_nanoton, 0),
+      withdrawals_nanoton: chunk.reduce((sum, p) => sum + p.withdrawals_nanoton, 0),
       game_bets_nanoton: chunk.reduce((sum, p) => sum + p.game_bets_nanoton, 0),
     });
   }
@@ -60,8 +74,14 @@ type RevenueChartPoint = {
   label: string;
   revenueNanoton: number;
   depositsNanoton: number;
+  withdrawalsNanoton: number;
   gameBetsNanoton: number;
 };
+
+function getSeriesValue(point: RevenueChartPoint, dataKey: keyof RevenueChartPoint) {
+  const value = point[dataKey];
+  return typeof value === "number" ? value : 0;
+}
 
 function RevenueTooltip({
   active,
@@ -85,6 +105,9 @@ function RevenueTooltip({
         Депозиты: {formatTON(point.depositsNanoton)} TON
       </p>
       <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
+        Выводы: {formatTON(point.withdrawalsNanoton)} TON
+      </p>
+      <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
         Ставки: {formatTON(point.gameBetsNanoton)} TON
       </p>
     </div>
@@ -99,6 +122,12 @@ export default function DashboardSection() {
   const [timeseries, setTimeseries] = useState<AdminRevenuePoint[]>([]);
   const [games, setGames] = useState<AdminGameStat[]>([]);
   const [periodId, setPeriodId] = useState<RevenuePeriodId>("7d");
+  const [enabledSeries, setEnabledSeries] = useState<Record<RevenueSeriesId, boolean>>({
+    revenue: true,
+    deposits: true,
+    withdrawals: true,
+    bets: false,
+  });
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadingRevenue, setLoadingRevenue] = useState(false);
 
@@ -172,9 +201,9 @@ export default function DashboardSection() {
     return downsampleRevenuePoints(timeseries, 90);
   }, [periodId, timeseries]);
 
-  const maxRevenue = useMemo(
-    () => Math.max(1, ...displaySeries.map((point) => Math.max(0, point.revenue_nanoton))),
-    [displaySeries],
+  const activeSeries = useMemo(
+    () => REVENUE_SERIES.filter((series) => enabledSeries[series.id]),
+    [enabledSeries],
   );
 
   const chartData = useMemo(
@@ -184,8 +213,25 @@ export default function DashboardSection() {
         label: formatPeriodLabel(point.period),
         revenueNanoton: point.revenue_nanoton,
         depositsNanoton: point.deposits_nanoton,
+        withdrawalsNanoton: point.withdrawals_nanoton,
         gameBetsNanoton: point.game_bets_nanoton,
       })),
+    [displaySeries],
+  );
+
+  const maxRevenue = useMemo(
+    () =>
+      Math.max(
+        1,
+        ...chartData.flatMap((point) =>
+          activeSeries.map((series) => Math.max(0, getSeriesValue(point, series.dataKey))),
+        ),
+      ),
+    [activeSeries, chartData],
+  );
+
+  const totalRevenue = useMemo(
+    () => displaySeries.reduce((sum, point) => sum + point.revenue_nanoton, 0),
     [displaySeries],
   );
 
@@ -248,6 +294,29 @@ export default function DashboardSection() {
             </AdminChip>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {REVENUE_SERIES.map((series) => (
+            <AdminChip
+              key={series.id}
+              active={enabledSeries[series.id]}
+              onClick={() =>
+                setEnabledSeries((prev) => {
+                  const next = { ...prev, [series.id]: !prev[series.id] };
+                  if (Object.values(next).some(Boolean)) return next;
+                  return prev;
+                })
+              }
+            >
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: series.color }}
+                />
+                {series.label}
+              </span>
+            </AdminChip>
+          ))}
+        </div>
 
         {displaySeries.length === 0 ? (
           <AdminEmpty>{loadingRevenue ? "Загружаем…" : "Появится после первых транзакций и ставок."}</AdminEmpty>
@@ -256,9 +325,9 @@ export default function DashboardSection() {
             <div className="overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-raised)] p-4">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--admin-muted)]">Revenue</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--admin-muted)]">Сумма за период</p>
                   <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--admin-fg)]">
-                    {formatTON(displaySeries[displaySeries.length - 1]?.revenue_nanoton ?? 0)} TON
+                    {formatTON(totalRevenue)} TON
                   </p>
                 </div>
                 <p className="max-w-xs text-right text-xs leading-relaxed text-[var(--admin-muted)]">
@@ -291,20 +360,24 @@ export default function DashboardSection() {
                       tickLine={false}
                       axisLine={false}
                       width={72}
-                      tickFormatter={(value: number) => `${formatTON(value)} TON`}
+                      domain={[0, maxRevenue]}
+                      tickFormatter={(value: number) => `${formatTON(Number(value))} TON`}
                     />
                     <Tooltip
                       cursor={{ stroke: "rgba(45,212,191,0.32)", strokeWidth: 1.5 }}
                       content={<RevenueTooltip />}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="revenueNanoton"
-                      stroke="url(#adminRevenueStroke)"
-                      strokeWidth={3}
-                      dot={{ r: 3, fill: "var(--admin-accent)", stroke: "var(--admin-bg)", strokeWidth: 2 }}
-                      activeDot={{ r: 6, fill: "var(--admin-accent)", stroke: "var(--admin-bg)", strokeWidth: 3 }}
-                    />
+                    {activeSeries.map((series) => (
+                      <Line
+                        key={series.id}
+                        type="monotone"
+                        dataKey={series.dataKey}
+                        stroke={series.id === "revenue" ? "url(#adminRevenueStroke)" : series.color}
+                        strokeWidth={series.id === "revenue" ? 3 : 2.25}
+                        dot={{ r: 3, fill: series.color, stroke: "var(--admin-bg)", strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: series.color, stroke: "var(--admin-bg)", strokeWidth: 3 }}
+                      />
+                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </div>

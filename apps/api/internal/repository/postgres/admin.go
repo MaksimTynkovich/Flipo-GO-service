@@ -147,6 +147,17 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 		return nil, err
 	}
 
+	withdrawalsRows := make([]daySumRow, 0, dayCount)
+	if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+		Select("DATE_TRUNC('day', confirmed_at) AS day, COALESCE(SUM(amount_nanoton - fee_nanoton), 0) AS sum").
+		Where("direction = ? AND status = ? AND confirmed_at >= ? AND confirmed_at < ?",
+			domain.TonDirectionWithdraw, domain.TonStatusCompleted, start, end).
+		Group("DATE_TRUNC('day', confirmed_at)").
+		Order("day").
+		Scan(&withdrawalsRows).Error; err != nil {
+		return nil, err
+	}
+
 	betsRows := make([]daySumRow, 0, dayCount)
 	if err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
 		Select("DATE_TRUNC('day', created_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
@@ -161,6 +172,10 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 	for _, row := range depositsRows {
 		depositsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
 	}
+	withdrawalsByDay := make(map[string]int64, len(withdrawalsRows))
+	for _, row := range withdrawalsRows {
+		withdrawalsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
+	}
 	betsByDay := make(map[string]int64, len(betsRows))
 	for _, row := range betsRows {
 		betsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
@@ -171,12 +186,14 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 		day := start.AddDate(0, 0, i)
 		period := day.Format("2006-01-02")
 		deposits := depositsByDay[period]
+		withdrawals := withdrawalsByDay[period]
 		bets := betsByDay[period]
 		points = append(points, domain.RevenueTimeseriesPoint{
-			Period:          period,
-			RevenueNanoton:  deposits,
-			DepositsNanoton: deposits,
-			GameBetsNanoton: bets,
+			Period:             period,
+			RevenueNanoton:     deposits,
+			DepositsNanoton:    deposits,
+			WithdrawalsNanoton: withdrawals,
+			GameBetsNanoton:    bets,
 		})
 	}
 	return points, nil

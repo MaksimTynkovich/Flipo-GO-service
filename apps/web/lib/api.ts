@@ -1043,6 +1043,7 @@ export type AdminRevenuePoint = {
   period: string;
   revenue_nanoton: number;
   deposits_nanoton: number;
+  withdrawals_nanoton: number;
   game_bets_nanoton: number;
 };
 
