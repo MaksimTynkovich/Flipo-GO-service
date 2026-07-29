@@ -916,7 +916,7 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 		return err
 	}
 	for i := range entries {
-		if entries[i].Weight <= 0 {
+		if entries[i].Weight < 0 {
 			return domain.ErrInvalidAmount
 		}
 		if entries[i].FloorPriceNanoton < 0 || entries[i].AmountNanoton < 0 {
@@ -967,6 +967,16 @@ func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entrie
 				entries[i].DisplayName = entries[i].CollectionSlug
 			}
 		}
+	}
+	hasPositiveWeight := false
+	for _, e := range entries {
+		if e.Weight > 0 {
+			hasPositiveWeight = true
+			break
+		}
+	}
+	if len(entries) > 0 && !hasPositiveWeight {
+		return domain.ErrCaseNoLoot
 	}
 	if err := s.cases.ReplaceLoot(ctx, caseID, entries); err != nil {
 		return err

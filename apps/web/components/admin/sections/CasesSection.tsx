@@ -246,7 +246,7 @@ function lootToDraft(entries: AdminCaseLootEntry[]): LootDraft[] {
       tile_background_color: e.tile_background_color || "",
       backdrop: normalizeLootBackdrop(e.backdrop),
       sort_order: e.sort_order ?? i,
-      weight: e.weight > 0 ? e.weight : 1,
+      weight: Math.max(0, e.weight ?? 0),
       floor_price_nanoton: e.floor_price_nanoton ?? 0,
       amount_nanoton: e.amount_nanoton ?? (prizeType === "ton" ? e.floor_price_nanoton ?? 0 : 0),
     };
@@ -342,7 +342,7 @@ function LootChanceField({
   return (
     <AdminField
       label="шанс %"
-      hint="Задаёт долю этого приза; остальные веса пересчитываются пропорционально"
+      hint="Доля этого приза среди открытий. 0% — приз виден в кейсе, но никогда не выпадает. Остальные веса пересчитываются пропорционально."
     >
       <input
         className="input-field tabular-nums"
@@ -760,8 +760,8 @@ export default function CasesSection() {
     for (let i = 0; i < loot.length; i += 1) {
       const row = loot[i];
       const prizeType = row.prize_type === "ton" ? "ton" : "gift";
-      if (row.weight <= 0) {
-        showToast({ title: `Приз ${i + 1}: weight должен быть > 0`, variant: "error" });
+      if (row.weight < 0) {
+        showToast({ title: `Приз ${i + 1}: weight не может быть отрицательным`, variant: "error" });
         return;
       }
       if (prizeType === "ton") {
@@ -808,6 +808,13 @@ export default function CasesSection() {
         amount_nanoton: 0,
       });
     }
+    if (cleaned.length > 0 && cleaned.every((r) => r.weight <= 0)) {
+      showToast({
+        title: "Хотя бы у одного приза шанс должен быть больше 0%",
+        variant: "error",
+      });
+      return;
+    }
     setSavingLoot(true);
     try {
       await replaceAdminCaseLoot(draft.id, cleaned);
@@ -829,7 +836,7 @@ export default function CasesSection() {
   function applyLootWeights(weights: Record<string, number>) {
     setLoot((prev) =>
       prev.map((row) =>
-        weights[row._key] != null ? { ...row, weight: Math.max(1, Math.round(weights[row._key])) } : row,
+        weights[row._key] != null ? { ...row, weight: Math.max(0, Math.round(weights[row._key])) } : row,
       ),
     );
   }
@@ -1973,15 +1980,15 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              <AdminField label="weight">
+                              <AdminField label="weight" hint="0 = шанс 0%, приз не выпадает">
                                 <input
                                   className="input-field"
                                   type="number"
-                                  min={1}
+                                  min={0}
                                   value={row.weight}
                                   onChange={(e) =>
                                     updateLoot(row._key, {
-                                      weight: Math.max(1, Number.parseInt(e.target.value, 10) || 1),
+                                      weight: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
                                     })
                                   }
                                 />

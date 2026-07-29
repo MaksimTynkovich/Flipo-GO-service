@@ -37,7 +37,8 @@ export function percentInputToBps(percent: string): number {
 
 /**
  * Set one row's chance to targetPct; rescale other rows proportionally onto a
- * 10000-part basis so fine percentages (1%, 0.5%) work with integer weights.
+ * 10000-part basis so fine percentages (1%, 0.5%, 0%) work with integer weights.
+ * targetPct = 0 → weight 0 (prize stays in loot table but never rolls).
  */
 export function applyChancePercentWeights(
   targetPct: number,
@@ -47,30 +48,35 @@ export function applyChancePercentWeights(
   const result: Record<string, number> = {};
   if (entries.length === 0) return result;
 
+  let p = targetPct;
+  if (!Number.isFinite(p) || p < 0) p = 0;
+  if (p > 100) p = 100;
+
   if (entries.length === 1) {
-    result[entries[0].key] = CHANCE_WEIGHT_BASIS;
+    result[entries[0].key] = p <= 0 ? 0 : CHANCE_WEIGHT_BASIS;
     return result;
   }
 
   const others = entries.filter((e) => e.key !== currentKey);
   const otherSum = others.reduce((s, e) => s + Math.max(0, e.weight), 0);
 
-  let p = targetPct;
-  if (!Number.isFinite(p) || p <= 0) p = 0.01;
-  // Leave at least 0.01% for others combined.
-  if (p >= 100) p = 99.99;
-
-  const thisW = Math.max(1, Math.round((p / 100) * CHANCE_WEIGHT_BASIS));
-  const otherTarget = Math.max(others.length, CHANCE_WEIGHT_BASIS - thisW);
+  const thisW = Math.round((p / 100) * CHANCE_WEIGHT_BASIS);
+  const otherTarget = Math.max(0, CHANCE_WEIGHT_BASIS - thisW);
 
   result[currentKey] = thisW;
 
   if (otherSum <= 0) {
-    const each = Math.max(1, Math.floor(otherTarget / others.length));
+    if (otherTarget <= 0 || others.length === 0) {
+      others.forEach((e) => {
+        result[e.key] = 0;
+      });
+      return result;
+    }
+    const each = Math.max(0, Math.floor(otherTarget / others.length));
     let assigned = 0;
     others.forEach((e, i) => {
       if (i === others.length - 1) {
-        result[e.key] = Math.max(1, otherTarget - assigned);
+        result[e.key] = Math.max(0, otherTarget - assigned);
       } else {
         result[e.key] = each;
         assigned += each;
@@ -82,9 +88,9 @@ export function applyChancePercentWeights(
   let assigned = 0;
   others.forEach((e, i) => {
     if (i === others.length - 1) {
-      result[e.key] = Math.max(1, otherTarget - assigned);
+      result[e.key] = Math.max(0, otherTarget - assigned);
     } else {
-      const w = Math.max(1, Math.round((Math.max(0, e.weight) / otherSum) * otherTarget));
+      const w = Math.max(0, Math.round((Math.max(0, e.weight) / otherSum) * otherTarget));
       result[e.key] = w;
       assigned += w;
     }
@@ -99,13 +105,13 @@ export function weightFromChancePercent(
   weightTotal: number,
 ): number {
   const other = Math.max(0, weightTotal - Math.max(0, currentWeight));
-  if (other <= 0) return Math.max(1, currentWeight || 1);
-  if (!Number.isFinite(targetPct) || targetPct <= 0) return 1;
+  if (other <= 0) return Math.max(0, currentWeight || 0);
+  if (!Number.isFinite(targetPct) || targetPct <= 0) return 0;
   if (targetPct >= 100) {
     return Math.max(1, Math.round(other * 9999));
   }
   const w = Math.round((other * targetPct) / (100 - targetPct));
-  return Math.max(1, w);
+  return Math.max(0, w);
 }
 
 export function chancePercentFromWeight(weight: number, weightTotal: number): number {
