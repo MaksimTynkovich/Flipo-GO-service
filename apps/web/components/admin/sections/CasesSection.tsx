@@ -87,6 +87,11 @@ const DEFAULT_CATALOG_ECONOMY: AdminCaseCatalogSettings = {
   bank_bias_weight: 50,
   bank_max_prize_bps: 5000,
   bank_fat_paused: false,
+  bank_recovery_smooth_enabled: true,
+  bank_recovery_drain_opens: 2,
+  bank_recovery_relief_opens: 1,
+  bank_recovery_relief_max_prize_bps: 3000,
+  bank_recovery_pace_counter: 0,
   daily_pool_enabled: false,
   daily_pool_nanoton: 0,
   daily_pool_max_prize_bps: 5000,
@@ -509,6 +514,10 @@ export default function CasesSection() {
         bank_bias_weight: economy.bank_bias_weight,
         bank_max_prize_bps: economy.bank_max_prize_bps,
         bank_fat_paused: economy.bank_fat_paused,
+        bank_recovery_smooth_enabled: economy.bank_recovery_smooth_enabled,
+        bank_recovery_drain_opens: economy.bank_recovery_drain_opens,
+        bank_recovery_relief_opens: economy.bank_recovery_relief_opens,
+        bank_recovery_relief_max_prize_bps: economy.bank_recovery_relief_max_prize_bps,
         bank_adjust_nanoton: adjustNanoton,
         daily_pool_enabled: economy.daily_pool_enabled,
         daily_pool_max_prize_bps: economy.daily_pool_max_prize_bps,
@@ -1094,6 +1103,64 @@ export default function CasesSection() {
             onChangeBps={(v) => setEconomy((s) => ({ ...s, bank_max_prize_bps: v }))}
             hint="Максимум, который можно отдать одним призом от текущего запаса. Например, 50% значит: если в банке 100 TON, приз дороже 50 TON не выпадет. Для новичка: 30–50%."
           />
+          <label className="flex items-center gap-2 text-sm text-muted sm:col-span-2 lg:col-span-3">
+            <input
+              type="checkbox"
+              checked={economy.bank_recovery_smooth_enabled !== false}
+              onChange={(e) =>
+                setEconomy((s) => ({ ...s, bank_recovery_smooth_enabled: e.target.checked }))
+              }
+            />
+            <span className="inline-flex items-center gap-1.5">
+              Плавный recovery
+              <AdminInfoHint
+                label="Плавный recovery"
+                hint="Вместо серии только самых дешёвых призов: цикл «N экономных → M умеренных». Рекомендуемый старт: 2 / 1 / 30%. Счётчик сбрасывается при выходе из recovery."
+              />
+            </span>
+          </label>
+          <AdminIntField
+            label="Drain opens"
+            value={economy.bank_recovery_drain_opens ?? 2}
+            onChange={(v) => setEconomy((s) => ({ ...s, bank_recovery_drain_opens: v }))}
+            min={1}
+            hint="Сколько подряд экономных (дешёвых) открытий в цикле recovery. Обычно 2."
+          />
+          <AdminIntField
+            label="Relief opens"
+            value={economy.bank_recovery_relief_opens ?? 1}
+            onChange={(v) => setEconomy((s) => ({ ...s, bank_recovery_relief_opens: v }))}
+            min={1}
+            hint="Сколько умеренных «разрядок» после drain. Обычно 1 (паттерн 2+1)."
+          />
+          <AdminPercentField
+            label="Relief max prize %"
+            valueBps={economy.bank_recovery_relief_max_prize_bps ?? 3000}
+            onChangeBps={(v) =>
+              setEconomy((s) => ({ ...s, bank_recovery_relief_max_prize_bps: v }))
+            }
+            hint="Потолок приза в фазе relief от баланса банка. Чем ближе банк к recovery target, тем выше реальный потолок. Для новичка: 30%."
+          />
+          <p className="text-xs text-muted sm:col-span-2 lg:col-span-3">
+            Цикл recovery:{" "}
+            <span className="font-medium text-foreground/90">
+              {(() => {
+                if (!economy.bank_recovery_active) return "не активен";
+                if (economy.bank_recovery_smooth_enabled === false)
+                  return "классический (без плавности)";
+                const drain = economy.bank_recovery_drain_opens ?? 2;
+                const relief = economy.bank_recovery_relief_opens ?? 1;
+                const pace = economy.bank_recovery_pace_counter ?? 0;
+                const cycle = Math.max(1, drain + relief);
+                const idx = ((pace % cycle) + cycle) % cycle;
+                const phase = idx < drain ? "drain" : "relief";
+                return `${phase} · pace ${pace} / ${cycle}`;
+              })()}
+            </span>
+            {economy.bank_recovery_smooth_enabled !== false
+              ? " · при маленьком loot (1–2 приза) плавность ограничена"
+              : null}
+          </p>
           <AdminField
             label="Корректировка банка (± TON)"
             hint="Ручное пополнение или уменьшение основного запаса. Используйте, если хотите быстро добавить стартовый резерв или скорректировать цифру вручную."
@@ -1169,6 +1236,10 @@ bank_recovery_target_nanoton: 100_000_000_000 # выключаем эконом�
 bank_bias_weight: 50              # средняя сила экономии
 bank_max_prize_bps: 4000          # один приз не дороже 40% банка
 bank_fat_paused: false
+bank_recovery_smooth_enabled: true
+bank_recovery_drain_opens: 2      # два дешёвых
+bank_recovery_relief_opens: 1     # одно умеренное
+bank_recovery_relief_max_prize_bps: 3000  # до 30% банка в relief
 daily_pool_enabled: true
 daily_pool_daily_refill_nanoton: 10_000_000_000  # daily бюджет 10 TON в день
 daily_pool_max_prize_bps: 3000                    # один daily приз не дороже 30%

@@ -50,6 +50,27 @@ func TestIsUnbackedCaseClaim(t *testing.T) {
 	}
 }
 
+func TestIsCaseClaimItemBackedHouseGift(t *testing.T) {
+	caseID := uuid.New()
+	lootID := uuid.New()
+	item := domain.InventoryItem{
+		TelegramTxRef:  "deposit:abc123",
+		TelegramGiftID: "snakebox-154039",
+		Metadata: datatypes.JSON([]byte(`{
+			"fulfillment":"backed",
+			"case_id":"` + caseID.String() + `",
+			"loot_entry_id":"` + lootID.String() + `",
+			"case_cashout_nanoton":1500000000
+		}`)),
+	}
+	if !domain.IsCaseClaimItem(item) {
+		t.Fatal("expected backed house gift to be a case claim")
+	}
+	if domain.IsUnbackedCaseClaim(item) {
+		t.Fatal("expected backed house gift")
+	}
+}
+
 func TestRunCaseSimulateTheoretical(t *testing.T) {
 	idA, idB := uuid.New(), uuid.New()
 	c := domain.Case{

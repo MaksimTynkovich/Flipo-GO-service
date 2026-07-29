@@ -472,6 +472,9 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	if pool.Enabled && prizeNanoton > 0 {
 		_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -prizeNanoton)
 	}
+	if pool.Enabled && poolKind == domain.CasePoolPaid {
+		_, _ = s.cases.AdvancePaidRecoveryPace(ctx)
+	}
 
 	open := &domain.CaseOpen{
 		ID:               openID,
@@ -800,6 +803,11 @@ type CatalogSettingsPatch struct {
 	BankFatPaused             *bool
 	BankAdjustNanoton         *int64 // relative delta for paid bank
 
+	BankRecoverySmoothEnabled     *bool
+	BankRecoveryDrainOpens        *int
+	BankRecoveryReliefOpens       *int
+	BankRecoveryReliefMaxPrizeBps *int
+
 	DailyPoolEnabled            *bool
 	DailyPoolNanoton            *int64
 	DailyPoolMaxPrizeBps        *int
@@ -847,6 +855,18 @@ func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogS
 	}
 	if patch.BankFatPaused != nil {
 		settings.BankFatPaused = *patch.BankFatPaused
+	}
+	if patch.BankRecoverySmoothEnabled != nil {
+		settings.BankRecoverySmoothEnabled = *patch.BankRecoverySmoothEnabled
+	}
+	if patch.BankRecoveryDrainOpens != nil {
+		settings.BankRecoveryDrainOpens = *patch.BankRecoveryDrainOpens
+	}
+	if patch.BankRecoveryReliefOpens != nil {
+		settings.BankRecoveryReliefOpens = *patch.BankRecoveryReliefOpens
+	}
+	if patch.BankRecoveryReliefMaxPrizeBps != nil {
+		settings.BankRecoveryReliefMaxPrizeBps = *patch.BankRecoveryReliefMaxPrizeBps
 	}
 	if patch.BankAdjustNanoton != nil {
 		settings.BankNanoton += *patch.BankAdjustNanoton
@@ -1011,8 +1031,11 @@ func (s *Service) grantPrize(
 					metaMap[domain.CaseClaimMetaSymbol] = houseAttrs.Symbol
 				}
 				meta, _ := json.Marshal(metaMap)
-				_ = s.inventory.BindTelegramGift(ctx, house.ID, house.TelegramGiftID, house.ImageURL, meta, domain.CaseFulfillmentBacked)
+				if err := s.inventory.BindTelegramGift(ctx, house.ID, house.TelegramGiftID, house.ImageURL, meta, domain.CaseFulfillmentBacked, txRef); err != nil {
+					return nil, false, err
+				}
 				house.Metadata = datatypes.JSON(meta)
+				house.TelegramTxRef = txRef
 				return house, true, nil
 			}
 		}

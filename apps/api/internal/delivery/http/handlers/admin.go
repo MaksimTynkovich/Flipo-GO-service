@@ -1085,6 +1085,11 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		BankFatPaused             *bool  `json:"bank_fat_paused"`
 		BankAdjustNanoton         *int64 `json:"bank_adjust_nanoton"`
 
+		BankRecoverySmoothEnabled     *bool `json:"bank_recovery_smooth_enabled"`
+		BankRecoveryDrainOpens        *int  `json:"bank_recovery_drain_opens"`
+		BankRecoveryReliefOpens       *int  `json:"bank_recovery_relief_opens"`
+		BankRecoveryReliefMaxPrizeBps *int  `json:"bank_recovery_relief_max_prize_bps"`
+
 		DailyPoolEnabled            *bool  `json:"daily_pool_enabled"`
 		DailyPoolNanoton            *int64 `json:"daily_pool_nanoton"`
 		DailyPoolMaxPrizeBps        *int   `json:"daily_pool_max_prize_bps"`
@@ -1111,9 +1116,13 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		BankRecoveryTargetNanoton:   req.BankRecoveryTargetNanoton,
 		BankBiasWeight:              req.BankBiasWeight,
 		BankMaxPrizeBps:             req.BankMaxPrizeBps,
-		BankFatPaused:               req.BankFatPaused,
-		BankAdjustNanoton:           req.BankAdjustNanoton,
-		DailyPoolEnabled:            req.DailyPoolEnabled,
+		BankFatPaused:                   req.BankFatPaused,
+		BankAdjustNanoton:               req.BankAdjustNanoton,
+		BankRecoverySmoothEnabled:       req.BankRecoverySmoothEnabled,
+		BankRecoveryDrainOpens:          req.BankRecoveryDrainOpens,
+		BankRecoveryReliefOpens:         req.BankRecoveryReliefOpens,
+		BankRecoveryReliefMaxPrizeBps:   req.BankRecoveryReliefMaxPrizeBps,
+		DailyPoolEnabled:                req.DailyPoolEnabled,
 		DailyPoolNanoton:            req.DailyPoolNanoton,
 		DailyPoolMaxPrizeBps:        req.DailyPoolMaxPrizeBps,
 		DailyPoolDailyRefillNanoton: req.DailyPoolDailyRefillNanoton,

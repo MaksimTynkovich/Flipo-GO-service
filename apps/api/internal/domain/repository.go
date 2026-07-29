@@ -57,7 +57,7 @@ type InventoryRepository interface {
 	TakeHouseGiftForModel(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName, backdrop string) (*InventoryItem, error)
 	// HasHouseGift reports whether bot stock has a matching gift (available or market-locked).
 	HasHouseGift(ctx context.Context, botUserID uuid.UUID, collectionSlug, modelName, backdrop string) (bool, error)
-	BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment string) error
+	BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment, telegramTxRef string) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
 	SetFloorPrice(ctx context.Context, slug string, price int64) error
 }
@@ -83,6 +83,8 @@ type CaseRepository interface {
 	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
 	// ApplyCasePoolDelta adds delta to the selected pool and syncs paid-bank hysteresis.
 	ApplyCasePoolDelta(ctx context.Context, kind CasePoolKind, delta int64) (*CaseCatalogSettings, error)
+	// AdvancePaidRecoveryPace bumps drain/relief counter after a successful paid open in recovery.
+	AdvancePaidRecoveryPace(ctx context.Context) (*CaseCatalogSettings, error)
 	// CaseOpenStats aggregates paid opens for admin P&L (since optional; nil = all time).
 	CaseOpenStats(ctx context.Context, since *time.Time) (*CaseOpenStats, error)
 	GetLiveFeedSettings(ctx context.Context) (*CaseLiveFeedSettings, error)

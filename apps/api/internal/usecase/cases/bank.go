@@ -19,6 +19,61 @@ func lootPrice(e domain.CaseLootEntry, floors map[uuid.UUID]int64) int64 {
 	return domain.CaseLootPrizeValueNanoton(e)
 }
 
+// recoveryMaxPrizeNanoton returns the smooth-recovery prize ceiling for this open.
+func recoveryMaxPrizeNanoton(pool domain.CasePoolSnapshot, loot []domain.CaseLootEntry, floors map[uuid.UUID]int64) int64 {
+	if !pool.Recovery || !pool.RecoverySmooth {
+		return pool.MaxPrizeNanoton()
+	}
+	phase := pool.RecoveryPhase
+	if phase == "" {
+		phase = domain.CaseRecoveryPhase(pool.RecoveryDrainOpens, pool.RecoveryReliefOpens, pool.RecoveryPaceCounter)
+	}
+	cheap := cheapestLoot(loot, floors)
+	cheapPrice := lootPrice(cheap, floors)
+	if cheapPrice < 0 {
+		cheapPrice = 0
+	}
+
+	if phase == domain.CaseRecoveryPhaseDrain {
+		// Allow the cheap half of the table (below median) so drain isn't a single-item lock.
+		median := medianLootPrice(loot, floors)
+		if median > cheapPrice {
+			return median - 1
+		}
+		if cheapPrice <= 0 {
+			return 0
+		}
+		return cheapPrice
+	}
+
+	// Relief: scale bank % by recovery progress so early relief stays modest.
+	bal := pool.Balance
+	if bal < 0 {
+		bal = 0
+	}
+	reliefBps := pool.RecoveryReliefMaxPrizeBps
+	if reliefBps <= 0 {
+		reliefBps = pool.MaxPrizeBps
+	}
+	if pool.MaxPrizeBps > 0 && reliefBps > pool.MaxPrizeBps {
+		reliefBps = pool.MaxPrizeBps
+	}
+	ceiling := bal * int64(reliefBps) / 10000
+	progress := pool.RecoveryProgress
+	if progress <= 0 {
+		progress = 0.15 // floor so relief is never zero when bank has funds
+	}
+	ceiling = int64(float64(ceiling) * (0.35 + 0.65*progress))
+	if ceiling < cheapPrice {
+		ceiling = cheapPrice
+	}
+	// Also never exceed standard max-prize gate when bank is positive.
+	if hard := pool.MaxPrizeNanoton(); hard > 0 && ceiling > hard {
+		ceiling = hard
+	}
+	return ceiling
+}
+
 // filterLootForPool applies hard ceiling, fat-pause, and optional stock gate.
 // stockOK may be nil (treat as skip stock checks).
 func filterLootForPool(
@@ -33,6 +88,10 @@ func filterLootForPool(
 	}
 
 	maxPrize := pool.MaxPrizeNanoton()
+	smooth := pool.Recovery && pool.RecoverySmooth && pool.Kind == domain.CasePoolPaid
+	if smooth {
+		maxPrize = recoveryMaxPrizeNanoton(pool, loot, floors)
+	}
 	median := medianLootPrice(loot, floors)
 
 	out := make([]domain.CaseLootEntry, 0, len(loot))
@@ -68,7 +127,54 @@ func filterLootForPool(
 	if len(out) > 0 {
 		return out
 	}
+	if smooth {
+		return bottomTierLoot(loot, floors, maxPrize, 3)
+	}
 	return []domain.CaseLootEntry{cheapestLoot(loot, floors)}
+}
+
+// bottomTierLoot keeps up to `tiers` cheapest positive-weight entries (by price).
+func bottomTierLoot(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64, maxPrize int64, tiers int) []domain.CaseLootEntry {
+	if tiers < 1 {
+		tiers = 1
+	}
+	type scored struct {
+		e     domain.CaseLootEntry
+		price int64
+	}
+	cands := make([]scored, 0, len(loot))
+	for _, e := range loot {
+		if e.Weight <= 0 {
+			continue
+		}
+		p := lootPrice(e, floors)
+		if maxPrize > 0 && p > maxPrize {
+			continue
+		}
+		cands = append(cands, scored{e: e, price: p})
+	}
+	if len(cands) == 0 {
+		c := cheapestLoot(loot, floors)
+		return []domain.CaseLootEntry{c}
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].price != cands[j].price {
+			return cands[i].price < cands[j].price
+		}
+		return cands[i].e.Weight > cands[j].e.Weight
+	})
+	if len(cands) > tiers {
+		cands = cands[:tiers]
+	}
+	out := make([]domain.CaseLootEntry, 0, len(cands))
+	for _, c := range cands {
+		e := c.e
+		if e.Weight <= 0 {
+			e.Weight = 1
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 func medianLootPrice(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64) int64 {
@@ -121,6 +227,11 @@ func biasLootWeights(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64, po
 
 	strength := pool.BiasWeight
 	surplus := pool.TargetBalance > 0 && pool.Balance >= pool.TargetBalance && !pool.Recovery
+	smooth := pool.Recovery && pool.RecoverySmooth && pool.Kind == domain.CasePoolPaid
+	phase := pool.RecoveryPhase
+	if phase == "" && smooth {
+		phase = domain.CaseRecoveryPhase(pool.RecoveryDrainOpens, pool.RecoveryReliefOpens, pool.RecoveryPaceCounter)
+	}
 
 	for i := range out {
 		price := lootPrice(out[i], floors)
@@ -137,6 +248,17 @@ func biasLootWeights(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64, po
 				}
 			} else {
 				w = w * (100 + strength) / 100
+			}
+			if smooth && phase == domain.CaseRecoveryPhaseDrain && price >= median && price > 0 {
+				// Extra cut on fat during drain so mid-tier rarely slips through bottomTier.
+				w = w * (100 - strength/2) / 100
+				if w < 1 {
+					w = 1
+				}
+			}
+			if smooth && phase == domain.CaseRecoveryPhaseRelief && price > 0 && price < median {
+				// Mild mid-tier lift in relief (still below median).
+				w = w * (100 + strength/4) / 100
 			}
 		case surplus:
 			if price >= median && price > 0 {

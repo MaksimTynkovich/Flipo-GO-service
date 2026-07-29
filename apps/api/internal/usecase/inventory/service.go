@@ -420,7 +420,7 @@ func (s *Service) FulfillPendingWithdrawal(ctx context.Context, itemID uuid.UUID
 	metaMap[domain.CaseClaimMetaFulfillment] = domain.CaseFulfillmentBacked
 	metaMap[domain.CaseClaimMetaCollection] = item.CollectionSlug
 	meta, _ := json.Marshal(metaMap)
-	if err := s.inventory.BindTelegramGift(ctx, itemID, telegramGiftID, item.ImageURL, meta, domain.CaseFulfillmentBacked); err != nil {
+	if err := s.inventory.BindTelegramGift(ctx, itemID, telegramGiftID, item.ImageURL, meta, domain.CaseFulfillmentBacked, ""); err != nil {
 		return err
 	}
 

@@ -10,12 +10,17 @@ import { cn } from "@/lib/utils";
 /** How many prize tiles must fit fully in the roulette viewport. */
 const VISIBLE_COUNT = 5;
 const ITEM_GAP = 6;
-/** Full cycles before the landing zone — more distance reads as a longer spin. */
+/** Full cycles before the landing zone when the loot pool is large enough. */
 const LOOPS = 10;
+/** Small loot pools still scroll at least this many tiles before landing. */
+const MIN_LAND_TILE_INDEX = 56;
 const IDLE_LOOPS = 3;
 /** Items kept after the winner so the right side of the viewport never goes empty. */
 const PAD_AFTER = 8;
-const SPIN_MS = 8000;
+/** Target reel speed — duration scales with travel distance. */
+const SPIN_PX_PER_MS = 2.35;
+const SPIN_MIN_MS = 2800;
+const SPIN_MAX_MS = 5200;
 const FALLBACK_ITEM_W = 56;
 
 type RevealLayout = {
@@ -76,19 +81,24 @@ function buildSpinStrip(
 ): { items: CaseLootPreview[]; targetIndex: number } {
   if (loot.length === 0) return { items: [], targetIndex: 0 };
   const base = shuffleCopy(loot);
+  const defaultLandStart = (LOOPS - 2) * base.length;
+  const landStart = Math.max(MIN_LAND_TILE_INDEX, defaultLandStart);
+  const landEnd = landStart + base.length;
+  const loopsNeeded = Math.ceil((landEnd + PAD_AFTER) / base.length) + 1;
   const items: CaseLootPreview[] = [];
-  for (let i = 0; i < LOOPS; i += 1) {
+  for (let i = 0; i < loopsNeeded; i += 1) {
     items.push(...base);
   }
   // Land in the second-to-last loop so a full loop remains after the winner.
-  const landLoopStart = (LOOPS - 2) * base.length;
-  const landLoopEnd = landLoopStart + base.length;
   let targetIndex = items.findIndex(
-    (item, idx) => idx >= landLoopStart && idx < landLoopEnd && item.id === winnerId,
+    (item, idx) => idx >= landStart && idx < landEnd && item.id === winnerId,
   );
   if (targetIndex < 0) {
     const winner = loot.find((l) => l.id === winnerId) || loot[0];
-    targetIndex = landLoopStart + Math.floor(base.length / 2);
+    targetIndex = landStart + Math.floor(base.length / 2);
+    if (targetIndex >= items.length) {
+      items.push(...base);
+    }
     items.splice(targetIndex, 0, winner);
   }
   // Guarantee enough tiles past the pointer so the strip never blanks on the right.
@@ -96,6 +106,11 @@ function buildSpinStrip(
     items.push(...base);
   }
   return { items, targetIndex };
+}
+
+function spinDurationMs(travelPx: number): number {
+  if (travelPx <= 0) return SPIN_MIN_MS;
+  return Math.min(SPIN_MAX_MS, Math.max(SPIN_MIN_MS, travelPx / SPIN_PX_PER_MS));
 }
 
 /** Ease-out quartic: fast reel-up, then a long soft brake into the winner. */
@@ -198,6 +213,7 @@ export function CaseOpenReveal({
     let cancelled = false;
     const from = 0;
     const travel = finalOffset - from;
+    const spinMs = spinDurationMs(travel);
 
     const finish = () => {
       if (completedRef.current) return;
@@ -211,7 +227,7 @@ export function CaseOpenReveal({
     const frame = (now: number) => {
       if (cancelled) return;
       if (!startAt) startAt = now;
-      const t = Math.min(1, (now - startAt) / SPIN_MS);
+      const t = Math.min(1, (now - startAt) / spinMs);
       paint(from + travel * easeOutQuartic(t));
       if (t < 1) {
         raf = window.requestAnimationFrame(frame);

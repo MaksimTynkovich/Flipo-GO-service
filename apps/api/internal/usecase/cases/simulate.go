@@ -118,7 +118,19 @@ func runCaseSimulateWithBank(
 	var prizeTotal int64
 	price := c.PriceNanoton
 	balance := pool.Balance
+	pace := pool.RecoveryPaceCounter
+	recovery := pool.Recovery
 	eligibleSet := map[uuid.UUID]struct{}{}
+
+	drainOpens := pool.RecoveryDrainOpens
+	reliefOpens := pool.RecoveryReliefOpens
+	if drainOpens < 1 {
+		drainOpens = 1
+	}
+	if reliefOpens < 1 {
+		reliefOpens = 1
+	}
+	cycle := drainOpens + reliefOpens
 
 	for i := 0; i < iterations; i++ {
 		snap := pool
@@ -129,8 +141,25 @@ func runCaseSimulateWithBank(
 		// Recompute recovery-ish flag for daily/promo from balance.
 		if snap.Kind != domain.CasePoolPaid {
 			snap.Recovery = snap.Balance <= 0
-		} else if snap.TargetBalance > 0 {
-			// Keep Recovery from settings hysteresis; soft surplus uses TargetBalance.
+		} else {
+			// Synthetic hysteresis for paid bank (mirrors SyncCaseBankHysteresis).
+			if recovery {
+				if snap.Balance >= snap.RecoveryTarget {
+					recovery = false
+					pace = 0
+				}
+			} else if snap.Balance <= snap.LossThreshold {
+				recovery = true
+			}
+			snap.Recovery = recovery
+			if snap.Recovery && snap.RecoverySmooth {
+				snap.RecoveryPaceCounter = pace
+				snap.RecoveryPhase = domain.CaseRecoveryPhase(drainOpens, reliefOpens, pace)
+				snap.RecoveryProgress = domain.CaseRecoveryProgress(snap.Balance, snap.LossThreshold, snap.RecoveryTarget)
+			} else {
+				snap.RecoveryPhase = ""
+				snap.RecoveryProgress = 0
+			}
 		}
 		filtered := filterLootForPool(loot, floors, snap, price, stockOK)
 		biased := biasLootWeights(filtered, floors, snap)
@@ -146,6 +175,16 @@ func runCaseSimulateWithBank(
 		prizeSums[entry.ID] += floor
 		prizeTotal += floor
 		balance = snap.Balance - floor
+
+		// Advance drain/relief pace after a successful paid open while still in recovery.
+		if snap.Kind == domain.CasePoolPaid && recovery && snap.RecoverySmooth && cycle > 0 {
+			if balance >= snap.RecoveryTarget {
+				recovery = false
+				pace = 0
+			} else {
+				pace = (pace + 1) % cycle
+			}
+		}
 	}
 
 	spent := int64(iterations) * price

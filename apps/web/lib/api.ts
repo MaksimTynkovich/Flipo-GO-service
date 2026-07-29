@@ -2384,6 +2384,11 @@ export type AdminCaseCatalogSettings = {
   bank_bias_weight?: number;
   bank_max_prize_bps?: number;
   bank_fat_paused?: boolean;
+  bank_recovery_smooth_enabled?: boolean;
+  bank_recovery_drain_opens?: number;
+  bank_recovery_relief_opens?: number;
+  bank_recovery_relief_max_prize_bps?: number;
+  bank_recovery_pace_counter?: number;
 
   daily_pool_enabled?: boolean;
   daily_pool_nanoton?: number;
@@ -2410,6 +2415,10 @@ export type AdminCaseCatalogSettingsPatch = {
   bank_max_prize_bps?: number;
   bank_fat_paused?: boolean;
   bank_adjust_nanoton?: number;
+  bank_recovery_smooth_enabled?: boolean;
+  bank_recovery_drain_opens?: number;
+  bank_recovery_relief_opens?: number;
+  bank_recovery_relief_max_prize_bps?: number;
   daily_pool_enabled?: boolean;
   daily_pool_nanoton?: number;
   daily_pool_max_prize_bps?: number;

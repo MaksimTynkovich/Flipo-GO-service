@@ -124,6 +124,13 @@ type CaseCatalogSettings struct {
 	BankMaxPrizeBps           int   `gorm:"not null;default:5000" json:"bank_max_prize_bps"`
 	BankFatPaused             bool  `gorm:"not null;default:false" json:"bank_fat_paused"`
 
+	// Smooth recovery — paced drain/relief instead of 100% cheapest prizes.
+	BankRecoverySmoothEnabled     bool `gorm:"not null;default:true" json:"bank_recovery_smooth_enabled"`
+	BankRecoveryDrainOpens        int  `gorm:"not null;default:2" json:"bank_recovery_drain_opens"`
+	BankRecoveryReliefOpens       int  `gorm:"not null;default:1" json:"bank_recovery_relief_opens"`
+	BankRecoveryReliefMaxPrizeBps int  `gorm:"not null;default:3000" json:"bank_recovery_relief_max_prize_bps"`
+	BankRecoveryPaceCounter       int  `gorm:"not null;default:0" json:"bank_recovery_pace_counter"`
+
 	// Daily pool — isolated budget for daily cases.
 	DailyPoolEnabled            bool       `gorm:"not null;default:false" json:"daily_pool_enabled"`
 	DailyPoolNanoton            int64      `gorm:"not null;default:0" json:"daily_pool_nanoton"`
@@ -157,6 +164,9 @@ const (
 	CasePoolPaid  CasePoolKind = "paid"
 	CasePoolDaily CasePoolKind = "daily"
 	CasePoolPromo CasePoolKind = "promo"
+
+	CaseRecoveryPhaseDrain  = "drain"
+	CaseRecoveryPhaseRelief = "relief"
 )
 
 // CasePoolForKind maps case kind to economy pool.
@@ -169,6 +179,79 @@ func CasePoolForKind(kind string) CasePoolKind {
 	default:
 		return CasePoolPaid
 	}
+}
+
+// NormalizeCaseRecoverySmooth clamps smooth-recovery knobs to safe ranges.
+func NormalizeCaseRecoverySmooth(s *CaseCatalogSettings) {
+	if s == nil {
+		return
+	}
+	if s.BankRecoveryDrainOpens < 1 {
+		s.BankRecoveryDrainOpens = 1
+	}
+	if s.BankRecoveryDrainOpens > 50 {
+		s.BankRecoveryDrainOpens = 50
+	}
+	if s.BankRecoveryReliefOpens < 1 {
+		s.BankRecoveryReliefOpens = 1
+	}
+	if s.BankRecoveryReliefOpens > 50 {
+		s.BankRecoveryReliefOpens = 50
+	}
+	if s.BankRecoveryReliefMaxPrizeBps < 0 {
+		s.BankRecoveryReliefMaxPrizeBps = 0
+	}
+	if s.BankRecoveryReliefMaxPrizeBps > 10000 {
+		s.BankRecoveryReliefMaxPrizeBps = 10000
+	}
+	cycle := s.BankRecoveryDrainOpens + s.BankRecoveryReliefOpens
+	if cycle > 0 && s.BankRecoveryPaceCounter >= cycle {
+		s.BankRecoveryPaceCounter %= cycle
+	}
+	if s.BankRecoveryPaceCounter < 0 {
+		s.BankRecoveryPaceCounter = 0
+	}
+}
+
+// CaseRecoveryPhase returns drain|relief for the current pace counter (paid smooth recovery).
+func CaseRecoveryPhase(drainOpens, reliefOpens, paceCounter int) string {
+	if drainOpens < 1 {
+		drainOpens = 1
+	}
+	if reliefOpens < 1 {
+		reliefOpens = 1
+	}
+	cycle := drainOpens + reliefOpens
+	idx := paceCounter
+	if cycle > 0 {
+		idx = paceCounter % cycle
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	if idx < drainOpens {
+		return CaseRecoveryPhaseDrain
+	}
+	return CaseRecoveryPhaseRelief
+}
+
+// CaseRecoveryProgress is 0..1 how far bank has climbed from loss threshold toward recovery target.
+func CaseRecoveryProgress(balance, lossThreshold, recoveryTarget int64) float64 {
+	span := recoveryTarget - lossThreshold
+	if span <= 0 {
+		if balance >= recoveryTarget {
+			return 1
+		}
+		return 0
+	}
+	p := float64(balance-lossThreshold) / float64(span)
+	if p < 0 {
+		return 0
+	}
+	if p > 1 {
+		return 1
+	}
+	return p
 }
 
 // SyncCaseBankHysteresis updates BankRecoveryActive from bank vs thresholds (paid pool only).
@@ -200,13 +283,16 @@ func SyncCaseBankHysteresis(s *CaseCatalogSettings) {
 	if s.PromoPoolMaxPrizeBps > 10000 {
 		s.PromoPoolMaxPrizeBps = 10000
 	}
+	NormalizeCaseRecoverySmooth(s)
 	if !s.BankEnabled {
 		s.BankRecoveryActive = false
+		s.BankRecoveryPaceCounter = 0
 		return
 	}
 	if s.BankRecoveryActive {
 		if s.BankNanoton >= s.BankRecoveryTargetNanoton {
 			s.BankRecoveryActive = false
+			s.BankRecoveryPaceCounter = 0
 		}
 	} else if s.BankNanoton <= s.BankLossThresholdNanoton {
 		s.BankRecoveryActive = true
@@ -223,6 +309,17 @@ type CasePoolSnapshot struct {
 	Recovery      bool
 	FatPaused     bool
 	TargetBalance int64 // paid bank target; 0 for daily/promo
+
+	// Paid smooth recovery (zeroed for daily/promo).
+	RecoverySmooth            bool
+	RecoveryDrainOpens        int
+	RecoveryReliefOpens       int
+	RecoveryReliefMaxPrizeBps int
+	RecoveryPaceCounter       int
+	RecoveryPhase             string  // drain|relief when Recovery&&RecoverySmooth
+	RecoveryProgress          float64 // 0..1 toward recovery target
+	LossThreshold             int64
+	RecoveryTarget            int64
 }
 
 func (s *CaseCatalogSettings) PoolSnapshot(kind CasePoolKind) CasePoolSnapshot {
@@ -251,17 +348,42 @@ func (s *CaseCatalogSettings) PoolSnapshot(kind CasePoolKind) CasePoolSnapshot {
 			FatPaused:   s.BankFatPaused,
 		}
 	default:
-		return CasePoolSnapshot{
-			Kind:          CasePoolPaid,
-			Enabled:       s.BankEnabled,
-			Balance:       s.BankNanoton,
-			MaxPrizeBps:   s.BankMaxPrizeBps,
-			BiasWeight:    s.BankBiasWeight,
-			Recovery:      s.BankRecoveryActive,
-			FatPaused:     s.BankFatPaused,
-			TargetBalance: s.BankTargetNanoton,
+		snap := CasePoolSnapshot{
+			Kind:                      CasePoolPaid,
+			Enabled:                   s.BankEnabled,
+			Balance:                   s.BankNanoton,
+			MaxPrizeBps:               s.BankMaxPrizeBps,
+			BiasWeight:                s.BankBiasWeight,
+			Recovery:                  s.BankRecoveryActive,
+			FatPaused:                 s.BankFatPaused,
+			TargetBalance:             s.BankTargetNanoton,
+			RecoverySmooth:            s.BankRecoverySmoothEnabled,
+			RecoveryDrainOpens:        s.BankRecoveryDrainOpens,
+			RecoveryReliefOpens:       s.BankRecoveryReliefOpens,
+			RecoveryReliefMaxPrizeBps: s.BankRecoveryReliefMaxPrizeBps,
+			RecoveryPaceCounter:       s.BankRecoveryPaceCounter,
+			LossThreshold:             s.BankLossThresholdNanoton,
+			RecoveryTarget:            s.BankRecoveryTargetNanoton,
 		}
+		if snap.Recovery && snap.RecoverySmooth {
+			snap.RecoveryPhase = CaseRecoveryPhase(snap.RecoveryDrainOpens, snap.RecoveryReliefOpens, snap.RecoveryPaceCounter)
+			snap.RecoveryProgress = CaseRecoveryProgress(snap.Balance, snap.LossThreshold, snap.RecoveryTarget)
+		}
+		return snap
 	}
+}
+
+// AdvancePaidRecoveryPace bumps the drain/relief cycle counter when smooth recovery is active.
+func AdvancePaidRecoveryPace(s *CaseCatalogSettings) {
+	if s == nil || !s.BankEnabled || !s.BankRecoveryActive || !s.BankRecoverySmoothEnabled {
+		return
+	}
+	NormalizeCaseRecoverySmooth(s)
+	cycle := s.BankRecoveryDrainOpens + s.BankRecoveryReliefOpens
+	if cycle <= 0 {
+		return
+	}
+	s.BankRecoveryPaceCounter = (s.BankRecoveryPaceCounter + 1) % cycle
 }
 
 // MaxPrizeNanoton returns hard ceiling for a prize given pool balance (0 if disabled/empty).
@@ -336,7 +458,27 @@ func (CaseLiveFeedSettings) TableName() string { return "case_live_feed_settings
 
 // IsCaseClaimItem — inventory row created by opening a case.
 func IsCaseClaimItem(item InventoryItem) bool {
-	return strings.HasPrefix(item.TelegramTxRef, CaseClaimTxRefPrefix)
+	if strings.HasPrefix(item.TelegramTxRef, CaseClaimTxRefPrefix) {
+		return true
+	}
+	return hasCaseClaimMetadata(item.Metadata)
+}
+
+func hasCaseClaimMetadata(meta datatypes.JSON) bool {
+	if len(meta) == 0 {
+		return false
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(meta, &raw); err != nil {
+		return false
+	}
+	if _, ok := raw[CaseClaimMetaCaseID]; ok {
+		return true
+	}
+	if _, ok := raw[CaseClaimMetaLootEntryID]; ok {
+		return true
+	}
+	return false
 }
 
 // CaseClaimFulfillment reads metadata.fulfillment; empty means backed (real deposit / bound gift).

@@ -71,7 +71,7 @@ func (s *inventoryRepoStub) TakeHouseGiftForModel(context.Context, uuid.UUID, uu
 func (s *inventoryRepoStub) HasHouseGift(context.Context, uuid.UUID, string, string, string) (bool, error) {
 	return false, nil
 }
-func (s *inventoryRepoStub) BindTelegramGift(_ context.Context, _ uuid.UUID, telegramGiftID, _ string, metadata []byte, _ string) error {
+func (s *inventoryRepoStub) BindTelegramGift(_ context.Context, _ uuid.UUID, telegramGiftID, _ string, metadata []byte, _, _ string) error {
 	s.boundGiftID = telegramGiftID
 	s.boundMeta = append([]byte(nil), metadata...)
 	if s.item != nil {
@@ -185,6 +185,41 @@ func TestLiquidateCaseClaimUsesGuaranteedCashout(t *testing.T) {
 		t.Fatalf("expected broker call, got %d", broker.calls)
 	}
 	if broker.payout != 4200000000 {
+		t.Fatalf("payout %d", broker.payout)
+	}
+}
+
+func TestLiquidateCaseClaimBackedHouseGiftWithoutCaseTxRef(t *testing.T) {
+	userID := uuid.New()
+	itemID := uuid.New()
+	caseID := uuid.New()
+	lootID := uuid.New()
+	repo := &inventoryRepoStub{
+		item: &domain.InventoryItem{
+			ID:             itemID,
+			UserID:         userID,
+			Status:         domain.InvAvailable,
+			TelegramTxRef:  "deposit:legacy-ref",
+			TelegramGiftID: "snakebox-154039",
+			Metadata: []byte(`{
+				"fulfillment":"backed",
+				"case_id":"` + caseID.String() + `",
+				"loot_entry_id":"` + lootID.String() + `",
+				"case_cashout_nanoton":1500000000
+			}`),
+		},
+	}
+	broker := &liquidationBrokerStub{}
+	svc := &Service{inventory: repo, market: broker}
+
+	balance, err := svc.LiquidateCaseClaim(context.Background(), userID, itemID)
+	if err != nil {
+		t.Fatalf("liquidate backed house gift: %v", err)
+	}
+	if balance != 777 {
+		t.Fatalf("balance %d", balance)
+	}
+	if broker.payout != 1500000000 {
 		t.Fatalf("payout %d", broker.payout)
 	}
 }

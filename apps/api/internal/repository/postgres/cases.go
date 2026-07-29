@@ -263,15 +263,19 @@ func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogS
 		return nil, err
 	}
 	row = domain.CaseCatalogSettings{
-		ID:                        1,
-		Enabled:                   true,
-		BannersEnabled:            false,
-		BankLossThresholdNanoton:  -50_000_000_000,
-		BankBiasWeight:            50,
-		BankMaxPrizeBps:           5000,
-		DailyPoolMaxPrizeBps:      5000,
-		PromoPoolMaxPrizeBps:      5000,
-		UpdatedAt:                 time.Now().UTC(),
+		ID:                            1,
+		Enabled:                       true,
+		BannersEnabled:                false,
+		BankLossThresholdNanoton:      -50_000_000_000,
+		BankBiasWeight:                50,
+		BankMaxPrizeBps:               5000,
+		BankRecoverySmoothEnabled:     true,
+		BankRecoveryDrainOpens:        2,
+		BankRecoveryReliefOpens:       1,
+		BankRecoveryReliefMaxPrizeBps: 3000,
+		DailyPoolMaxPrizeBps:          5000,
+		PromoPoolMaxPrizeBps:          5000,
+		UpdatedAt:                     time.Now().UTC(),
 	}
 	if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
 		return nil, createErr
@@ -296,28 +300,33 @@ func (r *CaseRepo) UpdateCatalogSettings(ctx context.Context, settings *domain.C
 
 func catalogSettingsUpdateMap(s *domain.CaseCatalogSettings) map[string]any {
 	return map[string]any{
-		"enabled":                          s.Enabled,
-		"banners_enabled":                  s.BannersEnabled,
-		"bank_enabled":                     s.BankEnabled,
-		"bank_nanoton":                     s.BankNanoton,
-		"bank_target_nanoton":              s.BankTargetNanoton,
-		"bank_loss_threshold_nanoton":      s.BankLossThresholdNanoton,
-		"bank_recovery_target_nanoton":     s.BankRecoveryTargetNanoton,
-		"bank_recovery_active":             s.BankRecoveryActive,
-		"bank_bias_weight":                 s.BankBiasWeight,
-		"bank_max_prize_bps":               s.BankMaxPrizeBps,
-		"bank_fat_paused":                  s.BankFatPaused,
-		"daily_pool_enabled":               s.DailyPoolEnabled,
-		"daily_pool_nanoton":               s.DailyPoolNanoton,
-		"daily_pool_max_prize_bps":         s.DailyPoolMaxPrizeBps,
-		"daily_pool_daily_refill_nanoton":  s.DailyPoolDailyRefillNanoton,
-		"daily_pool_last_refill_date":      s.DailyPoolLastRefillDate,
-		"promo_pool_enabled":               s.PromoPoolEnabled,
-		"promo_pool_nanoton":               s.PromoPoolNanoton,
-		"promo_pool_max_prize_bps":         s.PromoPoolMaxPrizeBps,
-		"promo_pool_daily_refill_nanoton":  s.PromoPoolDailyRefillNanoton,
-		"promo_pool_last_refill_date":      s.PromoPoolLastRefillDate,
-		"updated_at":                       s.UpdatedAt,
+		"enabled":                             s.Enabled,
+		"banners_enabled":                     s.BannersEnabled,
+		"bank_enabled":                        s.BankEnabled,
+		"bank_nanoton":                        s.BankNanoton,
+		"bank_target_nanoton":                 s.BankTargetNanoton,
+		"bank_loss_threshold_nanoton":         s.BankLossThresholdNanoton,
+		"bank_recovery_target_nanoton":        s.BankRecoveryTargetNanoton,
+		"bank_recovery_active":                s.BankRecoveryActive,
+		"bank_bias_weight":                    s.BankBiasWeight,
+		"bank_max_prize_bps":                  s.BankMaxPrizeBps,
+		"bank_fat_paused":                     s.BankFatPaused,
+		"bank_recovery_smooth_enabled":        s.BankRecoverySmoothEnabled,
+		"bank_recovery_drain_opens":           s.BankRecoveryDrainOpens,
+		"bank_recovery_relief_opens":          s.BankRecoveryReliefOpens,
+		"bank_recovery_relief_max_prize_bps":  s.BankRecoveryReliefMaxPrizeBps,
+		"bank_recovery_pace_counter":          s.BankRecoveryPaceCounter,
+		"daily_pool_enabled":                  s.DailyPoolEnabled,
+		"daily_pool_nanoton":                  s.DailyPoolNanoton,
+		"daily_pool_max_prize_bps":            s.DailyPoolMaxPrizeBps,
+		"daily_pool_daily_refill_nanoton":     s.DailyPoolDailyRefillNanoton,
+		"daily_pool_last_refill_date":         s.DailyPoolLastRefillDate,
+		"promo_pool_enabled":                  s.PromoPoolEnabled,
+		"promo_pool_nanoton":                  s.PromoPoolNanoton,
+		"promo_pool_max_prize_bps":            s.PromoPoolMaxPrizeBps,
+		"promo_pool_daily_refill_nanoton":     s.PromoPoolDailyRefillNanoton,
+		"promo_pool_last_refill_date":         s.PromoPoolLastRefillDate,
+		"updated_at":                          s.UpdatedAt,
 	}
 }
 
@@ -328,14 +337,18 @@ func (r *CaseRepo) ApplyCasePoolDelta(ctx context.Context, kind domain.CasePoolK
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&settings, "id = ?", 1).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				settings = domain.CaseCatalogSettings{
-					ID:                       1,
-					Enabled:                  true,
-					BankLossThresholdNanoton: -50_000_000_000,
-					BankBiasWeight:           50,
-					BankMaxPrizeBps:          5000,
-					DailyPoolMaxPrizeBps:     5000,
-					PromoPoolMaxPrizeBps:     5000,
-					UpdatedAt:                time.Now().UTC(),
+					ID:                            1,
+					Enabled:                       true,
+					BankLossThresholdNanoton:      -50_000_000_000,
+					BankBiasWeight:                50,
+					BankMaxPrizeBps:               5000,
+					BankRecoverySmoothEnabled:     true,
+					BankRecoveryDrainOpens:        2,
+					BankRecoveryReliefOpens:       1,
+					BankRecoveryReliefMaxPrizeBps: 3000,
+					DailyPoolMaxPrizeBps:          5000,
+					PromoPoolMaxPrizeBps:          5000,
+					UpdatedAt:                     time.Now().UTC(),
 				}
 				if createErr := tx.Create(&settings).Error; createErr != nil {
 					return createErr
@@ -357,6 +370,31 @@ func (r *CaseRepo) ApplyCasePoolDelta(ctx context.Context, kind domain.CasePoolK
 			settings.BankNanoton += delta
 		}
 		domain.SyncCaseBankHysteresis(&settings)
+		settings.UpdatedAt = time.Now().UTC()
+		if err := tx.Model(&domain.CaseCatalogSettings{}).Where("id = ?", 1).Updates(catalogSettingsUpdateMap(&settings)).Error; err != nil {
+			return err
+		}
+		out = settings
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (r *CaseRepo) AdvancePaidRecoveryPace(ctx context.Context) (*domain.CaseCatalogSettings, error) {
+	var out domain.CaseCatalogSettings
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var settings domain.CaseCatalogSettings
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&settings, "id = ?", 1).Error; err != nil {
+			return err
+		}
+		wasActive := settings.BankRecoveryActive
+		domain.SyncCaseBankHysteresis(&settings)
+		if wasActive && settings.BankRecoveryActive {
+			domain.AdvancePaidRecoveryPace(&settings)
+		}
 		settings.UpdatedAt = time.Now().UTC()
 		if err := tx.Model(&domain.CaseCatalogSettings{}).Where("id = ?", 1).Updates(catalogSettingsUpdateMap(&settings)).Error; err != nil {
 			return err
@@ -625,10 +663,13 @@ func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID u
 	return &item, nil
 }
 
-func (r *InventoryRepo) BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment string) error {
+func (r *InventoryRepo) BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment, telegramTxRef string) error {
 	updates := map[string]any{
 		"telegram_gift_id": telegramGiftID,
 		"updated_at":       time.Now().UTC(),
+	}
+	if telegramTxRef = strings.TrimSpace(telegramTxRef); telegramTxRef != "" {
+		updates["telegram_tx_ref"] = telegramTxRef
 	}
 	if imageURL != "" {
 		updates["image_url"] = imageURL
