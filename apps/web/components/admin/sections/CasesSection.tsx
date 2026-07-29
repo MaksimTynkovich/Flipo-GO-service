@@ -73,7 +73,9 @@ const KINDS = [
   { value: "promo", label: "Промокод" },
 ] as const;
 
-const SIM_ITERATIONS = 100;
+const DEFAULT_SIM_ITERATIONS = 100;
+const MIN_SIM_ITERATIONS = 1;
+const MAX_SIM_ITERATIONS = 10_000;
 
 const DEFAULT_CATALOG_ECONOMY: AdminCaseCatalogSettings = {
   id: 1,
@@ -395,6 +397,7 @@ export default function CasesSection() {
   const [savingLiveSettings, setSavingLiveSettings] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [simWithBank, setSimWithBank] = useState(false);
+  const [simIterations, setSimIterations] = useState(DEFAULT_SIM_ITERATIONS);
   const [simResult, setSimResult] = useState<AdminCaseSimulateResult | null>(null);
   const [economy, setEconomy] = useState<AdminCaseCatalogSettings>(DEFAULT_CATALOG_ECONOMY);
   const [economyStats, setEconomyStats] = useState<AdminCaseEconomyStats | null>(null);
@@ -476,9 +479,16 @@ export default function CasesSection() {
 
   async function runSimulate() {
     if (!draft.id) return;
+    const iterations = Math.min(
+      MAX_SIM_ITERATIONS,
+      Math.max(MIN_SIM_ITERATIONS, Math.round(simIterations) || DEFAULT_SIM_ITERATIONS),
+    );
+    if (iterations !== simIterations) {
+      setSimIterations(iterations);
+    }
     setSimulating(true);
     try {
-      const result = await simulateAdminCase(draft.id, SIM_ITERATIONS, simWithBank);
+      const result = await simulateAdminCase(draft.id, iterations, simWithBank);
       setSimResult(result);
       const rtpLine = result.rtp_available
         ? `RTP ${bpsPct(result.simulated_rtp_bps)} (теор ${bpsPct(result.theoretical_rtp_bps)})`
@@ -1670,8 +1680,34 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                 disabled={!draft.id || simulating || loot.length === 0 || deletingCase}
                 onClick={() => void runSimulate()}
               >
-                {simulating ? "…" : `Тест · ${SIM_ITERATIONS}`}
+                {simulating ? "…" : "Тест"}
               </AdminButton>
+              <label className="flex items-center gap-1.5 text-xs text-muted">
+                <span className="whitespace-nowrap">открытий</span>
+                <input
+                  type="number"
+                  className="input-field w-[5.5rem] py-1 text-xs"
+                  min={MIN_SIM_ITERATIONS}
+                  max={MAX_SIM_ITERATIONS}
+                  step={1}
+                  value={simIterations}
+                  disabled={simulating || deletingCase}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    setSimIterations(Math.min(MAX_SIM_ITERATIONS, Math.max(0, Math.round(n))));
+                  }}
+                  onBlur={() => {
+                    setSimIterations((n) =>
+                      Math.min(
+                        MAX_SIM_ITERATIONS,
+                        Math.max(MIN_SIM_ITERATIONS, n || DEFAULT_SIM_ITERATIONS),
+                      ),
+                    );
+                  }}
+                  title={`От 1 до ${MAX_SIM_ITERATIONS.toLocaleString("ru-RU")}`}
+                />
+              </label>
               <label className="flex items-center gap-1.5 text-xs text-muted">
                 <input
                   type="checkbox"
