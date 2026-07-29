@@ -108,6 +108,7 @@ type MarketRepository interface {
 	UpdateListingPrice(ctx context.Context, listingID uuid.UUID, priceNanoton int64) error
 	Purchase(ctx context.Context, listingID, buyerID uuid.UUID, price, sellerProceeds int64, fee int) (*MarketListing, error)
 	SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, payout, listPrice int64) (int64, error)
+	SettleCaseClaim(ctx context.Context, userID, itemID uuid.UUID, payout int64) (int64, error)
 	AcquireGiftFromBet(ctx context.Context, itemID uuid.UUID) error
 	EnsureBotUser(ctx context.Context) (*User, error)
 	CountActive(ctx context.Context) (int64, error)

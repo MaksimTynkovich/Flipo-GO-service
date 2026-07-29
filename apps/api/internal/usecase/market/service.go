@@ -229,6 +229,16 @@ func (s *Service) BuybackFromUser(ctx context.Context, sellerID, itemID uuid.UUI
 	return balanceAfter, nil
 }
 
+// SettleCaseClaim credits the user for a case-claim cashout and liquidates the inventory item.
+func (s *Service) SettleCaseClaim(ctx context.Context, userID, itemID uuid.UUID, payout int64) (int64, error) {
+	balanceAfter, err := s.market.SettleCaseClaim(ctx, userID, itemID, payout)
+	if err != nil {
+		return 0, err
+	}
+	balance.NotifyUser(ctx, s.users, s.notifier, userID, payout, domain.LedgerCaseCashout)
+	return balanceAfter, nil
+}
+
 // AddBotGift registers a gift received by the bot and lists it on the market.
 func (s *Service) AddBotGift(ctx context.Context, transfer BotGiftInput) (*ListingView, error) {
 	botUser, err := s.market.EnsureBotUser(ctx)
