@@ -1115,7 +1115,7 @@ export default function CasesSection() {
               Плавный recovery
               <AdminInfoHint
                 label="Плавный recovery"
-                hint="Вместо серии только самых дешёвых призов: цикл «N экономных → M умеренных». Рекомендуемый старт: 2 / 1 / 30%. Счётчик сбрасывается при выходе из recovery."
+                hint="Работает только когда банк в режиме экономии (recovery): баланс упал ниже Loss threshold и ещё не дорос до Recovery target. Без плавности система почти всегда отдаёт самый дешёвый приз, пока банк не восстановится — игроки видят длинную серию «сливов». С плавностью открытия идут циклом: несколько экономных (drain), потом одно или несколько умеренных (relief). Так банк всё равно растёт в среднем, но выдача выглядит естественнее. Выключите, если нужен жёсткий аварийный режим «только дешёвые». Рекомендуемый старт: Drain 2 / Relief 1 / Relief max 30%."
               />
             </span>
           </label>
@@ -1124,14 +1124,14 @@ export default function CasesSection() {
             value={economy.bank_recovery_drain_opens ?? 2}
             onChange={(v) => setEconomy((s) => ({ ...s, bank_recovery_drain_opens: v }))}
             min={1}
-            hint="Сколько подряд экономных (дешёвых) открытий в цикле recovery. Обычно 2."
+            hint="Число подряд идущих «экономных» открытий в одном цикле recovery. В этой фазе выпадают только относительно дешёвые призы (ниже медианы loot кейса) — банк быстро набирает запас за счёт цены открытия. Чем больше число, тем жёстче экономия и быстрее выход из минуса, но игроки чаще видят скромные призы. Обычно 2. Пример: Drain 2 + Relief 1 = из трёх открытий два дешёвых, одно умеренное."
           />
           <AdminIntField
             label="Relief opens"
             value={economy.bank_recovery_relief_opens ?? 1}
             onChange={(v) => setEconomy((s) => ({ ...s, bank_recovery_relief_opens: v }))}
             min={1}
-            hint="Сколько умеренных «разрядок» после drain. Обычно 1 (паттерн 2+1)."
+            hint="Число «разрядок» после drain в том же цикле. В relief можно выпасть приз средней цены (не джекпот) — чтобы recovery не выглядел как бесконечный слив. Чем больше Relief относительно Drain, тем мягче ощущение для игрока, но банк восстанавливается медленнее. Обычно 1. Счётчик цикла общий на все платные кейсы (catalog/featured), не на каждый кейс отдельно."
           />
           <AdminPercentField
             label="Relief max prize %"
@@ -1139,10 +1139,17 @@ export default function CasesSection() {
             onChangeBps={(v) =>
               setEconomy((s) => ({ ...s, bank_recovery_relief_max_prize_bps: v }))
             }
-            hint="Потолок приза в фазе relief от баланса банка. Чем ближе банк к recovery target, тем выше реальный потолок. Для новичка: 30%."
+            hint="Верхний потолок одного приза в фазе relief, в процентах от текущего баланса банка. Пример: банк 40 TON и 30% → приз дороже ~12 TON в relief не выпадет. Потолок дополнительно растёт по мере приближения баланса к Recovery target (в начале recovery разрядка скромнее, ближе к выходу — смелее). Не может превысить обычный Max prize % банка. Для новичка: 25–35%. Слишком высокий % замедляет выход из экономии."
           />
           <p className="text-xs text-muted sm:col-span-2 lg:col-span-3">
-            Цикл recovery:{" "}
+            <span className="inline-flex items-center gap-1.5">
+              Цикл recovery
+              <AdminInfoHint
+                label="Цикл recovery"
+                hint="Текущая фаза и позиция в цикле Drain+Relief. drain — сейчас экономные открытия; relief — умеренная разрядка. pace X / Y — сколько открытий прошло в текущем круге из Y (Drain opens + Relief opens). Счётчик увеличивается после каждого успешного открытия платного кейса в recovery и сбрасывается в 0, когда баланс доходит до Recovery target (экономия выключается). Если loot в кейсе совсем маленький (1–2 приза), разнообразия всё равно мало — плавность ограничена составом призов."
+              />
+            </span>
+            :{" "}
             <span className="font-medium text-foreground/90">
               {(() => {
                 if (!economy.bank_recovery_active) return "не активен";
@@ -1157,9 +1164,6 @@ export default function CasesSection() {
                 return `${phase} · pace ${pace} / ${cycle}`;
               })()}
             </span>
-            {economy.bank_recovery_smooth_enabled !== false
-              ? " · при маленьком loot (1–2 приза) плавность ограничена"
-              : null}
           </p>
           <AdminField
             label="Корректировка банка (± TON)"
