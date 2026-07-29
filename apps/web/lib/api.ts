@@ -1944,7 +1944,13 @@ export async function getAdminStakingStakers(opts?: {
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   if (opts?.offset != null) params.set("offset", String(opts.offset));
   const q = params.toString();
-  return api<{ items: AdminStakingStakerRow[]; total: number; limit: number; offset: number }>(
+  return api<{
+    items: AdminStakingStakerRow[];
+    total: number;
+    limit: number;
+    offset: number;
+    total_projected_payout_nanoton: number;
+  }>(
     `/api/v1/admin/staking/stakers${q ? `?${q}` : ""}`,
   );
 }

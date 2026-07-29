@@ -1535,7 +1535,7 @@ func (h *AdminHandler) ListStakingStakers(c *gin.Context) {
 		Limit:  limit,
 		Offset: offset,
 	}
-	items, total, err := h.admin.ListStakingStakers(c.Request.Context(), filter)
+	items, total, totalProjectedPayout, err := h.admin.ListStakingStakers(c.Request.Context(), filter)
 	if err != nil {
 		respondInternal(c, err)
 		return
@@ -1543,7 +1543,13 @@ func (h *AdminHandler) ListStakingStakers(c *gin.Context) {
 	if items == nil {
 		items = []domain.AdminStakingStakerRow{}
 	}
-	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
+	c.JSON(http.StatusOK, gin.H{
+		"items":                           items,
+		"total":                           total,
+		"limit":                           limit,
+		"offset":                          offset,
+		"total_projected_payout_nanoton": totalProjectedPayout,
+	})
 }
 
 func (h *AdminHandler) GetSocialSimSettings(c *gin.Context) {

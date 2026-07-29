@@ -768,6 +768,6 @@ func (s *Service) ListStakingActivity(ctx context.Context, filter domain.AdminSt
 	return s.admin.ListStakingActivity(ctx, filter)
 }
 
-func (s *Service) ListStakingStakers(ctx context.Context, filter domain.AdminStakingStakerFilter) ([]domain.AdminStakingStakerRow, int64, error) {
+func (s *Service) ListStakingStakers(ctx context.Context, filter domain.AdminStakingStakerFilter) ([]domain.AdminStakingStakerRow, int64, int64, error) {
 	return s.admin.ListStakingStakers(ctx, filter)
 }

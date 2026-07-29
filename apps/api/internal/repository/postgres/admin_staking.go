@@ -239,7 +239,7 @@ func (r *AdminRepo) ListStakingPositions(ctx context.Context, filter domain.Admi
 	return out, total, nil
 }
 
-func (r *AdminRepo) ListStakingStakers(ctx context.Context, filter domain.AdminStakingStakerFilter) ([]domain.AdminStakingStakerRow, int64, error) {
+func (r *AdminRepo) ListStakingStakers(ctx context.Context, filter domain.AdminStakingStakerFilter) ([]domain.AdminStakingStakerRow, int64, int64, error) {
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = 50
@@ -285,7 +285,37 @@ func (r *AdminRepo) ListStakingStakers(ctx context.Context, filter domain.AdminS
 			GROUP BY sp.user_id
 		) t`
 	if err := r.db.WithContext(ctx).Raw(countSQL, args...).Scan(&total).Error; err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
+	}
+
+	// Total projected payout for all matching stakers (not limited by pagination).
+	var totalProjectedPayout int64
+	type payoutAggRow struct {
+		StakingTier           domain.StakingTier `gorm:"column:staking_tier"`
+		Principal             int64              `gorm:"column:principal"`
+		BonusPayoutsRemaining int                `gorm:"column:bonus_payouts_remaining"`
+	}
+	var payoutAgg []payoutAggRow
+	aggSQL := `
+		SELECT
+			u.staking_tier AS staking_tier,
+			COALESCE(SUM(sp.principal_nanoton), 0) AS principal,
+			COALESCE(MAX(uss.bonus_payouts_remaining), 0) AS bonus_payouts_remaining
+		FROM staking_positions sp
+		JOIN users u ON u.id = sp.user_id
+		LEFT JOIN user_staking_streaks uss ON uss.user_id = u.id
+		WHERE ` + where + `
+		GROUP BY u.id, u.staking_tier
+	`
+	if err := r.db.WithContext(ctx).Raw(aggSQL, args...).Scan(&payoutAgg).Error; err != nil {
+		return nil, 0, 0, err
+	}
+	for _, a := range payoutAgg {
+		payout := projectedDailyYield(a.Principal, a.StakingTier, basePct, boostPct)
+		if a.BonusPayoutsRemaining > 0 {
+			payout = int64(float64(payout) * domain.StakingStreakBonusMultiplier)
+		}
+		totalProjectedPayout += payout
 	}
 
 	type row struct {
@@ -319,7 +349,7 @@ func (r *AdminRepo) ListStakingStakers(ctx context.Context, filter domain.AdminS
 		LIMIT ? OFFSET ?
 	`, listArgs...).Scan(&rows).Error
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	out := make([]domain.AdminStakingStakerRow, 0, len(rows))
@@ -341,7 +371,7 @@ func (r *AdminRepo) ListStakingStakers(ctx context.Context, filter domain.AdminS
 			StreakBonusActive:      bonusActive,
 		})
 	}
-	return out, total, nil
+	return out, total, totalProjectedPayout, nil
 }
 
 func (r *AdminRepo) ListStakingActivity(ctx context.Context, filter domain.AdminStakingActivityFilter) ([]domain.AdminStakingActivityRow, int64, error) {

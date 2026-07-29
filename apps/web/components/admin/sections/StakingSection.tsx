@@ -137,6 +137,8 @@ export default function StakingSection() {
   const [positionsOffset, setPositionsOffset] = useState(0);
   const [stakers, setStakers] = useState<AdminStakingStakerRow[]>([]);
   const [stakersTotal, setStakersTotal] = useState(0);
+  const [stakersTotalProjectedPayoutNanoton, setStakersTotalProjectedPayoutNanoton] =
+    useState(0);
   const [stakersOffset, setStakersOffset] = useState(0);
   const [stakersQuery, setStakersQuery] = useState("");
   const [activity, setActivity] = useState<AdminStakingActivityRow[]>([]);
@@ -189,6 +191,7 @@ export default function StakingSection() {
     });
     setStakers(data.items);
     setStakersTotal(data.total);
+    setStakersTotalProjectedPayoutNanoton(data.total_projected_payout_nanoton ?? 0);
     setStakersOffset(offset);
   }
 
@@ -354,6 +357,12 @@ export default function StakingSection() {
             title={`Стейкеры (${stakersTotal})`}
             description="Активные игроки: сумма в стейке и прогноз выплаты в 00:05 МСК."
           >
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2">
+              <p className="text-xs text-[var(--admin-muted)]">Нужно выплатить сегодня</p>
+              <p className="text-sm font-semibold">
+                {formatTON(stakersTotalProjectedPayoutNanoton)} TON
+              </p>
+            </div>
             {stakers.length === 0 ? (
               <AdminEmpty>{loading ? "Загрузка…" : "Активных стейкеров нет"}</AdminEmpty>
             ) : (

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strconv"
 	"time"
@@ -76,26 +77,101 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 }
 
 func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.RevenueTimeseriesPoint, error) {
-	if days <= 0 {
-		days = 7
-	}
-	points := make([]domain.RevenueTimeseriesPoint, 0, days)
 	now := time.Now().UTC()
-	for i := days - 1; i >= 0; i-- {
-		day := now.AddDate(0, 0, -i)
-		start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC)
-		end := start.Add(24 * time.Hour)
-		period := start.Format("2006-01-02")
+	end := now.Truncate(24 * time.Hour).Add(24 * time.Hour) // inclusive day: "today" -> end is tomorrow 00:00
 
-		var deposits, bets int64
-		r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
-			Where("direction = ? AND status = ? AND confirmed_at >= ? AND confirmed_at < ?",
-				domain.TonDirectionDeposit, domain.TonStatusCompleted, start, end).
-			Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&deposits)
-		r.db.WithContext(ctx).Model(&domain.GameBet{}).
-			Where("created_at >= ? AND created_at < ?", start, end).
-			Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&bets)
+	start := time.Time{}
+	switch {
+	case days == -1:
+		// "All time": find the earliest day among completed deposits (confirmed_at) and bets (created_at).
+		// We intentionally include bets regardless of status (same behavior as previous N+1 loop).
+		var minDeposit sql.NullTime
+		if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+			Select("MIN(confirmed_at)").
+			Where("direction = ? AND status = ? AND confirmed_at IS NOT NULL", domain.TonDirectionDeposit, domain.TonStatusCompleted).
+			Scan(&minDeposit).Error; err != nil {
+			return nil, err
+		}
 
+		var minBet sql.NullTime
+		if err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+			Select("MIN(created_at)").
+			Scan(&minBet).Error; err != nil {
+			return nil, err
+		}
+
+		switch {
+		case minDeposit.Valid && minBet.Valid:
+			if minDeposit.Time.Before(minBet.Time) {
+				start = minDeposit.Time
+			} else {
+				start = minBet.Time
+			}
+		case minDeposit.Valid:
+			start = minDeposit.Time
+		case minBet.Valid:
+			start = minBet.Time
+		default:
+			// No data at all yet.
+			return []domain.RevenueTimeseriesPoint{}, nil
+		}
+		start = start.UTC().Truncate(24 * time.Hour)
+
+	default:
+		if days <= 0 {
+			days = 7
+		}
+		// days=7 => range contains 7 days including today: [today-6, today]
+		start = end.AddDate(0, 0, -days)
+	}
+
+	dayCount := int(end.Sub(start) / (24 * time.Hour))
+	if dayCount <= 0 {
+		return []domain.RevenueTimeseriesPoint{}, nil
+	}
+
+	type daySumRow struct {
+		Day time.Time `gorm:"column:day"`
+		Sum int64     `gorm:"column:sum"`
+	}
+
+	// Fetch daily aggregates using GROUP BY (fast even for "all time").
+	depositsRows := make([]daySumRow, 0, dayCount)
+	if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+		Select("DATE_TRUNC('day', confirmed_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
+		Where("direction = ? AND status = ? AND confirmed_at >= ? AND confirmed_at < ?",
+			domain.TonDirectionDeposit, domain.TonStatusCompleted, start, end).
+		Group("DATE_TRUNC('day', confirmed_at)").
+		Order("day").
+		Scan(&depositsRows).Error; err != nil {
+		return nil, err
+	}
+
+	betsRows := make([]daySumRow, 0, dayCount)
+	if err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Select("DATE_TRUNC('day', created_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
+		Where("created_at >= ? AND created_at < ?", start, end).
+		Group("DATE_TRUNC('day', created_at)").
+		Order("day").
+		Scan(&betsRows).Error; err != nil {
+		return nil, err
+	}
+
+	depositsByDay := make(map[string]int64, len(depositsRows))
+	for _, row := range depositsRows {
+		depositsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
+	}
+	betsByDay := make(map[string]int64, len(betsRows))
+	for _, row := range betsRows {
+		betsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
+	}
+
+	points := make([]domain.RevenueTimeseriesPoint, 0, dayCount)
+	for i := 0; i < dayCount; i++ {
+		day := start.AddDate(0, 0, i)
+		period := day.Format("2006-01-02")
+		deposits := depositsByDay[period]
+		bets := betsByDay[period]
 		points = append(points, domain.RevenueTimeseriesPoint{
 			Period:          period,
 			RevenueNanoton:  deposits,

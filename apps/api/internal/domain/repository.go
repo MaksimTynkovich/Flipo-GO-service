@@ -279,7 +279,7 @@ type AdminRepository interface {
 	ListStakingEpochs(ctx context.Context, limit, offset int) ([]AdminStakingEpochRow, int64, error)
 	ListStakingPositions(ctx context.Context, filter AdminStakingPositionFilter) ([]AdminStakingPositionRow, int64, error)
 	ListStakingActivity(ctx context.Context, filter AdminStakingActivityFilter) ([]AdminStakingActivityRow, int64, error)
-	ListStakingStakers(ctx context.Context, filter AdminStakingStakerFilter) ([]AdminStakingStakerRow, int64, error)
+	ListStakingStakers(ctx context.Context, filter AdminStakingStakerFilter) ([]AdminStakingStakerRow, int64, int64, error)
 }
 
 type AdminNotificationRepository interface {

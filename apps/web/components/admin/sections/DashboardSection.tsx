@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminPage, AdminChip, AdminEmpty, AdminMetric, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
-import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
+import { invalidateCached, loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
   formatTON,
   getAdminGameStats,
@@ -13,48 +13,116 @@ import {
   type AdminRevenueSummary,
 } from "@/lib/api";
 
+type RevenuePeriodId = "7d" | "30d" | "all";
+
+const REVENUE_PERIODS: Record<RevenuePeriodId, { label: string; days: number }> = {
+  "7d": { label: "7 дней", days: 7 },
+  "30d": { label: "30 дней", days: 30 },
+  all: { label: "Всё время", days: -1 },
+};
+
+function downsampleRevenuePoints(points: AdminRevenuePoint[], targetMaxPoints: number): AdminRevenuePoint[] {
+  if (points.length <= targetMaxPoints) return points;
+  const bucketSize = Math.ceil(points.length / targetMaxPoints);
+  const out: AdminRevenuePoint[] = [];
+  for (let i = 0; i < points.length; i += bucketSize) {
+    const chunk = points.slice(i, i + bucketSize);
+    const first = chunk[0]!;
+    const last = chunk[chunk.length - 1]!;
+    out.push({
+      period: `${first.period}–${last.period}`,
+      revenue_nanoton: chunk.reduce((sum, p) => sum + p.revenue_nanoton, 0),
+      deposits_nanoton: chunk.reduce((sum, p) => sum + p.deposits_nanoton, 0),
+      game_bets_nanoton: chunk.reduce((sum, p) => sum + p.game_bets_nanoton, 0),
+    });
+  }
+  return out;
+}
+
 export default function DashboardSection() {
+  const metaKey = "admin:dashboard:v4:meta";
+  const revenueKey = (days: number) => `admin:dashboard:v4:revenue:${days}`;
+
   const [summary, setSummary] = useState<AdminRevenueSummary | null>(null);
   const [timeseries, setTimeseries] = useState<AdminRevenuePoint[]>([]);
   const [games, setGames] = useState<AdminGameStat[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [periodId, setPeriodId] = useState<RevenuePeriodId>("7d");
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [loadingRevenue, setLoadingRevenue] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  const revenueLoadId = useRef(0);
+
+  async function loadMeta() {
+    setLoadingMeta(true);
     try {
-      const [summaryData, seriesData, gameData] = await loadCached("admin:dashboard:v3", () =>
-        Promise.all([
-          getAdminRevenueSummary(),
-          getAdminRevenueTimeseries(7),
-          getAdminGameStats(),
-        ]),
-      );
+      const [summaryData, gameData] = await loadCached(metaKey, () => Promise.all([getAdminRevenueSummary(), getAdminGameStats()]));
       setSummary(summaryData);
-      setTimeseries(seriesData);
       setGames(gameData);
-      primeCache("admin:dashboard:v3", [summaryData, seriesData, gameData]);
+      primeCache(metaKey, [summaryData, gameData]);
     } finally {
-      setLoading(false);
+      setLoadingMeta(false);
+    }
+  }
+
+  async function loadRevenue(days: number) {
+    const key = revenueKey(days);
+    const requestId = ++revenueLoadId.current;
+    setLoadingRevenue(true);
+
+    const cached = readCached<AdminRevenuePoint[]>(key);
+    if (cached) {
+      setTimeseries(cached);
+    } else {
+      setTimeseries([]);
+    }
+
+    try {
+      const seriesData = await loadCached(key, () => getAdminRevenueTimeseries(days));
+      if (requestId !== revenueLoadId.current) return;
+      setTimeseries(seriesData);
+      primeCache(key, seriesData);
+    } finally {
+      if (requestId === revenueLoadId.current) {
+        setLoadingRevenue(false);
+      }
     }
   }
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cached = readCached<[AdminRevenueSummary, AdminRevenuePoint[], AdminGameStat[]]>(
-        "admin:dashboard:v3",
-      );
-      if (cached) {
-        setSummary(cached[0]);
-        setTimeseries(cached[1]);
-        setGames(cached[2]);
+      const cachedMeta = readCached<[AdminRevenueSummary, AdminGameStat[]]>(metaKey);
+      if (cachedMeta) {
+        setSummary(cachedMeta[0]);
+        setGames(cachedMeta[1]);
       }
-      load().catch(() => {});
+
+      const initialDays = REVENUE_PERIODS["7d"].days;
+      const cachedRevenue = readCached<AdminRevenuePoint[]>(revenueKey(initialDays));
+      if (cachedRevenue) {
+        setTimeseries(cachedRevenue);
+      }
+      loadMeta().catch(() => {});
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    loadRevenue(REVENUE_PERIODS[periodId].days).catch(() => {});
+  }, [periodId]);
+
+  async function refresh() {
+    invalidateCached("admin:dashboard:v4");
+    await Promise.all([loadMeta(), loadRevenue(REVENUE_PERIODS[periodId].days)]);
+  }
+
+  const displaySeries = useMemo(() => {
+    if (periodId !== "all") return timeseries;
+    return downsampleRevenuePoints(timeseries, 90);
+  }, [periodId, timeseries]);
+
   const maxRevenue = useMemo(
-    () => Math.max(1, ...timeseries.map((point) => Math.max(0, point.revenue_nanoton))),
-    [timeseries],
+    () => Math.max(1, ...displaySeries.map((point) => Math.max(0, point.revenue_nanoton))),
+    [displaySeries],
   );
 
   return (
@@ -63,7 +131,9 @@ export default function DashboardSection() {
       description="Ключевые цифры по деньгам и играм. Ручные действия по выводам вынесены в раздел «Операции»."
     >
       <AdminToolbar>
-        <AdminChip onClick={() => load().catch(() => {})}>{loading ? "Обновляем…" : "Обновить"}</AdminChip>
+        <AdminChip onClick={() => refresh().catch(() => {})}>
+          {loadingMeta || loadingRevenue ? "Обновляем…" : "Обновить"}
+        </AdminChip>
       </AdminToolbar>
 
       <section className="grid grid-cols-4 gap-4">
@@ -106,29 +176,37 @@ export default function DashboardSection() {
         />
       </section>
 
-      <AdminPanel title="Доход за 7 дней" description="Суммарный revenue по дням.">
-          {timeseries.length === 0 ? (
-            <AdminEmpty>Появится после первых транзакций и ставок.</AdminEmpty>
-          ) : (
-            <div className="space-y-3 pt-1">
-              {timeseries.map((point) => (
-                <div key={point.period} className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-[var(--admin-muted)]">{point.period}</span>
-                    <span className="font-semibold tabular-nums">
-                      {formatTON(point.revenue_nanoton)} TON
-                    </span>
-                  </div>
-                  <div className="admin-chart-bar">
-                    <div
-                      className="admin-chart-bar__fill"
-                      style={{ width: `${Math.max(6, (point.revenue_nanoton / maxRevenue) * 100)}%` }}
-                    />
-                  </div>
+      <AdminPanel title="Доход за период" description="Суммарный revenue по дням в выбранном периоде.">
+        <div className="flex flex-wrap items-center gap-2">
+          {(Object.keys(REVENUE_PERIODS) as RevenuePeriodId[]).map((id) => (
+            <AdminChip key={id} active={periodId === id} onClick={() => setPeriodId(id)}>
+              {REVENUE_PERIODS[id].label}
+            </AdminChip>
+          ))}
+        </div>
+
+        {displaySeries.length === 0 ? (
+          <AdminEmpty>{loadingRevenue ? "Загружаем…" : "Появится после первых транзакций и ставок."}</AdminEmpty>
+        ) : (
+          <div className="space-y-3 pt-1">
+            {displaySeries.map((point) => (
+              <div key={point.period} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-[var(--admin-muted)]">{point.period}</span>
+                  <span className="font-semibold tabular-nums">
+                    {formatTON(point.revenue_nanoton)} TON
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="admin-chart-bar">
+                  <div
+                    className="admin-chart-bar__fill"
+                    style={{ width: `${Math.max(6, (point.revenue_nanoton / maxRevenue) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </AdminPanel>
 
       <AdminPanel title="Игры" description="GGR и объём ставок по режимам.">
