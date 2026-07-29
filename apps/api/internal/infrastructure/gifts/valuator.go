@@ -161,6 +161,18 @@ func (v *Valuator) QuoteInventoryValuation(ctx context.Context, item domain.Inve
 	return v.QuoteValuation(ctx, ScannedGiftFromItem(item))
 }
 
+// QuoteInventoryListPrices returns buyback + valuation without live market HTTP.
+// Uses memory cache, fresh/stale DB trait prices, and collection floors — for inventory list latency.
+func (v *Valuator) QuoteInventoryListPrices(ctx context.Context, item domain.InventoryItem) (buyback, valuation int64) {
+	gift := ScannedGiftFromItem(item)
+	raw, _ := v.rawQuoteCached(ctx, gift)
+	if raw <= 0 {
+		return 0, 0
+	}
+	buyPct, valPct := v.cachedAdjust(ctx)
+	return ApplyPercentAdjust(raw, buyPct), ApplyPercentAdjust(raw, valPct)
+}
+
 func ScannedGiftFromItem(item domain.InventoryItem) telegram.ScannedGift {
 	attrs := ItemAttributes(item.Metadata)
 	return telegram.ScannedGift{
@@ -270,6 +282,38 @@ func (v *Valuator) rawQuote(ctx context.Context, gift telegram.ScannedGift) (int
 		return gift.PriceNanoton, gift.PriceSource
 	}
 	if gift.PriceNanoton > 0 {
+		return gift.PriceNanoton, PriceSourceTelegram
+	}
+	return 0, PriceSourceNone
+}
+
+// rawQuoteCached resolves price from memory/DB/floors only — never Portals/MRKT/GiftAsset HTTP.
+func (v *Valuator) rawQuoteCached(ctx context.Context, gift telegram.ScannedGift) (int64, string) {
+	cached, hasCached := v.lookupQuoteCache(gift)
+	if hasCached && time.Since(cached.at) < marketQuoteCacheTTL {
+		return cached.price, cached.source
+	}
+
+	collection, model, backdrop := StorageKey(gift.CollectionSlug, gift.Attributes.Model, gift.Attributes.Backdrop)
+	if v.store != nil && collection != "" && model != "" {
+		if row, err := v.store.Get(ctx, collection, model, backdrop); err == nil && row != nil && row.PriceNanoton > 0 {
+			// Accept admin + any persisted price (even stale) for list latency; cron refreshes.
+			v.storeMarketQuote(gift, row.PriceNanoton, row.Source)
+			return row.PriceNanoton, row.Source
+		}
+	}
+	if hasCached && time.Since(cached.at) < marketQuoteStaleTTL {
+		return cached.price, cached.source
+	}
+	if v.floors != nil {
+		if price, err := v.floors.GetFloorPrice(ctx, gift.CollectionSlug); err == nil && price > 0 {
+			return price, PriceSourceDBFloor
+		}
+	}
+	if gift.PriceNanoton > 0 {
+		if gift.PriceSource != "" && gift.PriceSource != PriceSourceTelegram {
+			return gift.PriceNanoton, gift.PriceSource
+		}
 		return gift.PriceNanoton, PriceSourceTelegram
 	}
 	return 0, PriceSourceNone

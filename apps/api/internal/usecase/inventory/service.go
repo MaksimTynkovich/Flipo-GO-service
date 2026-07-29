@@ -109,13 +109,15 @@ func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.In
 		view.ValuationNanoton = item.FloorPriceNanoton
 		return view
 	}
-	if price, _ := valuator.QuoteInventoryBuyback(ctx, item); price > 0 {
-		view.BuybackPriceNanoton = price
+	// List path: cached/DB only — live Portals/MRKT would make inventory 3–4s with a handful of gifts.
+	buyback, valuation := valuator.QuoteInventoryListPrices(ctx, item)
+	if buyback > 0 {
+		view.BuybackPriceNanoton = buyback
 	} else {
 		view.BuybackPriceNanoton = item.FloorPriceNanoton
 	}
-	if price, _ := valuator.QuoteInventoryValuation(ctx, item); price > 0 {
-		view.ValuationNanoton = price
+	if valuation > 0 {
+		view.ValuationNanoton = valuation
 	} else {
 		view.ValuationNanoton = item.FloorPriceNanoton
 	}

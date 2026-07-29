@@ -51,14 +51,13 @@ export function InventorySection() {
   async function load() {
     setLoading(true);
     try {
-      const inv = await getInventory();
+      const invPromise = getInventory();
+      const listingsPromise = MARKET_ENABLED
+        ? getMyMarketListings().catch(() => [] as MarketListing[])
+        : Promise.resolve([] as MarketListing[]);
+      const [inv, mine] = await Promise.all([invPromise, listingsPromise]);
       setItems(inv.filter((i) => i.status !== "liquidated" && i.status !== "staked" && i.status !== "withdrawn"));
-      if (MARKET_ENABLED) {
-        const mine = await getMyMarketListings().catch(() => [] as MarketListing[]);
-        setMyListings(mine);
-      } else {
-        setMyListings([]);
-      }
+      setMyListings(mine);
     } finally {
       setLoading(false);
     }

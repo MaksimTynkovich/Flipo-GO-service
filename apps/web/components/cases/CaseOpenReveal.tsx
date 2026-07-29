@@ -18,9 +18,9 @@ const IDLE_LOOPS = 3;
 /** Items kept after the winner so the right side of the viewport never goes empty. */
 const PAD_AFTER = 8;
 /** Target reel speed — duration scales with travel distance. */
-const SPIN_PX_PER_MS = 1.55;
-const SPIN_MIN_MS = 5200;
-const SPIN_MAX_MS = 8200;
+const SPIN_PX_PER_MS = 0.78;
+const SPIN_MIN_MS = 9000;
+const SPIN_MAX_MS = 13000;
 const FALLBACK_ITEM_W = 56;
 
 type RevealLayout = {
@@ -114,13 +114,12 @@ function spinDurationMs(travelPx: number): number {
 }
 
 /**
- * Ease-out sextic: quick rush, then a long soft crawl into the winner.
- * Higher power = more of the timeline spent decelerating near the end.
+ * Single ease-out: velocity falls monotonically (no mid-spin stall).
+ * Power ~3.5 keeps mid-spin readable and the final approach soft.
  */
 function easeOutSmoothStop(t: number): number {
   const x = Math.min(1, Math.max(0, t));
-  const inv = 1 - x;
-  return 1 - inv ** 6;
+  return 1 - (1 - x) ** 3.5;
 }
 
 export function CaseOpenReveal({
