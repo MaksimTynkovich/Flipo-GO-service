@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
@@ -69,6 +70,13 @@ func (h *InventoryHandler) Liquidate(c *gin.Context) {
 	balance, err := h.inventory.Liquidate(c.Request.Context(), userID, itemID)
 	if err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_liquidated", "error", "liquidate_failed", err.Error(), map[string]any{"item_id": itemID.String()})
+		if errors.Is(err, domain.ErrUnbackedBuyback) {
+			httperr.Respond(c, http.StatusConflict, err, gin.H{
+				"error": err.Error(),
+				"code":  "unbacked_buyback",
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

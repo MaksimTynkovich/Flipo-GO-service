@@ -256,12 +256,23 @@ func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogS
 	var row domain.CaseCatalogSettings
 	err := r.db.WithContext(ctx).First(&row, "id = ?", 1).Error
 	if err == nil {
+		domain.SyncCaseBankHysteresis(&row)
 		return &row, nil
 	}
 	if err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
-	row = domain.CaseCatalogSettings{ID: 1, Enabled: true, BannersEnabled: false, UpdatedAt: time.Now().UTC()}
+	row = domain.CaseCatalogSettings{
+		ID:                        1,
+		Enabled:                   true,
+		BannersEnabled:            false,
+		BankLossThresholdNanoton:  -50_000_000_000,
+		BankBiasWeight:            50,
+		BankMaxPrizeBps:           5000,
+		DailyPoolMaxPrizeBps:      5000,
+		PromoPoolMaxPrizeBps:      5000,
+		UpdatedAt:                 time.Now().UTC(),
+	}
 	if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
 		return nil, createErr
 	}
@@ -271,25 +282,139 @@ func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogS
 func (r *CaseRepo) UpdateCatalogSettings(ctx context.Context, settings *domain.CaseCatalogSettings) error {
 	settings.ID = 1
 	settings.UpdatedAt = time.Now().UTC()
-	// Use a map so false bools are written (GORM Create omits zero-value fields,
-	// which made ON CONFLICT SET enabled = EXCLUDED.enabled fall back to DEFAULT true).
-	res := r.db.WithContext(ctx).Model(&domain.CaseCatalogSettings{}).Where("id = ?", 1).Updates(map[string]any{
-		"enabled":         settings.Enabled,
-		"banners_enabled": settings.BannersEnabled,
-		"updated_at":      settings.UpdatedAt,
-	})
+	domain.SyncCaseBankHysteresis(settings)
+	// Use a map so false bools are written (GORM Updates omits zero-value fields otherwise).
+	res := r.db.WithContext(ctx).Model(&domain.CaseCatalogSettings{}).Where("id = ?", 1).Updates(catalogSettingsUpdateMap(settings))
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return r.db.WithContext(ctx).Create(&domain.CaseCatalogSettings{
-			ID:             1,
-			Enabled:        settings.Enabled,
-			BannersEnabled: settings.BannersEnabled,
-			UpdatedAt:      settings.UpdatedAt,
-		}).Error
+		return r.db.WithContext(ctx).Create(settings).Error
 	}
 	return nil
+}
+
+func catalogSettingsUpdateMap(s *domain.CaseCatalogSettings) map[string]any {
+	return map[string]any{
+		"enabled":                          s.Enabled,
+		"banners_enabled":                  s.BannersEnabled,
+		"bank_enabled":                     s.BankEnabled,
+		"bank_nanoton":                     s.BankNanoton,
+		"bank_target_nanoton":              s.BankTargetNanoton,
+		"bank_loss_threshold_nanoton":      s.BankLossThresholdNanoton,
+		"bank_recovery_target_nanoton":     s.BankRecoveryTargetNanoton,
+		"bank_recovery_active":             s.BankRecoveryActive,
+		"bank_bias_weight":                 s.BankBiasWeight,
+		"bank_max_prize_bps":               s.BankMaxPrizeBps,
+		"bank_fat_paused":                  s.BankFatPaused,
+		"daily_pool_enabled":               s.DailyPoolEnabled,
+		"daily_pool_nanoton":               s.DailyPoolNanoton,
+		"daily_pool_max_prize_bps":         s.DailyPoolMaxPrizeBps,
+		"daily_pool_daily_refill_nanoton":  s.DailyPoolDailyRefillNanoton,
+		"daily_pool_last_refill_date":      s.DailyPoolLastRefillDate,
+		"promo_pool_enabled":               s.PromoPoolEnabled,
+		"promo_pool_nanoton":               s.PromoPoolNanoton,
+		"promo_pool_max_prize_bps":         s.PromoPoolMaxPrizeBps,
+		"promo_pool_daily_refill_nanoton":  s.PromoPoolDailyRefillNanoton,
+		"promo_pool_last_refill_date":      s.PromoPoolLastRefillDate,
+		"updated_at":                       s.UpdatedAt,
+	}
+}
+
+func (r *CaseRepo) ApplyCasePoolDelta(ctx context.Context, kind domain.CasePoolKind, delta int64) (*domain.CaseCatalogSettings, error) {
+	var out domain.CaseCatalogSettings
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var settings domain.CaseCatalogSettings
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&settings, "id = ?", 1).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				settings = domain.CaseCatalogSettings{
+					ID:                       1,
+					Enabled:                  true,
+					BankLossThresholdNanoton: -50_000_000_000,
+					BankBiasWeight:           50,
+					BankMaxPrizeBps:          5000,
+					DailyPoolMaxPrizeBps:     5000,
+					PromoPoolMaxPrizeBps:     5000,
+					UpdatedAt:                time.Now().UTC(),
+				}
+				if createErr := tx.Create(&settings).Error; createErr != nil {
+					return createErr
+				}
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&settings, "id = ?", 1).Error; err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+		r.applyDailyRefillsLocked(&settings, time.Now().UTC())
+		switch kind {
+		case domain.CasePoolDaily:
+			settings.DailyPoolNanoton += delta
+		case domain.CasePoolPromo:
+			settings.PromoPoolNanoton += delta
+		default:
+			settings.BankNanoton += delta
+		}
+		domain.SyncCaseBankHysteresis(&settings)
+		settings.UpdatedAt = time.Now().UTC()
+		if err := tx.Model(&domain.CaseCatalogSettings{}).Where("id = ?", 1).Updates(catalogSettingsUpdateMap(&settings)).Error; err != nil {
+			return err
+		}
+		out = settings
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// applyDailyRefillsLocked tops up daily/promo pools once per UTC day when configured.
+func (r *CaseRepo) applyDailyRefillsLocked(settings *domain.CaseCatalogSettings, now time.Time) {
+	if settings == nil {
+		return
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if settings.DailyPoolEnabled && settings.DailyPoolDailyRefillNanoton > 0 {
+		if settings.DailyPoolLastRefillDate == nil || settings.DailyPoolLastRefillDate.Before(today) {
+			settings.DailyPoolNanoton += settings.DailyPoolDailyRefillNanoton
+			settings.DailyPoolLastRefillDate = &today
+		}
+	}
+	if settings.PromoPoolEnabled && settings.PromoPoolDailyRefillNanoton > 0 {
+		if settings.PromoPoolLastRefillDate == nil || settings.PromoPoolLastRefillDate.Before(today) {
+			settings.PromoPoolNanoton += settings.PromoPoolDailyRefillNanoton
+			settings.PromoPoolLastRefillDate = &today
+		}
+	}
+}
+
+func (r *CaseRepo) CaseOpenStats(ctx context.Context, since *time.Time) (*domain.CaseOpenStats, error) {
+	type row struct {
+		OpensCount        int64
+		SpentNanoton      int64
+		PrizeTotalNanoton int64
+	}
+	var agg row
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Select("COUNT(*) AS opens_count, COALESCE(SUM(price_paid_nanoton),0) AS spent_nanoton, COALESCE(SUM(prize_nanoton),0) AS prize_total_nanoton")
+	if since != nil {
+		q = q.Where("created_at >= ?", *since)
+	}
+	if err := q.Scan(&agg).Error; err != nil {
+		return nil, err
+	}
+	stats := &domain.CaseOpenStats{
+		OpensCount:        agg.OpensCount,
+		SpentNanoton:      agg.SpentNanoton,
+		PrizeTotalNanoton: agg.PrizeTotalNanoton,
+		HouseEdgeNanoton:  agg.SpentNanoton - agg.PrizeTotalNanoton,
+	}
+	if agg.SpentNanoton > 0 {
+		stats.ActualRTPBPS = int((agg.PrizeTotalNanoton * 10000) / agg.SpentNanoton)
+	}
+	return stats, nil
 }
 
 func (r *CaseRepo) GetLiveFeedSettings(ctx context.Context) (*domain.CaseLiveFeedSettings, error) {
@@ -427,6 +552,23 @@ func (r *InventoryRepo) TakeHouseGiftForModel(ctx context.Context, botUserID, to
 		return nil, gorm.ErrRecordNotFound
 	}
 	return r.takeHouseGift(ctx, botUserID, toUserID, collectionSlug, modelName, backdrop)
+}
+
+func (r *InventoryRepo) HasHouseGift(ctx context.Context, botUserID uuid.UUID, collectionSlug, modelName, backdrop string) (bool, error) {
+	q := r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("user_id = ? AND LOWER(collection_slug) = LOWER(?) AND status IN ? AND telegram_gift_id <> ''",
+			botUserID, collectionSlug, []domain.InventoryStatus{domain.InvAvailable, domain.InvLocked})
+	if modelName = strings.TrimSpace(modelName); modelName != "" {
+		q = q.Where("metadata->>'model' = ?", modelName)
+	}
+	if backdrop = strings.TrimSpace(backdrop); backdrop != "" {
+		q = q.Where("LOWER(COALESCE(metadata->>'backdrop', '')) = LOWER(?)", backdrop)
+	}
+	var count int64
+	if err := q.Limit(1).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (r *InventoryRepo) takeHouseGift(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName, backdrop string) (*domain.InventoryItem, error) {

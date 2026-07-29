@@ -163,6 +163,9 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	if isProfileVirtualItem(*item) {
 		return 0, domain.ErrInvalidAmount
 	}
+	if domain.IsUnbackedCaseClaim(*item) {
+		return 0, domain.ErrUnbackedBuyback
+	}
 
 	payout := item.FloorPriceNanoton
 	if s.valuator != nil {

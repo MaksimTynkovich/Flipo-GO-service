@@ -438,6 +438,25 @@ type AdminStakingActivityRow struct {
 	RequestID    string    `json:"request_id,omitempty"`
 }
 
+type AdminStakingStakerFilter struct {
+	Query  string
+	Limit  int
+	Offset int
+}
+
+// AdminStakingStakerRow — active staker aggregated by user for admin list.
+type AdminStakingStakerRow struct {
+	UserID                 string     `json:"user_id"`
+	TelegramID             int64      `json:"telegram_id"`
+	Username               string     `json:"username"`
+	FirstName              string     `json:"first_name"`
+	StakingTier            StakingTier `json:"staking_tier"`
+	Positions              int64      `json:"positions"`
+	PrincipalNanoton       int64      `json:"principal_nanoton"`
+	ProjectedPayoutNanoton int64      `json:"projected_payout_nanoton"`
+	StreakBonusActive      bool       `json:"streak_bonus_active"`
+}
+
 // PromoRedemption — player promo activation history.
 type PromoRedemption struct {
 	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`

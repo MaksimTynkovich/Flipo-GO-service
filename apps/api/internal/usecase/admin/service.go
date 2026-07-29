@@ -767,3 +767,7 @@ func (s *Service) ListStakingPositions(ctx context.Context, filter domain.AdminS
 func (s *Service) ListStakingActivity(ctx context.Context, filter domain.AdminStakingActivityFilter) ([]domain.AdminStakingActivityRow, int64, error) {
 	return s.admin.ListStakingActivity(ctx, filter)
 }
+
+func (s *Service) ListStakingStakers(ctx context.Context, filter domain.AdminStakingStakerFilter) ([]domain.AdminStakingStakerRow, int64, error) {
+	return s.admin.ListStakingStakers(ctx, filter)
+}

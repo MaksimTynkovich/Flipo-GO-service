@@ -40,12 +40,16 @@ type CaseSimulateResult struct {
 	TheoreticalRTPBPS   int                       `json:"theoretical_rtp_bps"`
 	TargetRTPBPS        int                       `json:"target_rtp_bps"`
 	RTPAvailable        bool                      `json:"rtp_available"`
+	WithBank            bool                      `json:"with_bank"`
+	FinalBankNanoton    int64                     `json:"final_bank_nanoton,omitempty"`
+	EligibleEntryIDs    []uuid.UUID               `json:"eligible_entry_ids,omitempty"`
 	Entries             []CaseSimulateEntryResult `json:"entries"`
 	Warnings            []string                  `json:"warnings,omitempty"`
 }
 
 // AdminSimulateCase runs pickWeighted iterations against saved loot (no opens/inventory).
-func (s *Service) AdminSimulateCase(ctx context.Context, caseID uuid.UUID, iterations int) (*CaseSimulateResult, error) {
+// When withBank is true, applies current pool gates and tracks a synthetic bank balance.
+func (s *Service) AdminSimulateCase(ctx context.Context, caseID uuid.UUID, iterations int, withBank bool) (*CaseSimulateResult, error) {
 	if iterations <= 0 {
 		iterations = defaultSimulateIterations
 	}
@@ -82,7 +86,107 @@ func (s *Service) AdminSimulateCase(ctx context.Context, caseID uuid.UUID, itera
 		}
 	}
 
-	return runCaseSimulate(*c, loot, floors, iterations, warnings), nil
+	if !withBank {
+		return runCaseSimulate(*c, loot, floors, iterations, warnings), nil
+	}
+
+	settings, err := s.cases.GetCatalogSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	poolKind := domain.CasePoolForKind(c.Kind)
+	pool := settings.PoolSnapshot(poolKind)
+	if !pool.Enabled {
+		warnings = append(warnings, "пул экономики выключен — симуляция без банка")
+		return runCaseSimulate(*c, loot, floors, iterations, warnings), nil
+	}
+
+	return runCaseSimulateWithBank(*c, loot, floors, iterations, pool, warnings, s.stockChecker(ctx)), nil
+}
+
+func runCaseSimulateWithBank(
+	c domain.Case,
+	loot []domain.CaseLootEntry,
+	floors map[uuid.UUID]int64,
+	iterations int,
+	pool domain.CasePoolSnapshot,
+	warnings []string,
+	stockOK func(domain.CaseLootEntry) bool,
+) *CaseSimulateResult {
+	hits := make(map[uuid.UUID]int, len(loot))
+	prizeSums := make(map[uuid.UUID]int64, len(loot))
+	var prizeTotal int64
+	price := c.PriceNanoton
+	balance := pool.Balance
+	eligibleSet := map[uuid.UUID]struct{}{}
+
+	for i := 0; i < iterations; i++ {
+		snap := pool
+		snap.Balance = balance
+		if price > 0 {
+			snap.Balance += price
+		}
+		// Recompute recovery-ish flag for daily/promo from balance.
+		if snap.Kind != domain.CasePoolPaid {
+			snap.Recovery = snap.Balance <= 0
+		} else if snap.TargetBalance > 0 {
+			// Keep Recovery from settings hysteresis; soft surplus uses TargetBalance.
+		}
+		filtered := filterLootForPool(loot, floors, snap, price, stockOK)
+		biased := biasLootWeights(filtered, floors, snap)
+		for _, e := range filtered {
+			eligibleSet[e.ID] = struct{}{}
+		}
+		entry, _, err := pickWeighted(biased)
+		if err != nil {
+			break
+		}
+		hits[entry.ID]++
+		floor := floors[entry.ID]
+		prizeSums[entry.ID] += floor
+		prizeTotal += floor
+		balance = snap.Balance - floor
+	}
+
+	spent := int64(iterations) * price
+	rtpAvailable := price > 0
+	var simulatedRTPBPS int
+	if rtpAvailable && spent > 0 {
+		simulatedRTPBPS = int(math.Round(float64(prizeTotal) / float64(spent) * 10_000))
+	}
+
+	eligibleIDs := make([]uuid.UUID, 0, len(eligibleSet))
+	for id := range eligibleSet {
+		eligibleIDs = append(eligibleIDs, id)
+	}
+
+	base := runCaseSimulate(c, loot, floors, 0, warnings)
+	base.Iterations = iterations
+	base.SpentNanoton = spent
+	base.PrizeTotalNanoton = prizeTotal
+	base.HouseEdgeNanoton = spent - prizeTotal
+	base.SimulatedRTPBPS = simulatedRTPBPS
+	base.WithBank = true
+	base.FinalBankNanoton = balance
+	base.EligibleEntryIDs = eligibleIDs
+	base.RTPAvailable = rtpAvailable
+
+	for i := range base.Entries {
+		id := base.Entries[i].LootEntryID
+		h := hits[id]
+		base.Entries[i].Hits = h
+		base.Entries[i].PrizeSumNanoton = prizeSums[id]
+		if iterations > 0 {
+			base.Entries[i].ActualPctBps = int(math.Round(float64(h) / float64(iterations) * 10_000))
+		}
+	}
+	sort.SliceStable(base.Entries, func(i, j int) bool {
+		if base.Entries[i].Hits != base.Entries[j].Hits {
+			return base.Entries[i].Hits > base.Entries[j].Hits
+		}
+		return base.Entries[i].DisplayName < base.Entries[j].DisplayName
+	})
+	return base
 }
 
 func runCaseSimulate(

@@ -55,6 +55,8 @@ type InventoryRepository interface {
 	// TakeHouseGiftForModel transfers one bot-owned gift matching collection + metadata.model.
 	// Optional backdrop filters metadata->>'backdrop' (Black / Onyx Black).
 	TakeHouseGiftForModel(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, modelName, backdrop string) (*InventoryItem, error)
+	// HasHouseGift reports whether bot stock has a matching gift (available or market-locked).
+	HasHouseGift(ctx context.Context, botUserID uuid.UUID, collectionSlug, modelName, backdrop string) (bool, error)
 	BindTelegramGift(ctx context.Context, itemID uuid.UUID, telegramGiftID, imageURL string, metadata []byte, fulfillment string) error
 	GetFloorPrice(ctx context.Context, collectionSlug string) (int64, error)
 	SetFloorPrice(ctx context.Context, slug string, price int64) error
@@ -79,6 +81,10 @@ type CaseRepository interface {
 	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
 	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
+	// ApplyCasePoolDelta adds delta to the selected pool and syncs paid-bank hysteresis.
+	ApplyCasePoolDelta(ctx context.Context, kind CasePoolKind, delta int64) (*CaseCatalogSettings, error)
+	// CaseOpenStats aggregates paid opens for admin P&L (since optional; nil = all time).
+	CaseOpenStats(ctx context.Context, since *time.Time) (*CaseOpenStats, error)
 	GetLiveFeedSettings(ctx context.Context) (*CaseLiveFeedSettings, error)
 	UpdateLiveFeedSettings(ctx context.Context, settings *CaseLiveFeedSettings) error
 
@@ -273,6 +279,7 @@ type AdminRepository interface {
 	ListStakingEpochs(ctx context.Context, limit, offset int) ([]AdminStakingEpochRow, int64, error)
 	ListStakingPositions(ctx context.Context, filter AdminStakingPositionFilter) ([]AdminStakingPositionRow, int64, error)
 	ListStakingActivity(ctx context.Context, filter AdminStakingActivityFilter) ([]AdminStakingActivityRow, int64, error)
+	ListStakingStakers(ctx context.Context, filter AdminStakingStakerFilter) ([]AdminStakingStakerRow, int64, error)
 }
 
 type AdminNotificationRepository interface {

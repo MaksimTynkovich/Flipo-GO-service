@@ -40,7 +40,8 @@ export function CaseWinModal({
   const giftValue = result.item ? giftBuyPriceNanoton(result.item) : 0;
   const value = isTon ? tonPrize : giftValue;
   const glow = accent || "#3390ec";
-  const canSell = !isTon && Boolean(result.item) && Boolean(onSell);
+  const canSell =
+    !isTon && Boolean(result.item) && Boolean(onSell) && result.backed !== false;
 
   useEffect(() => {
     setMounted(true);

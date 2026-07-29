@@ -239,6 +239,111 @@ func (r *AdminRepo) ListStakingPositions(ctx context.Context, filter domain.Admi
 	return out, total, nil
 }
 
+func (r *AdminRepo) ListStakingStakers(ctx context.Context, filter domain.AdminStakingStakerFilter) ([]domain.AdminStakingStakerRow, int64, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	basePct, boostPct := 3.0, 4.0
+	var yieldSettings domain.PlatformYieldSettings
+	if err := r.db.WithContext(ctx).First(&yieldSettings, 1).Error; err == nil {
+		if yieldSettings.StakingBaseMonthlyPercent >= 0 {
+			basePct = yieldSettings.StakingBaseMonthlyPercent
+		}
+		if yieldSettings.StakingBoostMonthlyPercent >= 0 {
+			boostPct = yieldSettings.StakingBoostMonthlyPercent
+		}
+	}
+
+	where := `sp.is_active = TRUE AND u.deleted_at IS NULL`
+	args := make([]any, 0, 4)
+	if search := strings.TrimSpace(filter.Query); search != "" {
+		like := "%" + search + "%"
+		where += ` AND (
+			u.username ILIKE ? OR
+			u.first_name ILIKE ? OR
+			CAST(u.telegram_id AS TEXT) ILIKE ?
+		)`
+		args = append(args, like, like, like)
+	}
+
+	var total int64
+	countSQL := `
+		SELECT COUNT(*) FROM (
+			SELECT sp.user_id
+			FROM staking_positions sp
+			JOIN users u ON u.id = sp.user_id
+			WHERE ` + where + `
+			GROUP BY sp.user_id
+		) t`
+	if err := r.db.WithContext(ctx).Raw(countSQL, args...).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	type row struct {
+		UserID                uuid.UUID         `gorm:"column:user_id"`
+		TelegramID            int64             `gorm:"column:telegram_id"`
+		Username              string            `gorm:"column:username"`
+		FirstName             string            `gorm:"column:first_name"`
+		StakingTier           domain.StakingTier `gorm:"column:staking_tier"`
+		Positions             int64             `gorm:"column:positions"`
+		Principal             int64             `gorm:"column:principal"`
+		BonusPayoutsRemaining int               `gorm:"column:bonus_payouts_remaining"`
+	}
+	listArgs := append(append([]any{}, args...), limit, offset)
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			u.id AS user_id,
+			u.telegram_id,
+			COALESCE(u.username, '') AS username,
+			COALESCE(u.first_name, '') AS first_name,
+			u.staking_tier,
+			COUNT(sp.id) AS positions,
+			COALESCE(SUM(sp.principal_nanoton), 0) AS principal,
+			COALESCE(MAX(uss.bonus_payouts_remaining), 0) AS bonus_payouts_remaining
+		FROM staking_positions sp
+		JOIN users u ON u.id = sp.user_id
+		LEFT JOIN user_staking_streaks uss ON uss.user_id = u.id
+		WHERE `+where+`
+		GROUP BY u.id, u.telegram_id, u.username, u.first_name, u.staking_tier
+		ORDER BY principal DESC, u.telegram_id ASC
+		LIMIT ? OFFSET ?
+	`, listArgs...).Scan(&rows).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	out := make([]domain.AdminStakingStakerRow, 0, len(rows))
+	for _, item := range rows {
+		payout := projectedDailyYield(item.Principal, item.StakingTier, basePct, boostPct)
+		bonusActive := item.BonusPayoutsRemaining > 0
+		if bonusActive {
+			payout = int64(float64(payout) * domain.StakingStreakBonusMultiplier)
+		}
+		out = append(out, domain.AdminStakingStakerRow{
+			UserID:                 item.UserID.String(),
+			TelegramID:             item.TelegramID,
+			Username:               item.Username,
+			FirstName:              item.FirstName,
+			StakingTier:            item.StakingTier,
+			Positions:              item.Positions,
+			PrincipalNanoton:       item.Principal,
+			ProjectedPayoutNanoton: payout,
+			StreakBonusActive:      bonusActive,
+		})
+	}
+	return out, total, nil
+}
+
 func (r *AdminRepo) ListStakingActivity(ctx context.Context, filter domain.AdminStakingActivityFilter) ([]domain.AdminStakingActivityRow, int64, error) {
 	limit := filter.Limit
 	if limit <= 0 {

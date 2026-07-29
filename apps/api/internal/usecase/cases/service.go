@@ -379,9 +379,16 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		}
 	}
 
-	entry, roll, err := pickWeighted(loot)
-	if err != nil {
-		return nil, err
+	poolKind := domain.CasePoolForKind(c.Kind)
+	var pool domain.CasePoolSnapshot
+	if settings, err := s.cases.GetCatalogSettings(ctx); err == nil && settings != nil {
+		// Trigger daily/promo refill via zero delta when those pools are used.
+		if poolKind == domain.CasePoolDaily || poolKind == domain.CasePoolPromo {
+			if refreshed, dErr := s.cases.ApplyCasePoolDelta(ctx, poolKind, 0); dErr == nil && refreshed != nil {
+				settings = refreshed
+			}
+		}
+		pool = settings.PoolSnapshot(poolKind)
 	}
 
 	openID := uuid.New()
@@ -390,6 +397,23 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		if _, err := s.balance.Debit(ctx, userID, price, domain.LedgerCaseOpen, "case_open", openID); err != nil {
 			return nil, err
 		}
+		if pool.Enabled {
+			if refreshed, err := s.cases.ApplyCasePoolDelta(ctx, poolKind, price); err == nil && refreshed != nil {
+				pool = refreshed.PoolSnapshot(poolKind)
+			}
+		}
+	}
+
+	effectiveLoot, _ := s.prepareLootForOpen(ctx, loot, pool, price)
+	entry, roll, err := pickWeighted(effectiveLoot)
+	if err != nil {
+		if price > 0 {
+			_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+			if pool.Enabled {
+				_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
+			}
+		}
+		return nil, err
 	}
 
 	prizeType := domain.NormalizeCasePrizeType(entry.PrizeType)
@@ -403,12 +427,18 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		if prizeNanoton <= 0 {
 			if price > 0 {
 				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+				if pool.Enabled {
+					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
+				}
 			}
 			return nil, domain.ErrInvalidAmount
 		}
 		if _, err := s.balance.Credit(ctx, userID, prizeNanoton, domain.LedgerCasePrize, "case_open", openID); err != nil {
 			if price > 0 {
 				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+				if pool.Enabled {
+					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
+				}
 			}
 			return nil, err
 		}
@@ -417,6 +447,9 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		if err != nil {
 			if price > 0 {
 				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+				if pool.Enabled {
+					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
+				}
 			}
 			return nil, err
 		}
@@ -428,6 +461,10 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		if prizeNanoton <= 0 {
 			prizeNanoton = view.FloorPriceNanoton
 		}
+	}
+
+	if pool.Enabled && prizeNanoton > 0 {
+		_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -prizeNanoton)
 	}
 
 	open := &domain.CaseOpen{
@@ -745,6 +782,28 @@ func (s *Service) AdminGetCatalogSettings(ctx context.Context) (*domain.CaseCata
 type CatalogSettingsPatch struct {
 	Enabled        *bool
 	BannersEnabled *bool
+
+	BankEnabled               *bool
+	BankNanoton               *int64
+	BankTargetNanoton         *int64
+	BankLossThresholdNanoton  *int64
+	BankRecoveryTargetNanoton *int64
+	BankBiasWeight            *int
+	BankMaxPrizeBps           *int
+	BankFatPaused             *bool
+	BankAdjustNanoton         *int64 // relative delta for paid bank
+
+	DailyPoolEnabled            *bool
+	DailyPoolNanoton            *int64
+	DailyPoolMaxPrizeBps        *int
+	DailyPoolDailyRefillNanoton *int64
+	DailyPoolAdjustNanoton      *int64
+
+	PromoPoolEnabled            *bool
+	PromoPoolNanoton            *int64
+	PromoPoolMaxPrizeBps        *int
+	PromoPoolDailyRefillNanoton *int64
+	PromoPoolAdjustNanoton      *int64
 }
 
 func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogSettingsPatch) (*domain.CaseCatalogSettings, error) {
@@ -758,10 +817,71 @@ func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogS
 	if patch.BannersEnabled != nil {
 		settings.BannersEnabled = *patch.BannersEnabled
 	}
+	if patch.BankEnabled != nil {
+		settings.BankEnabled = *patch.BankEnabled
+	}
+	if patch.BankNanoton != nil {
+		settings.BankNanoton = *patch.BankNanoton
+	}
+	if patch.BankTargetNanoton != nil {
+		settings.BankTargetNanoton = *patch.BankTargetNanoton
+	}
+	if patch.BankLossThresholdNanoton != nil {
+		settings.BankLossThresholdNanoton = *patch.BankLossThresholdNanoton
+	}
+	if patch.BankRecoveryTargetNanoton != nil {
+		settings.BankRecoveryTargetNanoton = *patch.BankRecoveryTargetNanoton
+	}
+	if patch.BankBiasWeight != nil {
+		settings.BankBiasWeight = *patch.BankBiasWeight
+	}
+	if patch.BankMaxPrizeBps != nil {
+		settings.BankMaxPrizeBps = *patch.BankMaxPrizeBps
+	}
+	if patch.BankFatPaused != nil {
+		settings.BankFatPaused = *patch.BankFatPaused
+	}
+	if patch.BankAdjustNanoton != nil {
+		settings.BankNanoton += *patch.BankAdjustNanoton
+	}
+	if patch.DailyPoolEnabled != nil {
+		settings.DailyPoolEnabled = *patch.DailyPoolEnabled
+	}
+	if patch.DailyPoolNanoton != nil {
+		settings.DailyPoolNanoton = *patch.DailyPoolNanoton
+	}
+	if patch.DailyPoolMaxPrizeBps != nil {
+		settings.DailyPoolMaxPrizeBps = *patch.DailyPoolMaxPrizeBps
+	}
+	if patch.DailyPoolDailyRefillNanoton != nil {
+		settings.DailyPoolDailyRefillNanoton = *patch.DailyPoolDailyRefillNanoton
+	}
+	if patch.DailyPoolAdjustNanoton != nil {
+		settings.DailyPoolNanoton += *patch.DailyPoolAdjustNanoton
+	}
+	if patch.PromoPoolEnabled != nil {
+		settings.PromoPoolEnabled = *patch.PromoPoolEnabled
+	}
+	if patch.PromoPoolNanoton != nil {
+		settings.PromoPoolNanoton = *patch.PromoPoolNanoton
+	}
+	if patch.PromoPoolMaxPrizeBps != nil {
+		settings.PromoPoolMaxPrizeBps = *patch.PromoPoolMaxPrizeBps
+	}
+	if patch.PromoPoolDailyRefillNanoton != nil {
+		settings.PromoPoolDailyRefillNanoton = *patch.PromoPoolDailyRefillNanoton
+	}
+	if patch.PromoPoolAdjustNanoton != nil {
+		settings.PromoPoolNanoton += *patch.PromoPoolAdjustNanoton
+	}
 	if err := s.cases.UpdateCatalogSettings(ctx, settings); err != nil {
 		return nil, err
 	}
 	return s.cases.GetCatalogSettings(ctx)
+}
+
+func (s *Service) AdminCaseOpenStats(ctx context.Context, since *time.Time) (*domain.CaseOpenStats, error) {
+	return s.cases.CaseOpenStats(ctx, since)
 }
 
 func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entries []domain.CaseLootEntry) error {

@@ -1074,20 +1074,82 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 	var req struct {
 		Enabled        *bool `json:"enabled"`
 		BannersEnabled *bool `json:"banners_enabled"`
+
+		BankEnabled               *bool  `json:"bank_enabled"`
+		BankNanoton               *int64 `json:"bank_nanoton"`
+		BankTargetNanoton         *int64 `json:"bank_target_nanoton"`
+		BankLossThresholdNanoton  *int64 `json:"bank_loss_threshold_nanoton"`
+		BankRecoveryTargetNanoton *int64 `json:"bank_recovery_target_nanoton"`
+		BankBiasWeight            *int   `json:"bank_bias_weight"`
+		BankMaxPrizeBps           *int   `json:"bank_max_prize_bps"`
+		BankFatPaused             *bool  `json:"bank_fat_paused"`
+		BankAdjustNanoton         *int64 `json:"bank_adjust_nanoton"`
+
+		DailyPoolEnabled            *bool  `json:"daily_pool_enabled"`
+		DailyPoolNanoton            *int64 `json:"daily_pool_nanoton"`
+		DailyPoolMaxPrizeBps        *int   `json:"daily_pool_max_prize_bps"`
+		DailyPoolDailyRefillNanoton *int64 `json:"daily_pool_daily_refill_nanoton"`
+		DailyPoolAdjustNanoton      *int64 `json:"daily_pool_adjust_nanoton"`
+
+		PromoPoolEnabled            *bool  `json:"promo_pool_enabled"`
+		PromoPoolNanoton            *int64 `json:"promo_pool_nanoton"`
+		PromoPoolMaxPrizeBps        *int   `json:"promo_pool_max_prize_bps"`
+		PromoPoolDailyRefillNanoton *int64 `json:"promo_pool_daily_refill_nanoton"`
+		PromoPoolAdjustNanoton      *int64 `json:"promo_pool_adjust_nanoton"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	settings, err := h.cases.AdminUpdateCatalogSettings(c.Request.Context(), casesuc.CatalogSettingsPatch{
-		Enabled:        req.Enabled,
-		BannersEnabled: req.BannersEnabled,
+		Enabled:                     req.Enabled,
+		BannersEnabled:              req.BannersEnabled,
+		BankEnabled:                 req.BankEnabled,
+		BankNanoton:                 req.BankNanoton,
+		BankTargetNanoton:           req.BankTargetNanoton,
+		BankLossThresholdNanoton:    req.BankLossThresholdNanoton,
+		BankRecoveryTargetNanoton:   req.BankRecoveryTargetNanoton,
+		BankBiasWeight:              req.BankBiasWeight,
+		BankMaxPrizeBps:             req.BankMaxPrizeBps,
+		BankFatPaused:               req.BankFatPaused,
+		BankAdjustNanoton:           req.BankAdjustNanoton,
+		DailyPoolEnabled:            req.DailyPoolEnabled,
+		DailyPoolNanoton:            req.DailyPoolNanoton,
+		DailyPoolMaxPrizeBps:        req.DailyPoolMaxPrizeBps,
+		DailyPoolDailyRefillNanoton: req.DailyPoolDailyRefillNanoton,
+		DailyPoolAdjustNanoton:      req.DailyPoolAdjustNanoton,
+		PromoPoolEnabled:            req.PromoPoolEnabled,
+		PromoPoolNanoton:            req.PromoPoolNanoton,
+		PromoPoolMaxPrizeBps:        req.PromoPoolMaxPrizeBps,
+		PromoPoolDailyRefillNanoton: req.PromoPoolDailyRefillNanoton,
+		PromoPoolAdjustNanoton:      req.PromoPoolAdjustNanoton,
 	})
 	if err != nil {
 		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) GetCaseEconomyStats(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var since *time.Time
+	if raw := strings.TrimSpace(c.Query("since")); raw != "" {
+		if t, err := time.Parse(time.RFC3339, raw); err == nil {
+			since = &t
+		} else if t, err := time.Parse("2006-01-02", raw); err == nil {
+			since = &t
+		}
+	}
+	stats, err := h.cases.AdminCaseOpenStats(c.Request.Context(), since)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
 }
 
 func (h *AdminHandler) GetCaseLiveFeedSettings(c *gin.Context) {
@@ -1209,10 +1271,11 @@ func (h *AdminHandler) SimulateCase(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Iterations int `json:"iterations"`
+		Iterations int  `json:"iterations"`
+		WithBank   bool `json:"with_bank"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	result, err := h.cases.AdminSimulateCase(c.Request.Context(), caseID, req.Iterations)
+	result, err := h.cases.AdminSimulateCase(c.Request.Context(), caseID, req.Iterations, req.WithBank)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrNotFound):
@@ -1460,6 +1523,25 @@ func (h *AdminHandler) ListStakingActivity(c *gin.Context) {
 	}
 	if items == nil {
 		items = []domain.AdminStakingActivityRow{}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
+}
+
+func (h *AdminHandler) ListStakingStakers(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	filter := domain.AdminStakingStakerFilter{
+		Query:  strings.TrimSpace(c.Query("q")),
+		Limit:  limit,
+		Offset: offset,
+	}
+	items, total, err := h.admin.ListStakingStakers(c.Request.Context(), filter)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	if items == nil {
+		items = []domain.AdminStakingStakerRow{}
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
 }

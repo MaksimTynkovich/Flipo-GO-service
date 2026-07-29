@@ -1,0 +1,21 @@
+-- Case economy pools: paid Case Bank + Daily/Promo budgets (hybrid gate).
+ALTER TABLE case_catalog_settings
+    ADD COLUMN IF NOT EXISTS bank_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS bank_nanoton BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS bank_target_nanoton BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS bank_loss_threshold_nanoton BIGINT NOT NULL DEFAULT -50000000000,
+    ADD COLUMN IF NOT EXISTS bank_recovery_target_nanoton BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS bank_recovery_active BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS bank_bias_weight INT NOT NULL DEFAULT 50,
+    ADD COLUMN IF NOT EXISTS bank_max_prize_bps INT NOT NULL DEFAULT 5000,
+    ADD COLUMN IF NOT EXISTS bank_fat_paused BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS daily_pool_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS daily_pool_nanoton BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS daily_pool_max_prize_bps INT NOT NULL DEFAULT 5000,
+    ADD COLUMN IF NOT EXISTS daily_pool_daily_refill_nanoton BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS daily_pool_last_refill_date DATE,
+    ADD COLUMN IF NOT EXISTS promo_pool_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS promo_pool_nanoton BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS promo_pool_max_prize_bps INT NOT NULL DEFAULT 5000,
+    ADD COLUMN IF NOT EXISTS promo_pool_daily_refill_nanoton BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS promo_pool_last_refill_date DATE;

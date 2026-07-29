@@ -1887,6 +1887,18 @@ export type AdminStakingActivityRow = {
   request_id?: string;
 };
 
+export type AdminStakingStakerRow = {
+  user_id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  staking_tier: "base" | "boost";
+  positions: number;
+  principal_nanoton: number;
+  projected_payout_nanoton: number;
+  streak_bonus_active: boolean;
+};
+
 export async function getAdminStakingOverview() {
   return api<AdminStakingOverview>("/api/v1/admin/staking/overview");
 }
@@ -1919,6 +1931,21 @@ export async function getAdminStakingPositions(opts?: {
   const q = params.toString();
   return api<{ items: AdminStakingPositionRow[]; total: number; limit: number; offset: number }>(
     `/api/v1/admin/staking/positions${q ? `?${q}` : ""}`,
+  );
+}
+
+export async function getAdminStakingStakers(opts?: {
+  q?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  const q = params.toString();
+  return api<{ items: AdminStakingStakerRow[]; total: number; limit: number; offset: number }>(
+    `/api/v1/admin/staking/stakers${q ? `?${q}` : ""}`,
   );
 }
 
@@ -2313,20 +2340,76 @@ export type AdminCaseCatalogSettings = {
   enabled: boolean;
   banners_enabled: boolean;
   updated_at?: string;
+
+  bank_enabled?: boolean;
+  bank_nanoton?: number;
+  bank_target_nanoton?: number;
+  bank_loss_threshold_nanoton?: number;
+  bank_recovery_target_nanoton?: number;
+  bank_recovery_active?: boolean;
+  bank_bias_weight?: number;
+  bank_max_prize_bps?: number;
+  bank_fat_paused?: boolean;
+
+  daily_pool_enabled?: boolean;
+  daily_pool_nanoton?: number;
+  daily_pool_max_prize_bps?: number;
+  daily_pool_daily_refill_nanoton?: number;
+  daily_pool_last_refill_date?: string;
+
+  promo_pool_enabled?: boolean;
+  promo_pool_nanoton?: number;
+  promo_pool_max_prize_bps?: number;
+  promo_pool_daily_refill_nanoton?: number;
+  promo_pool_last_refill_date?: string;
+};
+
+export type AdminCaseCatalogSettingsPatch = {
+  enabled?: boolean;
+  banners_enabled?: boolean;
+  bank_enabled?: boolean;
+  bank_nanoton?: number;
+  bank_target_nanoton?: number;
+  bank_loss_threshold_nanoton?: number;
+  bank_recovery_target_nanoton?: number;
+  bank_bias_weight?: number;
+  bank_max_prize_bps?: number;
+  bank_fat_paused?: boolean;
+  bank_adjust_nanoton?: number;
+  daily_pool_enabled?: boolean;
+  daily_pool_nanoton?: number;
+  daily_pool_max_prize_bps?: number;
+  daily_pool_daily_refill_nanoton?: number;
+  daily_pool_adjust_nanoton?: number;
+  promo_pool_enabled?: boolean;
+  promo_pool_nanoton?: number;
+  promo_pool_max_prize_bps?: number;
+  promo_pool_daily_refill_nanoton?: number;
+  promo_pool_adjust_nanoton?: number;
 };
 
 export async function getAdminCaseCatalogSettings() {
   return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings");
 }
 
-export async function updateAdminCaseCatalogSettings(body: {
-  enabled?: boolean;
-  banners_enabled?: boolean;
-}) {
+export async function updateAdminCaseCatalogSettings(body: AdminCaseCatalogSettingsPatch) {
   return api<AdminCaseCatalogSettings>("/api/v1/admin/cases/settings", {
     method: "PATCH",
     body: JSON.stringify(body),
   });
+}
+
+export type AdminCaseEconomyStats = {
+  opens_count: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+  house_edge_nanoton: number;
+  actual_rtp_bps: number;
+};
+
+export async function getAdminCaseEconomyStats(since?: string) {
+  const q = since ? `?since=${encodeURIComponent(since)}` : "";
+  return api<AdminCaseEconomyStats>(`/api/v1/admin/cases/economy-stats${q}`);
 }
 
 export type AdminCaseLiveFeedSettings = {
@@ -2409,16 +2492,23 @@ export type AdminCaseSimulateResult = {
   theoretical_rtp_bps: number;
   target_rtp_bps: number;
   rtp_available: boolean;
+  with_bank?: boolean;
+  final_bank_nanoton?: number;
+  eligible_entry_ids?: string[];
   entries: AdminCaseSimulateEntry[];
   warnings?: string[];
 };
 
-export async function simulateAdminCase(caseId: string, iterations = 100) {
+export async function simulateAdminCase(
+  caseId: string,
+  iterations = 100,
+  withBank = false,
+) {
   return api<AdminCaseSimulateResult>(
     `/api/v1/admin/cases/${encodeURIComponent(caseId)}/simulate`,
     {
       method: "POST",
-      body: JSON.stringify({ iterations }),
+      body: JSON.stringify({ iterations, with_bank: withBank }),
     },
   );
 }

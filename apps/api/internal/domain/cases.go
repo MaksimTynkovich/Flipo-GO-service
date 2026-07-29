@@ -95,15 +95,175 @@ type UserCaseState struct {
 
 func (UserCaseState) TableName() string { return "user_case_state" }
 
-// CaseCatalogSettings — singleton (id=1) for catalog UI knobs.
+// CaseCatalogSettings — singleton (id=1) for catalog UI knobs + case economy pools.
 type CaseCatalogSettings struct {
 	ID             int       `gorm:"primaryKey" json:"id"`
 	Enabled        bool      `gorm:"not null;default:true" json:"enabled"`
 	BannersEnabled bool      `gorm:"not null;default:false" json:"banners_enabled"`
 	UpdatedAt      time.Time `json:"updated_at"`
+
+	// Paid Case Bank (catalog / featured / free-channel opens).
+	BankEnabled               bool  `gorm:"not null;default:false" json:"bank_enabled"`
+	BankNanoton               int64 `gorm:"not null;default:0" json:"bank_nanoton"`
+	BankTargetNanoton         int64 `gorm:"not null;default:0" json:"bank_target_nanoton"`
+	BankLossThresholdNanoton  int64 `gorm:"not null;default:-50000000000" json:"bank_loss_threshold_nanoton"`
+	BankRecoveryTargetNanoton int64 `gorm:"not null;default:0" json:"bank_recovery_target_nanoton"`
+	BankRecoveryActive        bool  `gorm:"not null;default:false" json:"bank_recovery_active"`
+	BankBiasWeight            int   `gorm:"not null;default:50" json:"bank_bias_weight"`
+	BankMaxPrizeBps           int   `gorm:"not null;default:5000" json:"bank_max_prize_bps"`
+	BankFatPaused             bool  `gorm:"not null;default:false" json:"bank_fat_paused"`
+
+	// Daily pool — isolated budget for daily cases.
+	DailyPoolEnabled            bool       `gorm:"not null;default:false" json:"daily_pool_enabled"`
+	DailyPoolNanoton            int64      `gorm:"not null;default:0" json:"daily_pool_nanoton"`
+	DailyPoolMaxPrizeBps        int        `gorm:"not null;default:5000" json:"daily_pool_max_prize_bps"`
+	DailyPoolDailyRefillNanoton int64      `gorm:"not null;default:0" json:"daily_pool_daily_refill_nanoton"`
+	DailyPoolLastRefillDate     *time.Time `gorm:"type:date" json:"daily_pool_last_refill_date,omitempty"`
+
+	// Promo pool — isolated budget for promo cases.
+	PromoPoolEnabled            bool       `gorm:"not null;default:false" json:"promo_pool_enabled"`
+	PromoPoolNanoton            int64      `gorm:"not null;default:0" json:"promo_pool_nanoton"`
+	PromoPoolMaxPrizeBps        int        `gorm:"not null;default:5000" json:"promo_pool_max_prize_bps"`
+	PromoPoolDailyRefillNanoton int64      `gorm:"not null;default:0" json:"promo_pool_daily_refill_nanoton"`
+	PromoPoolLastRefillDate     *time.Time `gorm:"type:date" json:"promo_pool_last_refill_date,omitempty"`
 }
 
 func (CaseCatalogSettings) TableName() string { return "case_catalog_settings" }
+
+// CaseOpenStats — aggregate P&L from case_opens for admin.
+type CaseOpenStats struct {
+	OpensCount       int64 `json:"opens_count"`
+	SpentNanoton     int64 `json:"spent_nanoton"`
+	PrizeTotalNanoton int64 `json:"prize_total_nanoton"`
+	HouseEdgeNanoton int64 `json:"house_edge_nanoton"`
+	ActualRTPBPS     int   `json:"actual_rtp_bps"`
+}
+
+// CasePoolKind selects which economy pool backs an open.
+type CasePoolKind string
+
+const (
+	CasePoolPaid  CasePoolKind = "paid"
+	CasePoolDaily CasePoolKind = "daily"
+	CasePoolPromo CasePoolKind = "promo"
+)
+
+// CasePoolForKind maps case kind to economy pool.
+func CasePoolForKind(kind string) CasePoolKind {
+	switch kind {
+	case CaseKindDaily:
+		return CasePoolDaily
+	case CaseKindPromo:
+		return CasePoolPromo
+	default:
+		return CasePoolPaid
+	}
+}
+
+// SyncCaseBankHysteresis updates BankRecoveryActive from bank vs thresholds (paid pool only).
+func SyncCaseBankHysteresis(s *CaseCatalogSettings) {
+	if s == nil {
+		return
+	}
+	if s.BankBiasWeight < 0 {
+		s.BankBiasWeight = 0
+	}
+	if s.BankBiasWeight > 100 {
+		s.BankBiasWeight = 100
+	}
+	if s.BankMaxPrizeBps < 0 {
+		s.BankMaxPrizeBps = 0
+	}
+	if s.BankMaxPrizeBps > 10000 {
+		s.BankMaxPrizeBps = 10000
+	}
+	if s.DailyPoolMaxPrizeBps < 0 {
+		s.DailyPoolMaxPrizeBps = 0
+	}
+	if s.DailyPoolMaxPrizeBps > 10000 {
+		s.DailyPoolMaxPrizeBps = 10000
+	}
+	if s.PromoPoolMaxPrizeBps < 0 {
+		s.PromoPoolMaxPrizeBps = 0
+	}
+	if s.PromoPoolMaxPrizeBps > 10000 {
+		s.PromoPoolMaxPrizeBps = 10000
+	}
+	if !s.BankEnabled {
+		s.BankRecoveryActive = false
+		return
+	}
+	if s.BankRecoveryActive {
+		if s.BankNanoton >= s.BankRecoveryTargetNanoton {
+			s.BankRecoveryActive = false
+		}
+	} else if s.BankNanoton <= s.BankLossThresholdNanoton {
+		s.BankRecoveryActive = true
+	}
+}
+
+// CasePoolSnapshot is the active pool balance + gate knobs for one open.
+type CasePoolSnapshot struct {
+	Kind         CasePoolKind
+	Enabled      bool
+	Balance      int64
+	MaxPrizeBps  int
+	BiasWeight   int
+	Recovery     bool
+	FatPaused    bool
+	TargetBalance int64 // paid bank target; 0 for daily/promo
+}
+
+func (s *CaseCatalogSettings) PoolSnapshot(kind CasePoolKind) CasePoolSnapshot {
+	if s == nil {
+		return CasePoolSnapshot{Kind: kind}
+	}
+	switch kind {
+	case CasePoolDaily:
+		return CasePoolSnapshot{
+			Kind:        CasePoolDaily,
+			Enabled:     s.DailyPoolEnabled,
+			Balance:     s.DailyPoolNanoton,
+			MaxPrizeBps: s.DailyPoolMaxPrizeBps,
+			BiasWeight:  s.BankBiasWeight,
+			Recovery:    s.DailyPoolEnabled && s.DailyPoolNanoton <= 0,
+			FatPaused:   s.BankFatPaused,
+		}
+	case CasePoolPromo:
+		return CasePoolSnapshot{
+			Kind:        CasePoolPromo,
+			Enabled:     s.PromoPoolEnabled,
+			Balance:     s.PromoPoolNanoton,
+			MaxPrizeBps: s.PromoPoolMaxPrizeBps,
+			BiasWeight:  s.BankBiasWeight,
+			Recovery:    s.PromoPoolEnabled && s.PromoPoolNanoton <= 0,
+			FatPaused:   s.BankFatPaused,
+		}
+	default:
+		return CasePoolSnapshot{
+			Kind:          CasePoolPaid,
+			Enabled:       s.BankEnabled,
+			Balance:       s.BankNanoton,
+			MaxPrizeBps:   s.BankMaxPrizeBps,
+			BiasWeight:    s.BankBiasWeight,
+			Recovery:      s.BankRecoveryActive,
+			FatPaused:     s.BankFatPaused,
+			TargetBalance: s.BankTargetNanoton,
+		}
+	}
+}
+
+// MaxPrizeNanoton returns hard ceiling for a prize given pool balance (0 if disabled/empty).
+func (p CasePoolSnapshot) MaxPrizeNanoton() int64 {
+	if !p.Enabled || p.MaxPrizeBps <= 0 {
+		return 0
+	}
+	bal := p.Balance
+	if bal < 0 {
+		bal = 0
+	}
+	return bal * int64(p.MaxPrizeBps) / 10000
+}
 
 // CasePromoCode — unlocks a promo-kind case when redeemed.
 type CasePromoCode struct {

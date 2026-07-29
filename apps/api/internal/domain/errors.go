@@ -45,6 +45,7 @@ var (
 	ErrCaseDailyUsed          = errors.New("ежедневный кейс уже открыт")
 	ErrCaseCooldown            = errors.New("кейс можно открыть раз в 24 часа")
 	ErrCaseNoLoot             = errors.New("у кейса нет призов")
+	ErrUnbackedBuyback        = errors.New("виртуальный приз кейса нельзя продать — дождитесь выдачи NFT или выведите подарок")
 	ErrAdminPasswordNotSet    = errors.New("пароль админки не настроен")
 	ErrAdminPasswordInvalid   = errors.New("неверный пароль")
 	ErrAdminActorMissing      = errors.New("сначала зайдите в Mini App под admin Telegram ID")

@@ -52,8 +52,11 @@ import {
   upsertAdminCasePromoCode,
   deleteAdminCase,
   simulateAdminCase,
+  getAdminCaseEconomyStats,
   formatTON,
   type AdminCase,
+  type AdminCaseCatalogSettings,
+  type AdminCaseEconomyStats,
   type AdminCaseLiveFeedSettings,
   type AdminCaseLootEntry,
   type AdminCasePromoCode,
@@ -70,6 +73,28 @@ const KINDS = [
 ] as const;
 
 const SIM_ITERATIONS = 100;
+
+const DEFAULT_CATALOG_ECONOMY: AdminCaseCatalogSettings = {
+  id: 1,
+  enabled: true,
+  banners_enabled: false,
+  bank_enabled: false,
+  bank_nanoton: 0,
+  bank_target_nanoton: 0,
+  bank_loss_threshold_nanoton: -50_000_000_000,
+  bank_recovery_target_nanoton: 0,
+  bank_bias_weight: 50,
+  bank_max_prize_bps: 5000,
+  bank_fat_paused: false,
+  daily_pool_enabled: false,
+  daily_pool_nanoton: 0,
+  daily_pool_max_prize_bps: 5000,
+  daily_pool_daily_refill_nanoton: 0,
+  promo_pool_enabled: false,
+  promo_pool_nanoton: 0,
+  promo_pool_max_prize_bps: 5000,
+  promo_pool_daily_refill_nanoton: 0,
+};
 
 function bpsPct(bps: number): string {
   return `${(bps / 100).toFixed(2)}%`;
@@ -363,20 +388,28 @@ export default function CasesSection() {
   const [liveSettingsLoading, setLiveSettingsLoading] = useState(true);
   const [savingLiveSettings, setSavingLiveSettings] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const [simWithBank, setSimWithBank] = useState(false);
   const [simResult, setSimResult] = useState<AdminCaseSimulateResult | null>(null);
+  const [economy, setEconomy] = useState<AdminCaseCatalogSettings>(DEFAULT_CATALOG_ECONOMY);
+  const [economyStats, setEconomyStats] = useState<AdminCaseEconomyStats | null>(null);
+  const [savingEconomy, setSavingEconomy] = useState(false);
+  const [bankAdjustTon, setBankAdjustTon] = useState("0");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, settings] = await Promise.all([
+      const [data, settings, stats] = await Promise.all([
         getAdminCases(),
         getAdminCaseCatalogSettings().catch(() => null),
+        getAdminCaseEconomyStats().catch(() => null),
       ]);
       setCases(data);
       if (settings) {
         setBannersEnabled(Boolean(settings.banners_enabled));
         setCasesEnabled(settings.enabled !== false);
+        setEconomy({ ...DEFAULT_CATALOG_ECONOMY, ...settings });
       }
+      if (stats) setEconomyStats(stats);
       return data;
     } catch (e) {
       showToast({ title: formatUserError(e, "Не удалось загрузить кейсы"), variant: "error" });
@@ -439,13 +472,13 @@ export default function CasesSection() {
     if (!draft.id) return;
     setSimulating(true);
     try {
-      const result = await simulateAdminCase(draft.id, SIM_ITERATIONS);
+      const result = await simulateAdminCase(draft.id, SIM_ITERATIONS, simWithBank);
       setSimResult(result);
       const rtpLine = result.rtp_available
         ? `RTP ${bpsPct(result.simulated_rtp_bps)} (теор ${bpsPct(result.theoretical_rtp_bps)})`
         : "RTP — (цена 0)";
       showToast({
-        title: `Тест · ${result.iterations} открытий`,
+        title: `Тест · ${result.iterations} открытий${result.with_bank ? " · банк" : ""}`,
         subtitle: `Spent ${formatTON(result.spent_nanoton)} · Prize ${formatTON(result.prize_total_nanoton)} · ${rtpLine}`,
         variant: "success",
       });
@@ -456,6 +489,45 @@ export default function CasesSection() {
       });
     } finally {
       setSimulating(false);
+    }
+  }
+
+  async function saveEconomy() {
+    setSavingEconomy(true);
+    try {
+      const adjustRaw = Number(bankAdjustTon.replace(",", "."));
+      const adjustNanoton =
+        Number.isFinite(adjustRaw) && adjustRaw !== 0
+          ? Math.round(adjustRaw * 1e9)
+          : undefined;
+      const saved = await updateAdminCaseCatalogSettings({
+        bank_enabled: economy.bank_enabled,
+        bank_target_nanoton: economy.bank_target_nanoton,
+        bank_loss_threshold_nanoton: economy.bank_loss_threshold_nanoton,
+        bank_recovery_target_nanoton: economy.bank_recovery_target_nanoton,
+        bank_bias_weight: economy.bank_bias_weight,
+        bank_max_prize_bps: economy.bank_max_prize_bps,
+        bank_fat_paused: economy.bank_fat_paused,
+        bank_adjust_nanoton: adjustNanoton,
+        daily_pool_enabled: economy.daily_pool_enabled,
+        daily_pool_max_prize_bps: economy.daily_pool_max_prize_bps,
+        daily_pool_daily_refill_nanoton: economy.daily_pool_daily_refill_nanoton,
+        promo_pool_enabled: economy.promo_pool_enabled,
+        promo_pool_max_prize_bps: economy.promo_pool_max_prize_bps,
+        promo_pool_daily_refill_nanoton: economy.promo_pool_daily_refill_nanoton,
+      });
+      setEconomy({ ...DEFAULT_CATALOG_ECONOMY, ...saved });
+      setBankAdjustTon("0");
+      const stats = await getAdminCaseEconomyStats().catch(() => null);
+      if (stats) setEconomyStats(stats);
+      showToast({ title: "Экономика кейсов сохранена", variant: "success" });
+    } catch (e) {
+      showToast({
+        title: formatUserError(e, "Не удалось сохранить экономику"),
+        variant: "error",
+      });
+    } finally {
+      setSavingEconomy(false);
     }
   }
 
@@ -928,6 +1000,126 @@ export default function CasesSection() {
         .
       </p>
 
+      <AdminPanel title="Экономика кейсов (Case Bank)">
+        <p className="mb-3 text-[11px] text-muted">
+          Платные кейсы → общий банк. Daily/Promo → отдельные бюджеты. Гибрид: потолок приза + soft bias.
+          Unbacked призы нельзя продать в TON.
+        </p>
+        {economyStats ? (
+          <p className="mb-3 text-xs text-muted">
+            Live P&amp;L: opens {economyStats.opens_count} · spent{" "}
+            {formatTON(economyStats.spent_nanoton)} · prize{" "}
+            {formatTON(economyStats.prize_total_nanoton)} · edge{" "}
+            {formatTON(economyStats.house_edge_nanoton)} · RTP{" "}
+            {economyStats.spent_nanoton > 0 ? bpsPct(economyStats.actual_rtp_bps) : "—"}
+          </p>
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={Boolean(economy.bank_enabled)}
+              onChange={(e) => setEconomy((s) => ({ ...s, bank_enabled: e.target.checked }))}
+            />
+            Case Bank вкл
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={Boolean(economy.bank_fat_paused)}
+              onChange={(e) => setEconomy((s) => ({ ...s, bank_fat_paused: e.target.checked }))}
+            />
+            Пауза жирных призов
+          </label>
+          <p className="text-xs text-muted sm:col-span-2 lg:col-span-1">
+            Баланс:{" "}
+            <span className="font-medium text-foreground/90">
+              {formatTON(economy.bank_nanoton || 0)} TON
+            </span>
+            {economy.bank_recovery_active ? " · recovery" : ""}
+          </p>
+          <AdminTonField
+            label="Target банка"
+            valueNanoton={economy.bank_target_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, bank_target_nanoton: v }))}
+          />
+          <AdminTonField
+            label="Loss threshold"
+            valueNanoton={economy.bank_loss_threshold_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, bank_loss_threshold_nanoton: v }))}
+            allowNegative
+            min={-1e15}
+          />
+          <AdminTonField
+            label="Recovery target"
+            valueNanoton={economy.bank_recovery_target_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, bank_recovery_target_nanoton: v }))}
+            allowNegative
+            min={-1e15}
+          />
+          <AdminIntField
+            label="Bias weight 0–100"
+            value={economy.bank_bias_weight ?? 50}
+            onChange={(v) => setEconomy((s) => ({ ...s, bank_bias_weight: v }))}
+            min={0}
+          />
+          <AdminPercentField
+            label="Max prize % банка"
+            valueBps={economy.bank_max_prize_bps ?? 5000}
+            onChangeBps={(v) => setEconomy((s) => ({ ...s, bank_max_prize_bps: v }))}
+          />
+          <AdminField label="Корректировка банка (± TON)">
+            <input
+              className="input-field w-full"
+              value={bankAdjustTon}
+              onChange={(e) => setBankAdjustTon(e.target.value)}
+              placeholder="0"
+            />
+          </AdminField>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={Boolean(economy.daily_pool_enabled)}
+              onChange={(e) => setEconomy((s) => ({ ...s, daily_pool_enabled: e.target.checked }))}
+            />
+            Daily pool вкл ({formatTON(economy.daily_pool_nanoton || 0)} TON)
+          </label>
+          <AdminTonField
+            label="Daily refill / сутки"
+            valueNanoton={economy.daily_pool_daily_refill_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, daily_pool_daily_refill_nanoton: v }))}
+          />
+          <AdminPercentField
+            label="Daily max prize %"
+            valueBps={economy.daily_pool_max_prize_bps ?? 5000}
+            onChangeBps={(v) => setEconomy((s) => ({ ...s, daily_pool_max_prize_bps: v }))}
+          />
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={Boolean(economy.promo_pool_enabled)}
+              onChange={(e) => setEconomy((s) => ({ ...s, promo_pool_enabled: e.target.checked }))}
+            />
+            Promo pool вкл ({formatTON(economy.promo_pool_nanoton || 0)} TON)
+          </label>
+          <AdminTonField
+            label="Promo refill / сутки"
+            valueNanoton={economy.promo_pool_daily_refill_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, promo_pool_daily_refill_nanoton: v }))}
+          />
+          <AdminPercentField
+            label="Promo max prize %"
+            valueBps={economy.promo_pool_max_prize_bps ?? 5000}
+            onChangeBps={(v) => setEconomy((s) => ({ ...s, promo_pool_max_prize_bps: v }))}
+          />
+        </div>
+        <div className="mt-3">
+          <AdminButton disabled={savingEconomy} onClick={() => void saveEconomy()}>
+            {savingEconomy ? "…" : "Сохранить экономику"}
+          </AdminButton>
+        </div>
+      </AdminPanel>
+
       {loading && cases.length === 0 ? (
         <div className="h-24 animate-pulse rounded-xl bg-surface-raised/50" />
       ) : cases.length === 0 && selectedId !== "new" ? (
@@ -1330,6 +1522,14 @@ export default function CasesSection() {
               >
                 {simulating ? "…" : `Тест · ${SIM_ITERATIONS}`}
               </AdminButton>
+              <label className="flex items-center gap-1.5 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={simWithBank}
+                  onChange={(e) => setSimWithBank(e.target.checked)}
+                />
+                с банком
+              </label>
               {draft.id ? (
                 <AdminButton
                   variant="danger"
@@ -1352,6 +1552,9 @@ export default function CasesSection() {
                   Spent {formatTON(simResult.spent_nanoton)} TON · Prize{" "}
                   {formatTON(simResult.prize_total_nanoton)} TON · Edge{" "}
                   {formatTON(simResult.house_edge_nanoton)} TON
+                  {simResult.with_bank
+                    ? ` · банк → ${formatTON(simResult.final_bank_nanoton || 0)} TON`
+                    : ""}
                 </p>
                 <p className="text-xs text-muted">
                   RTP sim{" "}

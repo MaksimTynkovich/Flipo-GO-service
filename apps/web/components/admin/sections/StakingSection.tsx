@@ -18,19 +18,21 @@ import {
   getAdminStakingEpochs,
   getAdminStakingOverview,
   getAdminStakingPositions,
+  getAdminStakingStakers,
   getAdminStakingActivity,
   getAdminYieldSettings,
   updateAdminYieldSettings,
   type AdminStakingEpochRow,
   type AdminStakingOverview,
   type AdminStakingPositionRow,
+  type AdminStakingStakerRow,
   type AdminStakingActivityRow,
   type AdminYieldSettings,
 } from "@/lib/api";
 import { giftImageUrl, telegramGiftUrl } from "@/lib/gifts";
-import { formatStakingEpochEnd } from "@/lib/staking-ui";
+import { formatStakingEpochEnd, formatStakingTierName } from "@/lib/staking-ui";
 
-type Tab = "overview" | "settings" | "epochs" | "positions" | "activity";
+type Tab = "overview" | "stakers" | "settings" | "epochs" | "positions" | "activity";
 
 function formatActivityEvent(name: string): string {
   switch (name) {
@@ -133,6 +135,10 @@ export default function StakingSection() {
   const [positions, setPositions] = useState<AdminStakingPositionRow[]>([]);
   const [positionsTotal, setPositionsTotal] = useState(0);
   const [positionsOffset, setPositionsOffset] = useState(0);
+  const [stakers, setStakers] = useState<AdminStakingStakerRow[]>([]);
+  const [stakersTotal, setStakersTotal] = useState(0);
+  const [stakersOffset, setStakersOffset] = useState(0);
+  const [stakersQuery, setStakersQuery] = useState("");
   const [activity, setActivity] = useState<AdminStakingActivityRow[]>([]);
   const [activityTotal, setActivityTotal] = useState(0);
   const [activityOffset, setActivityOffset] = useState(0);
@@ -173,6 +179,19 @@ export default function StakingSection() {
     setPositionsOffset(offset);
   }
 
+  async function loadStakers(opts?: { offset?: number; q?: string }) {
+    const offset = opts?.offset ?? stakersOffset;
+    const q = opts?.q ?? stakersQuery;
+    const data = await getAdminStakingStakers({
+      q,
+      limit: PAGE_SIZE,
+      offset,
+    });
+    setStakers(data.items);
+    setStakersTotal(data.total);
+    setStakersOffset(offset);
+  }
+
   async function loadActivity(opts?: {
     offset?: number;
     q?: string;
@@ -199,6 +218,7 @@ export default function StakingSection() {
         loadOverview(),
         loadSettings(),
         loadEpochs(),
+        loadStakers({ offset: 0 }),
         loadPositions({ offset: 0 }),
         loadActivity({ offset: 0 }),
       ]);
@@ -244,6 +264,7 @@ export default function StakingSection() {
         {(
           [
             ["overview", "Обзор"],
+            ["stakers", "Игроки"],
             ["settings", "Настройки"],
             ["epochs", "Эпохи"],
             ["positions", "Позиции"],
@@ -308,6 +329,112 @@ export default function StakingSection() {
             ) : (
               <AdminEmpty>{loading ? "Загрузка…" : "Активной эпохи нет"}</AdminEmpty>
             )}
+          </AdminPanel>
+        </div>
+      ) : null}
+
+      {tab === "stakers" ? (
+        <div className="space-y-3">
+          <AdminToolbar>
+            <input
+              value={stakersQuery}
+              onChange={(e) => setStakersQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  loadStakers({ offset: 0, q: stakersQuery }).catch(() => {});
+                }
+              }}
+              className="input-field h-8 min-w-[180px] flex-1"
+              placeholder="username, имя, Telegram ID"
+            />
+            <AdminChip onClick={() => loadStakers({ offset: 0 }).catch(() => {})}>Найти</AdminChip>
+          </AdminToolbar>
+
+          <AdminPanel
+            title={`Стейкеры (${stakersTotal})`}
+            description="Активные игроки: сумма в стейке и прогноз выплаты в 00:05 МСК."
+          >
+            {stakers.length === 0 ? (
+              <AdminEmpty>{loading ? "Загрузка…" : "Активных стейкеров нет"}</AdminEmpty>
+            ) : (
+              <div className="space-y-1">
+                <div className="hidden grid-cols-[minmax(0,1.4fr)_0.7fr_0.9fr_0.9fr] gap-2 px-2 text-[11px] uppercase tracking-wide text-[var(--admin-muted)] sm:grid">
+                  <span>Игрок</span>
+                  <span>Позиции</span>
+                  <span>В стейке</span>
+                  <span>Выплата сегодня</span>
+                </div>
+                {stakers.map((row) => {
+                  const userLabel = row.first_name || row.username || `id ${row.telegram_id}`;
+                  return (
+                    <div
+                      key={row.user_id}
+                      className="grid gap-1 rounded-md bg-surface-raised/40 px-2 py-2 text-sm sm:grid-cols-[minmax(0,1.4fr)_0.7fr_0.9fr_0.9fr] sm:items-center sm:gap-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">
+                          {userLabel}
+                          {row.username ? ` (@${row.username})` : ""}
+                        </p>
+                        <p className="text-xs text-[var(--admin-muted)]">
+                          tg {row.telegram_id} · {formatStakingTierName(row.staking_tier)}
+                          {row.streak_bonus_active ? " · бонус ×2" : ""}
+                        </p>
+                      </div>
+                      <p className="text-xs text-[var(--admin-muted)] sm:text-sm sm:text-inherit">
+                        <span className="sm:hidden">Позиции: </span>
+                        {row.positions}
+                      </p>
+                      <p className="font-medium">
+                        <span className="text-xs font-normal text-[var(--admin-muted)] sm:hidden">
+                          В стейке:{" "}
+                        </span>
+                        {formatTON(row.principal_nanoton)} TON
+                      </p>
+                      <p className="font-medium text-accent">
+                        <span className="text-xs font-normal text-[var(--admin-muted)] sm:hidden">
+                          Выплата:{" "}
+                        </span>
+                        {formatTON(row.projected_payout_nanoton)} TON
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {stakersTotal > PAGE_SIZE ? (
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <p className="text-xs text-[var(--admin-muted)]">
+                  Стр. {Math.floor(stakersOffset / PAGE_SIZE) + 1} /{" "}
+                  {Math.max(1, Math.ceil(stakersTotal / PAGE_SIZE))}
+                </p>
+                <div className="flex gap-2">
+                  <AdminButton
+                    variant="secondary"
+                    className="!h-8 text-xs"
+                    disabled={stakersOffset <= 0}
+                    onClick={() =>
+                      loadStakers({ offset: Math.max(0, stakersOffset - PAGE_SIZE) }).catch(
+                        () => {},
+                      )
+                    }
+                  >
+                    Назад
+                  </AdminButton>
+                  <AdminButton
+                    variant="secondary"
+                    className="!h-8 text-xs"
+                    disabled={stakersOffset + PAGE_SIZE >= stakersTotal}
+                    onClick={() =>
+                      loadStakers({ offset: stakersOffset + PAGE_SIZE }).catch(() => {})
+                    }
+                  >
+                    Далее
+                  </AdminButton>
+                </div>
+              </div>
+            ) : null}
           </AdminPanel>
         </div>
       ) : null}

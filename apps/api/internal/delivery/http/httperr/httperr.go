@@ -96,6 +96,7 @@ func isExpectedClientError(err error, status int) bool {
 		domain.ErrStakingPoolFull,
 		domain.ErrStakingPersonalLimit,
 		domain.ErrGiftAlreadyStakedEpoch,
+		domain.ErrUnbackedBuyback,
 	}
 	for _, target := range expected {
 		if errors.Is(err, target) {
