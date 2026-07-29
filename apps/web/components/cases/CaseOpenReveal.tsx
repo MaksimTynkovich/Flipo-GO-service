@@ -10,17 +10,15 @@ import { cn } from "@/lib/utils";
 /** How many prize tiles must fit fully in the roulette viewport. */
 const VISIBLE_COUNT = 5;
 const ITEM_GAP = 6;
-/** Full cycles before the landing zone when the loot pool is large enough. */
-const LOOPS = 10;
-/** Small loot pools still scroll at least this many tiles before landing. */
-const MIN_LAND_TILE_INDEX = 56;
+/** Fixed tile index to land on — same travel for any loot pool size. */
+const LAND_TILE_INDEX = 56;
+/** Small random offset so landings don't feel identical every open. */
+const LAND_JITTER = 10;
 const IDLE_LOOPS = 3;
 /** Items kept after the winner so the right side of the viewport never goes empty. */
 const PAD_AFTER = 8;
-/** Target reel speed — duration scales with travel distance. */
-const SPIN_PX_PER_MS = 0.78;
-const SPIN_MIN_MS = 9000;
-const SPIN_MAX_MS = 13000;
+/** Fixed spin duration for every case, regardless of loot count. */
+const SPIN_MS = 8500;
 const FALLBACK_ITEM_W = 56;
 
 type RevealLayout = {
@@ -81,36 +79,21 @@ function buildSpinStrip(
 ): { items: CaseLootPreview[]; targetIndex: number } {
   if (loot.length === 0) return { items: [], targetIndex: 0 };
   const base = shuffleCopy(loot);
-  const defaultLandStart = (LOOPS - 2) * base.length;
-  const landStart = Math.max(MIN_LAND_TILE_INDEX, defaultLandStart);
-  const landEnd = landStart + base.length;
-  const loopsNeeded = Math.ceil((landEnd + PAD_AFTER) / base.length) + 1;
+  const winner = loot.find((l) => l.id === winnerId) || base[0];
+  // Near-fixed landing index so travel (and visual speed) stays similar for any pool size.
+  const targetIndex = LAND_TILE_INDEX + Math.floor(Math.random() * (LAND_JITTER + 1));
+  const totalNeeded = targetIndex + 1 + PAD_AFTER;
+  const loopsNeeded = Math.ceil(totalNeeded / base.length) + 1;
   const items: CaseLootPreview[] = [];
   for (let i = 0; i < loopsNeeded; i += 1) {
     items.push(...base);
   }
-  // Land in the second-to-last loop so a full loop remains after the winner.
-  let targetIndex = items.findIndex(
-    (item, idx) => idx >= landStart && idx < landEnd && item.id === winnerId,
-  );
-  if (targetIndex < 0) {
-    const winner = loot.find((l) => l.id === winnerId) || loot[0];
-    targetIndex = landStart + Math.floor(base.length / 2);
-    if (targetIndex >= items.length) {
-      items.push(...base);
-    }
-    items.splice(targetIndex, 0, winner);
-  }
+  items[targetIndex] = winner;
   // Guarantee enough tiles past the pointer so the strip never blanks on the right.
   while (items.length - targetIndex - 1 < PAD_AFTER) {
     items.push(...base);
   }
   return { items, targetIndex };
-}
-
-function spinDurationMs(travelPx: number): number {
-  if (travelPx <= 0) return SPIN_MIN_MS;
-  return Math.min(SPIN_MAX_MS, Math.max(SPIN_MIN_MS, travelPx / SPIN_PX_PER_MS));
 }
 
 /**
@@ -215,7 +198,6 @@ export function CaseOpenReveal({
     let cancelled = false;
     const from = 0;
     const travel = finalOffset - from;
-    const spinMs = spinDurationMs(travel);
 
     const finish = () => {
       if (completedRef.current) return;
@@ -229,7 +211,7 @@ export function CaseOpenReveal({
     const frame = (now: number) => {
       if (cancelled) return;
       if (!startAt) startAt = now;
-      const t = Math.min(1, (now - startAt) / spinMs);
+      const t = Math.min(1, (now - startAt) / SPIN_MS);
       paint(from + travel * easeOutSmoothStop(t));
       if (t < 1) {
         raf = window.requestAnimationFrame(frame);
