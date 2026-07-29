@@ -1003,8 +1003,9 @@ export default function CasesSection() {
 
       <AdminPanel title="Экономика кейсов (Case Bank)">
         <p className="mb-3 text-[11px] text-muted">
-          Платные кейсы → общий банк. Daily/Promo → отдельные бюджеты. Гибрид: потолок приза + soft bias.
-          Unbacked призы нельзя продать в TON.
+          Здесь вы настраиваете, сколько кейсы могут раздавать игрокам. Простая идея:
+          сначала платные кейсы зарабатывают общий запас, потом из этого запаса можно безопасно
+          выдавать более дорогие призы. Бесплатные daily/promo живут на отдельном лимите.
         </p>
         {economyStats ? (
           <p className="mb-3 text-xs text-muted">
@@ -1026,7 +1027,7 @@ export default function CasesSection() {
               Case Bank вкл
               <AdminInfoHint
                 label="Case Bank вкл"
-                hint="Включает экономические гейты на runtime: после каждого открытия приз списывается с выбранного пула, а до ролла (перед RNG) применяется hard ceiling + soft bias."
+                hint="Главный переключатель экономики кейсов. Если включено, система смотрит на запас денег перед выдачей приза. Если денег мало, слишком дорогие призы выпадают реже или не выпадают совсем. Для новичка: включить."
               />
             </span>
           </label>
@@ -1040,7 +1041,7 @@ export default function CasesSection() {
               Пауза жирных призов
               <AdminInfoHint
                 label="Пауза жирных призов"
-                hint="Когда включено, жёстче режутся «дорогие» строки лута по сравнению с медианой цен: это дополнительный стоп на фэт-выдачи даже при восстановлении банка."
+                hint="Аварийный режим. Почти отключает дорогие призы, если вы хотите быстро остановить крупные выдачи, не выключая кейсы полностью. Для новичка: обычно выключено."
               />
             </span>
           </label>
@@ -1049,7 +1050,7 @@ export default function CasesSection() {
               Баланс
               <AdminInfoHint
                 label="Баланс"
-                hint="Текущий резерв пула (paid / daily / promo). Он влияет на hard ceiling (максимальная стоимость приза как доля пула) и на soft bias (recovery при отрицательном/нулевом балансе)."
+                hint="Это текущий запас денег для выдачи призов. Чем он больше, тем смелее можно раздавать дорогие призы. Если он маленький или ушёл в минус, система начнёт сильнее экономить."
               />
             </span>
             :{" "}
@@ -1062,7 +1063,7 @@ export default function CasesSection() {
             label="Target банка"
             valueNanoton={economy.bank_target_nanoton || 0}
             onChangeNanoton={(v) => setEconomy((s) => ({ ...s, bank_target_nanoton: v }))}
-            hint="Цель выхода из recovery paid банка: когда банк >= этой величины, soft bias возвращается к обычному режиму."
+            hint="Желаемый размер основного запаса. Когда банк дорос до этого уровня, система снова начинает вести себя спокойно и меньше экономить. Для новичка: ставьте сумму, которую готовы держать как подушку, например 100 TON."
           />
           <AdminTonField
             label="Loss threshold"
@@ -1070,7 +1071,7 @@ export default function CasesSection() {
             onChangeNanoton={(v) => setEconomy((s) => ({ ...s, bank_loss_threshold_nanoton: v }))}
             allowNegative
             min={-1e15}
-            hint="Порог входа в recovery paid банка: когда банк <= этого значения, в runtime включается recovery-смягчение против дорогих призов."
+            hint="Точка, после которой система начинает спасать экономику и зажимать дорогие призы. Самый понятный вариант для новичка: `0`, то есть как только запас закончился, включаем экономию."
           />
           <AdminTonField
             label="Recovery target"
@@ -1078,24 +1079,24 @@ export default function CasesSection() {
             onChangeNanoton={(v) => setEconomy((s) => ({ ...s, bank_recovery_target_nanoton: v }))}
             allowNegative
             min={-1e15}
-            hint="Фактическая цель для hysteresis выхода из recovery. Для ежедневной/промо-выдачи recovery считается от нулевого баланса пула."
+            hint="До какой суммы нужно восстановить запас, чтобы режим экономии выключился. Обычно можно ставить так же, как `Target банка`, или немного ниже."
           />
           <AdminIntField
             label="Bias weight 0–100"
             value={economy.bank_bias_weight ?? 50}
             onChange={(v) => setEconomy((s) => ({ ...s, bank_bias_weight: v }))}
             min={0}
-            hint="Сила soft bias. Чем выше — тем сильнее уменьшаются шансы дорогих строк в recovery и тем сильнее (в пределах ceiling) можно отклоняться от «сухих» весов."
+            hint="Насколько сильно система будет уводить шанс от дорогих призов, когда денег мало. 0 — почти не вмешиваться. 100 — экономить очень жёстко. Для новичка: 40–60."
           />
           <AdminPercentField
             label="Max prize % банка"
             valueBps={economy.bank_max_prize_bps ?? 5000}
             onChangeBps={(v) => setEconomy((s) => ({ ...s, bank_max_prize_bps: v }))}
-            hint="Hard ceiling: до ролла исключаются строки, у которых EV/стоимость приза больше этой доли текущего банка."
+            hint="Максимум, который можно отдать одним призом от текущего запаса. Например, 50% значит: если в банке 100 TON, приз дороже 50 TON не выпадет. Для новичка: 30–50%."
           />
           <AdminField
             label="Корректировка банка (± TON)"
-            hint="Ручная поправка paid банка. Полезно на старте или после резких изменений. На runtime эта величина участвует как текущий баланс пула."
+            hint="Ручное пополнение или уменьшение основного запаса. Используйте, если хотите быстро добавить стартовый резерв или скорректировать цифру вручную."
           >
             <input
               className="input-field w-full"
@@ -1114,7 +1115,7 @@ export default function CasesSection() {
               Daily pool вкл ({formatTON(economy.daily_pool_nanoton || 0)} TON)
               <AdminInfoHint
                 label="Daily pool"
-                hint="Отдельный бюджет под бесплатные Daily/Sponsored-раздачи. Чтобы прибыль paid не съедалась маркетингом и giveaway-открытиями."
+                hint="Отдельный кошелёк для бесплатного daily-кейса. Нужен, чтобы ежедневные подарки не съедали деньги платных кейсов. Для новичка: включить, если daily бесплатный."
               />
             </span>
           </label>
@@ -1122,13 +1123,13 @@ export default function CasesSection() {
             label="Daily refill / сутки"
             valueNanoton={economy.daily_pool_daily_refill_nanoton || 0}
             onChangeNanoton={(v) => setEconomy((s) => ({ ...s, daily_pool_daily_refill_nanoton: v }))}
-            hint="Каждые сутки (UTC) добавляет refill в daily pool, но только если daily pool включён."
+            hint="Сколько автоматически добавлять в daily-кошелёк каждый день. Это ваш дневной бюджет на бесплатные daily-открытия."
           />
           <AdminPercentField
             label="Daily max prize %"
             valueBps={economy.daily_pool_max_prize_bps ?? 5000}
             onChangeBps={(v) => setEconomy((s) => ({ ...s, daily_pool_max_prize_bps: v }))}
-            hint="Hard ceiling для daily пула: ограничивает максимальную стоимость приза как долю daily баланса."
+            hint="Максимальный размер одного daily-приза от текущего daily-запаса. Для новичка: 30–50%."
           />
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
@@ -1140,7 +1141,7 @@ export default function CasesSection() {
               Promo pool вкл ({formatTON(economy.promo_pool_nanoton || 0)} TON)
               <AdminInfoHint
                 label="Promo pool"
-                hint="Отдельный бюджет для promo-кейсов (price=0). Аналогично daily: ограничения считаются от promo баланса."
+                hint="Отдельный кошелёк для промо-кейсов. Нужен, чтобы промокоды не тратили деньги из основного банка платных кейсов."
               />
             </span>
           </label>
@@ -1148,37 +1149,43 @@ export default function CasesSection() {
             label="Promo refill / сутки"
             valueNanoton={economy.promo_pool_daily_refill_nanoton || 0}
             onChangeNanoton={(v) => setEconomy((s) => ({ ...s, promo_pool_daily_refill_nanoton: v }))}
-            hint="Ежедневный refill в promo pool (UTC), если promo pool включён."
+            hint="Сколько автоматически добавлять в promo-кошелёк каждый день. Это ваш дневной бюджет на промо-открытия."
           />
           <AdminPercentField
             label="Promo max prize %"
             valueBps={economy.promo_pool_max_prize_bps ?? 5000}
             onChangeBps={(v) => setEconomy((s) => ({ ...s, promo_pool_max_prize_bps: v }))}
-            hint="Hard ceiling для promo пула: ограничивает дорогие призы при недостатке promo бюджета."
+            hint="Максимальный размер одного промо-приза от текущего promo-запаса. Для новичка: 30–50%."
           />
         </div>
         <div className="mt-3 rounded-xl border border-white/[0.06] bg-surface-raised/40 px-3 py-2.5">
-          <p className="text-xs font-medium text-foreground/90">Пример корректной настройки</p>
+          <p className="text-xs font-medium text-foreground/90">Простая стартовая настройка для новичка</p>
           <pre className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-muted">
 bank_enabled: true
-bank_nanoton: 50_000_000_000      # 50 TON начальный paid резерв
-bank_target_nanoton: 120_000_000_000 # recovery exit at 120 TON
-bank_loss_threshold_nanoton: 0    # вход в recovery при банк &lt;= 0
-bank_bias_weight: 50              # умеренный soft bias
-bank_max_prize_bps: 5000          # максимум EV приза ~50% банка
+bank_nanoton: 50_000_000_000      # положите в основной запас 50 TON
+bank_target_nanoton: 100_000_000_000 # цель: накопить 100 TON
+bank_loss_threshold_nanoton: 0    # если запас кончился, начинаем экономить
+bank_recovery_target_nanoton: 100_000_000_000 # выключаем экономию после возврата к 100 TON
+bank_bias_weight: 50              # средняя сила экономии
+bank_max_prize_bps: 4000          # один приз не дороже 40% банка
 bank_fat_paused: false
 daily_pool_enabled: true
-daily_pool_daily_refill_nanoton: 20_000_000_000  # +20 TON/сутки
-daily_pool_max_prize_bps: 5000
+daily_pool_daily_refill_nanoton: 10_000_000_000  # daily бюджет 10 TON в день
+daily_pool_max_prize_bps: 3000                    # один daily приз не дороже 30%
 promo_pool_enabled: true
-promo_pool_daily_refill_nanoton: 10_000_000_000  # +10 TON/сутки
-promo_pool_max_prize_bps: 5000
+promo_pool_daily_refill_nanoton: 5_000_000_000   # promo бюджет 5 TON в день
+promo_pool_max_prize_bps: 3000                   # один promo приз не дороже 30%
           </pre>
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
-            Идея: пока paid-банк «провален» (recovery) — жирные дропы режутся (soft bias + hard ceiling),
-            но при этом выдача не останавливается (в fallback всегда есть хотя бы один eligible приз).
-            Daily/Promo имеют отдельный бюджет, чтобы бесплатные открытия не съели прибыль проекта.
-            Начинайте с умеренных `*_max_prize_bps` (например 4000–6000) и постепенно поднимайте их по мере накопления банка.
+            Как это работает простыми словами: платные кейсы сначала собирают запас денег. Пока запас маленький,
+            система осторожничает и не даёт слишком дорогим призам выпадать слишком часто. Когда запас вырос,
+            дорогие призы снова начинают выпадать свободнее. Daily и promo живут отдельно, чтобы бесплатные раздачи
+            не мешали платным кейсам зарабатывать.
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted">
+            Если вы только запускаете систему, начните именно с таких умеренных значений. Потом смотрите на `Live P&L`:
+            если банк стабильно растёт, можно понемногу повышать `Max prize %`; если падает — уменьшать его или
+            увеличивать `Bias weight`.
           </p>
         </div>
         <div className="mt-3">

@@ -21,6 +21,12 @@ const REVENUE_PERIODS: Record<RevenuePeriodId, { label: string; days: number }> 
   all: { label: "Всё время", days: -1 },
 };
 
+const CHART_WIDTH = 960;
+const CHART_HEIGHT = 280;
+const CHART_PADDING_X = 20;
+const CHART_PADDING_TOP = 16;
+const CHART_PADDING_BOTTOM = 28;
+
 function downsampleRevenuePoints(points: AdminRevenuePoint[], targetMaxPoints: number): AdminRevenuePoint[] {
   if (points.length <= targetMaxPoints) return points;
   const bucketSize = Math.ceil(points.length / targetMaxPoints);
@@ -37,6 +43,30 @@ function downsampleRevenuePoints(points: AdminRevenuePoint[], targetMaxPoints: n
     });
   }
   return out;
+}
+
+function formatPeriodLabel(period: string) {
+  if (period.includes("–")) return period;
+  const [year, month, day] = period.split("-");
+  if (!year || !month || !day) return period;
+  return `${day}.${month}`;
+}
+
+function buildSmoothPath(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) return "";
+  if (points.length === 1) {
+    const point = points[0]!;
+    return `M ${point.x} ${point.y}`;
+  }
+
+  let path = `M ${points[0]!.x} ${points[0]!.y}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const current = points[i]!;
+    const next = points[i + 1]!;
+    const controlX = (current.x + next.x) / 2;
+    path += ` C ${controlX} ${current.y}, ${controlX} ${next.y}, ${next.x} ${next.y}`;
+  }
+  return path;
 }
 
 export default function DashboardSection() {
@@ -125,6 +155,47 @@ export default function DashboardSection() {
     [displaySeries],
   );
 
+  const chartData = useMemo(() => {
+    if (displaySeries.length === 0) return null;
+
+    const innerWidth = CHART_WIDTH - CHART_PADDING_X * 2;
+    const innerHeight = CHART_HEIGHT - CHART_PADDING_TOP - CHART_PADDING_BOTTOM;
+    const denominator = Math.max(displaySeries.length - 1, 1);
+
+    const points = displaySeries.map((point, index) => {
+      const x = CHART_PADDING_X + (innerWidth * index) / denominator;
+      const y =
+        CHART_PADDING_TOP +
+        innerHeight -
+        (Math.max(0, point.revenue_nanoton) / maxRevenue) * innerHeight;
+      return {
+        ...point,
+        x,
+        y,
+      };
+    });
+
+    const linePath = buildSmoothPath(points);
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    const areaPath = `${linePath} L ${last.x} ${CHART_HEIGHT - CHART_PADDING_BOTTOM} L ${first.x} ${CHART_HEIGHT - CHART_PADDING_BOTTOM} Z`;
+
+    const ticks = [0, 0.5, 1].map((ratio) => ({
+      y: CHART_PADDING_TOP + innerHeight - innerHeight * ratio,
+      value: Math.round(maxRevenue * ratio),
+    }));
+
+    const xLabelIndexes = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]));
+
+    return {
+      points,
+      linePath,
+      areaPath,
+      ticks,
+      xLabelIndexes,
+    };
+  }, [displaySeries, maxRevenue]);
+
   return (
     <AdminPage
       title="Дашборд"
@@ -188,23 +259,106 @@ export default function DashboardSection() {
         {displaySeries.length === 0 ? (
           <AdminEmpty>{loadingRevenue ? "Загружаем…" : "Появится после первых транзакций и ставок."}</AdminEmpty>
         ) : (
-          <div className="space-y-3 pt-1">
-            {displaySeries.map((point) => (
-              <div key={point.period} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-[var(--admin-muted)]">{point.period}</span>
-                  <span className="font-semibold tabular-nums">
-                    {formatTON(point.revenue_nanoton)} TON
-                  </span>
+          <div className="space-y-4 pt-1">
+            <div className="overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-raised)] p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--admin-muted)]">Revenue</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-[var(--admin-fg)]">
+                    {formatTON(displaySeries[displaySeries.length - 1]?.revenue_nanoton ?? 0)} TON
+                  </p>
                 </div>
-                <div className="admin-chart-bar">
-                  <div
-                    className="admin-chart-bar__fill"
-                    style={{ width: `${Math.max(6, (point.revenue_nanoton / maxRevenue) * 100)}%` }}
-                  />
-                </div>
+                <p className="max-w-xs text-right text-xs leading-relaxed text-[var(--admin-muted)]">
+                  {periodId === "all" ? "Для длинного периода точки агрегируются по диапазонам." : "Помесячный срез не нужен: показываем динамику по дням."}
+                </p>
               </div>
-            ))}
+
+              {chartData ? (
+                <>
+                  <svg
+                    viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+                    className="block h-64 w-full"
+                    role="img"
+                    aria-label="График дохода"
+                    preserveAspectRatio="none"
+                  >
+                    <defs>
+                      <linearGradient id="adminRevenueArea" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stopColor="var(--admin-accent)" stopOpacity="0.32" />
+                        <stop offset="100%" stopColor="var(--admin-accent)" stopOpacity="0.03" />
+                      </linearGradient>
+                    </defs>
+
+                    {chartData.ticks.map((tick) => (
+                      <g key={tick.y}>
+                        <line
+                          x1={CHART_PADDING_X}
+                          x2={CHART_WIDTH - CHART_PADDING_X}
+                          y1={tick.y}
+                          y2={tick.y}
+                          stroke="rgba(255,255,255,0.08)"
+                          strokeDasharray="4 6"
+                        />
+                        <text
+                          x={CHART_PADDING_X}
+                          y={tick.y - 6}
+                          fill="var(--admin-muted)"
+                          fontSize="12"
+                        >
+                          {formatTON(tick.value)} TON
+                        </text>
+                      </g>
+                    ))}
+
+                    <path d={chartData.areaPath} fill="url(#adminRevenueArea)" />
+                    <path
+                      d={chartData.linePath}
+                      fill="none"
+                      stroke="var(--admin-accent)"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+
+                    {chartData.points.map((point) => (
+                      <g key={point.period}>
+                        <circle cx={point.x} cy={point.y} r="4" fill="var(--admin-bg)" />
+                        <circle cx={point.x} cy={point.y} r="2.5" fill="var(--admin-accent)" />
+                        <title>{`${point.period}: ${formatTON(point.revenue_nanoton)} TON`}</title>
+                      </g>
+                    ))}
+                  </svg>
+
+                  <div className="mt-3 flex items-center justify-between gap-2 text-xs text-[var(--admin-muted)]">
+                    {chartData.xLabelIndexes.map((index) => {
+                      const point = chartData.points[index]!;
+                      return (
+                        <span key={`${point.period}:${index}`} className="tabular-nums">
+                          {formatPeriodLabel(point.period)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div className="rounded-xl bg-[var(--admin-raised)] px-3.5 py-3">
+                <span className="text-[var(--admin-muted)]">Максимум</span>
+                <p className="mt-1 font-semibold tabular-nums">{formatTON(maxRevenue)} TON</p>
+              </div>
+              <div className="rounded-xl bg-[var(--admin-raised)] px-3.5 py-3">
+                <span className="text-[var(--admin-muted)]">Точек</span>
+                <p className="mt-1 font-semibold tabular-nums">{displaySeries.length}</p>
+              </div>
+              <div className="rounded-xl bg-[var(--admin-raised)] px-3.5 py-3">
+                <span className="text-[var(--admin-muted)]">Сумма</span>
+                <p className="mt-1 font-semibold tabular-nums">
+                  {formatTON(displaySeries.reduce((sum, point) => sum + point.revenue_nanoton, 0))} TON
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </AdminPanel>
