@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { AdminPage, AdminChip, AdminEmpty, AdminMetric, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { invalidateCached, loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import {
@@ -20,12 +29,6 @@ const REVENUE_PERIODS: Record<RevenuePeriodId, { label: string; days: number }> 
   "30d": { label: "30 дней", days: 30 },
   all: { label: "Всё время", days: -1 },
 };
-
-const CHART_WIDTH = 960;
-const CHART_HEIGHT = 280;
-const CHART_PADDING_X = 20;
-const CHART_PADDING_TOP = 16;
-const CHART_PADDING_BOTTOM = 28;
 
 function downsampleRevenuePoints(points: AdminRevenuePoint[], targetMaxPoints: number): AdminRevenuePoint[] {
   if (points.length <= targetMaxPoints) return points;
@@ -52,21 +55,40 @@ function formatPeriodLabel(period: string) {
   return `${day}.${month}`;
 }
 
-function buildSmoothPath(points: Array<{ x: number; y: number }>) {
-  if (points.length === 0) return "";
-  if (points.length === 1) {
-    const point = points[0]!;
-    return `M ${point.x} ${point.y}`;
-  }
+type RevenueChartPoint = {
+  period: string;
+  label: string;
+  revenueNanoton: number;
+  depositsNanoton: number;
+  gameBetsNanoton: number;
+};
 
-  let path = `M ${points[0]!.x} ${points[0]!.y}`;
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const current = points[i]!;
-    const next = points[i + 1]!;
-    const controlX = (current.x + next.x) / 2;
-    path += ` C ${controlX} ${current.y}, ${controlX} ${next.y}, ${next.x} ${next.y}`;
-  }
-  return path;
+function RevenueTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: RevenueChartPoint }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0]?.payload;
+
+  if (!point) return null;
+
+  return (
+    <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] px-3 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+      <p className="text-xs text-[var(--admin-muted)]">{point.period}</p>
+      <p className="mt-1 font-semibold tabular-nums text-[var(--admin-fg)]">
+        {formatTON(point.revenueNanoton)} TON
+      </p>
+      <p className="mt-1 text-xs text-[var(--admin-muted)]">
+        Депозиты: {formatTON(point.depositsNanoton)} TON
+      </p>
+      <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
+        Ставки: {formatTON(point.gameBetsNanoton)} TON
+      </p>
+    </div>
+  );
 }
 
 export default function DashboardSection() {
@@ -155,46 +177,17 @@ export default function DashboardSection() {
     [displaySeries],
   );
 
-  const chartData = useMemo(() => {
-    if (displaySeries.length === 0) return null;
-
-    const innerWidth = CHART_WIDTH - CHART_PADDING_X * 2;
-    const innerHeight = CHART_HEIGHT - CHART_PADDING_TOP - CHART_PADDING_BOTTOM;
-    const denominator = Math.max(displaySeries.length - 1, 1);
-
-    const points = displaySeries.map((point, index) => {
-      const x = CHART_PADDING_X + (innerWidth * index) / denominator;
-      const y =
-        CHART_PADDING_TOP +
-        innerHeight -
-        (Math.max(0, point.revenue_nanoton) / maxRevenue) * innerHeight;
-      return {
-        ...point,
-        x,
-        y,
-      };
-    });
-
-    const linePath = buildSmoothPath(points);
-    const first = points[0]!;
-    const last = points[points.length - 1]!;
-    const areaPath = `${linePath} L ${last.x} ${CHART_HEIGHT - CHART_PADDING_BOTTOM} L ${first.x} ${CHART_HEIGHT - CHART_PADDING_BOTTOM} Z`;
-
-    const ticks = [0, 0.5, 1].map((ratio) => ({
-      y: CHART_PADDING_TOP + innerHeight - innerHeight * ratio,
-      value: Math.round(maxRevenue * ratio),
-    }));
-
-    const xLabelIndexes = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]));
-
-    return {
-      points,
-      linePath,
-      areaPath,
-      ticks,
-      xLabelIndexes,
-    };
-  }, [displaySeries, maxRevenue]);
+  const chartData = useMemo(
+    () =>
+      displaySeries.map<RevenueChartPoint>((point) => ({
+        period: point.period,
+        label: formatPeriodLabel(point.period),
+        revenueNanoton: point.revenue_nanoton,
+        depositsNanoton: point.deposits_nanoton,
+        gameBetsNanoton: point.game_bets_nanoton,
+      })),
+    [displaySeries],
+  );
 
   return (
     <AdminPage
@@ -273,74 +266,48 @@ export default function DashboardSection() {
                 </p>
               </div>
 
-              {chartData ? (
-                <>
-                  <svg
-                    viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                    className="block h-64 w-full"
-                    role="img"
-                    aria-label="График дохода"
-                    preserveAspectRatio="none"
+              <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 10, right: 12, left: 0, bottom: 10 }}
                   >
                     <defs>
-                      <linearGradient id="adminRevenueArea" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="var(--admin-accent)" stopOpacity="0.32" />
-                        <stop offset="100%" stopColor="var(--admin-accent)" stopOpacity="0.03" />
+                      <linearGradient id="adminRevenueStroke" x1="0" x2="1" y1="0" y2="0">
+                        <stop offset="0%" stopColor="color-mix(in srgb, var(--admin-accent) 75%, #0f766e)" />
+                        <stop offset="100%" stopColor="var(--admin-accent)" />
                       </linearGradient>
                     </defs>
-
-                    {chartData.ticks.map((tick) => (
-                      <g key={tick.y}>
-                        <line
-                          x1={CHART_PADDING_X}
-                          x2={CHART_WIDTH - CHART_PADDING_X}
-                          y1={tick.y}
-                          y2={tick.y}
-                          stroke="rgba(255,255,255,0.08)"
-                          strokeDasharray="4 6"
-                        />
-                        <text
-                          x={CHART_PADDING_X}
-                          y={tick.y - 6}
-                          fill="var(--admin-muted)"
-                          fontSize="12"
-                        >
-                          {formatTON(tick.value)} TON
-                        </text>
-                      </g>
-                    ))}
-
-                    <path d={chartData.areaPath} fill="url(#adminRevenueArea)" />
-                    <path
-                      d={chartData.linePath}
-                      fill="none"
-                      stroke="var(--admin-accent)"
-                      strokeWidth="4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 6" vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fill: "var(--admin-muted)", fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                      minTickGap={24}
                     />
-
-                    {chartData.points.map((point) => (
-                      <g key={point.period}>
-                        <circle cx={point.x} cy={point.y} r="4" fill="var(--admin-bg)" />
-                        <circle cx={point.x} cy={point.y} r="2.5" fill="var(--admin-accent)" />
-                        <title>{`${point.period}: ${formatTON(point.revenue_nanoton)} TON`}</title>
-                      </g>
-                    ))}
-                  </svg>
-
-                  <div className="mt-3 flex items-center justify-between gap-2 text-xs text-[var(--admin-muted)]">
-                    {chartData.xLabelIndexes.map((index) => {
-                      const point = chartData.points[index]!;
-                      return (
-                        <span key={`${point.period}:${index}`} className="tabular-nums">
-                          {formatPeriodLabel(point.period)}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : null}
+                    <YAxis
+                      tick={{ fill: "var(--admin-muted)", fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={72}
+                      tickFormatter={(value: number) => `${formatTON(value)} TON`}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: "rgba(45,212,191,0.32)", strokeWidth: 1.5 }}
+                      content={<RevenueTooltip />}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="revenueNanoton"
+                      stroke="url(#adminRevenueStroke)"
+                      strokeWidth={3}
+                      dot={{ r: 3, fill: "var(--admin-accent)", stroke: "var(--admin-bg)", strokeWidth: 2 }}
+                      activeDot={{ r: 6, fill: "var(--admin-accent)", stroke: "var(--admin-bg)", strokeWidth: 3 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3 text-sm">
