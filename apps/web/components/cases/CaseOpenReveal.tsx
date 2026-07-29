@@ -18,9 +18,9 @@ const IDLE_LOOPS = 3;
 /** Items kept after the winner so the right side of the viewport never goes empty. */
 const PAD_AFTER = 8;
 /** Target reel speed — duration scales with travel distance. */
-const SPIN_PX_PER_MS = 2.35;
-const SPIN_MIN_MS = 2800;
-const SPIN_MAX_MS = 5200;
+const SPIN_PX_PER_MS = 1.55;
+const SPIN_MIN_MS = 5200;
+const SPIN_MAX_MS = 8200;
 const FALLBACK_ITEM_W = 56;
 
 type RevealLayout = {
@@ -113,11 +113,14 @@ function spinDurationMs(travelPx: number): number {
   return Math.min(SPIN_MAX_MS, Math.max(SPIN_MIN_MS, travelPx / SPIN_PX_PER_MS));
 }
 
-/** Ease-out quartic: fast reel-up, then a long soft brake into the winner. */
-function easeOutQuartic(t: number): number {
+/**
+ * Ease-out sextic: quick rush, then a long soft crawl into the winner.
+ * Higher power = more of the timeline spent decelerating near the end.
+ */
+function easeOutSmoothStop(t: number): number {
   const x = Math.min(1, Math.max(0, t));
   const inv = 1 - x;
-  return 1 - inv * inv * inv * inv;
+  return 1 - inv ** 6;
 }
 
 export function CaseOpenReveal({
@@ -221,14 +224,14 @@ export function CaseOpenReveal({
       paint(finalOffset);
       setSpinning(false);
       setLanded(true);
-      window.setTimeout(() => onCompleteRef.current?.(), 520);
+      window.setTimeout(() => onCompleteRef.current?.(), 700);
     };
 
     const frame = (now: number) => {
       if (cancelled) return;
       if (!startAt) startAt = now;
       const t = Math.min(1, (now - startAt) / spinMs);
-      paint(from + travel * easeOutQuartic(t));
+      paint(from + travel * easeOutSmoothStop(t));
       if (t < 1) {
         raf = window.requestAnimationFrame(frame);
       } else {

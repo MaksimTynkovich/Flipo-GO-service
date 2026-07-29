@@ -373,7 +373,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-muted">Пул</span>
                 <span className="tabular-nums text-foreground">
-                  {Math.min(100, Math.round((tvlUsed / tvlCap) * 100))}% заполнено
+                  {Math.min(100, Math.round((tvlUsed / tvlCap) * 100))}%
                 </span>
               </div>
               <ProgressBar value={tvlUsed / tvlCap} tone={poolFull ? "danger" : "accent"} />
