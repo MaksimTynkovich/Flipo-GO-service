@@ -245,6 +245,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.POST("/cases/:id/simulate", deps.AdminHandler.SimulateCase)
 			adminAuthed.POST("/telegram/broadcast", deps.AdminHandler.CreateBroadcast)
 			adminAuthed.GET("/telegram/broadcasts", deps.AdminHandler.ListBroadcasts)
+			adminAuthed.GET("/telegram/broadcasts/:id/deliveries", deps.AdminHandler.ListBroadcastDeliveries)
 			adminAuthed.GET("/treasury/sweeps", deps.AdminHandler.ListSweeps)
 			adminAuthed.GET("/audit", deps.AdminHandler.AuditLogs)
 			adminAuthed.GET("/online", deps.AdminHandler.OnlineNow)

@@ -8,12 +8,14 @@ import { useToast } from "@/components/providers/ToastProvider";
 import {
   createAdminBroadcast,
   getAdminBotSettings,
+  getAdminBroadcastDeliveries,
   getAdminBroadcasts,
   resolveAsset,
   updateAdminBotSettings,
   uploadAdminCaseImage,
   type AdminBotSettings,
   type TelegramBroadcast,
+  type TelegramBroadcastDelivery,
 } from "@/lib/api";
 
 const DEFAULT_SETTINGS: AdminBotSettings = {
@@ -27,6 +29,22 @@ const DEFAULT_SETTINGS: AdminBotSettings = {
 
 const MAX_PHOTO_CAPTION = 1024;
 const MAX_BROADCAST_IMAGES = 5;
+const DELIVERY_PAGE = 50;
+
+type DeliveryFilter = "" | "sent" | "skipped" | "failed";
+
+function deliveryStatusLabel(status: string) {
+  switch (status) {
+    case "sent":
+      return "доставлено";
+    case "skipped":
+      return "пропущено";
+    case "failed":
+      return "ошибка";
+    default:
+      return status;
+  }
+}
 
 export default function TelegramSection() {
   const { showToast } = useToast();
@@ -39,6 +57,11 @@ export default function TelegramSection() {
   const [broadcastsLoading, setBroadcastsLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [expandedBroadcastId, setExpandedBroadcastId] = useState<string | null>(null);
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("");
+  const [deliveries, setDeliveries] = useState<TelegramBroadcastDelivery[]>([]);
+  const [deliveriesTotal, setDeliveriesTotal] = useState(0);
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false);
 
   async function loadSettings() {
     setSettingsLoading(true);
@@ -70,6 +93,42 @@ export default function TelegramSection() {
     } finally {
       setBroadcastsLoading(false);
     }
+  }
+
+  async function loadDeliveries(broadcastId: string, filter: DeliveryFilter, offset = 0) {
+    setDeliveriesLoading(true);
+    try {
+      const data = await getAdminBroadcastDeliveries(broadcastId, {
+        status: filter || undefined,
+        limit: DELIVERY_PAGE,
+        offset,
+      });
+      const items = Array.isArray(data?.items) ? data.items : [];
+      setDeliveries((prev) => (offset > 0 ? [...prev, ...items] : items));
+      setDeliveriesTotal(typeof data?.total === "number" ? data.total : items.length);
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: "Не удалось загрузить журнал",
+        subtitle: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setDeliveriesLoading(false);
+    }
+  }
+
+  async function openBroadcastJournal(broadcastId: string) {
+    if (expandedBroadcastId === broadcastId) {
+      setExpandedBroadcastId(null);
+      setDeliveries([]);
+      setDeliveriesTotal(0);
+      return;
+    }
+    setExpandedBroadcastId(broadcastId);
+    setDeliveryFilter("");
+    setDeliveries([]);
+    setDeliveriesTotal(0);
+    await loadDeliveries(broadcastId, "");
   }
 
   useEffect(() => {
@@ -435,48 +494,150 @@ export default function TelegramSection() {
           <div className="space-y-2">
             {broadcasts.map((item) => {
               const thumbs = (item.image_urls ?? []).map((url) => resolveAsset(url) || "").filter(Boolean);
+              const expanded = expandedBroadcastId === item.id;
               return (
                 <div key={item.id} className="rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
-                  <div className="flex justify-between gap-3">
-                    <span className="uppercase text-[10px] text-muted">
-                      {item.status === "queued"
-                        ? "в очереди"
-                        : item.status === "running"
-                          ? "отправляется"
-                          : item.status === "completed"
-                            ? "завершена"
-                            : item.status === "failed"
-                              ? "ошибка"
-                              : item.status}
-                    </span>
-                    <span className="text-xs text-muted">
-                      {item.sent_count}/{item.total_users}
-                      {item.failed_count > 0 ? ` · ошибок ${item.failed_count}` : ""}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 flex gap-2.5">
-                    {thumbs.length ? (
-                      <div className="flex shrink-0 gap-1">
-                        {thumbs.slice(0, 3).map((thumb) => (
-                          <div
-                            key={thumb}
-                            className="h-12 w-12 overflow-hidden rounded-lg bg-surface-raised"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={thumb} alt="" className="h-full w-full object-cover" />
-                          </div>
-                        ))}
-                        {thumbs.length > 3 ? (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-raised text-xs text-muted">
-                            +{thumbs.length - 3}
-                          </div>
-                        ) : null}
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => void openBroadcastJournal(item.id)}
+                  >
+                    <div className="flex justify-between gap-3">
+                      <span className="uppercase text-[10px] text-muted">
+                        {item.status === "queued"
+                          ? "в очереди"
+                          : item.status === "running"
+                            ? "отправляется"
+                            : item.status === "completed"
+                              ? "завершена"
+                              : item.status === "failed"
+                                ? "ошибка"
+                                : item.status}
+                      </span>
+                      <span className="text-xs text-muted">
+                        {item.sent_count}/{item.total_users}
+                        {item.failed_count > 0 ? ` · ошибок ${item.failed_count}` : ""}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex gap-2.5">
+                      {thumbs.length ? (
+                        <div className="flex shrink-0 gap-1">
+                          {thumbs.slice(0, 3).map((thumb) => (
+                            <div
+                              key={thumb}
+                              className="h-12 w-12 overflow-hidden rounded-lg bg-surface-raised"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={thumb} alt="" className="h-full w-full object-cover" />
+                            </div>
+                          ))}
+                          {thumbs.length > 3 ? (
+                            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-raised text-xs text-muted">
+                              +{thumbs.length - 3}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-2">
+                          {item.message || (thumbs.length ? `Изображения (${thumbs.length})` : "")}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted">
+                          {expanded ? "Скрыть журнал доставок" : "Журнал доставок"}
+                        </p>
                       </div>
-                    ) : null}
-                    <p className="line-clamp-2 min-w-0 flex-1">
-                      {item.message || (thumbs.length ? `Изображения (${thumbs.length})` : "")}
-                    </p>
-                  </div>
+                    </div>
+                  </button>
+
+                  {expanded ? (
+                    <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(
+                          [
+                            { id: "" as DeliveryFilter, label: "Все" },
+                            { id: "sent" as DeliveryFilter, label: "Доставлено" },
+                            { id: "skipped" as DeliveryFilter, label: "Пропущено" },
+                            { id: "failed" as DeliveryFilter, label: "Ошибки" },
+                          ] as const
+                        ).map((tab) => (
+                          <button
+                            key={tab.id || "all"}
+                            type="button"
+                            className={`rounded-lg px-2.5 py-1 text-xs ${
+                              deliveryFilter === tab.id
+                                ? "bg-white/10 text-white"
+                                : "bg-surface-raised text-muted hover:bg-white/5"
+                            }`}
+                            onClick={() => {
+                              setDeliveryFilter(tab.id);
+                              setDeliveries([]);
+                              void loadDeliveries(item.id, tab.id);
+                            }}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {deliveriesLoading && deliveries.length === 0 ? (
+                        <div className="space-y-1.5">
+                          {Array.from({ length: 3 }).map((_, index) => (
+                            <div key={index} className="h-8 animate-pulse rounded-lg bg-surface-raised" />
+                          ))}
+                        </div>
+                      ) : deliveries.length === 0 ? (
+                        <p className="text-xs text-muted">
+                          Записей пока нет. Для старых рассылок журнал не сохранялся.
+                        </p>
+                      ) : (
+                        <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                          {deliveries.map((row) => (
+                            <div
+                              key={row.id}
+                              className="rounded-lg bg-black/20 px-2.5 py-1.5 text-xs"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="font-mono tabular-nums">{row.telegram_id}</span>
+                                <span
+                                  className={
+                                    row.status === "failed"
+                                      ? "text-red-300"
+                                      : row.status === "skipped"
+                                        ? "text-amber-200/80"
+                                        : "text-emerald-300/80"
+                                  }
+                                >
+                                  {deliveryStatusLabel(row.status)}
+                                </span>
+                              </div>
+                              {row.error_message ? (
+                                <p className="mt-0.5 break-words text-[11px] text-muted">
+                                  {row.error_message}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {deliveries.length < deliveriesTotal ? (
+                        <AdminButton
+                          variant="secondary"
+                          className="!h-8"
+                          disabled={deliveriesLoading}
+                          onClick={() => void loadDeliveries(item.id, deliveryFilter, deliveries.length)}
+                        >
+                          {deliveriesLoading
+                            ? "Загрузка…"
+                            : `Ещё (${deliveries.length}/${deliveriesTotal})`}
+                        </AdminButton>
+                      ) : deliveriesTotal > 0 ? (
+                        <p className="text-[11px] text-muted">
+                          Показано {deliveries.length} из {deliveriesTotal}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

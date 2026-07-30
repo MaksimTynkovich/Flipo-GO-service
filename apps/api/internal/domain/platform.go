@@ -488,6 +488,24 @@ type TelegramBroadcast struct {
 
 func (TelegramBroadcast) TableName() string { return "telegram_broadcasts" }
 
+// TelegramBroadcastDelivery — per-recipient result of a mass broadcast.
+type TelegramBroadcastDelivery struct {
+	ID           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	BroadcastID  uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_broadcast_deliveries_unique;index:idx_broadcast_deliveries_broadcast" json:"broadcast_id"`
+	TelegramID   int64     `gorm:"not null;uniqueIndex:idx_broadcast_deliveries_unique" json:"telegram_id"`
+	Status       string    `gorm:"size:16;not null;index" json:"status"` // sent | skipped | failed
+	ErrorMessage string    `gorm:"type:text" json:"error_message,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+func (TelegramBroadcastDelivery) TableName() string { return "telegram_broadcast_deliveries" }
+
+const (
+	BroadcastDeliverySent    = "sent"
+	BroadcastDeliverySkipped = "skipped"
+	BroadcastDeliveryFailed  = "failed"
+)
+
 // TreasurySweep — on-chain hot → cold transfer record.
 type TreasurySweep struct {
 	ID                uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`

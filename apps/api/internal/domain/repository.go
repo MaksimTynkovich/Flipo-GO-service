@@ -265,6 +265,8 @@ type PlatformRepository interface {
 	UpdateBroadcast(ctx context.Context, broadcast *TelegramBroadcast) error
 	ListBroadcasts(ctx context.Context, limit int) ([]TelegramBroadcast, error)
 	ListQueuedBroadcasts(ctx context.Context, limit int) ([]TelegramBroadcast, error)
+	UpsertBroadcastDelivery(ctx context.Context, delivery *TelegramBroadcastDelivery) error
+	ListBroadcastDeliveries(ctx context.Context, broadcastID uuid.UUID, status string, limit, offset int) ([]TelegramBroadcastDelivery, int64, error)
 	CreateSweep(ctx context.Context, sweep *TreasurySweep) error
 	ListSweeps(ctx context.Context, limit int) ([]TreasurySweep, error)
 	GetSocialSimSettings(ctx context.Context) (*SocialSimSettings, error)

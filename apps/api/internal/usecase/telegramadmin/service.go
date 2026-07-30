@@ -188,6 +188,21 @@ func (s *Service) ListBroadcasts(ctx context.Context) ([]domain.TelegramBroadcas
 	return s.platform.ListBroadcasts(ctx, 20)
 }
 
+func (s *Service) ListBroadcastDeliveries(
+	ctx context.Context,
+	broadcastID uuid.UUID,
+	status string,
+	limit, offset int,
+) ([]domain.TelegramBroadcastDelivery, int64, error) {
+	if broadcastID == uuid.Nil {
+		return nil, 0, fmt.Errorf("broadcast id is required")
+	}
+	if _, err := s.platform.GetBroadcast(ctx, broadcastID); err != nil {
+		return nil, 0, err
+	}
+	return s.platform.ListBroadcastDeliveries(ctx, broadcastID, status, limit, offset)
+}
+
 func (s *Service) ProcessQueued(ctx context.Context) error {
 	s.processMu.Lock()
 	defer s.processMu.Unlock()
@@ -265,10 +280,24 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if err := s.sendBroadcastItemWithRetry(ctx, chatID, broadcast.Message, photoSources, &cachedFileIDs, markup); err != nil {
+			status, errMsg := s.deliverToRecipient(ctx, chatID, broadcast.Message, photoSources, &cachedFileIDs, markup)
+			if err := s.platform.UpsertBroadcastDelivery(ctx, &domain.TelegramBroadcastDelivery{
+				BroadcastID:  broadcast.ID,
+				TelegramID:   chatID,
+				Status:       status,
+				ErrorMessage: errMsg,
+			}); err != nil {
+				slog.Warn("broadcast delivery journal write failed",
+					"broadcast_id", broadcast.ID,
+					"chat_id", chatID,
+					"status", status,
+					"error", err,
+				)
+			}
+			switch status {
+			case domain.BroadcastDeliveryFailed:
 				broadcast.FailedCount++
-				slog.Warn("broadcast send failed", "broadcast_id", broadcast.ID, "chat_id", chatID, "error", err)
-			} else {
+			default:
 				broadcast.SentCount++
 			}
 			time.Sleep(delay)
@@ -305,6 +334,31 @@ func broadcastSendDelay(spamLevel, photoCount int) time.Duration {
 	return base
 }
 
+func (s *Service) deliverToRecipient(
+	ctx context.Context,
+	chatID int64,
+	message string,
+	photoSources []string,
+	cachedFileIDs *[]string,
+	markup map[string]any,
+) (status string, errMsg string) {
+	err := s.sendBroadcastItemWithRetry(ctx, chatID, message, photoSources, cachedFileIDs, markup)
+	if err == nil {
+		return domain.BroadcastDeliverySent, ""
+	}
+	var unavailable *telegram.RecipientUnavailableError
+	if errors.As(err, &unavailable) {
+		reason := unavailable.Error()
+		return domain.BroadcastDeliverySkipped, reason
+	}
+	slog.Warn("broadcast send failed", "chat_id", chatID, "error", err)
+	msg := err.Error()
+	if len(msg) > 500 {
+		msg = msg[:500]
+	}
+	return domain.BroadcastDeliveryFailed, msg
+}
+
 func (s *Service) sendBroadcastItemWithRetry(
 	ctx context.Context,
 	chatID int64,
@@ -318,6 +372,10 @@ func (s *Service) sendBroadcastItemWithRetry(
 		err := s.sendBroadcastItem(ctx, chatID, message, photoSources, cachedFileIDs, markup)
 		if err == nil {
 			return nil
+		}
+		var unavailable *telegram.RecipientUnavailableError
+		if errors.As(err, &unavailable) {
+			return err
 		}
 		var flood *telegram.FloodWaitError
 		if errors.As(err, &flood) {

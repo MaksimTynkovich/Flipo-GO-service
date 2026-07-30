@@ -32,7 +32,7 @@ func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int6
 	}
 
 	text := fmt.Sprintf("🎁 Подарок «%s» зачислен в инвентарь!", giftName)
-	return n.api.sendMessage(ctx, telegramUserID, text, nil, "")
+	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, text, nil, ""))
 }
 
 func (n *BotNotifier) SendDailyStakingSettled(ctx context.Context, telegramUserID int64, yieldNanoton, referralBonusNanoton int64) error {
@@ -49,7 +49,7 @@ func (n *BotNotifier) SendDailyStakingSettled(ctx context.Context, telegramUserI
 		parts = append(parts, fmt.Sprintf("Рефералы: %s TON — зачислено на баланс.", formatTON(referralBonusNanoton)))
 	}
 	parts = append(parts, "Подарки разблокированы — можно застейкать снова.")
-	return n.api.sendMessage(ctx, telegramUserID, strings.Join(parts, "\n\n"), nil, "")
+	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, strings.Join(parts, "\n\n"), nil, ""))
 }
 
 func (n *BotNotifier) SendWheelBonusSpins(ctx context.Context, telegramUserID int64, count int) error {
@@ -70,7 +70,14 @@ func (n *BotNotifier) SendWheelBonusSpins(ctx context.Context, telegramUserID in
 		opts.WebAppURL = webURL + "/games/wheel"
 	}
 	markup := OpenAppButtonMarkup(opts)
-	return n.api.sendMessage(ctx, telegramUserID, text, markup, "")
+	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, text, markup, ""))
+}
+
+func ignoreUnavailable(err error) error {
+	if IsRecipientUnavailable(err) {
+		return nil
+	}
+	return err
 }
 
 func russianSpinWord(n int) string {

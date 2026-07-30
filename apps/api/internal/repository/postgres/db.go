@@ -68,6 +68,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.AnalyticsEvent{},
 		&domain.PromoRedemption{},
 		&domain.TelegramBroadcast{},
+		&domain.TelegramBroadcastDelivery{},
 		&domain.TreasurySweep{},
 		&domain.SocialSimSettings{},
 		&domain.ReferralPerk{},

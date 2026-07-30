@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -416,6 +417,23 @@ func (e *FloodWaitError) Error() string {
 	return fmt.Sprintf("telegram flood wait: %s", e.Description)
 }
 
+// RecipientUnavailableError means the chat cannot receive bot messages (blocked, deleted, etc.).
+type RecipientUnavailableError struct {
+	Reason string
+}
+
+func (e *RecipientUnavailableError) Error() string {
+	if e == nil || e.Reason == "" {
+		return "telegram recipient unavailable"
+	}
+	return e.Reason
+}
+
+func IsRecipientUnavailable(err error) bool {
+	var unavailable *RecipientUnavailableError
+	return errors.As(err, &unavailable)
+}
+
 type telegramAPIError struct {
 	OK          bool   `json:"ok"`
 	ErrorCode   int    `json:"error_code"`
@@ -429,9 +447,10 @@ func mapTelegramAPIError(statusCode int, body telegramAPIError, chatID int64, me
 	desc := body.Description
 	lower := strings.ToLower(desc)
 	if strings.Contains(lower, "chat not found") || strings.Contains(lower, "bot was blocked") ||
-		strings.Contains(lower, "user is deactivated") || strings.Contains(lower, "peer_id_invalid") {
+		strings.Contains(lower, "user is deactivated") || strings.Contains(lower, "peer_id_invalid") ||
+		strings.Contains(lower, "forbidden") {
 		slog.Warn("telegram "+method+" skipped", "chat_id", chatID, "reason", desc)
-		return nil
+		return &RecipientUnavailableError{Reason: desc}
 	}
 	if statusCode == http.StatusTooManyRequests || body.ErrorCode == 429 || body.Parameters.RetryAfter > 0 {
 		wait := time.Duration(body.Parameters.RetryAfter) * time.Second

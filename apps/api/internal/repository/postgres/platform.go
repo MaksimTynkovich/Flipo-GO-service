@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -438,6 +440,62 @@ func (r *PlatformRepo) ListQueuedBroadcasts(ctx context.Context, limit int) ([]d
 		Order("created_at ASC").
 		Limit(limit).
 		Find(&items).Error
+}
+
+func (r *PlatformRepo) UpsertBroadcastDelivery(ctx context.Context, delivery *domain.TelegramBroadcastDelivery) error {
+	if delivery == nil {
+		return fmt.Errorf("delivery is nil")
+	}
+	if delivery.CreatedAt.IsZero() {
+		delivery.CreatedAt = time.Now().UTC()
+	}
+	if delivery.ID == uuid.Nil {
+		delivery.ID = uuid.New()
+	}
+	// Raw upsert: GORM OnConflict often fails if only a UNIQUE INDEX exists
+	// (no named CONSTRAINT), which previously left the journal empty.
+	return r.db.WithContext(ctx).Exec(`
+		INSERT INTO telegram_broadcast_deliveries
+			(id, broadcast_id, telegram_id, status, error_message, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (broadcast_id, telegram_id) DO UPDATE SET
+			status = EXCLUDED.status,
+			error_message = EXCLUDED.error_message,
+			created_at = EXCLUDED.created_at
+	`, delivery.ID, delivery.BroadcastID, delivery.TelegramID, delivery.Status, delivery.ErrorMessage, delivery.CreatedAt).Error
+}
+
+func (r *PlatformRepo) ListBroadcastDeliveries(
+	ctx context.Context,
+	broadcastID uuid.UUID,
+	status string,
+	limit, offset int,
+) ([]domain.TelegramBroadcastDelivery, int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	base := r.db.WithContext(ctx).Model(&domain.TelegramBroadcastDelivery{}).
+		Where("broadcast_id = ?", broadcastID)
+	status = strings.TrimSpace(strings.ToLower(status))
+	if status != "" {
+		base = base.Where("status = ?", status)
+	}
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []domain.TelegramBroadcastDelivery
+	err := base.Order("created_at DESC").Limit(limit).Offset(offset).Find(&items).Error
+	if items == nil {
+		items = []domain.TelegramBroadcastDelivery{}
+	}
+	return items, total, err
 }
 
 func (r *PlatformRepo) CreateSweep(ctx context.Context, sweep *domain.TreasurySweep) error {

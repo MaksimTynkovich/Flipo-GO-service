@@ -1647,6 +1647,32 @@ func (h *AdminHandler) ListBroadcasts(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+func (h *AdminHandler) ListBroadcastDeliveries(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid broadcast id"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	status := c.Query("status")
+	items, total, err := h.telegram.ListBroadcastDeliveries(c.Request.Context(), id, status, limit, offset)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "рассылка не найдена"})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"items":  items,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
 func (h *AdminHandler) ListSweeps(c *gin.Context) {
 	items, err := h.treasury.ListSweeps(c.Request.Context())
 	if err != nil {

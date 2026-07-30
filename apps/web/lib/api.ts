@@ -2776,6 +2776,36 @@ export async function getAdminBroadcasts() {
   return api<TelegramBroadcast[]>("/api/v1/admin/telegram/broadcasts");
 }
 
+export type TelegramBroadcastDelivery = {
+  id: string;
+  broadcast_id: string;
+  telegram_id: number;
+  status: "sent" | "skipped" | "failed" | string;
+  error_message?: string;
+  created_at: string;
+};
+
+export type TelegramBroadcastDeliveriesResponse = {
+  items: TelegramBroadcastDelivery[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export async function getAdminBroadcastDeliveries(
+  broadcastId: string,
+  opts?: { status?: string; limit?: number; offset?: number },
+) {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set("status", opts.status);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return api<TelegramBroadcastDeliveriesResponse>(
+    `/api/v1/admin/telegram/broadcasts/${encodeURIComponent(broadcastId)}/deliveries${qs ? `?${qs}` : ""}`,
+  );
+}
+
 export type TreasurySweep = {
   id: string;
   amount_nanoton: number;
