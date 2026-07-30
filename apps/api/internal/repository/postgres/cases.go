@@ -455,6 +455,234 @@ func (r *CaseRepo) CaseOpenStats(ctx context.Context, since *time.Time) (*domain
 	return stats, nil
 }
 
+func (r *CaseRepo) CaseOpenPeriodStats(ctx context.Context, since time.Time) (domain.CaseOpenPeriodStats, error) {
+	type row struct {
+		Opens             int64
+		UniqueUsers       int64
+		SpentNanoton      int64
+		PrizeTotalNanoton int64
+		PaidOpens         int64
+		FreeOpens         int64
+		PaidSpentNanoton  int64
+		PaidPrizeNanoton  int64
+	}
+	var out row
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Select(`COUNT(*) AS opens,
+			COUNT(DISTINCT user_id) AS unique_users,
+			COALESCE(SUM(price_paid_nanoton), 0) AS spent_nanoton,
+			COALESCE(SUM(prize_nanoton), 0) AS prize_total_nanoton,
+			COUNT(*) FILTER (WHERE price_paid_nanoton > 0) AS paid_opens,
+			COUNT(*) FILTER (WHERE price_paid_nanoton = 0) AS free_opens,
+			COALESCE(SUM(price_paid_nanoton) FILTER (WHERE price_paid_nanoton > 0), 0) AS paid_spent_nanoton,
+			COALESCE(SUM(prize_nanoton) FILTER (WHERE price_paid_nanoton > 0), 0) AS paid_prize_nanoton`)
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&out).Error; err != nil {
+		return domain.CaseOpenPeriodStats{}, err
+	}
+	return domain.CaseOpenPeriodStats{
+		Opens:             out.Opens,
+		UniqueUsers:       out.UniqueUsers,
+		SpentNanoton:      out.SpentNanoton,
+		PrizeTotalNanoton: out.PrizeTotalNanoton,
+		PaidOpens:         out.PaidOpens,
+		FreeOpens:         out.FreeOpens,
+		PaidSpentNanoton:  out.PaidSpentNanoton,
+		PaidPrizeNanoton:  out.PaidPrizeNanoton,
+	}, nil
+}
+
+func (r *CaseRepo) CaseOpenSourceStats(ctx context.Context, since time.Time) ([]domain.CaseOpenSourceStats, error) {
+	type row struct {
+		Source            string
+		Opens             int64
+		UniqueUsers       int64
+		SpentNanoton      int64
+		PrizeTotalNanoton int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Select(`source,
+			COUNT(*) AS opens,
+			COUNT(DISTINCT user_id) AS unique_users,
+			COALESCE(SUM(price_paid_nanoton), 0) AS spent_nanoton,
+			COALESCE(SUM(prize_nanoton), 0) AS prize_total_nanoton`).
+		Group("source").
+		Order("source ASC")
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.CaseOpenSourceStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.CaseOpenSourceStats{
+			Source:            item.Source,
+			Opens:             item.Opens,
+			UniqueUsers:       item.UniqueUsers,
+			SpentNanoton:      item.SpentNanoton,
+			PrizeTotalNanoton: item.PrizeTotalNanoton,
+		})
+	}
+	return out, nil
+}
+
+func (r *CaseRepo) CaseOpenPrizeTypeStats(ctx context.Context, since time.Time) ([]domain.CaseOpenPrizeTypeStats, error) {
+	type row struct {
+		PrizeType         string
+		Opens             int64
+		PrizeTotalNanoton int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Select(`COALESCE(NULLIF(prize_type, ''), 'gift') AS prize_type,
+			COUNT(*) AS opens,
+			COALESCE(SUM(prize_nanoton), 0) AS prize_total_nanoton`).
+		Group("COALESCE(NULLIF(prize_type, ''), 'gift')").
+		Order("opens DESC")
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.CaseOpenPrizeTypeStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.CaseOpenPrizeTypeStats{
+			PrizeType:         item.PrizeType,
+			Opens:             item.Opens,
+			PrizeTotalNanoton: item.PrizeTotalNanoton,
+		})
+	}
+	return out, nil
+}
+
+func (r *CaseRepo) CaseOpenByCaseStats(ctx context.Context, since time.Time, limit int) ([]domain.CaseOpenCaseStats, error) {
+	if limit <= 0 {
+		limit = 15
+	}
+	type row struct {
+		CaseID            uuid.UUID
+		Title             string
+		Slug              string
+		Opens             int64
+		SpentNanoton      int64
+		PrizeTotalNanoton int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).
+		Table("case_opens AS o").
+		Select(`o.case_id,
+			COALESCE(NULLIF(c.title, ''), '—') AS title,
+			COALESCE(c.slug, '') AS slug,
+			COUNT(*) AS opens,
+			COALESCE(SUM(o.price_paid_nanoton), 0) AS spent_nanoton,
+			COALESCE(SUM(o.prize_nanoton), 0) AS prize_total_nanoton`).
+		Joins("LEFT JOIN cases c ON c.id = o.case_id").
+		Group("o.case_id, c.title, c.slug").
+		Order("opens DESC, spent_nanoton DESC").
+		Limit(limit)
+	if !since.IsZero() {
+		q = q.Where("o.created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.CaseOpenCaseStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.CaseOpenCaseStats{
+			CaseID:            item.CaseID,
+			Title:             item.Title,
+			Slug:              item.Slug,
+			Opens:             item.Opens,
+			SpentNanoton:      item.SpentNanoton,
+			PrizeTotalNanoton: item.PrizeTotalNanoton,
+		})
+	}
+	return out, nil
+}
+
+func (r *CaseRepo) CaseOpenTopPrizes(ctx context.Context, since time.Time, limit int) ([]domain.CaseOpenPrizeHitStats, error) {
+	if limit <= 0 {
+		limit = 15
+	}
+	type row struct {
+		LootEntryID       uuid.UUID
+		Label             string
+		PrizeType         string
+		Hits              int64
+		PrizeTotalNanoton int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).
+		Table("case_opens AS o").
+		Select(`o.loot_entry_id,
+			COALESCE(NULLIF(e.display_name, ''), '—') AS label,
+			COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift') AS prize_type,
+			COUNT(*) AS hits,
+			COALESCE(SUM(o.prize_nanoton), 0) AS prize_total_nanoton`).
+		Joins("LEFT JOIN case_loot_entries e ON e.id = o.loot_entry_id").
+		Group("o.loot_entry_id, e.display_name, COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift')").
+		Order("hits DESC, prize_total_nanoton DESC").
+		Limit(limit)
+	if !since.IsZero() {
+		q = q.Where("o.created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.CaseOpenPrizeHitStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.CaseOpenPrizeHitStats{
+			LootEntryID:       item.LootEntryID,
+			Label:             item.Label,
+			PrizeType:         item.PrizeType,
+			Hits:              item.Hits,
+			PrizeTotalNanoton: item.PrizeTotalNanoton,
+		})
+	}
+	return out, nil
+}
+
+func (r *CaseRepo) CaseOpenByDay(ctx context.Context, since time.Time) ([]domain.CaseOpenDailyStats, error) {
+	type row struct {
+		Day               time.Time
+		Opens             int64
+		UniqueUsers       int64
+		SpentNanoton      int64
+		PrizeTotalNanoton int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Select(`date_trunc('day', created_at AT TIME ZONE 'UTC') AS day,
+			COUNT(*) AS opens,
+			COUNT(DISTINCT user_id) AS unique_users,
+			COALESCE(SUM(price_paid_nanoton), 0) AS spent_nanoton,
+			COALESCE(SUM(prize_nanoton), 0) AS prize_total_nanoton`).
+		Group("day").
+		Order("day ASC")
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.CaseOpenDailyStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.CaseOpenDailyStats{
+			Date:              item.Day.UTC(),
+			Opens:             item.Opens,
+			UniqueUsers:       item.UniqueUsers,
+			SpentNanoton:      item.SpentNanoton,
+			PrizeTotalNanoton: item.PrizeTotalNanoton,
+		})
+	}
+	return out, nil
+}
+
 func (r *CaseRepo) GetLiveFeedSettings(ctx context.Context) (*domain.CaseLiveFeedSettings, error) {
 	var row domain.CaseLiveFeedSettings
 	err := r.db.WithContext(ctx).First(&row, "id = ?", 1).Error

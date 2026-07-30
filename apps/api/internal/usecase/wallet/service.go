@@ -190,25 +190,27 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 		if !ok && !s.cfg.ChainDevMode {
 			return nil, 0, domain.ErrChainUnavailable
 		}
-		balanceAfter, err := s.transfers.CompleteDepositAtomic(ctx, transferID, txHash, 0)
+		balanceAfter, credited, err := s.transfers.CompleteDepositAtomic(ctx, transferID, txHash, 0)
 		if err != nil {
 			return nil, 0, err
 		}
 		updated, _ := s.transfers.FindByID(ctx, transferID)
-		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
-		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
+		if credited {
+			s.onDepositCredited(ctx, transfer)
+		}
 		return toView(updated), balanceAfter, nil
 	}
 
 	if s.cfg.ChainDevMode {
 		devHash := fmt.Sprintf("dev:%s", transferID.String())
-		balanceAfter, err := s.transfers.CompleteDepositAtomic(ctx, transferID, devHash, 0)
+		balanceAfter, credited, err := s.transfers.CompleteDepositAtomic(ctx, transferID, devHash, 0)
 		if err != nil {
 			return nil, 0, err
 		}
 		updated, _ := s.transfers.FindByID(ctx, transferID)
-		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
-		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
+		if credited {
+			s.onDepositCredited(ctx, transfer)
+		}
 		return toView(updated), balanceAfter, nil
 	}
 
@@ -223,13 +225,14 @@ func (s *Service) ConfirmDeposit(ctx context.Context, userID, transferID uuid.UU
 		return toView(transfer), 0, nil
 	}
 
-	balanceAfter, err := s.transfers.CompleteDepositAtomic(ctx, transferID, incoming.TxHash, incoming.LT)
+	balanceAfter, credited, err := s.transfers.CompleteDepositAtomic(ctx, transferID, incoming.TxHash, incoming.LT)
 	if err != nil {
 		return nil, 0, err
 	}
 	updated, _ := s.transfers.FindByID(ctx, transferID)
-	s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
-	balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
+	if credited {
+		s.onDepositCredited(ctx, transfer)
+	}
 	return toView(updated), balanceAfter, nil
 }
 
@@ -337,6 +340,11 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 	return toView(transfer), balanceAfter, nil
 }
 
+func (s *Service) onDepositCredited(ctx context.Context, transfer *domain.TonTransfer) {
+	s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
+	balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
+}
+
 func (s *Service) trackDepositConfirmed(ctx context.Context, userID uuid.UUID, amountNanoton int64, wallet string) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -415,11 +423,11 @@ func (s *Service) ProcessPendingDeposits(ctx context.Context) error {
 		if transfer.Status != domain.TonStatusAwaitingPayment {
 			continue
 		}
-		if _, err := s.transfers.CompleteDepositAtomic(ctx, transfer.ID, incoming.TxHash, incoming.LT); err != nil {
+		if _, credited, err := s.transfers.CompleteDepositAtomic(ctx, transfer.ID, incoming.TxHash, incoming.LT); err != nil {
 			continue
+		} else if credited {
+			s.onDepositCredited(ctx, &transfer)
 		}
-		s.trackDepositConfirmed(ctx, transfer.UserID, transfer.AmountNanoton, transfer.WalletAddress)
-		balance.NotifyUser(ctx, s.users, s.notifier, transfer.UserID, transfer.AmountNanoton, domain.LedgerDeposit)
 	}
 	return nil
 }

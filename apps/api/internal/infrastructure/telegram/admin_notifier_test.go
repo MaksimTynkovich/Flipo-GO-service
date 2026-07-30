@@ -110,6 +110,9 @@ func TestAdminNotifierDisabledWithoutStore(t *testing.T) {
 }
 
 func TestMirrorImportantToTelegram(t *testing.T) {
+	if !mirrorImportantToTelegram("bot_start", nil) {
+		t.Fatal("bot_start should mirror")
+	}
 	if !mirrorImportantToTelegram("deposit", nil) {
 		t.Fatal("deposit should mirror")
 	}

@@ -1161,6 +1161,19 @@ func (h *AdminHandler) GetCaseEconomyStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
+func (h *AdminHandler) GetCaseOpenStats(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	stats, err := h.cases.AdminCaseOpenStatsDetailed(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
 func (h *AdminHandler) GetCaseLiveFeedSettings(c *gin.Context) {
 	if h.cases == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
@@ -1604,14 +1617,20 @@ func (h *AdminHandler) UpdateYieldSettings(c *gin.Context) {
 func (h *AdminHandler) CreateBroadcast(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	var req struct {
-		Message              string `json:"message" binding:"required"`
-		IncludeChannelButton bool   `json:"include_channel_button"`
+		Message              string   `json:"message"`
+		ImageURL             string   `json:"image_url"`
+		ImageURLs            []string `json:"image_urls"`
+		IncludeChannelButton bool     `json:"include_channel_button"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	broadcast, err := h.telegram.CreateBroadcast(c.Request.Context(), adminID, req.Message, req.IncludeChannelButton)
+	imageURLs := append([]string{}, req.ImageURLs...)
+	if len(imageURLs) == 0 && strings.TrimSpace(req.ImageURL) != "" {
+		imageURLs = []string{strings.TrimSpace(req.ImageURL)}
+	}
+	broadcast, err := h.telegram.CreateBroadcast(c.Request.Context(), adminID, req.Message, imageURLs, req.IncludeChannelButton)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

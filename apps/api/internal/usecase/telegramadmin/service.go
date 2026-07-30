@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -13,7 +15,13 @@ import (
 	"github.com/google/uuid"
 )
 
-const channelButtonText = "📢 Наш канал"
+const (
+	channelButtonText  = "📢 Наш канал"
+	maxPhotoCaptionLen = 1024
+	maxBroadcastImages = 5
+	staticCasesURLPref = "/static/cases/"
+	markupFollowUpText = "\u200b"
+)
 
 type Service struct {
 	platform        domain.PlatformRepository
@@ -23,6 +31,7 @@ type Service struct {
 	webAppShortName string
 	envWebAppURL    string
 	channelURL      string
+	casesUploadDir  string
 	processMu       sync.Mutex
 }
 
@@ -46,13 +55,29 @@ func NewService(
 	}
 }
 
-func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, message string, includeChannelButton bool) (*domain.TelegramBroadcast, error) {
+func (s *Service) SetCasesUploadDir(dir string) {
+	s.casesUploadDir = strings.TrimSpace(dir)
+}
+
+func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, message string, imageURLs []string, includeChannelButton bool) (*domain.TelegramBroadcast, error) {
 	message = strings.TrimSpace(message)
-	if message == "" {
-		return nil, fmt.Errorf("message is required")
+	imageURLs = normalizeImageURLs(imageURLs)
+	if message == "" && len(imageURLs) == 0 {
+		return nil, fmt.Errorf("нужен текст или изображение")
+	}
+	if len(imageURLs) > maxBroadcastImages {
+		return nil, fmt.Errorf("не больше %d изображений", maxBroadcastImages)
+	}
+	if len(imageURLs) > 0 && len(message) > maxPhotoCaptionLen {
+		return nil, fmt.Errorf("подпись к изображению не длиннее %d символов", maxPhotoCaptionLen)
 	}
 	if includeChannelButton && s.channelURL == "" {
 		return nil, fmt.Errorf("TELEGRAM_CHANNEL_URL не задан в .env")
+	}
+	for _, imageURL := range imageURLs {
+		if err := s.validateBroadcastImage(imageURL); err != nil {
+			return nil, err
+		}
 	}
 
 	settings, err := s.platform.GetBotSettings(ctx)
@@ -74,6 +99,7 @@ func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, messag
 	broadcast := &domain.TelegramBroadcast{
 		ID:                   uuid.New(),
 		Message:              message,
+		ImageURLs:            imageURLs,
 		IncludeChannelButton: includeChannelButton,
 		Status:               "queued",
 		TotalUsers:           int(total),
@@ -92,6 +118,70 @@ func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, messag
 	}()
 
 	return broadcast, nil
+}
+
+func normalizeImageURLs(urls []string) []string {
+	out := make([]string, 0, len(urls))
+	seen := make(map[string]struct{}, len(urls))
+	for _, raw := range urls {
+		u := strings.TrimSpace(raw)
+		if u == "" {
+			continue
+		}
+		if _, ok := seen[u]; ok {
+			continue
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	return out
+}
+
+func (s *Service) validateBroadcastImage(imageURL string) error {
+	if strings.HasPrefix(imageURL, "https://") || strings.HasPrefix(imageURL, "http://") {
+		return nil
+	}
+	if strings.HasPrefix(imageURL, staticCasesURLPref) {
+		if s.casesUploadDir == "" {
+			return fmt.Errorf("загрузка картинок недоступна")
+		}
+		name := filepath.Base(imageURL)
+		if name == "." || name == "/" || strings.Contains(name, "..") {
+			return fmt.Errorf("некорректный image_url")
+		}
+		path := filepath.Join(s.casesUploadDir, name)
+		if filepath.Base(path) != name {
+			return fmt.Errorf("некорректный image_url")
+		}
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			return fmt.Errorf("файл изображения не найден")
+		}
+		return nil
+	}
+	return fmt.Errorf("image_url: нужен https://… или /static/cases/…")
+}
+
+func (s *Service) resolveBroadcastPhoto(imageURL string) (string, error) {
+	imageURL = strings.TrimSpace(imageURL)
+	if imageURL == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(imageURL, "https://") || strings.HasPrefix(imageURL, "http://") {
+		return imageURL, nil
+	}
+	if strings.HasPrefix(imageURL, staticCasesURLPref) {
+		if s.casesUploadDir == "" {
+			return "", fmt.Errorf("cases upload dir is not configured")
+		}
+		name := filepath.Base(imageURL)
+		abs, err := filepath.Abs(filepath.Join(s.casesUploadDir, name))
+		if err != nil {
+			return "", err
+		}
+		return abs, nil
+	}
+	return "", fmt.Errorf("unsupported image_url")
 }
 
 func (s *Service) ListBroadcasts(ctx context.Context) ([]domain.TelegramBroadcast, error) {
@@ -141,6 +231,18 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 		delay = 35 * time.Millisecond
 	}
 
+	photoSources := make([]string, 0, len(broadcast.ImageURLs))
+	for _, imageURL := range broadcast.ImageURLs {
+		src, err := s.resolveBroadcastPhoto(imageURL)
+		if err != nil {
+			return err
+		}
+		if src != "" {
+			photoSources = append(photoSources, src)
+		}
+	}
+	cachedFileIDs := make([]string, 0, len(photoSources))
+
 	const pageSize = 100
 	for offset := 0; ; offset += pageSize {
 		ids, err := s.users.ListTelegramIDs(ctx, pageSize, offset)
@@ -151,7 +253,7 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 			break
 		}
 		for _, chatID := range ids {
-			if err := s.bot.SendMessageWithMarkup(ctx, chatID, broadcast.Message, markup); err != nil {
+			if err := s.sendBroadcastItem(ctx, chatID, broadcast.Message, photoSources, &cachedFileIDs, markup); err != nil {
 				broadcast.FailedCount++
 			} else {
 				broadcast.SentCount++
@@ -165,6 +267,49 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 	broadcast.Status = "completed"
 	broadcast.FinishedAt = &now
 	return s.platform.UpdateBroadcast(ctx, broadcast)
+}
+
+func (s *Service) sendBroadcastItem(
+	ctx context.Context,
+	chatID int64,
+	message string,
+	photoSources []string,
+	cachedFileIDs *[]string,
+	markup map[string]any,
+) error {
+	if len(photoSources) == 0 {
+		return s.bot.SendMessageWithMarkup(ctx, chatID, message, markup)
+	}
+
+	photos := photoSources
+	if len(*cachedFileIDs) == len(photoSources) {
+		photos = *cachedFileIDs
+	}
+
+	if len(photos) == 1 {
+		fileID, err := s.bot.SendPhotoWithMarkup(ctx, chatID, photos[0], message, markup)
+		if err != nil {
+			return err
+		}
+		if len(*cachedFileIDs) == 0 && fileID != "" {
+			*cachedFileIDs = []string{fileID}
+		}
+		return nil
+	}
+
+	fileIDs, err := s.bot.SendMediaGroup(ctx, chatID, photos, message)
+	if err != nil {
+		return err
+	}
+	if len(*cachedFileIDs) == 0 && len(fileIDs) == len(photoSources) {
+		*cachedFileIDs = append([]string{}, fileIDs...)
+	}
+	if markup != nil {
+		if err := s.bot.SendMessageWithMarkup(ctx, chatID, markupFollowUpText, markup); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings, includeChannelButton bool) map[string]any {

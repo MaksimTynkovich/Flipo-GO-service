@@ -234,6 +234,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/cases/settings", deps.AdminHandler.GetCaseCatalogSettings)
 			adminAuthed.PATCH("/cases/settings", deps.AdminHandler.UpdateCaseCatalogSettings)
 			adminAuthed.GET("/cases/economy-stats", deps.AdminHandler.GetCaseEconomyStats)
+			adminAuthed.GET("/cases/open-stats", deps.AdminHandler.GetCaseOpenStats)
 			adminAuthed.GET("/cases/live-settings", deps.AdminHandler.GetCaseLiveFeedSettings)
 			adminAuthed.PATCH("/cases/live-settings", deps.AdminHandler.UpdateCaseLiveFeedSettings)
 			adminAuthed.GET("/cases/promos", deps.AdminHandler.ListCasePromoCodes)

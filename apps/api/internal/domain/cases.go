@@ -157,6 +157,62 @@ type CaseOpenStats struct {
 	ActualRTPBPS      int   `json:"actual_rtp_bps"`
 }
 
+// CaseOpenPeriodStats — opens P&L for a time window (nil/zero since = all time).
+type CaseOpenPeriodStats struct {
+	Opens             int64
+	UniqueUsers       int64
+	SpentNanoton      int64
+	PrizeTotalNanoton int64
+	PaidOpens         int64
+	FreeOpens         int64
+	PaidSpentNanoton  int64
+	PaidPrizeNanoton  int64
+}
+
+// CaseOpenSourceStats — opens grouped by source (paid/daily/free/promo).
+type CaseOpenSourceStats struct {
+	Source            string
+	Opens             int64
+	UniqueUsers       int64
+	SpentNanoton      int64
+	PrizeTotalNanoton int64
+}
+
+// CaseOpenPrizeTypeStats — opens grouped by gift/ton.
+type CaseOpenPrizeTypeStats struct {
+	PrizeType         string
+	Opens             int64
+	PrizeTotalNanoton int64
+}
+
+// CaseOpenCaseStats — per-case aggregate for admin rankings.
+type CaseOpenCaseStats struct {
+	CaseID            uuid.UUID
+	Title             string
+	Slug              string
+	Opens             int64
+	SpentNanoton      int64
+	PrizeTotalNanoton int64
+}
+
+// CaseOpenPrizeHitStats — top loot entries by hit count.
+type CaseOpenPrizeHitStats struct {
+	LootEntryID       uuid.UUID
+	Label             string
+	PrizeType         string
+	Hits              int64
+	PrizeTotalNanoton int64
+}
+
+// CaseOpenDailyStats — UTC day bucket for opens timeseries.
+type CaseOpenDailyStats struct {
+	Date              time.Time
+	Opens             int64
+	UniqueUsers       int64
+	SpentNanoton      int64
+	PrizeTotalNanoton int64
+}
+
 // CasePoolKind selects which economy pool backs an open.
 type CasePoolKind string
 

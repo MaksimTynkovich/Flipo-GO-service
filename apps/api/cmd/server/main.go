@@ -157,6 +157,7 @@ func main() {
 	}
 	adminNotifier := telegram.NewAdminNotifier(notifStore, botAPI, cfg.AdminTelegramIDs)
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL, cfg.ChannelURL)
+	telegramAdminSvc.SetCasesUploadDir(cfg.CasesUploadDir)
 
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),

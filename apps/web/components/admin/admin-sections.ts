@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import AnalyticsSection from "./sections/AnalyticsSection";
 import CasesSection from "./sections/CasesSection";
+import CaseStatsSection from "./sections/CaseStatsSection";
 import DashboardSection from "./sections/DashboardSection";
 import FinanceSection from "./sections/FinanceSection";
 import GamesSection from "./sections/GamesSection";
@@ -22,6 +23,7 @@ export type AdminSectionId =
   | "users"
   | "games"
   | "cases"
+  | "case-stats"
   | "market"
   | "finance"
   | "marketing"
@@ -44,6 +46,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "users", href: "/admin/users", label: "Пользователи" },
   { id: "games", href: "/admin/games", label: "Игры" },
   { id: "cases", href: "/admin/cases", label: "Кейсы" },
+  { id: "case-stats", href: "/admin/case-stats", label: "Статистика кейсов" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы" },
   { id: "market", href: "/admin/market", label: "Маркет", disabled: !MARKET_ENABLED },
   { id: "finance", href: "/admin/finance", label: "Операции" },
@@ -60,6 +63,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   users: UsersSection,
   games: GamesSection,
   cases: CasesSection,
+  "case-stats": CaseStatsSection,
   market: MARKET_ENABLED ? MarketAdminSection : MarketDisabledSection,
   finance: FinanceSection,
   staking: StakingSection,
@@ -76,6 +80,7 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/users": "users",
   "/admin/games": "games",
   "/admin/cases": "cases",
+  "/admin/case-stats": "case-stats",
   "/admin/outcome": "outcome",
   "/admin/market": "market",
   "/admin/finance": "finance",

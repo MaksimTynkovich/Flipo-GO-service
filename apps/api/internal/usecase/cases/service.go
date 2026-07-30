@@ -911,6 +911,269 @@ func (s *Service) AdminCaseOpenStats(ctx context.Context, since *time.Time) (*do
 	return s.cases.CaseOpenStats(ctx, since)
 }
 
+// AdminCaseOpenDetailedView — rich open-stats payload for the admin case-stats section.
+type AdminCaseOpenDetailedView struct {
+	Today              AdminCaseOpenPeriodView       `json:"today"`
+	Last7Days          AdminCaseOpenPeriodView       `json:"last_7_days"`
+	AllTime            AdminCaseOpenPeriodView       `json:"all_time"`
+	SourcesToday       AdminCaseOpenSourceBreakdown  `json:"sources_today"`
+	SourcesAllTime     AdminCaseOpenSourceBreakdown  `json:"sources_all_time"`
+	PrizeTypes7d       []AdminCaseOpenPrizeTypeView  `json:"prize_types_7d"`
+	PrizeTypesAllTime  []AdminCaseOpenPrizeTypeView  `json:"prize_types_all_time"`
+	ByCase7d           []AdminCaseOpenCaseView       `json:"by_case_7d"`
+	ByCaseAllTime      []AdminCaseOpenCaseView       `json:"by_case_all_time"`
+	TopPrizes7d        []AdminCaseOpenPrizeHitView   `json:"top_prizes_7d"`
+	OpensByDay         []AdminCaseOpenDailyView      `json:"opens_by_day"`
+}
+
+type AdminCaseOpenPeriodView struct {
+	Opens             int64 `json:"opens"`
+	UniqueUsers       int64 `json:"unique_users"`
+	SpentNanoton      int64 `json:"spent_nanoton"`
+	PrizeTotalNanoton int64 `json:"prize_total_nanoton"`
+	HouseEdgeNanoton  int64 `json:"house_edge_nanoton"`
+	ActualRTPBPS      int   `json:"actual_rtp_bps"`
+	PaidOpens         int64 `json:"paid_opens"`
+	FreeOpens         int64 `json:"free_opens"`
+	AvgTicketNanoton  int64 `json:"avg_ticket_nanoton"`
+	AvgPrizeNanoton   int64 `json:"avg_prize_nanoton"`
+}
+
+type AdminCaseOpenSourceView struct {
+	Opens             int64 `json:"opens"`
+	UniqueUsers       int64 `json:"unique_users"`
+	SpentNanoton      int64 `json:"spent_nanoton"`
+	PrizeTotalNanoton int64 `json:"prize_total_nanoton"`
+}
+
+type AdminCaseOpenSourceBreakdown struct {
+	Paid  AdminCaseOpenSourceView `json:"paid"`
+	Daily AdminCaseOpenSourceView `json:"daily"`
+	Free  AdminCaseOpenSourceView `json:"free"`
+	Promo AdminCaseOpenSourceView `json:"promo"`
+}
+
+type AdminCaseOpenPrizeTypeView struct {
+	PrizeType         string `json:"prize_type"`
+	Opens             int64  `json:"opens"`
+	PrizeTotalNanoton int64  `json:"prize_total_nanoton"`
+}
+
+type AdminCaseOpenCaseView struct {
+	CaseID            string `json:"case_id"`
+	Title             string `json:"title"`
+	Slug              string `json:"slug"`
+	Opens             int64  `json:"opens"`
+	SpentNanoton      int64  `json:"spent_nanoton"`
+	PrizeTotalNanoton int64  `json:"prize_total_nanoton"`
+	HouseEdgeNanoton  int64  `json:"house_edge_nanoton"`
+	ActualRTPBPS      int    `json:"actual_rtp_bps"`
+}
+
+type AdminCaseOpenPrizeHitView struct {
+	LootEntryID       string  `json:"loot_entry_id"`
+	Label             string  `json:"label"`
+	PrizeType         string  `json:"prize_type"`
+	Hits              int64   `json:"hits"`
+	PrizeTotalNanoton int64   `json:"prize_total_nanoton"`
+	SharePercent      float64 `json:"share_percent"`
+}
+
+type AdminCaseOpenDailyView struct {
+	Date              string `json:"date"`
+	Opens             int64  `json:"opens"`
+	UniqueUsers       int64  `json:"unique_users"`
+	SpentNanoton      int64  `json:"spent_nanoton"`
+	PrizeTotalNanoton int64  `json:"prize_total_nanoton"`
+}
+
+func (s *Service) AdminCaseOpenStatsDetailed(ctx context.Context) (*AdminCaseOpenDetailedView, error) {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	since7d := today.AddDate(0, 0, -6)
+	since14d := today.AddDate(0, 0, -13)
+
+	todayStats, err := s.cases.CaseOpenPeriodStats(ctx, today)
+	if err != nil {
+		return nil, err
+	}
+	weekStats, err := s.cases.CaseOpenPeriodStats(ctx, since7d)
+	if err != nil {
+		return nil, err
+	}
+	allStats, err := s.cases.CaseOpenPeriodStats(ctx, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+
+	sourcesToday, err := s.cases.CaseOpenSourceStats(ctx, today)
+	if err != nil {
+		return nil, err
+	}
+	sourcesAll, err := s.cases.CaseOpenSourceStats(ctx, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+
+	prizeTypes7d, err := s.cases.CaseOpenPrizeTypeStats(ctx, since7d)
+	if err != nil {
+		return nil, err
+	}
+	prizeTypesAll, err := s.cases.CaseOpenPrizeTypeStats(ctx, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+
+	byCase7d, err := s.cases.CaseOpenByCaseStats(ctx, since7d, 15)
+	if err != nil {
+		return nil, err
+	}
+	byCaseAll, err := s.cases.CaseOpenByCaseStats(ctx, time.Time{}, 15)
+	if err != nil {
+		return nil, err
+	}
+
+	topPrizes, err := s.cases.CaseOpenTopPrizes(ctx, since7d, 15)
+	if err != nil {
+		return nil, err
+	}
+
+	dailyRows, err := s.cases.CaseOpenByDay(ctx, since14d)
+	if err != nil {
+		return nil, err
+	}
+
+	var totalHits int64
+	for _, hit := range topPrizes {
+		totalHits += hit.Hits
+	}
+	prizeHits := make([]AdminCaseOpenPrizeHitView, 0, len(topPrizes))
+	for _, hit := range topPrizes {
+		share := 0.0
+		if totalHits > 0 {
+			share = float64(hit.Hits) * 100 / float64(totalHits)
+		}
+		prizeHits = append(prizeHits, AdminCaseOpenPrizeHitView{
+			LootEntryID:       hit.LootEntryID.String(),
+			Label:             hit.Label,
+			PrizeType:         hit.PrizeType,
+			Hits:              hit.Hits,
+			PrizeTotalNanoton: hit.PrizeTotalNanoton,
+			SharePercent:      share,
+		})
+	}
+
+	byDay := make(map[string]domain.CaseOpenDailyStats, len(dailyRows))
+	for _, row := range dailyRows {
+		key := row.Date.UTC().Format("2006-01-02")
+		byDay[key] = row
+	}
+	opensByDay := make([]AdminCaseOpenDailyView, 0, 14)
+	for i := 0; i < 14; i++ {
+		day := since14d.AddDate(0, 0, i)
+		key := day.Format("2006-01-02")
+		point := AdminCaseOpenDailyView{Date: key}
+		if row, ok := byDay[key]; ok {
+			point.Opens = row.Opens
+			point.UniqueUsers = row.UniqueUsers
+			point.SpentNanoton = row.SpentNanoton
+			point.PrizeTotalNanoton = row.PrizeTotalNanoton
+		}
+		opensByDay = append(opensByDay, point)
+	}
+
+	return &AdminCaseOpenDetailedView{
+		Today:             mapCaseOpenPeriod(todayStats),
+		Last7Days:         mapCaseOpenPeriod(weekStats),
+		AllTime:           mapCaseOpenPeriod(allStats),
+		SourcesToday:      mapCaseOpenSources(sourcesToday),
+		SourcesAllTime:    mapCaseOpenSources(sourcesAll),
+		PrizeTypes7d:      mapCaseOpenPrizeTypes(prizeTypes7d),
+		PrizeTypesAllTime: mapCaseOpenPrizeTypes(prizeTypesAll),
+		ByCase7d:          mapCaseOpenCases(byCase7d),
+		ByCaseAllTime:     mapCaseOpenCases(byCaseAll),
+		TopPrizes7d:       prizeHits,
+		OpensByDay:        opensByDay,
+	}, nil
+}
+
+func mapCaseOpenPeriod(s domain.CaseOpenPeriodStats) AdminCaseOpenPeriodView {
+	v := AdminCaseOpenPeriodView{
+		Opens:             s.Opens,
+		UniqueUsers:       s.UniqueUsers,
+		SpentNanoton:      s.SpentNanoton,
+		PrizeTotalNanoton: s.PrizeTotalNanoton,
+		HouseEdgeNanoton:  s.SpentNanoton - s.PrizeTotalNanoton,
+		PaidOpens:         s.PaidOpens,
+		FreeOpens:         s.FreeOpens,
+	}
+	if s.PaidSpentNanoton > 0 {
+		v.ActualRTPBPS = int((s.PaidPrizeNanoton * 10000) / s.PaidSpentNanoton)
+	}
+	if s.PaidOpens > 0 {
+		v.AvgTicketNanoton = s.PaidSpentNanoton / s.PaidOpens
+	}
+	if s.Opens > 0 {
+		v.AvgPrizeNanoton = s.PrizeTotalNanoton / s.Opens
+	}
+	return v
+}
+
+func mapCaseOpenSources(rows []domain.CaseOpenSourceStats) AdminCaseOpenSourceBreakdown {
+	out := AdminCaseOpenSourceBreakdown{}
+	for _, row := range rows {
+		v := AdminCaseOpenSourceView{
+			Opens:             row.Opens,
+			UniqueUsers:       row.UniqueUsers,
+			SpentNanoton:      row.SpentNanoton,
+			PrizeTotalNanoton: row.PrizeTotalNanoton,
+		}
+		switch row.Source {
+		case domain.CaseOpenSourcePaid:
+			out.Paid = v
+		case domain.CaseOpenSourceDaily:
+			out.Daily = v
+		case domain.CaseOpenSourceFree:
+			out.Free = v
+		case domain.CaseOpenSourcePromo:
+			out.Promo = v
+		}
+	}
+	return out
+}
+
+func mapCaseOpenPrizeTypes(rows []domain.CaseOpenPrizeTypeStats) []AdminCaseOpenPrizeTypeView {
+	out := make([]AdminCaseOpenPrizeTypeView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, AdminCaseOpenPrizeTypeView{
+			PrizeType:         row.PrizeType,
+			Opens:             row.Opens,
+			PrizeTotalNanoton: row.PrizeTotalNanoton,
+		})
+	}
+	return out
+}
+
+func mapCaseOpenCases(rows []domain.CaseOpenCaseStats) []AdminCaseOpenCaseView {
+	out := make([]AdminCaseOpenCaseView, 0, len(rows))
+	for _, row := range rows {
+		v := AdminCaseOpenCaseView{
+			CaseID:            row.CaseID.String(),
+			Title:             row.Title,
+			Slug:              row.Slug,
+			Opens:             row.Opens,
+			SpentNanoton:      row.SpentNanoton,
+			PrizeTotalNanoton: row.PrizeTotalNanoton,
+			HouseEdgeNanoton:  row.SpentNanoton - row.PrizeTotalNanoton,
+		}
+		if row.SpentNanoton > 0 {
+			v.ActualRTPBPS = int((row.PrizeTotalNanoton * 10000) / row.SpentNanoton)
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
 func (s *Service) AdminReplaceLoot(ctx context.Context, caseID uuid.UUID, entries []domain.CaseLootEntry) error {
 	if _, err := s.cases.FindByID(ctx, caseID); err != nil {
 		return err

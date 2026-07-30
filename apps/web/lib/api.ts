@@ -2455,6 +2455,85 @@ export async function getAdminCaseEconomyStats(since?: string) {
   return api<AdminCaseEconomyStats>(`/api/v1/admin/cases/economy-stats${q}`);
 }
 
+export type AdminCaseOpenPeriodStats = {
+  opens: number;
+  unique_users: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+  house_edge_nanoton: number;
+  actual_rtp_bps: number;
+  paid_opens: number;
+  free_opens: number;
+  avg_ticket_nanoton: number;
+  avg_prize_nanoton: number;
+};
+
+export type AdminCaseOpenSourceStats = {
+  opens: number;
+  unique_users: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+};
+
+export type AdminCaseOpenSourceBreakdown = {
+  paid: AdminCaseOpenSourceStats;
+  daily: AdminCaseOpenSourceStats;
+  free: AdminCaseOpenSourceStats;
+  promo: AdminCaseOpenSourceStats;
+};
+
+export type AdminCaseOpenPrizeTypeStats = {
+  prize_type: string;
+  opens: number;
+  prize_total_nanoton: number;
+};
+
+export type AdminCaseOpenCaseRow = {
+  case_id: string;
+  title: string;
+  slug: string;
+  opens: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+  house_edge_nanoton: number;
+  actual_rtp_bps: number;
+};
+
+export type AdminCaseOpenPrizeHit = {
+  loot_entry_id: string;
+  label: string;
+  prize_type: string;
+  hits: number;
+  prize_total_nanoton: number;
+  share_percent: number;
+};
+
+export type AdminCaseOpenDailyPoint = {
+  date: string;
+  opens: number;
+  unique_users: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+};
+
+export type AdminCaseOpenStats = {
+  today: AdminCaseOpenPeriodStats;
+  last_7_days: AdminCaseOpenPeriodStats;
+  all_time: AdminCaseOpenPeriodStats;
+  sources_today: AdminCaseOpenSourceBreakdown;
+  sources_all_time: AdminCaseOpenSourceBreakdown;
+  prize_types_7d: AdminCaseOpenPrizeTypeStats[];
+  prize_types_all_time: AdminCaseOpenPrizeTypeStats[];
+  by_case_7d: AdminCaseOpenCaseRow[];
+  by_case_all_time: AdminCaseOpenCaseRow[];
+  top_prizes_7d: AdminCaseOpenPrizeHit[];
+  opens_by_day: AdminCaseOpenDailyPoint[];
+};
+
+export async function getAdminCaseOpenStats() {
+  return api<AdminCaseOpenStats>("/api/v1/admin/cases/open-stats");
+}
+
 export type AdminCaseLiveFeedSettings = {
   id?: number;
   enabled: boolean;
@@ -2667,6 +2746,7 @@ export async function grantAdminWheelBonusSpins(body: { telegram_id: number; cou
 export type TelegramBroadcast = {
   id: string;
   message: string;
+  image_urls?: string[];
   include_channel_button?: boolean;
   status: string;
   total_users: number;
@@ -2676,10 +2756,19 @@ export type TelegramBroadcast = {
   finished_at?: string;
 };
 
-export async function createAdminBroadcast(message: string, includeChannelButton = false) {
+export async function createAdminBroadcast(
+  message: string,
+  includeChannelButton = false,
+  imageUrls?: string[],
+) {
+  const urls = (imageUrls ?? []).map((u) => u.trim()).filter(Boolean);
   return api<TelegramBroadcast>("/api/v1/admin/telegram/broadcast", {
     method: "POST",
-    body: JSON.stringify({ message, include_channel_button: includeChannelButton }),
+    body: JSON.stringify({
+      message,
+      include_channel_button: includeChannelButton,
+      ...(urls.length ? { image_urls: urls } : {}),
+    }),
   });
 }
 

@@ -202,14 +202,15 @@ func (r *TonTransferRepo) CreateWithdrawalAtomic(
 	return &transfer, balanceAfter, nil
 }
 
-func (r *TonTransferRepo) CompleteDepositAtomic(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) (int64, error) {
+func (r *TonTransferRepo) CompleteDepositAtomic(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) (int64, bool, error) {
 	if existing, err := r.FindByTxHash(ctx, txHash); err != nil {
-		return 0, err
+		return 0, false, err
 	} else if existing != nil && existing.ID != transferID {
-		return 0, domain.ErrDuplicateRequest
+		return 0, false, domain.ErrDuplicateRequest
 	}
 
 	var balanceAfter int64
+	var credited bool
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var transfer domain.TonTransfer
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -225,6 +226,7 @@ func (r *TonTransferRepo) CompleteDepositAtomic(ctx context.Context, transferID 
 				return err
 			}
 			balanceAfter = user.BettingBalance
+			credited = false
 			return nil
 		}
 		if transfer.Status != domain.TonStatusAwaitingPayment && transfer.Status != domain.TonStatusPaymentSeen {
@@ -267,9 +269,10 @@ func (r *TonTransferRepo) CompleteDepositAtomic(ctx context.Context, transferID 
 			return err
 		}
 		balanceAfter = newBalance
+		credited = true
 		return nil
 	})
-	return balanceAfter, err
+	return balanceAfter, credited, err
 }
 
 func (r *TonTransferRepo) ClaimWithdrawalBroadcast(ctx context.Context, transferID uuid.UUID) (bool, error) {

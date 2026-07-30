@@ -705,7 +705,8 @@ func (n *AdminNotifier) persist(
 
 func mirrorImportantToTelegram(kind string, meta map[string]any) bool {
 	switch kind {
-	case "deposit", "deposit_confirmed",
+	case "bot_start",
+		"deposit", "deposit_confirmed",
 		"withdraw_attempt", "withdraw_confirmed", "withdraw_failed":
 		return true
 	case "gift_withdraw":

@@ -87,6 +87,13 @@ type CaseRepository interface {
 	AdvancePaidRecoveryPace(ctx context.Context) (*CaseCatalogSettings, error)
 	// CaseOpenStats aggregates paid opens for admin P&L (since optional; nil = all time).
 	CaseOpenStats(ctx context.Context, since *time.Time) (*CaseOpenStats, error)
+	// Detailed open-stats for admin dashboard (zero since = all time).
+	CaseOpenPeriodStats(ctx context.Context, since time.Time) (CaseOpenPeriodStats, error)
+	CaseOpenSourceStats(ctx context.Context, since time.Time) ([]CaseOpenSourceStats, error)
+	CaseOpenPrizeTypeStats(ctx context.Context, since time.Time) ([]CaseOpenPrizeTypeStats, error)
+	CaseOpenByCaseStats(ctx context.Context, since time.Time, limit int) ([]CaseOpenCaseStats, error)
+	CaseOpenTopPrizes(ctx context.Context, since time.Time, limit int) ([]CaseOpenPrizeHitStats, error)
+	CaseOpenByDay(ctx context.Context, since time.Time) ([]CaseOpenDailyStats, error)
 	GetLiveFeedSettings(ctx context.Context) (*CaseLiveFeedSettings, error)
 	UpdateLiveFeedSettings(ctx context.Context, settings *CaseLiveFeedSettings) error
 
@@ -348,7 +355,9 @@ type TonTransferRepository interface {
 		riskFlags []string,
 		reviewReason *string,
 	) (*TonTransfer, int64, error)
-	CompleteDepositAtomic(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) (int64, error)
+	// CompleteDepositAtomic credits the user once. credited is true only on the first successful completion;
+	// repeat calls for an already-completed transfer return (balance, false, nil).
+	CompleteDepositAtomic(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) (balanceAfter int64, credited bool, err error)
 	ClaimWithdrawalBroadcast(ctx context.Context, transferID uuid.UUID) (bool, error)
 	FailWithdrawalAtomic(ctx context.Context, transferID uuid.UUID, errMsg string) (int64, error)
 	CompleteWithdrawal(ctx context.Context, transferID uuid.UUID, txHash string, txLT int64) error

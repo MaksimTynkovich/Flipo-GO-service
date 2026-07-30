@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Upload, X } from "lucide-react";
 import { AdminPage, AdminButton, AdminField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -8,7 +9,9 @@ import {
   createAdminBroadcast,
   getAdminBotSettings,
   getAdminBroadcasts,
+  resolveAsset,
   updateAdminBotSettings,
+  uploadAdminCaseImage,
   type AdminBotSettings,
   type TelegramBroadcast,
 } from "@/lib/api";
@@ -22,15 +25,20 @@ const DEFAULT_SETTINGS: AdminBotSettings = {
   terms_button_text: "",
 };
 
+const MAX_PHOTO_CAPTION = 1024;
+const MAX_BROADCAST_IMAGES = 5;
+
 export default function TelegramSection() {
   const { showToast } = useToast();
   const [settings, setSettings] = useState<AdminBotSettings | null>(null);
   const [broadcasts, setBroadcasts] = useState<TelegramBroadcast[]>([]);
   const [message, setMessage] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [includeChannelButton, setIncludeChannelButton] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [broadcastsLoading, setBroadcastsLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   async function loadSettings() {
     setSettingsLoading(true);
@@ -85,6 +93,52 @@ export default function TelegramSection() {
   }, [broadcasts]);
 
   const formSettings = settings ?? DEFAULT_SETTINGS;
+  const canSend = Boolean(message.trim() || imageUrls.length) && !sending && !uploadingImage;
+
+  async function onPickImages(files: File[]) {
+    if (!files.length) return;
+    const remaining = MAX_BROADCAST_IMAGES - imageUrls.length;
+    if (remaining <= 0) {
+      showToast({
+        variant: "error",
+        title: "Лимит изображений",
+        subtitle: `Можно прикрепить не больше ${MAX_BROADCAST_IMAGES}`,
+      });
+      return;
+    }
+    const batch = files.slice(0, remaining);
+    setUploadingImage(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of batch) {
+        const res = await uploadAdminCaseImage(file);
+        const url = res.image_url || res.url;
+        if (url) uploaded.push(url);
+      }
+      if (uploaded.length) {
+        setImageUrls((prev) => [...prev, ...uploaded].slice(0, MAX_BROADCAST_IMAGES));
+        showToast({
+          variant: "success",
+          title: uploaded.length === 1 ? "Изображение загружено" : `Загружено: ${uploaded.length}`,
+        });
+      }
+      if (files.length > remaining) {
+        showToast({
+          variant: "error",
+          title: "Часть файлов пропущена",
+          subtitle: `Лимит — ${MAX_BROADCAST_IMAGES} изображений`,
+        });
+      }
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: "Не удалось загрузить изображение",
+        subtitle: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   return (
     <AdminPage title="Telegram-бот" description="Настройки бота, массовые рассылки и история отправок.">
@@ -199,13 +253,98 @@ export default function TelegramSection() {
 
       <AdminPanel title="Массовая рассылка" description="Сообщение уйдёт всем игрокам с привязанным Telegram.">
         <div className="space-y-4">
-          <AdminField label="Текст сообщения">
+          <AdminField
+            label="Текст сообщения"
+            hint={
+              imageUrls.length
+                ? `С изображениями текст идёт подписью (до ${MAX_PHOTO_CAPTION} символов).`
+                : undefined
+            }
+          >
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className="input-field min-h-28"
               placeholder="Текст сообщения для всех игроков"
+              maxLength={imageUrls.length ? MAX_PHOTO_CAPTION : undefined}
             />
+          </AdminField>
+
+          <AdminField
+            label="Изображения"
+            hint={`До ${MAX_BROADCAST_IMAGES} шт., JPEG/PNG/WebP/GIF до 5 МБ каждое. Можно только картинки без текста.`}
+          >
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap gap-2">
+                <label className="inline-flex">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    multiple
+                    className="sr-only"
+                    disabled={uploadingImage || sending || imageUrls.length >= MAX_BROADCAST_IMAGES}
+                    onChange={(e) => {
+                      // FileList is live — snapshot before clearing the input.
+                      const files = e.target.files ? Array.from(e.target.files) : [];
+                      e.target.value = "";
+                      void onPickImages(files);
+                    }}
+                  />
+                  <span
+                    className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-surface-raised px-3 text-sm ${
+                      uploadingImage || imageUrls.length >= MAX_BROADCAST_IMAGES
+                        ? "pointer-events-none opacity-50"
+                        : "hover:bg-white/5"
+                    }`}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploadingImage
+                      ? "Загрузка…"
+                      : imageUrls.length
+                        ? `Ещё (${imageUrls.length}/${MAX_BROADCAST_IMAGES})`
+                        : "Прикрепить"}
+                  </span>
+                </label>
+                {imageUrls.length ? (
+                  <AdminButton
+                    variant="secondary"
+                    className="!h-9"
+                    disabled={uploadingImage || sending}
+                    onClick={() => setImageUrls([])}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Убрать все
+                  </AdminButton>
+                ) : null}
+              </div>
+              {imageUrls.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {imageUrls.map((url) => {
+                    const preview = resolveAsset(url) || "";
+                    return (
+                      <div
+                        key={url}
+                        className="relative h-20 w-20 overflow-hidden rounded-xl border border-white/10 bg-surface-raised"
+                      >
+                        {preview ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={preview} alt="" className="h-full w-full object-cover" />
+                        ) : null}
+                        <button
+                          type="button"
+                          className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white"
+                          disabled={uploadingImage || sending}
+                          onClick={() => setImageUrls((prev) => prev.filter((item) => item !== url))}
+                          aria-label="Убрать изображение"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </AdminField>
 
           <label className="flex items-center gap-2.5 text-sm">
@@ -222,10 +361,19 @@ export default function TelegramSection() {
 
           <AdminToolbar>
             <AdminButton
-              disabled={!message.trim() || sending}
+              disabled={!canSend}
               onClick={async () => {
                 const text = message.trim();
-                if (!text) return;
+                const images = imageUrls.map((u) => u.trim()).filter(Boolean);
+                if (!text && !images.length) return;
+                if (images.length && text.length > MAX_PHOTO_CAPTION) {
+                  showToast({
+                    variant: "error",
+                    title: "Слишком длинная подпись",
+                    subtitle: `С изображениями максимум ${MAX_PHOTO_CAPTION} символов`,
+                  });
+                  return;
+                }
 
                 setSending(true);
                 try {
@@ -237,8 +385,9 @@ export default function TelegramSection() {
                   primeCache("admin:telegram:settings", nextSettings);
                   setSettings(nextSettings);
 
-                  await createAdminBroadcast(text, includeChannelButton);
+                  await createAdminBroadcast(text, includeChannelButton, images);
                   setMessage("");
+                  setImageUrls([]);
                   setIncludeChannelButton(false);
                   showToast({ variant: "success", title: "Рассылка запущена" });
                   await loadBroadcasts();
@@ -284,27 +433,52 @@ export default function TelegramSection() {
           <p className="text-sm text-muted">Рассылок пока не было.</p>
         ) : (
           <div className="space-y-2">
-            {broadcasts.map((item) => (
-              <div key={item.id} className="rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
-                <div className="flex justify-between gap-3">
-                  <span className="uppercase text-[10px] text-muted">
-                    {item.status === "queued"
-                      ? "в очереди"
-                      : item.status === "running"
-                        ? "отправляется"
-                        : item.status === "completed"
-                          ? "завершена"
-                          : item.status === "failed"
-                            ? "ошибка"
-                            : item.status}
-                  </span>
-                  <span className="text-xs text-muted">
-                    {item.sent_count}/{item.total_users}
-                  </span>
+            {broadcasts.map((item) => {
+              const thumbs = (item.image_urls ?? []).map((url) => resolveAsset(url) || "").filter(Boolean);
+              return (
+                <div key={item.id} className="rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="uppercase text-[10px] text-muted">
+                      {item.status === "queued"
+                        ? "в очереди"
+                        : item.status === "running"
+                          ? "отправляется"
+                          : item.status === "completed"
+                            ? "завершена"
+                            : item.status === "failed"
+                              ? "ошибка"
+                              : item.status}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {item.sent_count}/{item.total_users}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex gap-2.5">
+                    {thumbs.length ? (
+                      <div className="flex shrink-0 gap-1">
+                        {thumbs.slice(0, 3).map((thumb) => (
+                          <div
+                            key={thumb}
+                            className="h-12 w-12 overflow-hidden rounded-lg bg-surface-raised"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={thumb} alt="" className="h-full w-full object-cover" />
+                          </div>
+                        ))}
+                        {thumbs.length > 3 ? (
+                          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-raised text-xs text-muted">
+                            +{thumbs.length - 3}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <p className="line-clamp-2 min-w-0 flex-1">
+                      {item.message || (thumbs.length ? `Изображения (${thumbs.length})` : "")}
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-1 line-clamp-2">{item.message}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </AdminPanel>

@@ -475,6 +475,7 @@ func (PromoRedemption) TableName() string { return "promo_redemptions" }
 type TelegramBroadcast struct {
 	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Message              string     `gorm:"type:text;not null" json:"message"`
+	ImageURLs            []string   `gorm:"type:jsonb;serializer:json" json:"image_urls,omitempty"`
 	IncludeChannelButton bool       `gorm:"not null;default:false" json:"include_channel_button"`
 	Status               string     `gorm:"size:32;not null;default:'queued';index" json:"status"`
 	TotalUsers           int        `gorm:"not null;default:0" json:"total_users"`
