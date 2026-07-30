@@ -100,29 +100,20 @@ func (s *LiveSim) tick(ctx context.Context) {
 		return
 	}
 
-	wantFake := true
+	recentReal := 0
 	if cfg.FillWhenSparse {
+		// Gate on real opens only. Counting in-memory fakes here would fill the
+		// buffer once and then freeze the feed until the 90s window rolls.
 		cutoff := time.Now().UTC().Add(-90 * time.Second)
-		recent := 0
 		if rows, err := s.svc.cases.ListRecentOpens(ctx, cfg.MinVisible*2); err == nil {
 			for _, row := range rows {
 				if row.CreatedAt.After(cutoff) {
-					recent++
+					recentReal++
 				}
 			}
-		}
-		if s.svc.feedBuf != nil {
-			for _, row := range s.svc.feedBuf.Snapshot() {
-				if row.CreatedAt.After(cutoff) {
-					recent++
-				}
-			}
-		}
-		if recent >= cfg.MinVisible {
-			wantFake = false
 		}
 	}
-	if !wantFake {
+	if !shouldInjectFakeDrop(cfg, recentReal) {
 		return
 	}
 
@@ -136,6 +127,18 @@ func (s *LiveSim) tick(ctx context.Context) {
 	} else if s.svc.feedBuf != nil {
 		s.svc.feedBuf.Push(drop)
 	}
+}
+
+// shouldInjectFakeDrop decides whether LiveSim should emit another fake drop.
+// FillWhenSparse looks at real opens only — fakes must not suppress themselves.
+func shouldInjectFakeDrop(cfg domain.CaseLiveFeedSettings, recentRealOpens int) bool {
+	if !cfg.Enabled {
+		return false
+	}
+	if !cfg.FillWhenSparse {
+		return true
+	}
+	return recentRealOpens < cfg.MinVisible
 }
 
 func (s *LiveSim) sampleLoot(ctx context.Context, cfg domain.CaseLiveFeedSettings) (domain.CaseLootEntry, bool) {

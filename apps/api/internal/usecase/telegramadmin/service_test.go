@@ -2,6 +2,7 @@ package telegramadmin
 
 import (
 	"testing"
+	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 )
@@ -53,5 +54,17 @@ func TestBroadcastMarkupChannelOnly(t *testing.T) {
 	}
 	if rows[0][0]["url"] != "https://t.me/flipo_channel" {
 		t.Fatalf("unexpected url: %#v", rows[0][0]["url"])
+	}
+}
+
+func TestBroadcastSendDelaySlowsForAlbums(t *testing.T) {
+	text := broadcastSendDelay(2, 0)
+	photo := broadcastSendDelay(2, 1)
+	album := broadcastSendDelay(2, 3)
+	if !(text < photo && photo < album) {
+		t.Fatalf("expected text < photo < album delays, got %v %v %v", text, photo, album)
+	}
+	if album < 200*time.Millisecond {
+		t.Fatalf("album delay too aggressive for Telegram flood limits: %v", album)
 	}
 }

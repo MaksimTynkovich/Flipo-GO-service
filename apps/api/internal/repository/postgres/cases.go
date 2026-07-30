@@ -702,14 +702,18 @@ func (r *CaseRepo) GetLiveFeedSettings(ctx context.Context) (*domain.CaseLiveFee
 func (r *CaseRepo) UpdateLiveFeedSettings(ctx context.Context, settings *domain.CaseLiveFeedSettings) error {
 	settings.ID = 1
 	settings.UpdatedAt = time.Now().UTC()
+	// Select forces zero-values (e.g. fill_when_sparse=false) into the INSERT.
+	// Without it GORM skips fields that match their `default:` tag, so Postgres
+	// writes DEFAULT true and ON CONFLICT keeps the option stuck on.
+	cols := []string{
+		"id", "enabled", "intensity", "fill_when_sparse", "min_visible",
+		"common_weight", "uncommon_weight", "rare_weight", "epic_weight", "legendary_weight",
+		"fat_chance", "fat_min_floor_nanoton", "updated_at",
+	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"enabled", "intensity", "fill_when_sparse", "min_visible",
-			"common_weight", "uncommon_weight", "rare_weight", "epic_weight", "legendary_weight",
-			"fat_chance", "fat_min_floor_nanoton", "updated_at",
-		}),
-	}).Create(settings).Error
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns(cols[1:]), // skip primary key
+	}).Select(cols).Create(settings).Error
 }
 
 func defaultLiveFeedSettings() domain.CaseLiveFeedSettings {

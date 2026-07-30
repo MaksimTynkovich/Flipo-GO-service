@@ -451,6 +451,7 @@ export default function TelegramSection() {
                     </span>
                     <span className="text-xs text-muted">
                       {item.sent_count}/{item.total_users}
+                      {item.failed_count > 0 ? ` · ошибок ${item.failed_count}` : ""}
                     </span>
                   </div>
                   <div className="mt-1.5 flex gap-2.5">

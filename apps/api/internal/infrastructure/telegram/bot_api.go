@@ -136,9 +136,8 @@ func (b *BotAPI) doSendPhoto(req *http.Request, chatID int64) (string, error) {
 	defer resp.Body.Close()
 
 	var result struct {
-		OK          bool   `json:"ok"`
-		Description string `json:"description"`
-		Result      struct {
+		telegramAPIError
+		Result struct {
 			Photo []struct {
 				FileID string `json:"file_id"`
 			} `json:"photo"`
@@ -148,12 +147,10 @@ func (b *BotAPI) doSendPhoto(req *http.Request, chatID int64) (string, error) {
 		return "", fmt.Errorf("telegram sendPhoto decode: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK || !result.OK {
-		if strings.Contains(strings.ToLower(result.Description), "chat not found") ||
-			strings.Contains(strings.ToLower(result.Description), "bot was blocked") {
-			slog.Warn("telegram sendPhoto skipped", "chat_id", chatID, "reason", result.Description)
-			return "", nil
+		if result.Description == "" {
+			result.Description = resp.Status
 		}
-		return "", fmt.Errorf("telegram sendPhoto status %d: %s", resp.StatusCode, result.Description)
+		return "", mapTelegramAPIError(resp.StatusCode, result.telegramAPIError, chatID, "sendPhoto")
 	}
 	fileID := ""
 	if n := len(result.Result.Photo); n > 0 {
@@ -289,9 +286,8 @@ func (b *BotAPI) doSendMediaGroup(req *http.Request, chatID int64, expected int)
 	defer resp.Body.Close()
 
 	var result struct {
-		OK          bool   `json:"ok"`
-		Description string `json:"description"`
-		Result      []struct {
+		telegramAPIError
+		Result []struct {
 			Photo []struct {
 				FileID string `json:"file_id"`
 			} `json:"photo"`
@@ -301,12 +297,10 @@ func (b *BotAPI) doSendMediaGroup(req *http.Request, chatID int64, expected int)
 		return nil, fmt.Errorf("telegram sendMediaGroup decode: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK || !result.OK {
-		if strings.Contains(strings.ToLower(result.Description), "chat not found") ||
-			strings.Contains(strings.ToLower(result.Description), "bot was blocked") {
-			slog.Warn("telegram sendMediaGroup skipped", "chat_id", chatID, "reason", result.Description)
-			return nil, nil
+		if result.Description == "" {
+			result.Description = resp.Status
 		}
-		return nil, fmt.Errorf("telegram sendMediaGroup status %d: %s", resp.StatusCode, result.Description)
+		return nil, mapTelegramAPIError(resp.StatusCode, result.telegramAPIError, chatID, "sendMediaGroup")
 	}
 
 	fileIDs := make([]string, 0, len(result.Result))
@@ -315,9 +309,7 @@ func (b *BotAPI) doSendMediaGroup(req *http.Request, chatID int64, expected int)
 			fileIDs = append(fileIDs, msg.Photo[n-1].FileID)
 		}
 	}
-	if len(fileIDs) != expected {
-		return fileIDs, nil
-	}
+	_ = expected
 	return fileIDs, nil
 }
 
@@ -408,6 +400,49 @@ type InlineKeyboardMarkup struct {
 	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
 }
 
+// FloodWaitError is returned when Telegram asks to retry after a cooldown.
+type FloodWaitError struct {
+	RetryAfter  time.Duration
+	Description string
+}
+
+func (e *FloodWaitError) Error() string {
+	if e == nil {
+		return "telegram flood wait"
+	}
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("telegram flood wait: retry after %s (%s)", e.RetryAfter, e.Description)
+	}
+	return fmt.Sprintf("telegram flood wait: %s", e.Description)
+}
+
+type telegramAPIError struct {
+	OK          bool   `json:"ok"`
+	ErrorCode   int    `json:"error_code"`
+	Description string `json:"description"`
+	Parameters  struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters"`
+}
+
+func mapTelegramAPIError(statusCode int, body telegramAPIError, chatID int64, method string) error {
+	desc := body.Description
+	lower := strings.ToLower(desc)
+	if strings.Contains(lower, "chat not found") || strings.Contains(lower, "bot was blocked") ||
+		strings.Contains(lower, "user is deactivated") || strings.Contains(lower, "peer_id_invalid") {
+		slog.Warn("telegram "+method+" skipped", "chat_id", chatID, "reason", desc)
+		return nil
+	}
+	if statusCode == http.StatusTooManyRequests || body.ErrorCode == 429 || body.Parameters.RetryAfter > 0 {
+		wait := time.Duration(body.Parameters.RetryAfter) * time.Second
+		if wait <= 0 {
+			wait = 5 * time.Second
+		}
+		return &FloodWaitError{RetryAfter: wait, Description: desc}
+	}
+	return fmt.Errorf("telegram %s status %d: %s", method, statusCode, desc)
+}
+
 func (b *BotAPI) sendMessage(ctx context.Context, chatID int64, text string, replyMarkup any, parseMode string) error {
 	if !b.Enabled() || chatID == 0 {
 		return nil
@@ -442,17 +477,13 @@ func (b *BotAPI) sendMessage(ctx context.Context, chatID int64, text string, rep
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		var result struct {
-			Description string `json:"description"`
+	var result telegramAPIError
+	_ = json.NewDecoder(resp.Body).Decode(&result)
+	if resp.StatusCode != http.StatusOK || !result.OK {
+		if result.Description == "" {
+			result.Description = resp.Status
 		}
-		_ = json.NewDecoder(resp.Body).Decode(&result)
-		if strings.Contains(strings.ToLower(result.Description), "chat not found") ||
-			strings.Contains(strings.ToLower(result.Description), "bot was blocked") {
-			slog.Warn("telegram sendMessage skipped", "chat_id", chatID, "reason", result.Description)
-			return nil
-		}
-		return fmt.Errorf("telegram sendMessage status %d: %s", resp.StatusCode, result.Description)
+		return mapTelegramAPIError(resp.StatusCode, result, chatID, "sendMessage")
 	}
 	return nil
 }

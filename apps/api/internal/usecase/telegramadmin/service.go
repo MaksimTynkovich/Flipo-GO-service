@@ -2,6 +2,7 @@ package telegramadmin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -20,7 +21,6 @@ const (
 	maxPhotoCaptionLen = 1024
 	maxBroadcastImages = 5
 	staticCasesURLPref = "/static/cases/"
-	markupFollowUpText = "\u200b"
 )
 
 type Service struct {
@@ -213,6 +213,15 @@ func (s *Service) ProcessQueued(ctx context.Context) error {
 }
 
 func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBroadcast) error {
+	// Resume mid-flight after deploy/crash: skip already processed recipients.
+	startOffset := 0
+	if broadcast.Status == "running" {
+		startOffset = broadcast.SentCount + broadcast.FailedCount
+		if startOffset < 0 {
+			startOffset = 0
+		}
+	}
+
 	broadcast.Status = "running"
 	if err := s.platform.UpdateBroadcast(ctx, broadcast); err != nil {
 		return err
@@ -226,10 +235,6 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 	if markup == nil {
 		slog.Warn("broadcast without open-app button", "broadcast_id", broadcast.ID, "hint", "set webapp_url in admin or BOT_USERNAME/WEBAPP_SHORT_NAME in env")
 	}
-	delay := time.Duration(50-settings.SpamProtectionLevel*10) * time.Millisecond
-	if delay < 35*time.Millisecond {
-		delay = 35 * time.Millisecond
-	}
 
 	photoSources := make([]string, 0, len(broadcast.ImageURLs))
 	for _, imageURL := range broadcast.ImageURLs {
@@ -242,9 +247,13 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 		}
 	}
 	cachedFileIDs := make([]string, 0, len(photoSources))
+	delay := broadcastSendDelay(settings.SpamProtectionLevel, len(photoSources))
 
 	const pageSize = 100
-	for offset := 0; ; offset += pageSize {
+	for offset := startOffset; ; offset += pageSize {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		ids, err := s.users.ListTelegramIDs(ctx, pageSize, offset)
 		if err != nil {
 			return err
@@ -253,8 +262,12 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 			break
 		}
 		for _, chatID := range ids {
-			if err := s.sendBroadcastItem(ctx, chatID, broadcast.Message, photoSources, &cachedFileIDs, markup); err != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := s.sendBroadcastItemWithRetry(ctx, chatID, broadcast.Message, photoSources, &cachedFileIDs, markup); err != nil {
 				broadcast.FailedCount++
+				slog.Warn("broadcast send failed", "broadcast_id", broadcast.ID, "chat_id", chatID, "error", err)
 			} else {
 				broadcast.SentCount++
 			}
@@ -267,6 +280,62 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 	broadcast.Status = "completed"
 	broadcast.FinishedAt = &now
 	return s.platform.UpdateBroadcast(ctx, broadcast)
+}
+
+// broadcastSendDelay stays under Telegram's ~30 msg/s bulk limit.
+// Albums + follow-up markup cost multiple messages per user.
+func broadcastSendDelay(spamLevel, photoCount int) time.Duration {
+	// spamLevel 1..3 → slower..faster
+	if spamLevel < 1 {
+		spamLevel = 1
+	}
+	if spamLevel > 3 {
+		spamLevel = 3
+	}
+	base := time.Duration(140-spamLevel*30) * time.Millisecond // 110 / 80 / 50
+	switch {
+	case photoCount >= 2:
+		base += 200 * time.Millisecond
+	case photoCount == 1:
+		base += 80 * time.Millisecond
+	}
+	if base < 50*time.Millisecond {
+		base = 50 * time.Millisecond
+	}
+	return base
+}
+
+func (s *Service) sendBroadcastItemWithRetry(
+	ctx context.Context,
+	chatID int64,
+	message string,
+	photoSources []string,
+	cachedFileIDs *[]string,
+	markup map[string]any,
+) error {
+	const maxAttempts = 6
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := s.sendBroadcastItem(ctx, chatID, message, photoSources, cachedFileIDs, markup)
+		if err == nil {
+			return nil
+		}
+		var flood *telegram.FloodWaitError
+		if errors.As(err, &flood) {
+			wait := flood.RetryAfter + time.Second
+			if wait > 2*time.Minute {
+				wait = 2 * time.Minute
+			}
+			slog.Warn("broadcast flood wait", "chat_id", chatID, "attempt", attempt, "retry_after", wait)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(wait):
+			}
+			continue
+		}
+		return err
+	}
+	return fmt.Errorf("telegram flood wait: exceeded retries")
 }
 
 func (s *Service) sendBroadcastItem(
@@ -297,17 +366,27 @@ func (s *Service) sendBroadcastItem(
 		return nil
 	}
 
-	fileIDs, err := s.bot.SendMediaGroup(ctx, chatID, photos, message)
+	// sendMediaGroup does not support reply_markup. Put caption on the album only when
+	// there are no buttons; otherwise send text+keyboard as a follow-up message.
+	albumCaption := ""
+	followUp := strings.TrimSpace(message)
+	if markup == nil {
+		albumCaption = message
+		followUp = ""
+	}
+	if followUp == "" && markup != nil {
+		followUp = "👇"
+	}
+
+	fileIDs, err := s.bot.SendMediaGroup(ctx, chatID, photos, albumCaption)
 	if err != nil {
 		return err
 	}
 	if len(*cachedFileIDs) == 0 && len(fileIDs) == len(photoSources) {
 		*cachedFileIDs = append([]string{}, fileIDs...)
 	}
-	if markup != nil {
-		if err := s.bot.SendMessageWithMarkup(ctx, chatID, markupFollowUpText, markup); err != nil {
-			return err
-		}
+	if followUp != "" {
+		return s.bot.SendMessageWithMarkup(ctx, chatID, followUp, markup)
 	}
 	return nil
 }

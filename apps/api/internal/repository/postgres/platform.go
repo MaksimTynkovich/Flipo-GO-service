@@ -434,7 +434,7 @@ func (r *PlatformRepo) ListQueuedBroadcasts(ctx context.Context, limit int) ([]d
 	}
 	var items []domain.TelegramBroadcast
 	return items, r.db.WithContext(ctx).
-		Where("status = ?", "queued").
+		Where("status IN ?", []string{"queued", "running"}).
 		Order("created_at ASC").
 		Limit(limit).
 		Find(&items).Error
