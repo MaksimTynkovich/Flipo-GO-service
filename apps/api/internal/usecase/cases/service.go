@@ -60,6 +60,7 @@ type Service struct {
 
 type AdminCaseNotifier interface {
 	NotifyCaseOpen(ctx context.Context, actor telegram.AdminActor, caseTitle, prizeName, source string, priceNanoton, prizeFloorNanoton int64, backed bool)
+	NotifyPromoActivationFailed(ctx context.Context, actor telegram.AdminActor, code, reason string)
 }
 
 type LiveDropPublisher interface {
@@ -346,6 +347,7 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		price = 0
 		promo, err = s.validateCasePromo(ctx, userID, c.ID, promoCode)
 		if err != nil {
+			s.notifyPromoActivationFailed(ctx, userID, promoCode, casePromoFailureReason(err, c.Title))
 			return nil, err
 		}
 	case c.Kind == domain.CaseKindDaily:
@@ -376,6 +378,9 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 
 	if c.RequireChannel {
 		if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+			if promo != nil {
+				s.notifyPromoActivationFailed(ctx, userID, promoCode, casePromoFailureReason(err, c.Title))
+			}
 			return nil, err
 		}
 	}
@@ -578,6 +583,62 @@ func (s *Service) validateCasePromo(ctx context.Context, userID, caseID uuid.UUI
 		return nil, domain.ErrPromoExhausted
 	}
 	return promo, nil
+}
+
+func (s *Service) notifyPromoActivationFailed(ctx context.Context, userID uuid.UUID, code, reason string) {
+	if s.admin == nil {
+		return
+	}
+	actor := telegram.AdminActor{}
+	if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+		actor = telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}
+	}
+	s.admin.NotifyPromoActivationFailed(ctx, actor, code, reason)
+}
+
+func casePromoFailureReason(err error, caseTitle string) string {
+	if err == nil {
+		return "неизвестная ошибка"
+	}
+	var channelErr *ChannelNotSubscribedError
+	reason := ""
+	if errors.As(err, &channelErr) {
+		channel := ""
+		if channelErr != nil {
+			channel = strings.TrimSpace(channelErr.Channel)
+		}
+		if channel != "" {
+			reason = fmt.Sprintf("не подписан на канал %s", channel)
+		} else {
+			reason = "не подписан на обязательный канал"
+		}
+	} else {
+		switch {
+		case errors.Is(err, domain.ErrPromoInvalid):
+			reason = "промокод недействителен"
+		case errors.Is(err, domain.ErrPromoExpired):
+			reason = "промокод истёк"
+		case errors.Is(err, domain.ErrPromoExhausted):
+			reason = "промокод исчерпан"
+		case errors.Is(err, domain.ErrPromoAlreadyRedeemed):
+			reason = "промокод уже использован"
+		default:
+			reason = strings.TrimSpace(err.Error())
+			if reason == "" {
+				reason = "не удалось активировать промокод"
+			}
+		}
+	}
+	title := strings.TrimSpace(caseTitle)
+	if title != "" {
+		return fmt.Sprintf("кейс «%s»: %s", title, reason)
+	}
+	return reason
 }
 
 func (s *Service) ListOpens(ctx context.Context, userID uuid.UUID, telegramID int64, limit int) ([]OpenResult, error) {

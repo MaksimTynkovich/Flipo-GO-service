@@ -2299,10 +2299,33 @@ export async function openCase(
   const body: { idempotency_key: string; promo_code?: string } = { idempotency_key: key };
   const promo = opts?.promoCode?.trim();
   if (promo) body.promo_code = promo.toUpperCase();
-  return api<CaseOpenResult>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/open`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  try {
+    const result = await api<CaseOpenResult>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/open`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    if (promo) {
+      trackEvent({
+        event_name: "promo_activated",
+        event_category: "promo",
+        status: "success",
+        properties: { code: promo.toUpperCase(), case: idOrSlug, source: "case" },
+      });
+    }
+    return result;
+  } catch (error) {
+    if (promo) {
+      trackEvent({
+        event_name: "promo_activated",
+        event_category: "promo",
+        status: "error",
+        error_code: "promo_failed",
+        error_message: error instanceof Error ? error.message : "promo_failed",
+        properties: { code: promo.toUpperCase(), case: idOrSlug, source: "case" },
+      });
+    }
+    throw error;
+  }
 }
 
 export async function getCaseOpens() {
