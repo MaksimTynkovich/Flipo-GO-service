@@ -2568,6 +2568,11 @@ export type AdminCaseLiveFeedSettings = {
   rare_weight: number;
   epic_weight: number;
   legendary_weight: number;
+  /** Upper bound (exclusive) for common tier, nanoton. */
+  common_max_nanoton: number;
+  uncommon_max_nanoton: number;
+  rare_max_nanoton: number;
+  epic_max_nanoton: number;
   fat_chance: number;
   fat_min_floor_nanoton: number;
   updated_at?: string;

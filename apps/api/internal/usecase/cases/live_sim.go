@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"log/slog"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -121,7 +120,7 @@ func (s *LiveSim) tick(ctx context.Context) {
 	if !ok {
 		return
 	}
-	drop := liveDropFromEntry(uuid.New(), entry, time.Now().UTC())
+	drop := liveDropFromEntry(uuid.New(), entry, time.Now().UTC(), cfg)
 	if s.svc.live != nil {
 		s.svc.live.PublishCaseLiveDrop(ctx, drop)
 	} else if s.svc.feedBuf != nil {
@@ -166,7 +165,7 @@ func (s *LiveSim) sampleLoot(ctx context.Context, cfg domain.CaseLiveFeedSetting
 	cands := make([]weighted, 0, len(pool))
 	total := 0.0
 	for _, e := range pool {
-		rarity := strings.ToLower(strings.TrimSpace(e.RarityLabel))
+		rarity := rarityFromValue(cfg, domain.CaseLootPrizeValueNanoton(e))
 		w := rarityWeight(cfg, rarity)
 		if w <= 0 {
 			continue

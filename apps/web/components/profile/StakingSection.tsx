@@ -182,7 +182,7 @@ export function StakingSection() {
   const stakeLabel = staking
     ? "Стейкаем…"
     : poolFull
-      ? "Пул заполнен"
+      ? "Дождитесь следующего дня"
       : selectedGifts.length > 0
         ? allUnstakedSelected && unstakedGifts.length > 1
           ? "Застейкать все"
@@ -345,6 +345,16 @@ export function StakingSection() {
                       </div>
                     ))}
                   </div>
+                  {poolFull ? (
+                    <div className="rounded-xl border border-danger/25 bg-danger/10 px-3 py-2.5">
+                      <p className="text-[12px] font-medium leading-snug text-danger">
+                        Нельзя застейкать: общий пул заполнен.
+                      </p>
+                      <p className="mt-1 text-[11px] leading-snug text-danger/80">
+                        Дождитесь следующего дня — после ночной выплаты место в пуле освободится.
+                      </p>
+                    </div>
+                  ) : null}
                   <StakingActionBar
                     label={stakeLabel}
                     disabled={staking || poolFull || selectedGifts.length === 0}

@@ -14,6 +14,10 @@ func DefaultLiveFeedSettings() domain.CaseLiveFeedSettings {
 		RareWeight:         15,
 		EpicWeight:         7,
 		LegendaryWeight:    3,
+		CommonMaxNanoton:   500_000_000,   // < 0.5 TON
+		UncommonMaxNanoton: 1_500_000_000, // < 1.5 TON
+		RareMaxNanoton:     3_000_000_000, // < 3 TON
+		EpicMaxNanoton:     5_000_000_000, // < 5 TON; legendary ≥ 5
 		FatChance:          0.08,
 		FatMinFloorNanoton: 5_000_000_000,
 	}
@@ -40,12 +44,31 @@ func NormalizeLiveFeedSettings(cfg *domain.CaseLiveFeedSettings) {
 	if cfg.FatMinFloorNanoton < 0 {
 		cfg.FatMinFloorNanoton = 0
 	}
+	if cfg.CommonMaxNanoton < 0 {
+		cfg.CommonMaxNanoton = 0
+	}
+	if cfg.UncommonMaxNanoton < cfg.CommonMaxNanoton {
+		cfg.UncommonMaxNanoton = cfg.CommonMaxNanoton
+	}
+	if cfg.RareMaxNanoton < cfg.UncommonMaxNanoton {
+		cfg.RareMaxNanoton = cfg.UncommonMaxNanoton
+	}
+	if cfg.EpicMaxNanoton < cfg.RareMaxNanoton {
+		cfg.EpicMaxNanoton = cfg.RareMaxNanoton
+	}
 	if cfg.CommonWeight+cfg.UncommonWeight+cfg.RareWeight+cfg.EpicWeight+cfg.LegendaryWeight <= 0 {
 		cfg.CommonWeight = 50
 		cfg.UncommonWeight = 25
 		cfg.RareWeight = 15
 		cfg.EpicWeight = 7
 		cfg.LegendaryWeight = 3
+	}
+	if cfg.CommonMaxNanoton == 0 && cfg.UncommonMaxNanoton == 0 && cfg.RareMaxNanoton == 0 && cfg.EpicMaxNanoton == 0 {
+		d := DefaultLiveFeedSettings()
+		cfg.CommonMaxNanoton = d.CommonMaxNanoton
+		cfg.UncommonMaxNanoton = d.UncommonMaxNanoton
+		cfg.RareMaxNanoton = d.RareMaxNanoton
+		cfg.EpicMaxNanoton = d.EpicMaxNanoton
 	}
 }
 
@@ -57,6 +80,25 @@ func clampFloat(v, min, max float64) float64 {
 		return max
 	}
 	return v
+}
+
+// rarityFromValue maps prize value (nanoton) into a rarity tier using live-feed intervals.
+func rarityFromValue(cfg domain.CaseLiveFeedSettings, valueNanoton int64) string {
+	if valueNanoton < 0 {
+		valueNanoton = 0
+	}
+	switch {
+	case valueNanoton < cfg.CommonMaxNanoton:
+		return "common"
+	case valueNanoton < cfg.UncommonMaxNanoton:
+		return "uncommon"
+	case valueNanoton < cfg.RareMaxNanoton:
+		return "rare"
+	case valueNanoton < cfg.EpicMaxNanoton:
+		return "epic"
+	default:
+		return "legendary"
+	}
 }
 
 func rarityWeight(cfg domain.CaseLiveFeedSettings, rarity string) float64 {

@@ -1,4 +1,4 @@
-import { normalizeLootTileColor, normalizeLootBackdrop, formatCasePrice } from "@/components/cases/case-ui";
+import { normalizeLootTileColor, normalizeLootBackdrop, formatCasePrice, rarityFromValueNanoton, type LootRarityIntervals } from "@/components/cases/case-ui";
 import type { CaseLootPreview } from "@/lib/api";
 
 type LootDraftLike = {
@@ -22,7 +22,10 @@ type CaseDraftLike = {
   require_channel?: boolean;
 };
 
-export function lootDraftsToPreview(rows: LootDraftLike[]): CaseLootPreview[] {
+export function lootDraftsToPreview(
+  rows: LootDraftLike[],
+  intervals?: LootRarityIntervals,
+): CaseLootPreview[] {
   return rows.map((row, i) => {
     const prizeType = row.prize_type === "ton" ? "ton" : "gift";
     const amount = row.amount_nanoton ?? 0;
@@ -32,6 +35,9 @@ export function lootDraftsToPreview(rows: LootDraftLike[]): CaseLootPreview[] {
           ? amount
           : (row.floor_price_nanoton ?? 0)
         : (row.floor_price_nanoton ?? 0);
+    const rarity = intervals
+      ? rarityFromValueNanoton(floor, intervals)
+      : row.rarity_label || undefined;
     return {
       id: row.id || row._key,
       prize_type: prizeType,
@@ -41,7 +47,7 @@ export function lootDraftsToPreview(rows: LootDraftLike[]): CaseLootPreview[] {
         prizeType === "gift" ? normalizeLootBackdrop(row.backdrop) || undefined : undefined,
       display_name: row.display_name || (prizeType === "ton" ? "TON" : ""),
       image_url: row.image_url || "",
-      rarity_label: row.rarity_label || undefined,
+      rarity_label: rarity,
       tile_background_color: normalizeLootTileColor(row.tile_background_color) || undefined,
       sort_order: i,
       floor_price_nanoton: floor,

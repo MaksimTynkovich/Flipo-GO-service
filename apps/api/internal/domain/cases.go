@@ -494,6 +494,12 @@ type CaseLiveDrop struct {
 }
 
 // CaseLiveFeedSettings — singleton (id=1) for fake live-feed knobs.
+// Rarity tiers are derived from prize value intervals (nanoton), not loot.rarity_label:
+//   common:    [0, CommonMax)
+//   uncommon:  [CommonMax, UncommonMax)
+//   rare:      [UncommonMax, RareMax)
+//   epic:      [RareMax, EpicMax)
+//   legendary: [EpicMax, +inf)
 type CaseLiveFeedSettings struct {
 	ID                 int       `gorm:"primaryKey" json:"id"`
 	Enabled            bool      `gorm:"not null;default:false" json:"enabled"`
@@ -505,6 +511,10 @@ type CaseLiveFeedSettings struct {
 	RareWeight         float64   `gorm:"type:decimal(8,3);not null;default:15" json:"rare_weight"`
 	EpicWeight         float64   `gorm:"type:decimal(8,3);not null;default:7" json:"epic_weight"`
 	LegendaryWeight    float64   `gorm:"type:decimal(8,3);not null;default:3" json:"legendary_weight"`
+	CommonMaxNanoton   int64     `gorm:"not null;default:500000000" json:"common_max_nanoton"`
+	UncommonMaxNanoton int64     `gorm:"not null;default:1500000000" json:"uncommon_max_nanoton"`
+	RareMaxNanoton     int64     `gorm:"not null;default:3000000000" json:"rare_max_nanoton"`
+	EpicMaxNanoton     int64     `gorm:"not null;default:5000000000" json:"epic_max_nanoton"`
 	FatChance          float64   `gorm:"type:decimal(6,4);not null;default:0.08" json:"fat_chance"`
 	FatMinFloorNanoton int64     `gorm:"not null;default:5000000000" json:"fat_min_floor_nanoton"`
 	UpdatedAt          time.Time `json:"updated_at"`

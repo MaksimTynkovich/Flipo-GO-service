@@ -25,6 +25,7 @@ import { formatUserError } from "@/lib/user-errors";
 import { chancePercentFromWeight, applyChancePercentWeights } from "@/lib/admin-units";
 import {
   candyTileBackgroundForLoot,
+  rarityFromValueNanoton,
   getCatalogAccent,
   CASE_ACCENT_COLOR_OPTIONS,
   LOOT_BACKDROP_OPTIONS,
@@ -125,11 +126,13 @@ const DEFAULT_LIVE_SETTINGS: AdminCaseLiveFeedSettings = {
   rare_weight: 15,
   epic_weight: 7,
   legendary_weight: 3,
+  common_max_nanoton: 500_000_000,
+  uncommon_max_nanoton: 1_500_000_000,
+  rare_max_nanoton: 3_000_000_000,
+  epic_max_nanoton: 5_000_000_000,
   fat_chance: 0.08,
   fat_min_floor_nanoton: 5_000_000_000,
 };
-
-const RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
 
 const CYR_TO_LAT: Record<string, string> = {
   а: "a",
@@ -777,7 +780,7 @@ export default function CasesSection() {
           model_name: "",
           display_name: row.display_name.trim() || "TON",
           image_url: "",
-          rarity_label: row.rarity_label?.trim() || "",
+          rarity_label: "",
           tile_background_color: normalizeLootTileColor(row.tile_background_color),
           backdrop: "",
           sort_order: i,
@@ -799,7 +802,7 @@ export default function CasesSection() {
         model_name: (row.model_name || row._modelName || "").trim(),
         display_name: row.display_name.trim() || slug,
         image_url: row.image_url?.trim() || "",
-        rarity_label: row.rarity_label?.trim() || "",
+        rarity_label: "",
         tile_background_color: normalizeLootTileColor(row.tile_background_color),
         backdrop: normalizeLootBackdrop(row.backdrop),
         sort_order: i,
@@ -966,7 +969,10 @@ export default function CasesSection() {
     }
   }
 
-  const previewLoot = useMemo(() => lootDraftsToPreview(loot), [loot]);
+  const previewLoot = useMemo(
+    () => lootDraftsToPreview(loot, liveSettings),
+    [loot, liveSettings],
+  );
 
   const previewCase = useMemo(
     () => ({
@@ -1325,7 +1331,7 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
 
       <AdminPanel
         title="Live-лента"
-        description="Фейк-дропы только в UI ленты. Не влияет на реальные открытия, баланс и аналитику case_opens."
+        description="Фейк-дропы только в UI ленты. Редкость призов считается по цене (интервалы ниже), не вручную на каждом подарке."
       >
         {liveSettingsLoading ? (
           <div className="h-20 animate-pulse rounded-xl bg-surface-raised/50" />
@@ -1384,38 +1390,74 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                 }
               />
             </div>
-            <p className="text-[11px] text-muted">Веса редкости (выше = чаще в обычном сэмпле)</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <p className="text-[11px] text-muted">
+              Редкость по цене приза (TON). Интервал: от порога предыдущего тира до max (не включая).
+              Legendary — всё от epic max и выше. Вес — как часто тир попадает в фейк-сэмпл.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <AdminTonField
+                label="Common max (TON)"
+                hint="ниже → common"
+                valueNanoton={liveSettings.common_max_nanoton}
+                onChangeNanoton={(v) =>
+                  setLiveSettings((s) => ({ ...s, common_max_nanoton: Math.max(0, v) }))
+                }
+              />
               <AdminFloatField
-                label="Common"
+                label="Common weight"
                 min={0}
                 step={1}
                 value={liveSettings.common_weight}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, common_weight: v }))}
               />
+              <AdminTonField
+                label="Uncommon max (TON)"
+                hint="ниже → uncommon"
+                valueNanoton={liveSettings.uncommon_max_nanoton}
+                onChangeNanoton={(v) =>
+                  setLiveSettings((s) => ({ ...s, uncommon_max_nanoton: Math.max(0, v) }))
+                }
+              />
               <AdminFloatField
-                label="Uncommon"
+                label="Uncommon weight"
                 min={0}
                 step={1}
                 value={liveSettings.uncommon_weight}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, uncommon_weight: v }))}
               />
+              <AdminTonField
+                label="Rare max (TON)"
+                hint="ниже → rare"
+                valueNanoton={liveSettings.rare_max_nanoton}
+                onChangeNanoton={(v) =>
+                  setLiveSettings((s) => ({ ...s, rare_max_nanoton: Math.max(0, v) }))
+                }
+              />
               <AdminFloatField
-                label="Rare"
+                label="Rare weight"
                 min={0}
                 step={1}
                 value={liveSettings.rare_weight}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, rare_weight: v }))}
               />
+              <AdminTonField
+                label="Epic max (TON)"
+                hint="ниже → epic; ≥ → legendary"
+                valueNanoton={liveSettings.epic_max_nanoton}
+                onChangeNanoton={(v) =>
+                  setLiveSettings((s) => ({ ...s, epic_max_nanoton: Math.max(0, v) }))
+                }
+              />
               <AdminFloatField
-                label="Epic"
+                label="Epic weight"
                 min={0}
                 step={1}
                 value={liveSettings.epic_weight}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, epic_weight: v }))}
               />
               <AdminFloatField
-                label="Legendary"
+                label="Legendary weight"
+                hint={`≥ ${(liveSettings.epic_max_nanoton / 1e9).toFixed(2)} TON`}
                 min={0}
                 step={1}
                 value={liveSettings.legendary_weight}
@@ -1897,11 +1939,18 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                     {loot.map((row, idx) => {
                       const expanded = expandedKey === row._key;
                       const isTon = row.prize_type === "ton";
+                      const valueNanoton = isTon
+                        ? row.amount_nanoton || row.floor_price_nanoton || 0
+                        : row.floor_price_nanoton || 0;
+                      const rarityBg = candyTileBackgroundForLoot({
+                        ...row,
+                        rarity_label: rarityFromValueNanoton(valueNanoton, liveSettings),
+                      });
                       return (
                         <div key={row._key} className="admin-loot-card">
                           <div
                             className="admin-loot-card__thumb"
-                            style={{ background: candyTileBackgroundForLoot(row) }}
+                            style={{ background: rarityBg }}
                           >
                             {isTon ? (
                               <span className="flex h-full w-full items-center justify-center text-sm font-bold text-white/90">
@@ -2022,42 +2071,16 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                                   hint="Показывается в списке призов кейса. 0 — подтянуть рыночный floor."
                                 />
                               )}
-                              <AdminField label="редкость" className="col-span-2 sm:col-span-3">
-                                <div className="flex flex-wrap gap-1">
-                                  {RARITY_OPTIONS.map((r) => (
-                                    <button
-                                      key={r}
-                                      type="button"
-                                      className={
-                                        row.rarity_label === r
-                                          ? "rounded-lg bg-[var(--admin-accent-subtle)] px-2 py-1 text-xs text-[var(--admin-fg)]"
-                                          : "rounded-lg bg-black/20 px-2 py-1 text-xs text-[var(--admin-muted)] hover:text-[var(--admin-fg)]"
-                                      }
-                                      onClick={() => updateLoot(row._key, { rarity_label: r })}
-                                    >
-                                      {r}
-                                    </button>
-                                  ))}
-                                  <input
-                                    className="input-field min-w-[5rem] flex-1"
-                                    value={row.rarity_label || ""}
-                                    onChange={(e) =>
-                                      updateLoot(row._key, { rarity_label: e.target.value })
-                                    }
-                                    placeholder="своя"
-                                  />
-                                </div>
-                              </AdminField>
                               <AdminField
                                 label="цвет фона"
                                 className="col-span-2 sm:col-span-3"
-                                hint="Палитра или свой #hex — фон карточки приза (иначе по редкости)"
+                                hint="Палитра или свой #hex — фон карточки приза (иначе по цене из интервалов live-ленты)"
                               >
                                 <div className="space-y-2">
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <button
                                       type="button"
-                                      title="По редкости"
+                                      title="По цене (live-интервалы)"
                                       className={
                                         !normalizeLootTileColor(row.tile_background_color)
                                           ? "rounded-lg border border-[var(--admin-accent)] bg-[var(--admin-accent-subtle)] px-2 py-1 text-[10px] text-[var(--admin-fg)]"

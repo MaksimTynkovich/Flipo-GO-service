@@ -174,9 +174,9 @@ func stakingErrorDetails(err error) (code, msg string) {
 	case errors.Is(err, domain.ErrChannelNotSubscribed):
 		return "channel_not_subscribed", "Подпишитесь на канал, чтобы застейкать подарки"
 	case errors.Is(err, domain.ErrStakingPoolFull):
-		return "staking_pool_full", "Пул стейкинга заполнен. Попробуйте позже."
+		return "staking_pool_full", "Нельзя застейкать: общий пул заполнен. Дождитесь следующего дня — после ночной выплаты место освободится."
 	case errors.Is(err, domain.ErrStakingPersonalLimit):
-		return "staking_personal_limit", "Личный лимит исчерпан — выполните задания, чтобы увеличить его."
+		return "staking_personal_limit", "Нельзя застейкать: исчерпан личный лимит. Выполните задания, чтобы увеличить его."
 	case errors.Is(err, domain.ErrGiftAlreadyStakedEpoch):
 		return "gift_already_staked", "Подарок уже в стейке сегодня."
 	case errors.Is(err, domain.ErrInvalidAmount):

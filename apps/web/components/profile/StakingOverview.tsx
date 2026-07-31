@@ -378,7 +378,9 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
               </div>
               <ProgressBar value={tvlUsed / tvlCap} tone={poolFull ? "danger" : "accent"} />
               {poolFull ? (
-                <p className="text-[11px] font-medium text-danger">Пул заполнен</p>
+                <p className="text-[11px] font-medium leading-snug text-danger">
+                  Общий пул заполнен — сейчас нельзя застейкать. Дождитесь следующего дня.
+                </p>
               ) : null}
             </div>
           ) : null}

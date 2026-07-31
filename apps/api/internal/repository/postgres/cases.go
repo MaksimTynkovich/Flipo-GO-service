@@ -708,6 +708,7 @@ func (r *CaseRepo) UpdateLiveFeedSettings(ctx context.Context, settings *domain.
 	cols := []string{
 		"id", "enabled", "intensity", "fill_when_sparse", "min_visible",
 		"common_weight", "uncommon_weight", "rare_weight", "epic_weight", "legendary_weight",
+		"common_max_nanoton", "uncommon_max_nanoton", "rare_max_nanoton", "epic_max_nanoton",
 		"fat_chance", "fat_min_floor_nanoton", "updated_at",
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
@@ -728,6 +729,10 @@ func defaultLiveFeedSettings() domain.CaseLiveFeedSettings {
 		RareWeight:         15,
 		EpicWeight:         7,
 		LegendaryWeight:    3,
+		CommonMaxNanoton:   500_000_000,
+		UncommonMaxNanoton: 1_500_000_000,
+		RareMaxNanoton:     3_000_000_000,
+		EpicMaxNanoton:     5_000_000_000,
 		FatChance:          0.08,
 		FatMinFloorNanoton: 5_000_000_000,
 		UpdatedAt:          time.Now().UTC(),

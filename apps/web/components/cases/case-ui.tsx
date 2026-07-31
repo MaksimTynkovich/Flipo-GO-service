@@ -77,11 +77,11 @@ export function candyGradientFromHex(hex: string): string {
   return `linear-gradient(150deg, ${rgbToHex(...top)} 0%, ${rgbToHex(...bottom)} 100%)`;
 }
 
-/** Loot rarity grades — same set as admin CasesSection. */
+/** Loot rarity grades — same set as live-feed value tiers. */
 export const LOOT_RARITY_OPTIONS = ["common", "uncommon", "rare", "epic", "legendary"] as const;
 export type LootRarity = (typeof LOOT_RARITY_OPTIONS)[number];
 
-/** Soft Candy tile gradients keyed by rarity (admin `rarity_label`). */
+/** Soft Candy tile gradients keyed by rarity (from live-feed value intervals). */
 export const RARITY_CANDY_BACKGROUND: Record<LootRarity, string> = {
   common: "linear-gradient(150deg, hsl(210 68% 62%) 0%, hsl(210 62% 40%) 100%)",
   uncommon: "linear-gradient(150deg, hsl(155 66% 58%) 0%, hsl(155 60% 36%) 100%)",
@@ -89,6 +89,26 @@ export const RARITY_CANDY_BACKGROUND: Record<LootRarity, string> = {
   epic: "linear-gradient(150deg, hsl(320 68% 62%) 0%, hsl(320 62% 40%) 100%)",
   legendary: "linear-gradient(150deg, hsl(35 72% 58%) 0%, hsl(25 68% 38%) 100%)",
 };
+
+export type LootRarityIntervals = {
+  common_max_nanoton: number;
+  uncommon_max_nanoton: number;
+  rare_max_nanoton: number;
+  epic_max_nanoton: number;
+};
+
+/** Map prize value → rarity using live-feed intervals (max bounds exclusive). */
+export function rarityFromValueNanoton(
+  valueNanoton: number,
+  intervals: LootRarityIntervals,
+): LootRarity {
+  const v = Number.isFinite(valueNanoton) && valueNanoton > 0 ? valueNanoton : 0;
+  if (v < intervals.common_max_nanoton) return "common";
+  if (v < intervals.uncommon_max_nanoton) return "uncommon";
+  if (v < intervals.rare_max_nanoton) return "rare";
+  if (v < intervals.epic_max_nanoton) return "epic";
+  return "legendary";
+}
 
 export function parseLootRarity(label?: string): LootRarity {
   const normalized = label?.trim().toLowerCase() ?? "";

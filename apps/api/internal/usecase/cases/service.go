@@ -519,6 +519,8 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		}
 	}
 
+	lootPreview := toLootPreview(entry)
+	lootPreview.RarityLabel = rarityFromValue(s.liveFeedSettings(ctx), domain.CaseLootPrizeValueNanoton(entry))
 	result := &OpenResult{
 		OpenID:                   openID,
 		CaseID:                   c.ID,
@@ -527,11 +529,12 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		PrizeNanoton:             prizeNanoton,
 		GuaranteedCashoutNanoton: guaranteedCashoutNanoton,
 		Item:                     itemView,
-		LootEntry:                toLootPreview(entry),
+		LootEntry:                lootPreview,
 		Backed:                   backed,
 	}
 	if s.live != nil {
-		s.live.PublishCaseLiveDrop(ctx, liveDropFromEntry(openID, entry, open.CreatedAt))
+		cfg := s.liveFeedSettings(ctx)
+		s.live.PublishCaseLiveDrop(ctx, liveDropFromEntry(openID, entry, open.CreatedAt, cfg))
 	}
 	if s.admin != nil {
 		actor := telegram.AdminActor{}
@@ -671,6 +674,7 @@ func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]
 	if err != nil {
 		return nil, err
 	}
+	cfg := s.liveFeedSettings(ctx)
 	out := make([]domain.CaseLiveDrop, 0, limit*2)
 	seen := make(map[uuid.UUID]struct{}, limit*2)
 	appendDrop := func(row domain.CaseLiveDrop) {
@@ -685,6 +689,7 @@ func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]
 			}
 			row.ImageURL = img
 		}
+		row.RarityLabel = rarityFromValue(cfg, row.FloorPriceNanoton)
 		out = append(out, row)
 	}
 	if s.feedBuf != nil {
@@ -1523,12 +1528,14 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 	}
 	if withLoot {
 		if loot, err := s.cases.ListLootByCase(ctx, c.ID); err == nil {
+			cfg := s.liveFeedSettings(ctx)
 			view.Loot = make([]LootPreview, 0, len(loot))
 			for _, e := range loot {
 				preview := toLootPreview(e)
 				if preview.PrizeType != domain.CasePrizeTypeTon && preview.FloorPriceNanoton <= 0 {
 					preview.FloorPriceNanoton = s.quoteLootFloor(ctx, e)
 				}
+				preview.RarityLabel = rarityFromValue(cfg, preview.FloorPriceNanoton)
 				view.Loot = append(view.Loot, preview)
 			}
 		}
@@ -1596,6 +1603,7 @@ func (s *Service) openResultFromExisting(ctx context.Context, open *domain.CaseO
 		for _, e := range loot {
 			if e.ID == open.LootEntryID {
 				preview = toLootPreview(e)
+				preview.RarityLabel = rarityFromValue(s.liveFeedSettings(ctx), domain.CaseLootPrizeValueNanoton(e))
 				break
 			}
 		}
@@ -1684,18 +1692,28 @@ func toLootPreview(e domain.CaseLootEntry) LootPreview {
 	}
 }
 
-func liveDropFromEntry(openID uuid.UUID, entry domain.CaseLootEntry, createdAt time.Time) domain.CaseLiveDrop {
+func (s *Service) liveFeedSettings(ctx context.Context) domain.CaseLiveFeedSettings {
+	cfg, err := s.cases.GetLiveFeedSettings(ctx)
+	if err != nil || cfg == nil {
+		return DefaultLiveFeedSettings()
+	}
+	NormalizeLiveFeedSettings(cfg)
+	return *cfg
+}
+
+func liveDropFromEntry(openID uuid.UUID, entry domain.CaseLootEntry, createdAt time.Time, cfg domain.CaseLiveFeedSettings) domain.CaseLiveDrop {
 	preview := toLootPreview(entry)
+	value := domain.CaseLootPrizeValueNanoton(entry)
 	return domain.CaseLiveDrop{
 		OpenID:              openID,
 		PrizeType:           preview.PrizeType,
 		CollectionSlug:      preview.CollectionSlug,
 		DisplayName:         preview.DisplayName,
 		ImageURL:            preview.ImageURL,
-		RarityLabel:         preview.RarityLabel,
+		RarityLabel:         rarityFromValue(cfg, value),
 		TileBackgroundColor: preview.TileBackgroundColor,
 		Backdrop:            preview.Backdrop,
-		FloorPriceNanoton:   domain.CaseLootPrizeValueNanoton(entry),
+		FloorPriceNanoton:   value,
 		CreatedAt:           createdAt,
 	}
 }

@@ -29,3 +29,42 @@ func TestShouldInjectFakeDropIgnoresFakeBufferSaturation(t *testing.T) {
 		t.Fatal("disabled sim must not inject")
 	}
 }
+
+func TestRarityFromValueIntervals(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cases := []struct {
+		value int64
+		want  string
+	}{
+		{0, "common"},
+		{499_999_999, "common"},
+		{500_000_000, "uncommon"},
+		{1_499_999_999, "uncommon"},
+		{1_500_000_000, "rare"},
+		{2_999_999_999, "rare"},
+		{3_000_000_000, "epic"},
+		{4_999_999_999, "epic"},
+		{5_000_000_000, "legendary"},
+		{50_000_000_000, "legendary"},
+	}
+	for _, tc := range cases {
+		got := rarityFromValue(cfg, tc.value)
+		if got != tc.want {
+			t.Fatalf("value %d: got %q want %q", tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestNormalizeLiveFeedSettingsSortsIntervals(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cfg.CommonMaxNanoton = 5_000_000_000
+	cfg.UncommonMaxNanoton = 1_000_000_000
+	cfg.RareMaxNanoton = 2_000_000_000
+	cfg.EpicMaxNanoton = 500_000_000
+	NormalizeLiveFeedSettings(&cfg)
+	if !(cfg.CommonMaxNanoton <= cfg.UncommonMaxNanoton &&
+		cfg.UncommonMaxNanoton <= cfg.RareMaxNanoton &&
+		cfg.RareMaxNanoton <= cfg.EpicMaxNanoton) {
+		t.Fatalf("intervals not non-decreasing: %+v", cfg)
+	}
+}
