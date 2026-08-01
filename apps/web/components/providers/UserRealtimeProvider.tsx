@@ -8,6 +8,10 @@ import { trackEvent } from "@/lib/analytics";
 import { connectUserWS } from "@/lib/ws";
 import { emitBalanceWin } from "@/lib/balance-win";
 import {
+  isCasePrizeBalanceHeld,
+  stashCasePrizeBalance,
+} from "@/lib/case-prize-balance";
+import {
   isWheelPrizeBalanceHeld,
   stashWheelPrizeBalance,
 } from "@/lib/wheel-prize-balance";
@@ -45,6 +49,19 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
           isWheelPrizeBalanceHeld()
         ) {
           stashWheelPrizeBalance({
+            betting_balance: payload.betting_balance,
+            delta_nanoton: payload.delta_nanoton,
+          });
+          return;
+        }
+
+        // Case TON prize: freeze until CaseDetailView reveal completes.
+        if (
+          payload.ledger_type === "case_prize" &&
+          payload.betting_balance != null &&
+          isCasePrizeBalanceHeld()
+        ) {
+          stashCasePrizeBalance({
             betting_balance: payload.betting_balance,
             delta_nanoton: payload.delta_nanoton,
           });

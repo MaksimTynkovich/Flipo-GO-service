@@ -142,6 +142,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/cases/live", deps.CasesHandler.Live)
 			authed.GET("/cases/:id", deps.CasesHandler.Get)
 			authed.POST("/cases/:id/open", deps.CasesHandler.Open)
+			authed.POST("/cases/:id/share", deps.CasesHandler.Share)
 
 			authed.POST("/wallet/deposit/intent", deps.WalletHandler.CreateDepositIntent)
 			authed.POST("/wallet/deposit/:id/confirm", deps.WalletHandler.ConfirmDeposit)

@@ -26,17 +26,18 @@ type Config struct {
 }
 
 type Service struct {
-	users     domain.UserRepository
-	intents   domain.PaymentIntentRepository
-	crypto    *cryptopay.Client
-	bot       *telegram.BotAPI
-	cfg       Config
-	notifier  balance.BalanceNotifier
-	admin     AdminNotifier
+	users    domain.UserRepository
+	intents  domain.PaymentIntentRepository
+	crypto   *cryptopay.Client
+	bot      *telegram.BotAPI
+	cfg      Config
+	notifier balance.BalanceNotifier
+	admin    AdminNotifier
 }
 
 type AdminNotifier interface {
-	NotifyDepositConfirmed(ctx context.Context, actor telegram.AdminActor, amountNanoton int64)
+	NotifyAltDepositAttempt(ctx context.Context, actor telegram.AdminActor, amountNanoton int64, provider string, providerAmount string)
+	NotifyAltDepositConfirmed(ctx context.Context, actor telegram.AdminActor, amountNanoton int64, provider string)
 }
 
 func NewService(
@@ -65,25 +66,25 @@ func (s *Service) CryptoBotEnabled() bool { return s.crypto != nil && s.crypto.E
 func (s *Service) StarsEnabled() bool     { return s.bot != nil && s.bot.Enabled() }
 
 type FeaturesView struct {
-	CryptoBotEnabled bool    `json:"cryptobot_enabled"`
-	StarsEnabled     bool    `json:"stars_enabled"`
-	MinDepositNanoton int64  `json:"min_deposit_nanoton"`
-	StarsUSDRate     float64 `json:"stars_usd_rate"`
-	TonUSDRate       float64 `json:"ton_usd_rate,omitempty"`
+	CryptoBotEnabled  bool    `json:"cryptobot_enabled"`
+	StarsEnabled      bool    `json:"stars_enabled"`
+	MinDepositNanoton int64   `json:"min_deposit_nanoton"`
+	StarsUSDRate      float64 `json:"stars_usd_rate"`
+	TonUSDRate        float64 `json:"ton_usd_rate,omitempty"`
 }
 
 type IntentView struct {
-	ID               string  `json:"id"`
-	Provider         string  `json:"provider"`
-	Status           string  `json:"status"`
-	AmountNanoton    int64   `json:"amount_nanoton"`
-	ProviderAmount   string  `json:"provider_amount"`
-	ProviderCurrency string  `json:"provider_currency"`
-	PayURL           string  `json:"pay_url,omitempty"`
-	StarsCount       int64   `json:"stars_count,omitempty"`
-	TonUSDRate       string  `json:"ton_usd_rate,omitempty"`
-	StarsUSDRate     string  `json:"stars_usd_rate,omitempty"`
-	ExpiresAt        string  `json:"expires_at,omitempty"`
+	ID               string `json:"id"`
+	Provider         string `json:"provider"`
+	Status           string `json:"status"`
+	AmountNanoton    int64  `json:"amount_nanoton"`
+	ProviderAmount   string `json:"provider_amount"`
+	ProviderCurrency string `json:"provider_currency"`
+	PayURL           string `json:"pay_url,omitempty"`
+	StarsCount       int64  `json:"stars_count,omitempty"`
+	TonUSDRate       string `json:"ton_usd_rate,omitempty"`
+	StarsUSDRate     string `json:"stars_usd_rate,omitempty"`
+	ExpiresAt        string `json:"expires_at,omitempty"`
 }
 
 type StarsQuoteView struct {
@@ -109,13 +110,27 @@ func (s *Service) Features(ctx context.Context) FeaturesView {
 	return out
 }
 
-func (s *Service) QuoteStars(ctx context.Context, amountNanoton int64) (*StarsQuoteView, error) {
-	if amountNanoton < s.cfg.MinDepositNanoton {
-		return nil, domain.ErrInvalidAmount
-	}
+func (s *Service) QuoteStars(ctx context.Context, amountNanoton, starsCount int64) (*StarsQuoteView, error) {
 	tonUSD, err := s.tonUSDRate(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if starsCount > 0 {
+		if starsCount < 1 {
+			return nil, domain.ErrInvalidAmount
+		}
+		nanoton := s.nanotonFromStars(starsCount, tonUSD)
+		usd := float64(starsCount) * s.cfg.StarsUSDRate
+		return &StarsQuoteView{
+			AmountNanoton: nanoton,
+			StarsCount:    starsCount,
+			TonUSDRate:    tonUSD,
+			StarsUSDRate:  s.cfg.StarsUSDRate,
+			USDValue:      usd,
+		}, nil
+	}
+	if amountNanoton < s.cfg.MinDepositNanoton {
+		return nil, domain.ErrInvalidAmount
 	}
 	stars, usd := s.starsForNanoton(amountNanoton, tonUSD)
 	return &StarsQuoteView{
@@ -174,16 +189,20 @@ func (s *Service) CreateCryptoBotIntent(ctx context.Context, userID uuid.UUID, a
 	if err := s.intents.Create(ctx, intent); err != nil {
 		return nil, err
 	}
-	_ = user
+	if s.admin != nil {
+		s.admin.NotifyAltDepositAttempt(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, amountNanoton, domain.PaymentProviderCryptoBot, tonAmount)
+	}
 	return toIntentView(intent), nil
 }
 
-func (s *Service) CreateStarsIntent(ctx context.Context, userID uuid.UUID, amountNanoton int64) (*IntentView, error) {
+func (s *Service) CreateStarsIntent(ctx context.Context, userID uuid.UUID, amountNanoton, starsCount int64) (*IntentView, error) {
 	if !s.StarsEnabled() {
 		return nil, fmt.Errorf("stars deposits disabled")
-	}
-	if amountNanoton < s.cfg.MinDepositNanoton {
-		return nil, domain.ErrInvalidAmount
 	}
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -197,16 +216,29 @@ func (s *Service) CreateStarsIntent(ctx context.Context, userID uuid.UUID, amoun
 	if err != nil {
 		return nil, err
 	}
-	stars, _ := s.starsForNanoton(amountNanoton, tonUSD)
+
+	var stars int64
+	if starsCount > 0 {
+		stars = starsCount
+		amountNanoton = s.nanotonFromStars(stars, tonUSD)
+	} else {
+		if amountNanoton < s.cfg.MinDepositNanoton {
+			return nil, domain.ErrInvalidAmount
+		}
+		stars, _ = s.starsForNanoton(amountNanoton, tonUSD)
+	}
 	if stars < 1 {
-		stars = 1
+		return nil, domain.ErrInvalidAmount
+	}
+	if amountNanoton < s.cfg.MinDepositNanoton {
+		return nil, domain.ErrInvalidAmount
 	}
 
 	intentID := uuid.New()
 	payload := fmt.Sprintf("st:%s", strings.ReplaceAll(intentID.String(), "-", ""))
 	expiresAt := time.Now().UTC().Add(s.cfg.DepositTTL)
 
-	title := "Flipo · пополнение"
+	title := "Пополнение баланса"
 	description := fmt.Sprintf("Пополнение баланса на %s TON", formatTONAmount(amountNanoton))
 	prices := []telegram.LabeledPrice{{Label: description, Amount: stars}}
 
@@ -223,21 +255,30 @@ func (s *Service) CreateStarsIntent(ctx context.Context, userID uuid.UUID, amoun
 	}
 
 	intent := &domain.PaymentIntent{
-		ID:               intentID,
-		UserID:           userID,
-		Provider:         domain.PaymentProviderStars,
-		Status:           domain.PaymentStatusAwaiting,
-		AmountNanoton:    amountNanoton,
-		ProviderAmount:   strconv.FormatInt(stars, 10),
-		ProviderCurrency: "XTR",
-		PayURL:           link,
-		Payload:          payload,
-		TonUSDRate:       formatFloat(tonUSD),
-		StarsUSDRate:     formatFloat(s.cfg.StarsUSDRate),
-		ExpiresAt:        &expiresAt,
+		ID:                intentID,
+		UserID:            userID,
+		Provider:          domain.PaymentProviderStars,
+		Status:            domain.PaymentStatusAwaiting,
+		AmountNanoton:     amountNanoton,
+		ProviderAmount:    strconv.FormatInt(stars, 10),
+		ProviderCurrency:  "XTR",
+		ProviderInvoiceID: payload, // unique placeholder until telegram_payment_charge_id arrives
+		PayURL:            link,
+		Payload:           payload,
+		TonUSDRate:        formatFloat(tonUSD),
+		StarsUSDRate:      formatFloat(s.cfg.StarsUSDRate),
+		ExpiresAt:         &expiresAt,
 	}
 	if err := s.intents.Create(ctx, intent); err != nil {
 		return nil, err
+	}
+	if s.admin != nil {
+		s.admin.NotifyAltDepositAttempt(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, amountNanoton, domain.PaymentProviderStars, strconv.FormatInt(stars, 10))
 	}
 	view := toIntentView(intent)
 	view.StarsCount = stars
@@ -362,12 +403,12 @@ func (s *Service) creditIntent(ctx context.Context, intentID uuid.UUID) error {
 	}
 	if s.admin != nil {
 		if user, err := s.users.FindByID(ctx, intent.UserID); err == nil && user != nil {
-			s.admin.NotifyDepositConfirmed(ctx, telegram.AdminActor{
+			s.admin.NotifyAltDepositConfirmed(ctx, telegram.AdminActor{
 				TelegramID: user.TelegramID,
 				Username:   user.Username,
 				FirstName:  user.FirstName,
 				LastName:   user.LastName,
-			}, intent.AmountNanoton)
+			}, intent.AmountNanoton, intent.Provider)
 		}
 	}
 	slog.Info("alt deposit credited",
@@ -398,6 +439,19 @@ func (s *Service) starsForNanoton(amountNanoton int64, tonUSD float64) (stars in
 		stars = 1
 	}
 	return stars, usd
+}
+
+func (s *Service) nanotonFromStars(stars int64, tonUSD float64) int64 {
+	if stars < 1 || tonUSD <= 0 || s.cfg.StarsUSDRate <= 0 {
+		return 0
+	}
+	usd := float64(stars) * s.cfg.StarsUSDRate
+	ton := usd / tonUSD
+	nanoton := int64(math.Floor(ton*1e9 + 1e-9))
+	if nanoton < 0 {
+		return 0
+	}
+	return nanoton
 }
 
 func toIntentView(intent *domain.PaymentIntent) *IntentView {

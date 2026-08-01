@@ -69,25 +69,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const inTelegram = hasTelegramInitData();
         const allowBrowserSession = DEBUG_AUTH;
-
-        const token = localStorage.getItem("flipo_token");
-        if (token && (inTelegram || allowBrowserSession)) {
-          try {
-            setUser(await getMe());
-            trackEvent({
-              event_name: "auth_restored",
-              event_category: "auth",
-              status: "success",
-            });
-            return;
-          } catch {
-            localStorage.removeItem("flipo_token");
-          }
-        } else if (token && !inTelegram && !allowBrowserSession) {
-          localStorage.removeItem("flipo_token");
-        }
-
         const initData = getTelegramWebApp()?.initData;
+
+        // Always re-auth via Telegram initData on entry so first/last name
+        // (and username/photo) stay in sync after profile changes.
         if (initData) {
           const startParam = readReferralCodeFromTelegram();
           if (startParam) {
@@ -120,6 +105,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             properties: { source: referralCode ? "referral" : "direct" },
           });
           return;
+        }
+
+        const token = localStorage.getItem("flipo_token");
+        if (token && allowBrowserSession) {
+          try {
+            setUser(await getMe());
+            trackEvent({
+              event_name: "auth_restored",
+              event_category: "auth",
+              status: "success",
+            });
+            return;
+          } catch {
+            localStorage.removeItem("flipo_token");
+          }
+        } else if (token && !inTelegram && !allowBrowserSession) {
+          localStorage.removeItem("flipo_token");
         }
 
         if (DEBUG_AUTH) {

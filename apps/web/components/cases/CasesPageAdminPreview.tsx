@@ -17,18 +17,33 @@ function adminToView(c: AdminCase): CaseView {
     kind: c.kind,
     sort_order: c.sort_order,
     require_channel: c.require_channel,
+    required_name_tag: c.required_name_tag,
+    require_share: c.require_share,
   };
 }
 
-function kindLabel(kind: string, bannersEnabled: boolean): string {
-  if (kind === "promo") return "Промокод";
-  if (!bannersEnabled) {
-    // Without banners everything sits in the catalog grid.
-    return kind === "daily" ? "Daily" : "Каталог";
+function kindLabel(
+  kind: string,
+  bannersEnabled: boolean,
+  quests?: { requireShare?: boolean; nameTag?: string },
+): string {
+  let base: string;
+  if (kind === "promo") {
+    base = "Промокод";
+  } else if (!bannersEnabled) {
+    base = kind === "daily" ? "Daily" : "Каталог";
+  } else if (kind === "featured") {
+    base = "Баннер";
+  } else if (kind === "daily") {
+    base = "Баннер · Daily";
+  } else {
+    base = "Каталог";
   }
-  if (kind === "featured") return "Баннер";
-  if (kind === "daily") return "Баннер · Daily";
-  return "Каталог";
+  if (kind !== "daily") return base;
+  const parts: string[] = [];
+  if (quests?.nameTag?.trim()) parts.push("тег");
+  if (quests?.requireShare) parts.push("share");
+  return parts.length ? `${base} · ${parts.join("+")}` : base;
 }
 
 export function CasesPageAdminPreview({
@@ -71,6 +86,8 @@ export function CasesPageAdminPreview({
           price_nanoton: draftOverlay.price_nanoton ?? view.price_nanoton,
           kind: draftOverlay.kind || view.kind,
           require_channel: draftOverlay.require_channel ?? view.require_channel,
+          required_name_tag: draftOverlay.required_name_tag ?? view.required_name_tag,
+          require_share: draftOverlay.require_share ?? view.require_share,
           sort_order: draftOverlay.sort_order ?? view.sort_order,
         };
       }
@@ -181,7 +198,18 @@ export function CasesPageAdminPreview({
                         {c.title || c.slug}
                       </span>
                       <span className="block truncate text-[11px] text-muted">
-                        #{idx + 1} · {kindLabel(c.kind, bannersEnabled)}
+                        #{idx + 1} ·{" "}
+                        {kindLabel(c.kind, bannersEnabled, {
+                          requireShare: Boolean(
+                            draftOverlay?.id === c.id
+                              ? draftOverlay.require_share ?? c.require_share
+                              : c.require_share,
+                          ),
+                          nameTag:
+                            draftOverlay?.id === c.id
+                              ? draftOverlay.required_name_tag ?? c.required_name_tag
+                              : c.required_name_tag,
+                        })}
                         {!c.active ? " · выкл" : ""}
                       </span>
                     </span>

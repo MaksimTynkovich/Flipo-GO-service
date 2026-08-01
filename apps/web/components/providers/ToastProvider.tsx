@@ -83,7 +83,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       <div
-        className="pointer-events-none fixed left-0 right-0 z-[60] flex justify-center pl-[var(--app-safe-left)] pr-[var(--app-safe-right)]"
+        className="pointer-events-none fixed left-0 right-0 z-[110] flex justify-center pl-[var(--app-safe-left)] pr-[var(--app-safe-right)]"
         style={{ top: "var(--app-safe-top)", height: "var(--app-header-height)" }}
       >
         <div className="app-container relative flex h-full items-center justify-center">

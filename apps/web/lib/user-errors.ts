@@ -14,6 +14,12 @@ export function formatUserError(
   if (code === "staking_personal_limit") {
     return "Нельзя застейкать: исчерпан личный лимит. Выполните задания, чтобы увеличить его.";
   }
+  if (code === "case_name_tag_required") {
+    return "Добавьте тег в имя Telegram";
+  }
+  if (code === "case_share_required") {
+    return "Поделитесь ссылкой, чтобы открыть кейс";
+  }
 
   const raw =
     error instanceof Error ? error.message.trim() : typeof error === "string" ? error.trim() : "";
@@ -72,6 +78,10 @@ export function formatUserError(
     ["maintenance", "Техническое обслуживание"],
     ["кейсы временно недоступны", "Кейсы временно недоступны"],
     ["cases_disabled", "Кейсы временно недоступны"],
+    ["добавьте тег в имя", "Добавьте тег в имя Telegram"],
+    ["case_name_tag_required", "Добавьте тег в имя Telegram"],
+    ["поделитесь ссылкой", "Поделитесь ссылкой, чтобы открыть кейс"],
+    ["case_share_required", "Поделитесь ссылкой, чтобы открыть кейс"],
     ["маркет временно недоступен", "Маркет временно недоступен"],
     ["market_disabled", "Маркет временно недоступен"],
     ["депозит подарками временно недоступен", "Депозит подарками временно недоступен"],

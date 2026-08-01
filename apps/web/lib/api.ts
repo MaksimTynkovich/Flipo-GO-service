@@ -1050,10 +1050,13 @@ export async function getPaymentFeatures() {
   return api<PaymentFeatures>("/api/v1/payments/features");
 }
 
-export async function quoteStarsDeposit(amountNanoton: number) {
+export async function quoteStarsDeposit(opts: { amountNanoton?: number; starsCount?: number }) {
+  const body: { amount_nanoton?: number; stars_count?: number } = {};
+  if (opts.starsCount != null && opts.starsCount > 0) body.stars_count = opts.starsCount;
+  if (opts.amountNanoton != null && opts.amountNanoton > 0) body.amount_nanoton = opts.amountNanoton;
   return api<StarsQuote>("/api/v1/payments/stars/quote", {
     method: "POST",
-    body: JSON.stringify({ amount_nanoton: amountNanoton }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -1064,10 +1067,13 @@ export async function createCryptoBotDeposit(amountNanoton: number) {
   });
 }
 
-export async function createStarsDeposit(amountNanoton: number) {
+export async function createStarsDeposit(opts: { amountNanoton?: number; starsCount?: number }) {
+  const body: { amount_nanoton?: number; stars_count?: number } = {};
+  if (opts.starsCount != null && opts.starsCount > 0) body.stars_count = opts.starsCount;
+  if (opts.amountNanoton != null && opts.amountNanoton > 0) body.amount_nanoton = opts.amountNanoton;
   return api<PaymentIntent>("/api/v1/payments/stars/intent", {
     method: "POST",
-    body: JSON.stringify({ amount_nanoton: amountNanoton }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -2309,6 +2315,11 @@ export type CaseView = {
   require_channel?: boolean;
   required_channel?: string;
   channel_subscribed?: boolean;
+  /** Substring that must appear in Telegram first_name or last_name. */
+  required_name_tag?: string;
+  require_share?: boolean;
+  name_tag_ok?: boolean;
+  share_done?: boolean;
   loot?: CaseLootPreview[];
   daily_available?: boolean;
   next_available_at?: string;
@@ -2344,6 +2355,13 @@ export async function getCasesLiveFeed() {
 
 export async function getCase(idOrSlug: string) {
   return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}`);
+}
+
+export async function shareCaseQuest(idOrSlug: string) {
+  return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/share`, {
+    method: "POST",
+    body: "{}",
+  });
 }
 
 export async function openCase(
@@ -2420,6 +2438,8 @@ export type AdminCase = {
   sort_order: number;
   active: boolean;
   require_channel: boolean;
+  required_name_tag?: string;
+  require_share?: boolean;
   target_rtp_bps: number;
   loot: AdminCaseLootEntry[];
 };
@@ -2435,6 +2455,8 @@ export type AdminCaseUpsert = {
   sort_order: number;
   active: boolean;
   require_channel: boolean;
+  required_name_tag?: string;
+  require_share?: boolean;
   target_rtp_bps: number;
 };
 

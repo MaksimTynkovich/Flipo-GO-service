@@ -74,6 +74,17 @@ func (h *CasesHandler) Open(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *CasesHandler) Share(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	telegramID := middleware.GetTelegramID(c)
+	out, err := h.cases.RecordShare(c.Request.Context(), userID, telegramID, c.Param("id"))
+	if err != nil {
+		writeCasesError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func (h *CasesHandler) Opens(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	telegramID := middleware.GetTelegramID(c)
@@ -128,6 +139,10 @@ func writeCasesError(c *gin.Context, err error) {
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Кейс можно открыть раз в 24 часа", "code": "case_cooldown"})
 	case errors.Is(err, domain.ErrCaseNoLoot):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "У кейса нет призов", "code": "case_no_loot"})
+	case errors.Is(err, domain.ErrCaseNameTagRequired):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Добавьте тег в имя Telegram", "code": "case_name_tag_required"})
+	case errors.Is(err, domain.ErrCaseShareRequired):
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Поделитесь ссылкой, чтобы открыть кейс", "code": "case_share_required"})
 	case errors.Is(err, domain.ErrInsufficientFunds):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Недостаточно средств", "code": "insufficient_funds"})
 	case errors.Is(err, domain.ErrChannelNotSubscribed):

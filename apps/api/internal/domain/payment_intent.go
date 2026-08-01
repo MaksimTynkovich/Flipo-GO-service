@@ -28,7 +28,7 @@ type PaymentIntent struct {
 	AmountNanoton      int64      `gorm:"not null" json:"amount_nanoton"`
 	ProviderAmount     string     `gorm:"size:64;not null" json:"provider_amount"`
 	ProviderCurrency   string     `gorm:"size:16;not null" json:"provider_currency"`
-	ProviderInvoiceID  string     `gorm:"size:128;uniqueIndex" json:"provider_invoice_id,omitempty"`
+	ProviderInvoiceID  string     `gorm:"size:128" json:"provider_invoice_id,omitempty"`
 	PayURL             string     `gorm:"size:512" json:"pay_url,omitempty"`
 	Payload            string     `gorm:"size:128;uniqueIndex" json:"payload"`
 	TonUSDRate         string     `gorm:"size:32" json:"ton_usd_rate,omitempty"`

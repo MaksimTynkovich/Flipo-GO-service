@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { Gift, Package } from "lucide-react";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { CaseOpenReveal } from "@/components/cases/CaseOpenReveal";
@@ -119,6 +119,8 @@ export type CaseDetailPlayerPreviewProps = {
   promoCode?: string;
   onPromoCodeChange?: (value: string) => void;
   showPromoCodeInput?: boolean;
+  /** Content rendered above the open CTA (quest checklist, etc.). */
+  aboveCta?: ReactNode;
   className?: string;
 };
 
@@ -138,6 +140,7 @@ export function CaseDetailPlayerPreview({
   promoCode = "",
   onPromoCodeChange,
   showPromoCodeInput = false,
+  aboveCta,
   className,
 }: CaseDetailPlayerPreviewProps) {
   const patternUid = useId().replace(/:/g, "");
@@ -187,6 +190,8 @@ export function CaseDetailPlayerPreview({
           />
         </label>
       ) : null}
+
+      {aboveCta}
 
       <button
         type="button"

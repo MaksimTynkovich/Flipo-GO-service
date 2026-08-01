@@ -143,22 +143,77 @@ func (n *AdminNotifier) NotifyDeposit(ctx context.Context, actor AdminActor, amo
 	amount := amountNanoton
 	n.persist(ctx, true, actor, "deposit", "finance", "info",
 		"Попытка депозита",
-		fmt.Sprintf("%s · %s TON", FormatActor(actor), formatTON(amountNanoton)),
-		fmt.Sprintf("%s\nСумма: %s TON", FormatActor(actor), formatTON(amountNanoton)),
+		fmt.Sprintf("%s · %s TON · TON-кошелёк", FormatActor(actor), formatTON(amountNanoton)),
+		fmt.Sprintf("%s\nСумма: %s TON\nСпособ: TON-кошелёк", FormatActor(actor), formatTON(amountNanoton)),
 		&amount,
-		nil,
+		map[string]any{"provider": "ton", "provider_label": "TON-кошелёк"},
+	)
+}
+
+// NotifyAltDepositAttempt — user created a Stars / Crypto Bot invoice (not yet paid).
+// Always notifies (including when the actor is an admin) so ops see every attempt.
+func (n *AdminNotifier) NotifyAltDepositAttempt(ctx context.Context, actor AdminActor, amountNanoton int64, provider, providerAmount string) {
+	label := altDepositProviderLabel(provider)
+	amount := amountNanoton
+	providerAmount = strings.TrimSpace(providerAmount)
+
+	summary := fmt.Sprintf("%s · %s TON · %s", FormatActor(actor), formatTON(amountNanoton), label)
+	body := fmt.Sprintf("%s\nСумма: %s TON\nСпособ: %s", FormatActor(actor), formatTON(amountNanoton), label)
+	meta := map[string]any{"provider": provider, "provider_label": label}
+	if providerAmount != "" {
+		meta["provider_amount"] = providerAmount
+		if provider == domain.PaymentProviderStars {
+			summary = fmt.Sprintf("%s · %s Stars → %s TON", FormatActor(actor), providerAmount, formatTON(amountNanoton))
+			body = fmt.Sprintf("%s\nК оплате: %s Stars\nК зачислению: %s TON\nСпособ: %s",
+				FormatActor(actor), providerAmount, formatTON(amountNanoton), label)
+		} else if provider == domain.PaymentProviderCryptoBot {
+			summary = fmt.Sprintf("%s · %s TON · %s", FormatActor(actor), providerAmount, label)
+			body = fmt.Sprintf("%s\nСумма: %s TON\nСпособ: %s", FormatActor(actor), providerAmount, label)
+		}
+	}
+
+	title := "Попытка депозита · " + label
+	n.persist(ctx, false, actor, "deposit", "finance", "info",
+		title,
+		summary,
+		body,
+		&amount,
+		meta,
 	)
 }
 
 func (n *AdminNotifier) NotifyDepositConfirmed(ctx context.Context, actor AdminActor, amountNanoton int64) {
+	n.notifyDepositConfirmed(ctx, actor, amountNanoton, "ton")
+}
+
+// NotifyAltDepositConfirmed — Stars / Crypto Bot payment credited.
+func (n *AdminNotifier) NotifyAltDepositConfirmed(ctx context.Context, actor AdminActor, amountNanoton int64, provider string) {
+	n.notifyDepositConfirmed(ctx, actor, amountNanoton, provider)
+}
+
+func (n *AdminNotifier) notifyDepositConfirmed(ctx context.Context, actor AdminActor, amountNanoton int64, provider string) {
+	label := altDepositProviderLabel(provider)
 	amount := amountNanoton
 	n.persist(ctx, true, actor, "deposit_confirmed", "finance", "info",
 		"Депозит подтверждён",
-		fmt.Sprintf("%s · %s TON", FormatActor(actor), formatTON(amountNanoton)),
-		fmt.Sprintf("%s\nСумма: %s TON", FormatActor(actor), formatTON(amountNanoton)),
+		fmt.Sprintf("%s · %s TON · %s", FormatActor(actor), formatTON(amountNanoton), label),
+		fmt.Sprintf("%s\nСумма: %s TON\nСпособ: %s", FormatActor(actor), formatTON(amountNanoton), label),
 		&amount,
-		nil,
+		map[string]any{"provider": provider, "provider_label": label},
 	)
+}
+
+func altDepositProviderLabel(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case domain.PaymentProviderStars:
+		return "Telegram Stars"
+	case domain.PaymentProviderCryptoBot:
+		return "Crypto Bot"
+	case "ton", "":
+		return "TON-кошелёк"
+	default:
+		return provider
+	}
 }
 
 func (n *AdminNotifier) NotifyWithdraw(ctx context.Context, actor AdminActor, amountNanoton int64) {

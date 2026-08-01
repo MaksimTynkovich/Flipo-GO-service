@@ -132,6 +132,10 @@ type CaseView struct {
 	RequireChannel    bool          `json:"require_channel"`
 	RequiredChannel   string        `json:"required_channel,omitempty"`
 	ChannelSubscribed *bool         `json:"channel_subscribed,omitempty"`
+	RequiredNameTag   string        `json:"required_name_tag,omitempty"`
+	RequireShare      bool          `json:"require_share"`
+	NameTagOK         *bool         `json:"name_tag_ok,omitempty"`
+	ShareDone         *bool         `json:"share_done,omitempty"`
 	Loot              []LootPreview `json:"loot,omitempty"`
 	DailyAvailable    *bool         `json:"daily_available,omitempty"`
 	NextAvailableAt   *time.Time    `json:"next_available_at,omitempty"`
@@ -157,18 +161,20 @@ type AdminLootEntry struct {
 
 // AdminCaseView — full case for admin list/edit.
 type AdminCaseView struct {
-	ID             uuid.UUID        `json:"id"`
-	Slug           string           `json:"slug"`
-	Title          string           `json:"title"`
-	ImageURL       string           `json:"image_url"`
-	AccentColor    string           `json:"accent_color"`
-	PriceNanoton   int64            `json:"price_nanoton"`
-	Kind           string           `json:"kind"`
-	SortOrder      int              `json:"sort_order"`
-	Active         bool             `json:"active"`
-	RequireChannel bool             `json:"require_channel"`
-	TargetRTPBPS   int              `json:"target_rtp_bps"`
-	Loot           []AdminLootEntry `json:"loot"`
+	ID              uuid.UUID        `json:"id"`
+	Slug            string           `json:"slug"`
+	Title           string           `json:"title"`
+	ImageURL        string           `json:"image_url"`
+	AccentColor     string           `json:"accent_color"`
+	PriceNanoton    int64            `json:"price_nanoton"`
+	Kind            string           `json:"kind"`
+	SortOrder       int              `json:"sort_order"`
+	Active          bool             `json:"active"`
+	RequireChannel  bool             `json:"require_channel"`
+	RequiredNameTag string           `json:"required_name_tag"`
+	RequireShare    bool             `json:"require_share"`
+	TargetRTPBPS    int              `json:"target_rtp_bps"`
+	Loot            []AdminLootEntry `json:"loot"`
 }
 
 type CatalogView struct {
@@ -270,6 +276,7 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID, telegramID int6
 				view.NextAvailableAt = next
 			}
 		}
+		s.attachQuestStatus(ctx, &view, userID)
 		switch row.Kind {
 		case domain.CaseKindFeatured:
 			out.Featured = append(out.Featured, view)
@@ -303,6 +310,7 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID, te
 		}
 	}
 	s.attachChannelStatus(ctx, &view, userID)
+	s.attachQuestStatus(ctx, &view, userID)
 	return &view, nil
 }
 
@@ -353,6 +361,9 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	case c.Kind == domain.CaseKindDaily:
 		source = domain.CaseOpenSourceDaily
 		price = 0
+		if err := s.ensureCaseQuestsDone(ctx, userID, c); err != nil {
+			return nil, err
+		}
 		ok, err := s.caseOpenCooldownAvailable(ctx, userID, c.ID)
 		if err != nil {
 			return nil, err
@@ -503,6 +514,11 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 			return s.openResultFromExisting(ctx, existing)
 		}
 		return nil, err
+	}
+
+	// Share is required again before the next open.
+	if c.RequireShare {
+		_ = s.cases.ResetCaseQuestShare(ctx, userID, c.ID)
 	}
 
 	if promo != nil {
@@ -739,18 +755,20 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 	out := make([]AdminCaseView, 0, len(rows))
 	for _, row := range rows {
 		view := AdminCaseView{
-			ID:             row.ID,
-			Slug:           row.Slug,
-			Title:          row.Title,
-			ImageURL:       row.ImageURL,
-			AccentColor:    row.AccentColor,
-			PriceNanoton:   row.PriceNanoton,
-			Kind:           row.Kind,
-			SortOrder:      row.SortOrder,
-			Active:         row.Active,
-			RequireChannel: row.RequireChannel,
-			TargetRTPBPS:   row.TargetRTPBPS,
-			Loot:           []AdminLootEntry{},
+			ID:              row.ID,
+			Slug:            row.Slug,
+			Title:           row.Title,
+			ImageURL:        row.ImageURL,
+			AccentColor:     row.AccentColor,
+			PriceNanoton:    row.PriceNanoton,
+			Kind:            row.Kind,
+			SortOrder:       row.SortOrder,
+			Active:          row.Active,
+			RequireChannel:  row.RequireChannel,
+			RequiredNameTag: row.RequiredNameTag,
+			RequireShare:    row.RequireShare,
+			TargetRTPBPS:    row.TargetRTPBPS,
+			Loot:            []AdminLootEntry{},
 		}
 		if loot, err := s.cases.ListLootByCase(ctx, row.ID); err == nil {
 			view.Loot = make([]AdminLootEntry, 0, len(loot))
@@ -788,6 +806,11 @@ func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
 	}
 	if c.Kind == domain.CaseKindPromo {
 		c.PriceNanoton = 0
+	}
+	c.RequiredNameTag = strings.TrimSpace(c.RequiredNameTag)
+	if c.Kind != domain.CaseKindDaily {
+		c.RequiredNameTag = ""
+		c.RequireShare = false
 	}
 	if c.Kind != domain.CaseKindDaily && c.Kind != domain.CaseKindPromo && c.PriceNanoton <= 0 && !c.RequireChannel {
 		return fmt.Errorf("бесплатный кейс требует подписку на канал (require_channel)")
@@ -1513,15 +1536,17 @@ func caseOpenCooldownElapsed(lastOpenAt *time.Time, now time.Time) bool {
 
 func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) CaseView {
 	view := CaseView{
-		ID:             c.ID,
-		Slug:           c.Slug,
-		Title:          c.Title,
-		ImageURL:       c.ImageURL,
-		AccentColor:    c.AccentColor,
-		PriceNanoton:   c.PriceNanoton,
-		Kind:           c.Kind,
-		SortOrder:      c.SortOrder,
-		RequireChannel: c.RequireChannel,
+		ID:              c.ID,
+		Slug:            c.Slug,
+		Title:           c.Title,
+		ImageURL:        c.ImageURL,
+		AccentColor:     c.AccentColor,
+		PriceNanoton:    c.PriceNanoton,
+		Kind:            c.Kind,
+		SortOrder:       c.SortOrder,
+		RequireChannel:  c.RequireChannel,
+		RequiredNameTag: strings.TrimSpace(c.RequiredNameTag),
+		RequireShare:    c.RequireShare,
 	}
 	if c.RequireChannel && s.requiredChannel != "" {
 		view.RequiredChannel = s.requiredChannel
@@ -1541,6 +1566,139 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 		}
 	}
 	return view
+}
+
+func (s *Service) attachQuestStatus(ctx context.Context, view *CaseView, userID uuid.UUID) {
+	if view == nil {
+		return
+	}
+	hasNameQuest := strings.TrimSpace(view.RequiredNameTag) != ""
+	hasShareQuest := view.RequireShare
+	if !hasNameQuest && !hasShareQuest {
+		return
+	}
+	if userID == uuid.Nil {
+		return
+	}
+	if hasNameQuest {
+		ok := false
+		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+			ok = nameContainsTag(user.FirstName, user.LastName, view.RequiredNameTag)
+		}
+		view.NameTagOK = &ok
+	}
+	if hasShareQuest {
+		done, err := s.freshShareDone(ctx, userID, view.ID)
+		if err != nil {
+			done = false
+		}
+		view.ShareDone = &done
+	}
+}
+
+func (s *Service) ensureCaseQuestsDone(ctx context.Context, userID uuid.UUID, c *domain.Case) error {
+	if c == nil {
+		return nil
+	}
+	// Share first, then name tag — matches client popup order.
+	if c.RequireShare {
+		ok, err := s.freshShareDone(ctx, userID, c.ID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return domain.ErrCaseShareRequired
+		}
+	}
+	tag := strings.TrimSpace(c.RequiredNameTag)
+	if tag != "" {
+		user, err := s.users.FindByID(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if !nameContainsTag(user.FirstName, user.LastName, tag) {
+			return domain.ErrCaseNameTagRequired
+		}
+	}
+	return nil
+}
+
+// freshShareDone — share is valid only for the current open cycle:
+// must be recorded after the previous open, and if the 24h cooldown already
+// elapsed, after the moment the case became available again (open+24h).
+func (s *Service) freshShareDone(ctx context.Context, userID, caseID uuid.UUID) (bool, error) {
+	share, err := s.cases.GetCaseQuestShare(ctx, userID, caseID)
+	if err != nil {
+		return false, err
+	}
+	if share == nil || share.ShareCount < 1 {
+		return false, nil
+	}
+	open, err := s.cases.FindLatestOpenByUserCase(ctx, userID, caseID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return true, nil
+		}
+		return false, err
+	}
+	shareAt := share.UpdatedAt.UTC()
+	openAt := open.CreatedAt.UTC()
+	if !shareAt.After(openAt) {
+		// Share was before/at the last open — already consumed.
+		return false, nil
+	}
+	nextAvailable := openAt.Add(caseOpenCooldown)
+	now := time.Now().UTC()
+	if now.Before(nextAvailable) {
+		// Still in cooldown; share after last open counts for the upcoming cycle.
+		return true, nil
+	}
+	// New cycle: share must be at/after the moment the case became available again.
+	return !shareAt.Before(nextAvailable), nil
+}
+
+func nameContainsTag(firstName, lastName, tag string) bool {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return true
+	}
+	needle := strings.ToLower(tag)
+	return strings.Contains(strings.ToLower(firstName), needle) ||
+		strings.Contains(strings.ToLower(lastName), needle)
+}
+
+// RecordShare increments quest share count and returns updated case quest status.
+func (s *Service) RecordShare(ctx context.Context, userID uuid.UUID, telegramID int64, idOrSlug string) (*CaseView, error) {
+	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
+		return nil, err
+	}
+	if userID == uuid.Nil {
+		return nil, domain.ErrForbidden
+	}
+	c, err := s.findCase(ctx, idOrSlug)
+	if err != nil {
+		return nil, err
+	}
+	if !c.Active {
+		return nil, domain.ErrCaseUnavailable
+	}
+	if !c.RequireShare {
+		return nil, domain.ErrInvalidAmount
+	}
+	if _, err := s.cases.IncrementCaseQuestShare(ctx, userID, c.ID); err != nil {
+		return nil, err
+	}
+	view := s.toCaseView(ctx, *c, true)
+	if c.Kind == domain.CaseKindDaily || isFreeChannelCase(*c) {
+		avail, next, _ := s.caseOpenCooldownAvailability(ctx, userID, c.ID)
+		view.DailyAvailable = &avail
+		if !avail {
+			view.NextAvailableAt = next
+		}
+	}
+	s.attachChannelStatus(ctx, &view, userID)
+	s.attachQuestStatus(ctx, &view, userID)
+	return &view, nil
 }
 
 func (s *Service) attachChannelStatus(ctx context.Context, view *CaseView, userID uuid.UUID) {

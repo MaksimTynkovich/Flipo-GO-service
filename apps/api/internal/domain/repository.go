@@ -104,6 +104,11 @@ type CaseRepository interface {
 	HasRedeemedCasePromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
 	CreateCasePromoRedemption(ctx context.Context, redemption *CasePromoRedemption) error
 	IncrementCasePromoUsed(ctx context.Context, code string) error
+
+	GetCaseQuestShareCount(ctx context.Context, userID, caseID uuid.UUID) (int, error)
+	GetCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) (*CaseQuestShare, error)
+	IncrementCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) (int, error)
+	ResetCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) error
 }
 
 type MarketRepository interface {

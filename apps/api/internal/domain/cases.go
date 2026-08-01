@@ -51,7 +51,11 @@ type Case struct {
 	SortOrder      int            `gorm:"not null;default:0" json:"sort_order"`
 	Active         bool           `gorm:"not null;default:true;index" json:"active"`
 	RequireChannel bool           `gorm:"not null;default:false" json:"require_channel"`
-	TargetRTPBPS   int            `gorm:"column:target_rtp_bps;not null;default:9000" json:"target_rtp_bps"`
+	// RequiredNameTag — if non-empty, first_name or last_name must contain this substring (case-insensitive).
+	RequiredNameTag string `gorm:"size:64;not null;default:''" json:"required_name_tag"`
+	// RequireShare — user must record at least one share click for this case before opening.
+	RequireShare bool `gorm:"not null;default:false" json:"require_share"`
+	TargetRTPBPS int  `gorm:"column:target_rtp_bps;not null;default:9000" json:"target_rtp_bps"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
@@ -478,6 +482,16 @@ type CasePromoRedemption struct {
 }
 
 func (CasePromoRedemption) TableName() string { return "case_promo_redemptions" }
+
+// CaseQuestShare tracks share-button clicks for case quest unlock.
+type CaseQuestShare struct {
+	UserID     uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
+	CaseID     uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"case_id"`
+	ShareCount int       `gorm:"not null;default:0" json:"share_count"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (CaseQuestShare) TableName() string { return "case_quest_shares" }
 
 // CaseLiveDrop — recent case open for the catalog live feed.
 type CaseLiveDrop struct {

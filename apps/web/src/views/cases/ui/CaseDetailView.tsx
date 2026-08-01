@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { CaseDetailPlayerPreview } from "@/components/cases/CaseDetailPlayerPreview";
+import { CaseQuestSheet, type CaseQuestStep } from "@/components/cases/CaseQuestSheet";
 import { CaseWinModal } from "@/components/cases/CaseWinModal";
 import { formatCasePrice } from "@/components/cases/case-ui";
 import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
@@ -15,11 +16,19 @@ import {
   liquidateCaseClaimItem,
   liquidateItem,
   openCase,
+  silentReauth,
+  shareCaseQuest,
   type CaseLootPreview,
   type CaseOpenResult,
   type CaseView,
 } from "@/lib/api";
 import { patchUserBalance } from "@/lib/apply-balance";
+import { emitBalanceWin } from "@/lib/balance-win";
+import {
+  setCasePrizeBalanceHold,
+  takePendingCasePrizeBalance,
+} from "@/lib/case-prize-balance";
+import { referralTelegramUrl } from "@/lib/bot";
 import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
@@ -27,7 +36,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
-import { openTelegramLink } from "@/src/shared/lib/twa";
+import { openTelegramLink, openTelegramShare } from "@/src/shared/lib/twa";
 import { Gift } from "lucide-react";
 
 type Phase = "idle" | "revealing" | "won";
@@ -47,6 +56,15 @@ function formatCountdown(ms: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** Next unfinished quest: share first, then name tag. */
+function nextQuestStep(c: CaseView): CaseQuestStep | null {
+  const needShare = Boolean(c.require_share) && c.share_done !== true;
+  if (needShare) return "share";
+  const tag = c.required_name_tag?.trim();
+  if (tag && c.name_tag_ok !== true) return "name";
+  return null;
+}
+
 export function CaseDetailView() {
   const params = useParams();
   const router = useRouter();
@@ -63,8 +81,12 @@ export function CaseDetailView() {
   const [result, setResult] = useState<CaseOpenResult | null>(null);
   const [revealLoot, setRevealLoot] = useState<CaseLootPreview[]>([]);
   const [channelSheetOpen, setChannelSheetOpen] = useState(false);
+  const [questStep, setQuestStep] = useState<CaseQuestStep | null>(null);
   const [promoCode, setPromoCode] = useState("");
   const [cooldownMs, setCooldownMs] = useState(0);
+  const [questBusy, setQuestBusy] = useState(false);
+  const [shareAwaitingReturn, setShareAwaitingReturn] = useState(false);
+  const shareResumeRef = useRef<CaseView | null>(null);
 
   const notifyError = useCallback(
     (message: string) => {
@@ -101,6 +123,20 @@ export function CaseDetailView() {
   }, [load, featuresReady, casesVisible]);
 
   useEffect(() => {
+    return () => {
+      const pending = takePendingCasePrizeBalance();
+      setCasePrizeBalanceHold(false);
+      if (pending) {
+        setUser((prev) =>
+          prev
+            ? patchUserBalance(prev, { betting_balance: pending.betting_balance })
+            : prev,
+        );
+      }
+    };
+  }, [setUser]);
+
+  useEffect(() => {
     const iso = caseItem?.next_available_at;
     if (!iso || caseItem?.daily_available !== false) {
       setCooldownMs(0);
@@ -133,6 +169,7 @@ export function CaseDetailView() {
     Boolean(caseItem?.require_channel) && caseItem?.channel_subscribed === false;
   const channel = caseItem?.required_channel || PROMO_REQUIRED_CHANNEL;
   const channelUrl = promoChannelUrl(channel);
+  const nameTag = caseItem?.required_name_tag?.trim() || "";
   const balance = user?.betting_balance ?? 0;
   const needsTopUp =
     Boolean(caseItem) &&
@@ -143,7 +180,10 @@ export function CaseDetailView() {
 
   async function runOpen(fresh: CaseView) {
     setOpening(true);
+    setQuestStep(null);
     haptics.impactOccurred("medium");
+    setCasePrizeBalanceHold(true);
+    takePendingCasePrizeBalance();
     try {
       const res = await openCase(fresh.slug, {
         promoCode: fresh.kind === "promo" ? promoCode : undefined,
@@ -153,14 +193,35 @@ export function CaseDetailView() {
       setResult(res);
       setPhase("revealing");
       setChannelSheetOpen(false);
+      // Share is consumed by this open — require it again next time.
+      if (fresh.require_share) {
+        setCaseItem((prev) => (prev ? { ...prev, share_done: false } : prev));
+      }
       haptics.impactOccurred("heavy");
-      try {
-        setUser(await getMe());
-      } catch {
-        /* ignore */
+
+      const isTonPrize = res.prize_type === "ton" && (res.prize_nanoton ?? 0) > 0;
+      if (isTonPrize) {
+        // Keep TON prize off the header until reveal ends; apply open debit locally.
+        if (fresh.price_nanoton > 0) {
+          setUser((prev) =>
+            prev
+              ? patchUserBalance(prev, {
+                  betting_balance: Math.max(0, (prev.betting_balance ?? 0) - fresh.price_nanoton),
+                })
+              : prev,
+          );
+        }
+      } else {
+        try {
+          setUser(await getMe());
+        } catch {
+          /* ignore */
+        }
       }
       void load();
     } catch (e) {
+      setCasePrizeBalanceHold(false);
+      takePendingCasePrizeBalance();
       if (e instanceof ApiRequestError && e.code === "channel_not_subscribed") {
         setChannelSheetOpen(true);
         void load();
@@ -173,6 +234,12 @@ export function CaseDetailView() {
       ) {
         notifyError(formatUserError(e, "Кейс пока недоступен"));
         void load();
+      } else if (e instanceof ApiRequestError && e.code === "case_share_required") {
+        setQuestStep("share");
+        void load();
+      } else if (e instanceof ApiRequestError && e.code === "case_name_tag_required") {
+        setQuestStep("name");
+        void load();
       } else {
         notifyError(formatUserError(e, "Не удалось открыть кейс"));
       }
@@ -181,8 +248,42 @@ export function CaseDetailView() {
     }
   }
 
+  /** After quests (and channel if needed) — continue opening. */
+  const continueAfterQuests = useCallback(
+    async (fresh: CaseView) => {
+      const step = nextQuestStep(fresh);
+      if (step) {
+        setQuestStep(step);
+        setShareAwaitingReturn(false);
+        shareResumeRef.current = null;
+        return;
+      }
+      setQuestStep(null);
+      setShareAwaitingReturn(false);
+      shareResumeRef.current = null;
+      if (fresh.require_channel && fresh.channel_subscribed === false) {
+        setChannelSheetOpen(true);
+        return;
+      }
+      await runOpen(fresh);
+    },
+    // runOpen closes over promo/load/notify — intentional for this screen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [promoCode, idOrSlug],
+  );
+
+  const resumeAfterShare = useCallback(() => {
+    const fresh = shareResumeRef.current;
+    if (!fresh || questBusy || opening) return;
+    setShareAwaitingReturn(false);
+    shareResumeRef.current = null;
+    haptics.notificationOccurred("success");
+    void continueAfterQuests(fresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [continueAfterQuests, questBusy, opening]);
+
   async function handleOpen() {
-    if (!caseItem || opening || phase !== "idle" || cooldownBlocked) return;
+    if (!caseItem || opening || phase !== "idle" || cooldownBlocked || questBusy) return;
 
     if (needsTopUp) {
       notifyError("Недостаточно средств");
@@ -195,12 +296,83 @@ export function CaseDetailView() {
       return;
     }
 
-    if (caseItem.require_channel && caseItem.channel_subscribed === false) {
+    // Refresh quest status before deciding which popup to show.
+    let fresh = caseItem;
+    try {
+      fresh = await getCase(idOrSlug);
+      setCaseItem(fresh);
+      if (fresh.daily_available === false) {
+        return;
+      }
+    } catch {
+      /* use cached caseItem */
+    }
+
+    const step = nextQuestStep(fresh);
+    if (step) {
+      setQuestStep(step);
+      return;
+    }
+
+    if (fresh.require_channel && fresh.channel_subscribed === false) {
       setChannelSheetOpen(true);
       return;
     }
 
-    await runOpen(caseItem);
+    await runOpen(fresh);
+  }
+
+  async function handleShareQuest() {
+    if (!caseItem || !user || questBusy) return;
+    setQuestBusy(true);
+    try {
+      const url = referralTelegramUrl(user.telegram_id);
+      const text = "Заходи в Flipo — открываем кейсы и стейкаем подарки!";
+      // Record share BEFORE opening the sheet — Telegram can cancel in-flight fetches.
+      const fresh = await shareCaseQuest(caseItem.slug || idOrSlug);
+      setCaseItem(fresh);
+      shareResumeRef.current = fresh;
+      setShareAwaitingReturn(true);
+      openTelegramShare({ url, text });
+      // Opening continues only when the user taps «Продолжить».
+    } catch (e) {
+      notifyError(formatUserError(e, "Не удалось зафиксировать share"));
+      setShareAwaitingReturn(false);
+      shareResumeRef.current = null;
+    } finally {
+      setQuestBusy(false);
+    }
+  }
+
+  async function handleCheckNameQuest() {
+    if (!idOrSlug || questBusy) return;
+    setQuestBusy(true);
+    try {
+      // Re-auth from Telegram initData so first/last name are refreshed in DB.
+      const reauthed = await silentReauth();
+      if (reauthed) {
+        setUser(reauthed);
+      } else {
+        try {
+          setUser(await getMe());
+        } catch {
+          /* ignore */
+        }
+      }
+      const fresh = await getCase(idOrSlug);
+      setCaseItem(fresh);
+      if (fresh.required_name_tag?.trim() && fresh.name_tag_ok !== true) {
+        notifyError("Тег в имени не найден — обновите имя в Telegram и зайдите снова");
+        setQuestStep("name");
+        return;
+      }
+      haptics.notificationOccurred("success");
+      await continueAfterQuests(fresh);
+    } catch (e) {
+      notifyError(formatUserError(e, "Не удалось проверить имя"));
+    } finally {
+      setQuestBusy(false);
+    }
   }
 
   async function recheckChannelAndOpen() {
@@ -222,13 +394,35 @@ export function CaseDetailView() {
   const handleRevealComplete = useCallback(() => {
     setPhase("won");
     haptics.notificationOccurred("success");
+
+    const pendingBalance = takePendingCasePrizeBalance();
+    setCasePrizeBalanceHold(false);
+    if (pendingBalance) {
+      setUser((prev) =>
+        prev
+          ? patchUserBalance(prev, { betting_balance: pendingBalance.betting_balance })
+          : prev,
+      );
+      if (pendingBalance.delta_nanoton && pendingBalance.delta_nanoton > 0) {
+        emitBalanceWin(pendingBalance.delta_nanoton);
+      }
+    } else if (result?.prize_type === "ton") {
+      void getMe()
+        .then((me) => setUser(me))
+        .catch(() => {
+          /* WS may still refresh */
+        });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- haptic API is fire-and-forget
-  }, []);
+  }, [result?.prize_type, setUser]);
 
   function handleAgain() {
     setResult(null);
     setRevealLoot([]);
     setPhase("idle");
+    setCasePrizeBalanceHold(false);
+    takePendingCasePrizeBalance();
+    void load();
   }
 
   async function handleSellPrize() {
@@ -317,6 +511,24 @@ export function CaseDetailView() {
           accent={accent}
           onAgain={handleAgain}
           onSell={handleSellPrize}
+        />
+      ) : null}
+
+      {questStep ? (
+        <CaseQuestSheet
+          step={questStep}
+          nameTag={nameTag}
+          busy={questBusy}
+          awaitingReturn={shareAwaitingReturn}
+          onClose={() => {
+            setQuestStep(null);
+            setShareAwaitingReturn(false);
+            shareResumeRef.current = null;
+            void load();
+          }}
+          onShare={() => void handleShareQuest()}
+          onContinueAfterShare={resumeAfterShare}
+          onCheckName={() => void handleCheckNameQuest()}
         />
       ) : null}
 

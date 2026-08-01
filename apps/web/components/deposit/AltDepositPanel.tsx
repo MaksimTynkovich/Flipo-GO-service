@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/button";
@@ -23,10 +23,15 @@ import { Bot, Star } from "lucide-react";
 
 type Provider = "cryptobot" | "stars";
 
+function parseStarsInput(raw: string): number {
+  const n = Number.parseInt(raw.replace(/[^\d]/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export function AltDepositPanel({ provider }: { provider: Provider }) {
   const { setUser } = useAuth();
   const { showToast } = useToast();
-  const [amount, setAmount] = useState("1");
+  const [amount, setAmount] = useState(provider === "stars" ? "100" : "1");
   const [features, setFeatures] = useState<PaymentFeatures | null>(null);
   const [quote, setQuote] = useState<StarsQuote | null>(null);
   const [loading, setLoading] = useState(false);
@@ -50,26 +55,30 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
       );
   }, []);
 
-  const refreshQuote = useCallback(async (tonInput: string) => {
-    if (provider !== "stars") return;
-    const nanoton = nanotonFromTonInput(tonInput);
-    if (nanoton < MIN_TRANSFER_NANOTON) {
-      setQuote(null);
-      return;
-    }
-    try {
-      setQuote(await quoteStarsDeposit(nanoton));
-    } catch {
-      setQuote(null);
-    }
-  }, [provider]);
+  const refreshQuote = useCallback(
+    async (starsInput: string) => {
+      if (provider !== "stars") return;
+      const stars = parseStarsInput(starsInput);
+      if (stars < 1) {
+        setQuote(null);
+        return;
+      }
+      try {
+        setQuote(await quoteStarsDeposit({ starsCount: stars }));
+      } catch {
+        setQuote(null);
+      }
+    },
+    [provider],
+  );
 
   useEffect(() => {
+    if (provider !== "stars") return;
     const t = window.setTimeout(() => {
       void refreshQuote(amount);
     }, 280);
     return () => window.clearTimeout(t);
-  }, [amount, refreshQuote]);
+  }, [amount, provider, refreshQuote]);
 
   useEffect(() => {
     if (!pendingId) return;
@@ -105,55 +114,46 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
     };
   }, [pendingId, setUser, showToast]);
 
-  async function handlePay() {
-    const nanoton = nanotonFromTonInput(amount);
-    const min = features?.min_deposit_nanoton ?? MIN_TRANSFER_NANOTON;
-    if (nanoton < min) {
-      showToast({
-        variant: "error",
-        title: `Минимум ${formatTON(min)} TON`,
-      });
-      return;
+  const tonPerStar = useMemo(() => {
+    if (!quote || quote.stars_count <= 0 || quote.ton_usd_rate <= 0) return null;
+    // Prefer explicit rates; fall back to quote ratio.
+    if (quote.stars_usd_rate > 0) {
+      return quote.stars_usd_rate / quote.ton_usd_rate;
     }
+    return quote.amount_nanoton / 1e9 / quote.stars_count;
+  }, [quote]);
+
+  const minStarsHint = useMemo(() => {
+    if (!features || provider !== "stars") return null;
+    const tonUSD = quote?.ton_usd_rate || features.ton_usd_rate || 0;
+    const starUSD = quote?.stars_usd_rate || features.stars_usd_rate || 0;
+    if (tonUSD <= 0 || starUSD <= 0) return null;
+    const minTon = (features.min_deposit_nanoton || MIN_TRANSFER_NANOTON) / 1e9;
+    return Math.max(1, Math.ceil((minTon * tonUSD) / starUSD));
+  }, [features, provider, quote]);
+
+  async function handlePay() {
     if (!enabled) {
       showToast({ variant: "error", title: "Способ временно недоступен" });
       return;
     }
     setLoading(true);
     try {
-      const intent =
-        provider === "cryptobot"
-          ? await createCryptoBotDeposit(nanoton)
-          : await createStarsDeposit(nanoton);
-      if (!intent.pay_url) {
-        throw new Error("Не получена ссылка на оплату");
-      }
-      setPendingId(intent.id);
-      if (provider === "stars") {
-        openTelegramInvoice(intent.pay_url, (status) => {
-          if (status === "paid") {
-            void getPaymentIntent(intent.id).then(async (fresh) => {
-              if (fresh.status === "paid") {
-                setPendingId(null);
-                try {
-                  const me = await getMe();
-                  setUser((prev) =>
-                    prev ? patchUserBalance(prev, { betting_balance: me.betting_balance }) : me,
-                  );
-                } catch {
-                  /* ignore */
-                }
-                showToast({
-                  variant: "success",
-                  title: `Зачислено ${formatTON(fresh.amount_nanoton)} TON`,
-                });
-              }
-            });
-          } else if (status === "cancelled" || status === "failed") {
-            showToast({ variant: "error", title: "Оплата не завершена" });
-          }
-        });
-      } else {
+      if (provider === "cryptobot") {
+        const nanoton = nanotonFromTonInput(amount);
+        const min = features?.min_deposit_nanoton ?? MIN_TRANSFER_NANOTON;
+        if (nanoton < min) {
+          showToast({
+            variant: "error",
+            title: `Минимум ${formatTON(min)} TON`,
+          });
+          return;
+        }
+        const intent = await createCryptoBotDeposit(nanoton);
+        if (!intent.pay_url) {
+          throw new Error("Не получена ссылка на оплату");
+        }
+        setPendingId(intent.id);
         const opened = openTelegramLink(intent.pay_url) || openTelegramInvoice(intent.pay_url);
         if (!opened && typeof window !== "undefined") {
           window.open(intent.pay_url, "_blank", "noopener,noreferrer");
@@ -162,7 +162,49 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
           variant: "info",
           title: "Оплатите счёт в Crypto Bot — баланс обновится автоматически",
         });
+        return;
       }
+
+      const stars = parseStarsInput(amount);
+      if (stars < 1) {
+        showToast({ variant: "error", title: "Укажите число Stars" });
+        return;
+      }
+      if (minStarsHint && stars < minStarsHint) {
+        showToast({
+          variant: "error",
+          title: `Минимум ${minStarsHint} Stars`,
+        });
+        return;
+      }
+      const intent = await createStarsDeposit({ starsCount: stars });
+      if (!intent.pay_url) {
+        throw new Error("Не получена ссылка на оплату");
+      }
+      setPendingId(intent.id);
+      openTelegramInvoice(intent.pay_url, (status) => {
+        if (status === "paid") {
+          void getPaymentIntent(intent.id).then(async (fresh) => {
+            if (fresh.status === "paid") {
+              setPendingId(null);
+              try {
+                const me = await getMe();
+                setUser((prev) =>
+                  prev ? patchUserBalance(prev, { betting_balance: me.betting_balance }) : me,
+                );
+              } catch {
+                /* ignore */
+              }
+              showToast({
+                variant: "success",
+                title: `Зачислено ${formatTON(fresh.amount_nanoton)} TON`,
+              });
+            }
+          });
+        } else if (status === "cancelled" || status === "failed") {
+          showToast({ variant: "error", title: "Оплата не завершена" });
+        }
+      });
     } catch (e) {
       showToast({
         variant: "error",
@@ -175,6 +217,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
 
   const title = provider === "cryptobot" ? "Crypto Bot" : "Telegram Stars";
   const Icon = provider === "cryptobot" ? Bot : Star;
+  const starsAmount = provider === "stars" ? parseStarsInput(amount) : 0;
 
   return (
     <div className="space-y-4">
@@ -188,7 +231,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
             <p className="mt-1 text-xs leading-relaxed text-muted">
               {provider === "cryptobot"
                 ? "Оплата через @CryptoBot — TON зачисляется на баланс после подтверждения."
-                : "Оплата Stars по рыночному курсу TON. Курс фиксируется при создании счёта."}
+                : "Укажите сумму в Stars — на баланс зачислится эквивалент в TON."}
             </p>
           </div>
         </div>
@@ -202,33 +245,42 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
         ) : (
           <>
             <label className="block space-y-1.5">
-              <span className="text-[11px] font-medium text-muted">Сумма (TON)</span>
+              <span className="text-[11px] font-medium text-muted">
+                {provider === "stars" ? "Сумма (Stars)" : "Сумма (TON)"}
+              </span>
               <input
                 className="input-field"
-                inputMode="decimal"
+                inputMode={provider === "stars" ? "numeric" : "decimal"}
                 value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(",", "."))}
-                placeholder="1"
+                onChange={(e) =>
+                  setAmount(
+                    provider === "stars"
+                      ? e.target.value.replace(/[^\d]/g, "")
+                      : e.target.value.replace(",", "."),
+                  )
+                }
+                placeholder={provider === "stars" ? "100" : "1"}
               />
             </label>
 
-            {provider === "stars" && quote ? (
+            {provider === "stars" ? (
               <div className="rounded-2xl bg-surface-raised/70 px-3 py-3 text-xs leading-relaxed text-muted">
-                <p>
-                  К оплате:{" "}
-                  <span className="font-semibold text-foreground">{quote.stars_count} Stars</span>
-                </p>
-                <p className="mt-1">
-                  Курс: 1 TON ≈ ${quote.ton_usd_rate.toFixed(4)} · 1 Star ≈ $
-                  {quote.stars_usd_rate.toFixed(4)}
-                </p>
+                {quote && quote.amount_nanoton > 0 ? (
+                  <>
+                    <p>
+                      К зачислению:{" "}
+                      <span className="font-semibold text-foreground">
+                        {formatTON(quote.amount_nanoton)} TON
+                      </span>
+                    </p>
+                    {minStarsHint ? (
+                      <p className="mt-1">Минимум: {minStarsHint} Stars</p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p>Введите сумму в Stars, чтобы увидеть курс в TON</p>
+                )}
               </div>
-            ) : null}
-
-            {provider === "cryptobot" && features.ton_usd_rate ? (
-              <p className="text-[11px] text-muted">
-                Рыночный ориентир: 1 TON ≈ ${features.ton_usd_rate.toFixed(4)}
-              </p>
             ) : null}
 
             <Button
@@ -240,8 +292,8 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
               {loading
                 ? "Создаём счёт…"
                 : provider === "stars"
-                  ? `Оплатить Stars · ${formatTON(nanotonFromTonInput(amount) || 0)} TON`
-                  : `Оплатить в Crypto Bot · ${formatTON(nanotonFromTonInput(amount) || 0)} TON`}
+                  ? `Оплатить ${starsAmount || 0} Stars`
+                  : `Оплатить ${formatTON(nanotonFromTonInput(amount) || 0)} TON`}
             </Button>
 
             {pendingId ? (

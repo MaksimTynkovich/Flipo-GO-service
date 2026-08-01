@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGuide";
 import { TonWalletPanel } from "@/components/deposit/TonWalletPanel";
 import { AltDepositPanel } from "@/components/deposit/AltDepositPanel";
 import { trackFlowViewed } from "@/lib/analytics";
 import { getPaymentFeatures, type PaymentFeatures } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { GIFT_DEPOSIT_ENABLED } from "@/src/shared/config/features";
-import { Bot, Gift, Star, Wallet } from "lucide-react";
+import { Bot, Star, Wallet } from "lucide-react";
 
-type Tab = "ton" | "cryptobot" | "stars" | "gifts";
+type Tab = "ton" | "cryptobot" | "stars";
 
 export function DepositSection() {
   const [tab, setTab] = useState<Tab>("ton");
@@ -34,7 +32,6 @@ export function DepositSection() {
   }, []);
 
   useEffect(() => {
-    if (!GIFT_DEPOSIT_ENABLED && tab === "gifts") setTab("ton");
     if (features && tab === "cryptobot" && !features.cryptobot_enabled) setTab("ton");
     if (features && tab === "stars" && !features.stars_enabled) setTab("ton");
   }, [tab, features]);
@@ -52,12 +49,6 @@ export function DepositSection() {
       label: "Stars",
       icon: Star,
       disabled: features ? !features.stars_enabled : false,
-    },
-    {
-      id: "gifts",
-      label: "Подарки",
-      icon: Gift,
-      disabled: !GIFT_DEPOSIT_ENABLED,
     },
   ];
 
@@ -87,15 +78,10 @@ export function DepositSection() {
         ))}
       </div>
 
-      {!GIFT_DEPOSIT_ENABLED && tab === "gifts" ? (
-        <p className="text-xs text-muted">Депозит подарками временно недоступен.</p>
-      ) : null}
-
       <div key={tab} className="segment-panel">
         {tab === "ton" ? <TonWalletPanel /> : null}
         {tab === "cryptobot" ? <AltDepositPanel provider="cryptobot" /> : null}
         {tab === "stars" ? <AltDepositPanel provider="stars" /> : null}
-        {tab === "gifts" ? <InventoryDepositGuide variant="deposit" /> : null}
       </div>
     </div>
   );

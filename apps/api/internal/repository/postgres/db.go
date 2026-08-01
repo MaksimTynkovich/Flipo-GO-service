@@ -85,6 +85,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.CaseCatalogSettings{},
 		&domain.CasePromoCode{},
 		&domain.CasePromoRedemption{},
+		&domain.CaseQuestShare{},
 		&domain.CaseLiveFeedSettings{},
 		&domain.PaymentIntent{},
 	); err != nil {
@@ -124,6 +125,9 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := migrateDropPromoWager(db); err != nil {
+		return err
+	}
+	if err := migratePaymentIntentInvoiceUnique(db); err != nil {
 		return err
 	}
 	if err := migrateStakingPositionItemIndex(db); err != nil {

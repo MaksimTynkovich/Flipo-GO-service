@@ -70,7 +70,7 @@ import { Upload } from "lucide-react";
 const KINDS = [
   { value: "catalog", label: "Каталог" },
   { value: "featured", label: "Баннер (Featured)" },
-  { value: "daily", label: "Баннер (Daily)" },
+  { value: "daily", label: "Daily (+ задания share/имя)" },
   { value: "promo", label: "Промокод" },
 ] as const;
 
@@ -204,6 +204,8 @@ function emptyCaseDraft(): CaseDraft {
     sort_order: 0,
     active: true,
     require_channel: false,
+    required_name_tag: "",
+    require_share: false,
     target_rtp_bps: 9000,
   };
 }
@@ -220,6 +222,8 @@ function caseToDraft(c: AdminCase): CaseDraft {
     sort_order: c.sort_order,
     active: c.active,
     require_channel: Boolean(c.require_channel),
+    required_name_tag: c.required_name_tag || "",
+    require_share: Boolean(c.require_share),
     target_rtp_bps: c.target_rtp_bps || 9000,
   };
 }
@@ -675,6 +679,8 @@ export default function CasesSection() {
         sort_order: draft.sort_order,
         active: draft.active,
         require_channel: requireChannel,
+        required_name_tag: draft.kind === "daily" ? (draft.required_name_tag || "").trim() : "",
+        require_share: draft.kind === "daily" ? Boolean(draft.require_share) : false,
         target_rtp_bps: draft.target_rtp_bps > 0 ? draft.target_rtp_bps : 9000,
       };
       const res = await upsertAdminCase(body);
@@ -925,6 +931,8 @@ export default function CasesSection() {
             sort_order: i,
             active: c.active,
             require_channel: c.require_channel,
+            required_name_tag: c.required_name_tag || "",
+            require_share: Boolean(c.require_share),
             target_rtp_bps: c.target_rtp_bps,
           });
         }),
@@ -1544,9 +1552,11 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                 hint={
                   draft.kind === "promo"
                     ? "Открывается только по промокоду. Коды создаются ниже после сохранения кейса."
-                    : bannersEnabled
-                      ? "Баннер (Featured/Daily) — верхний ряд; Каталог — сетка ниже."
-                      : "Баннеры скрыты: Featured/Daily попадают в общую сетку каталога вместе с остальными."
+                    : draft.kind === "daily"
+                      ? "Бесплатный daily с кулдауном 24ч. Задания (тег в имени, share) — флаги ниже, не отдельный тип."
+                      : bannersEnabled
+                        ? "Баннер (Featured/Daily) — верхний ряд; Каталог — сетка ниже."
+                        : "Баннеры скрыты: Featured/Daily попадают в общую сетку каталога вместе с остальными."
                 }
               >
                 <select
@@ -1558,6 +1568,9 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                       ...d,
                       kind,
                       price_nanoton: kind === "promo" ? 0 : d.price_nanoton,
+                      ...(kind !== "daily"
+                        ? { required_name_tag: "", require_share: false }
+                        : {}),
                     }));
                   }}
                 >
@@ -1753,6 +1766,40 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                   </span>
                 </span>
               </label>
+              {draft.kind === "daily" ? (
+                <>
+                  <AdminField
+                    label="Тег в имени"
+                    hint="Пусто = не требовать. Подстрока в имени или фамилии Telegram (без учёта регистра), например @flipoGameBot."
+                  >
+                    <input
+                      className="input-field"
+                      value={draft.required_name_tag || ""}
+                      placeholder="@flipoGameBot"
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, required_name_tag: e.target.value }))
+                      }
+                    />
+                  </AdminField>
+                  <label className="flex items-start gap-2 pt-5 text-sm text-muted sm:col-span-2 lg:col-span-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={Boolean(draft.require_share)}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, require_share: e.target.checked }))
+                      }
+                    />
+                    <span>
+                      Требовать share со ссылкой
+                      <span className="mt-0.5 block text-[11px] text-muted/80">
+                        Перед каждым открытием нужен клик «Поделиться». Текст для игрока может
+                        говорить «5 друзей» — доставку ссылки не проверяем.
+                      </span>
+                    </span>
+                  </label>
+                </>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
               <AdminButton disabled={savingCase || deletingCase} onClick={() => void saveCase()}>

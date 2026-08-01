@@ -66,16 +66,18 @@ func (r *CaseRepo) CreateCase(ctx context.Context, c *domain.Case) error {
 func (r *CaseRepo) UpdateCase(ctx context.Context, c *domain.Case) error {
 	c.UpdatedAt = time.Now().UTC()
 	res := r.db.WithContext(ctx).Model(&domain.Case{}).Where("id = ?", c.ID).Updates(map[string]any{
-		"title":           c.Title,
-		"image_url":       c.ImageURL,
-		"accent_color":    c.AccentColor,
-		"price_nanoton":   c.PriceNanoton,
-		"kind":            c.Kind,
-		"sort_order":      c.SortOrder,
-		"active":          c.Active,
-		"require_channel": c.RequireChannel,
-		"target_rtp_bps":  c.TargetRTPBPS,
-		"updated_at":      c.UpdatedAt,
+		"title":             c.Title,
+		"image_url":         c.ImageURL,
+		"accent_color":      c.AccentColor,
+		"price_nanoton":     c.PriceNanoton,
+		"kind":              c.Kind,
+		"sort_order":        c.SortOrder,
+		"active":            c.Active,
+		"require_channel":   c.RequireChannel,
+		"required_name_tag": c.RequiredNameTag,
+		"require_share":     c.RequireShare,
+		"target_rtp_bps":    c.TargetRTPBPS,
+		"updated_at":        c.UpdatedAt,
 	})
 	if res.Error != nil {
 		return res.Error
@@ -813,6 +815,58 @@ func (r *CaseRepo) IncrementCasePromoUsed(ctx context.Context, code string) erro
 		return domain.ErrPromoExhausted
 	}
 	return nil
+}
+
+func (r *CaseRepo) GetCaseQuestShareCount(ctx context.Context, userID, caseID uuid.UUID) (int, error) {
+	row, err := r.GetCaseQuestShare(ctx, userID, caseID)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, nil
+	}
+	return row.ShareCount, nil
+}
+
+func (r *CaseRepo) GetCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) (*domain.CaseQuestShare, error) {
+	var row domain.CaseQuestShare
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND case_id = ?", userID, caseID).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *CaseRepo) IncrementCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) (int, error) {
+	now := time.Now().UTC()
+	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "case_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"share_count": gorm.Expr("case_quest_shares.share_count + 1"),
+			"updated_at":  now,
+		}),
+	}).Create(&domain.CaseQuestShare{
+		UserID:     userID,
+		CaseID:     caseID,
+		ShareCount: 1,
+		UpdatedAt:  now,
+	}).Error
+	if err != nil {
+		return 0, err
+	}
+	return r.GetCaseQuestShareCount(ctx, userID, caseID)
+}
+
+func (r *CaseRepo) ResetCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) error {
+	return r.db.WithContext(ctx).Exec(
+		`DELETE FROM case_quest_shares WHERE user_id = ? AND case_id = ?`,
+		userID, caseID,
+	).Error
 }
 
 var _ domain.CaseRepository = (*CaseRepo)(nil)

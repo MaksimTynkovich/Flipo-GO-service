@@ -28,12 +28,13 @@ func (h *PaymentsHandler) Features(c *gin.Context) {
 func (h *PaymentsHandler) QuoteStars(c *gin.Context) {
 	var req struct {
 		AmountNanoton int64 `json:"amount_nanoton"`
+		StarsCount    int64 `json:"stars_count"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondBadRequest(c, err, "Укажите сумму", "invalid_amount")
 		return
 	}
-	quote, err := h.payments.QuoteStars(c.Request.Context(), req.AmountNanoton)
+	quote, err := h.payments.QuoteStars(c.Request.Context(), req.AmountNanoton, req.StarsCount)
 	if err != nil {
 		writePaymentError(c, err)
 		return
@@ -62,12 +63,13 @@ func (h *PaymentsHandler) CreateStars(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
 		AmountNanoton int64 `json:"amount_nanoton"`
+		StarsCount    int64 `json:"stars_count"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondBadRequest(c, err, "Укажите сумму", "invalid_amount")
 		return
 	}
-	intent, err := h.payments.CreateStarsIntent(c.Request.Context(), userID, req.AmountNanoton)
+	intent, err := h.payments.CreateStarsIntent(c.Request.Context(), userID, req.AmountNanoton, req.StarsCount)
 	if err != nil {
 		writePaymentError(c, err)
 		return
