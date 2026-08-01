@@ -117,6 +117,9 @@ func maintenancePathAllowed(method, path string) bool {
 	if path == "/api/v1/telegram/webhook" && method == http.MethodPost {
 		return true
 	}
+	if path == "/api/v1/payments/cryptobot/webhook" && method == http.MethodPost {
+		return true
+	}
 	if path == "/api/v1/analytics/events" && method == http.MethodPost {
 		return true
 	}

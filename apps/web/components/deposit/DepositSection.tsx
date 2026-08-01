@@ -3,28 +3,56 @@
 import { useEffect, useState } from "react";
 import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGuide";
 import { TonWalletPanel } from "@/components/deposit/TonWalletPanel";
+import { AltDepositPanel } from "@/components/deposit/AltDepositPanel";
 import { trackFlowViewed } from "@/lib/analytics";
+import { getPaymentFeatures, type PaymentFeatures } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { GIFT_DEPOSIT_ENABLED } from "@/src/shared/config/features";
-import { Gift, Wallet } from "lucide-react";
+import { Bot, Gift, Star, Wallet } from "lucide-react";
 
-type Tab = "ton" | "gifts";
+type Tab = "ton" | "cryptobot" | "stars" | "gifts";
 
 export function DepositSection() {
   const [tab, setTab] = useState<Tab>("ton");
+  const [features, setFeatures] = useState<PaymentFeatures | null>(null);
 
   useEffect(() => {
     trackFlowViewed("deposit_flow", "wallet");
   }, []);
 
   useEffect(() => {
-    if (!GIFT_DEPOSIT_ENABLED && tab === "gifts") {
-      setTab("ton");
-    }
-  }, [tab]);
+    getPaymentFeatures()
+      .then(setFeatures)
+      .catch(() =>
+        setFeatures({
+          cryptobot_enabled: false,
+          stars_enabled: false,
+          min_deposit_nanoton: 100_000_000,
+          stars_usd_rate: 0.013,
+        }),
+      );
+  }, []);
+
+  useEffect(() => {
+    if (!GIFT_DEPOSIT_ENABLED && tab === "gifts") setTab("ton");
+    if (features && tab === "cryptobot" && !features.cryptobot_enabled) setTab("ton");
+    if (features && tab === "stars" && !features.stars_enabled) setTab("ton");
+  }, [tab, features]);
 
   const tabs: { id: Tab; label: string; icon: typeof Wallet; disabled?: boolean }[] = [
-    { id: "ton", label: "TON кошелёк", icon: Wallet },
+    { id: "ton", label: "TON", icon: Wallet },
+    {
+      id: "cryptobot",
+      label: "Crypto Bot",
+      icon: Bot,
+      disabled: features ? !features.cryptobot_enabled : false,
+    },
+    {
+      id: "stars",
+      label: "Stars",
+      icon: Star,
+      disabled: features ? !features.stars_enabled : false,
+    },
     {
       id: "gifts",
       label: "Подарки",
@@ -37,7 +65,7 @@ export function DepositSection() {
     <div className="space-y-5">
       <p className="text-sm text-muted">Выбери способ зачисления средств</p>
 
-      <div className="segment-control">
+      <div className="segment-control overflow-x-auto">
         {tabs.map(({ id, label, icon: Icon, disabled }) => (
           <button
             key={id}
@@ -48,7 +76,7 @@ export function DepositSection() {
               setTab(id);
             }}
             className={cn(
-              "segment-item",
+              "segment-item shrink-0",
               tab === id && "segment-item-active",
               disabled && "pointer-events-none opacity-40",
             )}
@@ -59,12 +87,15 @@ export function DepositSection() {
         ))}
       </div>
 
-      {!GIFT_DEPOSIT_ENABLED ? (
+      {!GIFT_DEPOSIT_ENABLED && tab === "gifts" ? (
         <p className="text-xs text-muted">Депозит подарками временно недоступен.</p>
       ) : null}
 
       <div key={tab} className="segment-panel">
-        {tab === "ton" ? <TonWalletPanel /> : <InventoryDepositGuide variant="deposit" />}
+        {tab === "ton" ? <TonWalletPanel /> : null}
+        {tab === "cryptobot" ? <AltDepositPanel provider="cryptobot" /> : null}
+        {tab === "stars" ? <AltDepositPanel provider="stars" /> : null}
+        {tab === "gifts" ? <InventoryDepositGuide variant="deposit" /> : null}
       </div>
     </div>
   );

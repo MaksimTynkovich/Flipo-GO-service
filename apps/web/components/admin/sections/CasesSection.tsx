@@ -1331,7 +1331,7 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
 
       <AdminPanel
         title="Live-лента"
-        description="Фейк-дропы только в UI ленты. Редкость призов считается по цене (интервалы ниже), не вручную на каждом подарке."
+        description="Фейк-дропы только в UI ленты. Не влияет на реальные открытия, баланс и аналитику case_opens. Цвет тайла в ленте и в кейсе берётся из цены приза по интервалам ниже."
       >
         {liveSettingsLoading ? (
           <div className="h-20 animate-pulse rounded-xl bg-surface-raised/50" />
@@ -1345,7 +1345,13 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                   setLiveSettings((s) => ({ ...s, enabled: e.target.checked }))
                 }
               />
-              Включить фейк-дропы
+              <span className="inline-flex items-center gap-1.5">
+                Включить фейк-дропы
+                <AdminInfoHint
+                  label="Включить фейк-дропы"
+                  hint="Главный переключатель симуляции. Если выключено — в ленте только реальные открытия игроков. Если включено — система периодически добавляет «как будто выпавшие» призы из лута активных кейсов, чтобы лента не пустовала."
+                />
+              </span>
             </label>
             <label className="flex items-center gap-2 text-sm text-muted">
               <input
@@ -1355,12 +1361,18 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                   setLiveSettings((s) => ({ ...s, fill_when_sparse: e.target.checked }))
                 }
               />
-              Доливать при редких реальных открытиях
+              <span className="inline-flex items-center gap-1.5">
+                Доливать при редких реальных открытиях
+                <AdminInfoHint
+                  label="Доливать при редких реальных открытиях"
+                  hint="Если включено — фейки появляются только когда за последние ~90 секунд мало реальных открытий (меньше Min visible). Если выключено — фейки идут постоянно с частотой Intensity, даже когда игроки активно открывают кейсы."
+                />
+              </span>
             </label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <AdminFloatField
                 label="Intensity"
-                hint="0.2–5: чем выше, тем чаще фейк в ленте"
+                hint="Как часто симулятор пытается добавить фейк в ленту. 1 ≈ раз в ~4 секунды. Больше значение — чаще дропы (до ~0.8 с). Меньше — реже (до ~30 с). Обычно 0.5–2."
                 min={0.05}
                 step={0.1}
                 value={liveSettings.intensity}
@@ -1368,14 +1380,14 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               />
               <AdminIntField
                 label="Min visible"
-                hint="целевой минимум тайлов (1–6)"
+                hint="Целевой минимум «живых» реальных открытий за окно ~90 с, при котором фейки ещё доливаются (если включено «Доливать…»). Диапазон 1–6 — столько тайлов видно в ленте. Пример: 6 значит «пока реальных открытий меньше 6, продолжай подмешивать фейки»."
                 min={1}
                 value={liveSettings.min_visible}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, min_visible: v }))}
               />
               <AdminFloatField
                 label="Fat chance"
-                hint="0–1: шанс «жирного» дропа"
+                hint="Отдельный шанс (0–1) выбрать «жирный» приз вместо обычного взвешенного сэмпла. 0.08 = 8% попыток идут в пул дорогих призов (цена ≥ Fat min floor). Нужен, чтобы иногда показывать дорогие тайлы, даже если вес legendary маленький."
                 min={0}
                 step={0.01}
                 value={liveSettings.fat_chance}
@@ -1383,21 +1395,39 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               />
               <AdminTonField
                 label="Fat min floor (TON)"
-                hint="порог цены для жирного дропа"
+                hint="Минимальная цена приза (TON), чтобы он попал в «жирный» пул для Fat chance. Пример: 5 TON — при срабатывании fat-шанса симулятор берёт случайный приз стоимостью от 5 TON и выше. Не путать с интервалами редкости ниже."
                 valueNanoton={liveSettings.fat_min_floor_nanoton}
                 onChangeNanoton={(v) =>
                   setLiveSettings((s) => ({ ...s, fat_min_floor_nanoton: v }))
                 }
               />
             </div>
-            <p className="text-[11px] text-muted">
-              Редкость по цене приза (TON). Интервал: от порога предыдущего тира до max (не включая).
-              Legendary — всё от epic max и выше. Вес — как часто тир попадает в фейк-сэмпл.
-            </p>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 space-y-2">
+              <p className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--admin-fg)]">
+                Редкость по цене приза
+                <AdminInfoHint
+                  label="Редкость по цене приза"
+                  hint="Вручную ставить редкость на каждом подарке больше не нужно. Система смотрит на цену приза (floor / сумма TON) и относит его к тиру: common → uncommon → rare → epic → legendary. От тира зависят цвет тайла в ленте/кейсе и как часто этот приз попадает в фейк-сэмпл (через weight). Пороги — верхние границы тиров в TON (значение max не входит в тир: «строго меньше»)."
+                />
+              </p>
+              <p className="text-[11px] leading-relaxed text-muted">
+                Сейчас при ваших порогах:{" "}
+                <span className="text-foreground/90">
+                  common &lt; {(liveSettings.common_max_nanoton / 1e9).toFixed(2)} · uncommon &lt;{" "}
+                  {(liveSettings.uncommon_max_nanoton / 1e9).toFixed(2)} · rare &lt;{" "}
+                  {(liveSettings.rare_max_nanoton / 1e9).toFixed(2)} · epic &lt;{" "}
+                  {(liveSettings.epic_max_nanoton / 1e9).toFixed(2)} · legendary ≥{" "}
+                  {(liveSettings.epic_max_nanoton / 1e9).toFixed(2)} TON
+                </span>
+                . Пороги должны идти по возрастанию — при сохранении сервер подправит, если перепутали порядок.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <AdminTonField
-                label="Common max (TON)"
-                hint="ниже → common"
+                label="Common max"
+                hint="Верхняя граница common (строго меньше этого значения). Все призы дешевле этого порога считаются common (самый «дешёвый» цвет тайла). Пример: 0.5 TON → приз за 0.3 TON = common, приз ровно за 0.5 уже uncommon."
                 valueNanoton={liveSettings.common_max_nanoton}
                 onChangeNanoton={(v) =>
                   setLiveSettings((s) => ({ ...s, common_max_nanoton: Math.max(0, v) }))
@@ -1405,14 +1435,15 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               />
               <AdminFloatField
                 label="Common weight"
+                hint="Вес common во фейк-сэмпле. Чем выше относительно других weight, тем чаще в ленту попадают дешёвые (common) призы. 0 — тир не участвует в обычном сэмпле (кроме fat-шанса). Обычно common делают самым большим весом (например 50)."
                 min={0}
                 step={1}
                 value={liveSettings.common_weight}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, common_weight: v }))}
               />
               <AdminTonField
-                label="Uncommon max (TON)"
-                hint="ниже → uncommon"
+                label="Uncommon max"
+                hint="Верхняя граница uncommon: цена ≥ Common max и < Uncommon max. Задаёт, до какой суммы приз ещё «зелёный» uncommon, а не rare. Должен быть ≥ Common max."
                 valueNanoton={liveSettings.uncommon_max_nanoton}
                 onChangeNanoton={(v) =>
                   setLiveSettings((s) => ({ ...s, uncommon_max_nanoton: Math.max(0, v) }))
@@ -1420,14 +1451,15 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               />
               <AdminFloatField
                 label="Uncommon weight"
+                hint="Вес uncommon во фейк-сэмпле. Средние по цене призы. Обычно меньше common, больше rare (например 25)."
                 min={0}
                 step={1}
                 value={liveSettings.uncommon_weight}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, uncommon_weight: v }))}
               />
               <AdminTonField
-                label="Rare max (TON)"
-                hint="ниже → rare"
+                label="Rare max"
+                hint="Верхняя граница rare: цена ≥ Uncommon max и < Rare max. Призы в этом диапазоне получают цвет rare. Должен быть ≥ Uncommon max."
                 valueNanoton={liveSettings.rare_max_nanoton}
                 onChangeNanoton={(v) =>
                   setLiveSettings((s) => ({ ...s, rare_max_nanoton: Math.max(0, v) }))
@@ -1435,14 +1467,15 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               />
               <AdminFloatField
                 label="Rare weight"
+                hint="Вес rare во фейк-сэмпле. Дороже uncommon, но ещё не epic. Обычно небольшой вес (например 15), чтобы редкие тайлы не забивали ленту."
                 min={0}
                 step={1}
                 value={liveSettings.rare_weight}
                 onChange={(v) => setLiveSettings((s) => ({ ...s, rare_weight: v }))}
               />
               <AdminTonField
-                label="Epic max (TON)"
-                hint="ниже → epic; ≥ → legendary"
+                label="Epic max"
+                hint="Верхняя граница epic: цена ≥ Rare max и < Epic max. Всё от Epic max и выше — legendary. Это последний ценовой порог: им вы отделяете «очень дорогие» от «легендарных»."
                 valueNanoton={liveSettings.epic_max_nanoton}
                 onChangeNanoton={(v) =>
                   setLiveSettings((s) => ({ ...s, epic_max_nanoton: Math.max(0, v) }))
@@ -1450,6 +1483,7 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               />
               <AdminFloatField
                 label="Epic weight"
+                hint="Вес epic во фейк-сэмпле. Дорогие призы ниже порога legendary. Обычно маленький вес (например 7)."
                 min={0}
                 step={1}
                 value={liveSettings.epic_weight}
@@ -1457,7 +1491,7 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               />
               <AdminFloatField
                 label="Legendary weight"
-                hint={`≥ ${(liveSettings.epic_max_nanoton / 1e9).toFixed(2)} TON`}
+                hint={`Вес legendary во фейк-сэмпле. Тир без верхнего max: все призы от Epic max (${(liveSettings.epic_max_nanoton / 1e9).toFixed(2)} TON) и дороже. Обычно самый маленький вес (например 3), иначе лента будет часто показывать джекпоты. Дополнительно жирные дропы можно усилить через Fat chance.`}
                 min={0}
                 step={1}
                 value={liveSettings.legendary_weight}

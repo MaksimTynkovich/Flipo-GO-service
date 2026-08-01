@@ -60,6 +60,8 @@ export type TelegramWebApp = {
   setHeaderColor?: (color: string) => void;
   setBackgroundColor?: (color: string) => void;
   openTelegramLink?: (url: string) => void;
+  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+  openInvoice?: (url: string, callback?: (status: "paid" | "cancelled" | "failed" | "pending" | string) => void) => void;
   BackButton?: TelegramBackButton;
   HapticFeedback?: {
     selectionChanged?: () => void;
@@ -123,6 +125,27 @@ export function openTelegramLink(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Open a Telegram Stars / Bot Payments invoice inside the Mini App. */
+export function openTelegramInvoice(
+  url: string,
+  onStatus?: (status: string) => void,
+): boolean {
+  const webApp = getTelegramWebApp();
+  if (webApp?.openInvoice) {
+    try {
+      webApp.openInvoice(url, (status) => onStatus?.(status));
+      return true;
+    } catch {
+      /* fall through */
+    }
+  }
+  if (typeof window !== "undefined") {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return true;
+  }
+  return false;
 }
 
 /** Open Telegram share sheet with link preview on top and text below. */

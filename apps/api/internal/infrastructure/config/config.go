@@ -17,6 +17,7 @@ type Config struct {
 	WebAppURL                    string
 	ChannelURL                   string
 	SupportURL                   string
+	CooperationURL               string
 	WelcomeText                  string
 	TelegramWebhookURL           string
 	TelegramWebhookSecret        string
@@ -69,6 +70,9 @@ type Config struct {
 	GiftAssetAPIKey              string
 	GiftAssetBaseURL             string
 	CORSOrigins                  []string
+	CryptoBotAPIToken            string
+	CryptoBotAPIBaseURL          string
+	StarsUSDRate                 float64
 }
 
 func Load() *Config {
@@ -86,6 +90,7 @@ func Load() *Config {
 		WebAppURL:                    firstNonEmpty(getEnv("TELEGRAM_WEBAPP_URL", ""), getEnv("WEBAPP_URL", "")),
 		ChannelURL:                   getEnv("TELEGRAM_CHANNEL_URL", ""),
 		SupportURL:                   getEnv("TELEGRAM_SUPPORT_URL", ""),
+		CooperationURL:               getEnv("TELEGRAM_COOPERATION_URL", ""),
 		WelcomeText:                  getEnv("TELEGRAM_WELCOME_TEXT", ""),
 		TelegramWebhookURL:           getEnv("TELEGRAM_WEBHOOK_URL", ""),
 		TelegramWebhookSecret:        getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
@@ -133,6 +138,9 @@ func Load() *Config {
 		GiftAssetAPIKey:              getEnv("GIFTASSET_API_KEY", ""),
 		GiftAssetBaseURL:             getEnv("GIFTASSET_BASE_URL", "https://giftasset.gifts"),
 		CORSOrigins:                  parseCSV(getEnv("CORS_ORIGINS", "*")),
+		CryptoBotAPIToken:            getEnv("CRYPTO_BOT_API_TOKEN", ""),
+		CryptoBotAPIBaseURL:          getEnv("CRYPTO_BOT_API_BASE_URL", "https://pay.crypt.bot/api"),
+		StarsUSDRate:                 getEnvFloat("STARS_USD_RATE", 0.013),
 	}
 }
 

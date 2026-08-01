@@ -11,9 +11,10 @@ import (
 )
 
 type Update struct {
-	UpdateID      int64          `json:"update_id"`
-	Message       *Message       `json:"message"`
-	CallbackQuery *CallbackQuery `json:"callback_query"`
+	UpdateID         int64             `json:"update_id"`
+	Message          *Message          `json:"message"`
+	CallbackQuery    *CallbackQuery    `json:"callback_query"`
+	PreCheckoutQuery *PreCheckoutQuery `json:"pre_checkout_query"`
 }
 
 type CallbackQuery struct {
@@ -24,10 +25,11 @@ type CallbackQuery struct {
 }
 
 type Message struct {
-	MessageID int64        `json:"message_id"`
-	Text      string       `json:"text"`
-	Chat      Chat         `json:"chat"`
-	From      *MessageFrom `json:"from"`
+	MessageID         int64              `json:"message_id"`
+	Text              string             `json:"text"`
+	Chat              Chat               `json:"chat"`
+	From              *MessageFrom       `json:"from"`
+	SuccessfulPayment *SuccessfulPayment `json:"successful_payment"`
 }
 
 type MessageFrom struct {
@@ -39,6 +41,28 @@ type MessageFrom struct {
 
 type Chat struct {
 	ID int64 `json:"id"`
+}
+
+type PreCheckoutQuery struct {
+	ID               string       `json:"id"`
+	From             *MessageFrom `json:"from"`
+	Currency         string       `json:"currency"`
+	TotalAmount      int64        `json:"total_amount"`
+	InvoicePayload   string       `json:"invoice_payload"`
+}
+
+type SuccessfulPayment struct {
+	Currency                string `json:"currency"`
+	TotalAmount             int64  `json:"total_amount"`
+	InvoicePayload          string `json:"invoice_payload"`
+	TelegramPaymentChargeID string `json:"telegram_payment_charge_id"`
+	ProviderPaymentChargeID string `json:"provider_payment_charge_id"`
+}
+
+// StarsPaymentHandler settles Telegram Stars invoices.
+type StarsPaymentHandler interface {
+	HandlePreCheckout(ctx context.Context, queryID, payload string) error
+	HandleSuccessfulPayment(ctx context.Context, telegramID int64, payload string, totalAmount int64, currency, telegramChargeID string) error
 }
 
 type WebAppURLResolver func(ctx context.Context) string
@@ -57,6 +81,7 @@ type BotUpdates struct {
 	webAppShortName          string
 	channelURL               string
 	supportURL               string
+	cooperationURL           string
 	welcomeText              string
 	webAppURLResolver        WebAppURLResolver
 	webAppButtonTextResolver WebAppButtonTextResolver
@@ -65,6 +90,7 @@ type BotUpdates struct {
 	adminLogin               AdminLoginApprover
 	users                    UserLookup
 	analytics                *analyticsuc.Service
+	starsPay                 StarsPaymentHandler
 }
 
 // AdminLoginApprover resolves pending /admin password logins from Telegram buttons.
@@ -73,7 +99,7 @@ type AdminLoginApprover interface {
 	DenyAdminLogin(ctx context.Context, challengeID string, approverTelegramID int64) error
 }
 
-func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName, channelURL, supportURL, welcomeText string) *BotUpdates {
+func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName, channelURL, supportURL, cooperationURL, welcomeText string) *BotUpdates {
 	return &BotUpdates{
 		api:             api,
 		webAppURL:       strings.TrimRight(webAppURL, "/"),
@@ -81,6 +107,7 @@ func NewBotUpdates(api *BotAPI, webAppURL, botUsername, webAppShortName, channel
 		webAppShortName: strings.Trim(webAppShortName, "/"),
 		channelURL:      strings.TrimSpace(channelURL),
 		supportURL:      strings.TrimSpace(supportURL),
+		cooperationURL:  strings.TrimSpace(cooperationURL),
 		welcomeText:     strings.TrimSpace(welcomeText),
 	}
 }
@@ -113,6 +140,10 @@ func (h *BotUpdates) SetAnalytics(analytics *analyticsuc.Service) {
 	h.analytics = analytics
 }
 
+func (h *BotUpdates) SetStarsPaymentHandler(handler StarsPaymentHandler) {
+	h.starsPay = handler
+}
+
 func (h *BotUpdates) Enabled() bool {
 	return h.api != nil && h.api.Enabled()
 }
@@ -121,11 +152,17 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 	if !h.Enabled() {
 		return nil
 	}
+	if update.PreCheckoutQuery != nil {
+		return h.handlePreCheckout(ctx, update.PreCheckoutQuery)
+	}
 	if update.CallbackQuery != nil {
 		return h.handleCallbackQuery(ctx, update.CallbackQuery)
 	}
 	if update.Message == nil {
 		return nil
+	}
+	if update.Message.SuccessfulPayment != nil {
+		return h.handleSuccessfulPayment(ctx, update.Message)
 	}
 
 	text := strings.TrimSpace(update.Message.Text)
@@ -138,6 +175,31 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 	h.maybeNotifyBotStart(ctx, update.Message)
 
 	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload)
+}
+
+func (h *BotUpdates) handlePreCheckout(ctx context.Context, q *PreCheckoutQuery) error {
+	if q == nil {
+		return nil
+	}
+	if h.starsPay == nil {
+		return h.api.AnswerPreCheckoutQuery(ctx, q.ID, false, "Платежи временно недоступны")
+	}
+	return h.starsPay.HandlePreCheckout(ctx, q.ID, q.InvoicePayload)
+}
+
+func (h *BotUpdates) handleSuccessfulPayment(ctx context.Context, msg *Message) error {
+	if msg == nil || msg.SuccessfulPayment == nil || msg.From == nil || h.starsPay == nil {
+		return nil
+	}
+	sp := msg.SuccessfulPayment
+	return h.starsPay.HandleSuccessfulPayment(
+		ctx,
+		msg.From.ID,
+		sp.InvoicePayload,
+		sp.TotalAmount,
+		sp.Currency,
+		sp.TelegramPaymentChargeID,
+	)
 }
 
 func (h *BotUpdates) handleCallbackQuery(ctx context.Context, cq *CallbackQuery) error {
@@ -304,6 +366,12 @@ func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload string) m
 	if h.supportURL != "" {
 		rows = append(rows, []map[string]any{
 			{"text": "💬 Поддержка", "url": h.supportURL},
+		})
+	}
+
+	if h.cooperationURL != "" {
+		rows = append(rows, []map[string]any{
+			{"text": "🤝 Сотрудничество", "url": h.cooperationURL},
 		})
 	}
 

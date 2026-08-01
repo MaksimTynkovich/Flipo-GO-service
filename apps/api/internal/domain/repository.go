@@ -368,6 +368,16 @@ type TonTransferRepository interface {
 	RejectWithdrawalAtomic(ctx context.Context, transferID, adminID uuid.UUID, reason string) (int64, error)
 }
 
+type PaymentIntentRepository interface {
+	Create(ctx context.Context, intent *PaymentIntent) error
+	Update(ctx context.Context, intent *PaymentIntent) error
+	FindByID(ctx context.Context, id uuid.UUID) (*PaymentIntent, error)
+	FindByIDForUser(ctx context.Context, id, userID uuid.UUID) (*PaymentIntent, error)
+	FindByPayload(ctx context.Context, payload string) (*PaymentIntent, error)
+	FindByProviderInvoiceID(ctx context.Context, provider, invoiceID string) (*PaymentIntent, error)
+	CompleteAtomic(ctx context.Context, intentID uuid.UUID) (balanceAfter int64, credited bool, err error)
+}
+
 // GiftTraitPriceKey identifies a cached trait valuation row.
 type GiftTraitPriceKey struct {
 	CollectionSlug string

@@ -23,6 +23,7 @@ type Deps struct {
 	MarketHandler      *handlers.MarketHandler
 	ReferralHandler    *handlers.ReferralHandler
 	WalletHandler      *handlers.WalletHandler
+	PaymentsHandler    *handlers.PaymentsHandler
 	TelegramHandler    *handlers.TelegramHandler
 	PromoHandler       *handlers.PromoHandler
 	WheelHandler       *handlers.WheelHandler
@@ -92,6 +93,9 @@ func NewRouter(deps Deps) *gin.Engine {
 		v1.POST("/auth/debug", deps.AuthHandler.DebugAuth)
 		v1.POST("/analytics/events", deps.AnalyticsHandler.Ingest)
 		v1.POST("/telegram/webhook", deps.TelegramHandler.Webhook)
+		if deps.PaymentsHandler != nil {
+			v1.POST("/payments/cryptobot/webhook", deps.PaymentsHandler.CryptoBotWebhook)
+		}
 
 		v1.GET("/market/listings", deps.MarketHandler.List)
 		v1.GET("/market/listings/:id", deps.MarketHandler.Get)
@@ -144,6 +148,14 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.POST("/wallet/withdraw", deps.WalletHandler.RequestWithdrawal)
 			authed.GET("/wallet/transfers", deps.WalletHandler.ListTransfers)
 			authed.GET("/wallet/transfers/:id", deps.WalletHandler.GetTransfer)
+
+			if deps.PaymentsHandler != nil {
+				authed.GET("/payments/features", deps.PaymentsHandler.Features)
+				authed.POST("/payments/stars/quote", deps.PaymentsHandler.QuoteStars)
+				authed.POST("/payments/cryptobot/intent", deps.PaymentsHandler.CreateCryptoBot)
+				authed.POST("/payments/stars/intent", deps.PaymentsHandler.CreateStars)
+				authed.GET("/payments/intents/:id", deps.PaymentsHandler.GetIntent)
+			}
 
 			authed.GET("/games/modes", deps.GameHandler.Modes)
 			authed.GET("/games/roulette/current", deps.GameHandler.RouletteCurrent)

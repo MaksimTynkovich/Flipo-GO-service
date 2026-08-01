@@ -19,6 +19,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/cryptopay"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/giftimage"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
@@ -38,6 +39,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
+	"github.com/flipo/flipo/apps/api/internal/usecase/payments"
 	"github.com/flipo/flipo/apps/api/internal/usecase/promo"
 	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
@@ -106,6 +108,7 @@ func main() {
 	marketRepo := postgres.NewMarketRepo(db)
 	stakeRepo := postgres.NewStakingRepo(db)
 	tonTransferRepo := postgres.NewTonTransferRepo(db)
+	paymentIntentRepo := postgres.NewPaymentIntentRepo(db)
 	gameRepo := postgres.NewGameRepo(db)
 	pvpRepo := postgres.NewPvPRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
@@ -149,6 +152,14 @@ func main() {
 	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo, giftTraitRepo)
 	treasurySvc := treasury.NewService(platformRepo, tonClient)
 	botAPI := telegram.NewBotAPI(cfg.BotToken)
+	cryptoPayClient := cryptopay.NewClient(cfg.CryptoBotAPIToken, cfg.CryptoBotAPIBaseURL)
+	paymentsSvc := payments.NewService(userRepo, paymentIntentRepo, cryptoPayClient, botAPI, payments.Config{
+		MinDepositNanoton: cfg.TonMinDepositNanoton,
+		DepositTTL:        time.Duration(cfg.TonDepositTTLMinutes) * time.Minute,
+		StarsUSDRate:      cfg.StarsUSDRate,
+		WebAppURL:         cfg.WebAppURL,
+		BotUsername:       cfg.BotUsername,
+	})
 	adminNotifRepo := postgres.NewAdminNotificationRepo(db)
 	adminSvc.SetNotificationRepo(adminNotifRepo)
 	var notifStore domain.AdminNotificationRepository = adminNotifRepo
@@ -187,6 +198,7 @@ func main() {
 	promoSvc.SetAdminNotifier(adminNotifier)
 	referralSvc.SetPromoActivator(promoSvc)
 	walletSvc.SetAdminNotifier(adminNotifier)
+	paymentsSvc.SetAdminNotifier(adminNotifier)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath, cfg.TelegramMTProtoEnabled)
 	if mtprotoCfg.Enabled() {
@@ -228,6 +240,7 @@ func main() {
 	referralSvc.SetBalanceNotifier(hub)
 	marketSvc.SetBalanceNotifier(hub)
 	walletSvc.SetBalanceNotifier(hub)
+	paymentsSvc.SetBalanceNotifier(hub)
 	promoSvc.SetBalanceNotifier(hub)
 	adminSvc.SetBalanceNotifier(hub)
 	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator, adminNotifier)
@@ -326,7 +339,7 @@ func main() {
 	treasuryWorker.Start(ctx)
 	defer treasuryWorker.Stop()
 
-	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName, cfg.ChannelURL, cfg.SupportURL, cfg.WelcomeText)
+	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName, cfg.ChannelURL, cfg.SupportURL, cfg.CooperationURL, cfg.WelcomeText)
 	botUpdates.SetAdminNotifier(adminNotifier)
 	botUpdates.SetAdminLoginApprover(authSvc)
 	authSvc.SetAdminLoginAlerter(adminNotifier)
@@ -336,6 +349,7 @@ func main() {
 		},
 	})
 	botUpdates.SetAnalytics(analyticsSvc)
+	botUpdates.SetStarsPaymentHandler(paymentsSvc)
 	botUpdates.SetWebAppURLResolver(func(ctx context.Context) string {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {
@@ -411,6 +425,7 @@ func main() {
 		WheelHandler:       handlers.NewWheelHandler(wheelSvc, riskSvc),
 		CasesHandler:       handlers.NewCasesHandler(caseSvc),
 		WalletHandler:      handlers.NewWalletHandler(walletSvc, analyticsSvc),
+		PaymentsHandler:    handlers.NewPaymentsHandler(paymentsSvc),
 		TelegramHandler:    handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
 		AdminHandler:       adminHandler,
 		AnalyticsHandler:   handlers.NewAnalyticsHandler(authSvc, analyticsSvc),

@@ -514,7 +514,7 @@ func (b *BotAPI) SetWebhook(ctx context.Context, webhookURL, secret string) erro
 
 	form := url.Values{}
 	form.Set("url", webhookURL)
-	form.Set("allowed_updates", `["message","callback_query"]`)
+	form.Set("allowed_updates", `["message","callback_query","pre_checkout_query"]`)
 	if secret != "" {
 		form.Set("secret_token", secret)
 	}
@@ -538,6 +538,94 @@ func (b *BotAPI) SetWebhook(ctx context.Context, webhookURL, secret string) erro
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&result)
 		return fmt.Errorf("telegram setWebhook status %d: %s", resp.StatusCode, result.Description)
+	}
+	return nil
+}
+
+type LabeledPrice struct {
+	Label  string `json:"label"`
+	Amount int64  `json:"amount"`
+}
+
+type CreateInvoiceLinkRequest struct {
+	Title         string         `json:"title"`
+	Description   string         `json:"description"`
+	Payload       string         `json:"payload"`
+	ProviderToken string         `json:"provider_token"`
+	Currency      string         `json:"currency"`
+	Prices        []LabeledPrice `json:"prices"`
+}
+
+func (b *BotAPI) CreateInvoiceLink(ctx context.Context, req CreateInvoiceLinkRequest) (string, error) {
+	if !b.Enabled() {
+		return "", fmt.Errorf("telegram bot disabled")
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/createInvoiceLink", b.token)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := b.httpClient.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		OK          bool   `json:"ok"`
+		Result      string `json:"result"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK || !result.OK || result.Result == "" {
+		if result.Description == "" {
+			result.Description = resp.Status
+		}
+		return "", fmt.Errorf("telegram createInvoiceLink: %s", result.Description)
+	}
+	return result.Result, nil
+}
+
+func (b *BotAPI) AnswerPreCheckoutQuery(ctx context.Context, queryID string, ok bool, errorMessage string) error {
+	if !b.Enabled() || queryID == "" {
+		return nil
+	}
+	payload := map[string]any{
+		"pre_checkout_query_id": queryID,
+		"ok":                    ok,
+	}
+	if !ok && errorMessage != "" {
+		payload["error_message"] = errorMessage
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/answerPreCheckoutQuery", b.token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := b.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	var result telegramAPIError
+	_ = json.NewDecoder(resp.Body).Decode(&result)
+	if resp.StatusCode != http.StatusOK || !result.OK {
+		if result.Description == "" {
+			result.Description = resp.Status
+		}
+		return fmt.Errorf("telegram answerPreCheckoutQuery: %s", result.Description)
 	}
 	return nil
 }

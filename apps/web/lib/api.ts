@@ -1016,6 +1016,65 @@ export async function confirmWalletDeposit(transferId: string, txHash?: string) 
   }
 }
 
+export type PaymentFeatures = {
+  cryptobot_enabled: boolean;
+  stars_enabled: boolean;
+  min_deposit_nanoton: number;
+  stars_usd_rate: number;
+  ton_usd_rate?: number;
+};
+
+export type PaymentIntent = {
+  id: string;
+  provider: "cryptobot" | "stars" | string;
+  status: string;
+  amount_nanoton: number;
+  provider_amount: string;
+  provider_currency: string;
+  pay_url?: string;
+  stars_count?: number;
+  ton_usd_rate?: string;
+  stars_usd_rate?: string;
+  expires_at?: string;
+};
+
+export type StarsQuote = {
+  amount_nanoton: number;
+  stars_count: number;
+  ton_usd_rate: number;
+  stars_usd_rate: number;
+  usd_value: number;
+};
+
+export async function getPaymentFeatures() {
+  return api<PaymentFeatures>("/api/v1/payments/features");
+}
+
+export async function quoteStarsDeposit(amountNanoton: number) {
+  return api<StarsQuote>("/api/v1/payments/stars/quote", {
+    method: "POST",
+    body: JSON.stringify({ amount_nanoton: amountNanoton }),
+  });
+}
+
+export async function createCryptoBotDeposit(amountNanoton: number) {
+  return api<PaymentIntent>("/api/v1/payments/cryptobot/intent", {
+    method: "POST",
+    body: JSON.stringify({ amount_nanoton: amountNanoton }),
+  });
+}
+
+export async function createStarsDeposit(amountNanoton: number) {
+  return api<PaymentIntent>("/api/v1/payments/stars/intent", {
+    method: "POST",
+    body: JSON.stringify({ amount_nanoton: amountNanoton }),
+  });
+}
+
+export async function getPaymentIntent(id: string) {
+  return api<PaymentIntent>(`/api/v1/payments/intents/${encodeURIComponent(id)}`);
+}
+
 export async function requestWalletWithdraw(amountNanoton: number, idempotencyKey: string) {
   try {
     const result = await api<{ transfer: WalletTransfer; balance: number }>("/api/v1/wallet/withdraw", {

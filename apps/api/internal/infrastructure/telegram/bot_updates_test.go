@@ -6,7 +6,7 @@ import (
 )
 
 func TestOpenAppMarkupMiniAppLink(t *testing.T) {
-	h := NewBotUpdates(NewBotAPI("token"), "", "flipo_bot", "app", "", "", "")
+	h := NewBotUpdates(NewBotAPI("token"), "", "flipo_bot", "app", "", "", "", "")
 	markup := h.openAppMarkup(context.Background(), "ref_abc")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
@@ -20,7 +20,7 @@ func TestOpenAppMarkupMiniAppLink(t *testing.T) {
 }
 
 func TestOpenAppMarkupWebAppURL(t *testing.T) {
-	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "")
+	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "", "")
 	markup := h.openAppMarkup(context.Background(), "")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
@@ -35,7 +35,7 @@ func TestOpenAppMarkupWebAppURL(t *testing.T) {
 }
 
 func TestOpenAppMarkupWebAppURLWithPayload(t *testing.T) {
-	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "")
+	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "", "")
 	markup := h.openAppMarkup(context.Background(), "ref_xyz")
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
@@ -47,7 +47,7 @@ func TestOpenAppMarkupWebAppURLWithPayload(t *testing.T) {
 }
 
 func TestStartMenuMarkupIncludesTermsButton(t *testing.T) {
-	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "Привет")
+	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "", "Привет")
 	h.SetTermsURLResolver(func(ctx context.Context) (string, string) {
 		return "https://example.com/terms", "Политика"
 	})
@@ -62,5 +62,25 @@ func TestStartMenuMarkupIncludesTermsButton(t *testing.T) {
 	}
 	if btn["url"] != "https://example.com/terms" {
 		t.Fatalf("unexpected terms url: %v", btn["url"])
+	}
+}
+
+func TestStartMenuMarkupIncludesCooperationButton(t *testing.T) {
+	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "https://t.me/partners", "")
+	markup := h.startMenuMarkup(context.Background(), "")
+	rows := markup["inline_keyboard"].([][]map[string]any)
+	var found bool
+	for _, row := range rows {
+		for _, btn := range row {
+			if btn["text"] == "🤝 Сотрудничество" {
+				found = true
+				if btn["url"] != "https://t.me/partners" {
+					t.Fatalf("unexpected cooperation url: %v", btn["url"])
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected cooperation button")
 	}
 }
