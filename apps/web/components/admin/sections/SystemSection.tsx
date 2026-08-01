@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS: AdminMaintenanceSettings = {
 
 const DEFAULT_WITHDRAWAL: AdminWithdrawalSettings = {
   enabled: false,
+  gifts_manual: false,
 };
 
 export default function SystemSection() {
@@ -41,10 +42,20 @@ export default function SystemSection() {
         ...maintenance,
         accept_bets: maintenance.accept_bets !== false,
       });
-      setWithdrawalSettings(withdrawals);
+      setWithdrawalSettings({
+        ...DEFAULT_WITHDRAWAL,
+        ...withdrawals,
+        gifts_manual: Boolean(withdrawals.gifts_manual),
+        enabled: Boolean(withdrawals.enabled),
+      });
       primeCache("admin:system:v2", [
         { ...maintenance, accept_bets: maintenance.accept_bets !== false },
-        withdrawals,
+        {
+          ...DEFAULT_WITHDRAWAL,
+          ...withdrawals,
+          gifts_manual: Boolean(withdrawals.gifts_manual),
+          enabled: Boolean(withdrawals.enabled),
+        },
       ]);
     } finally {
       setLoading(false);
@@ -63,7 +74,12 @@ export default function SystemSection() {
   }, []);
 
   const form = settings ?? DEFAULT_SETTINGS;
-  const withdrawalForm = withdrawalSettings ?? DEFAULT_WITHDRAWAL;
+  const withdrawalForm: AdminWithdrawalSettings = {
+    ...DEFAULT_WITHDRAWAL,
+    ...(withdrawalSettings ?? {}),
+    gifts_manual: Boolean(withdrawalSettings?.gifts_manual),
+    enabled: Boolean(withdrawalSettings?.enabled),
+  };
 
   return (
     <AdminPage
@@ -221,12 +237,28 @@ export default function SystemSection() {
 
       <AdminPanel
         title="Тихий холд выводов"
-        description="Игрок не видит блокировку: TON-вывод уходит «в ожидание», подарок — в очередь hold. Одобрять можно в разделе Финансы."
+        description="Игрок не видит блокировку: статусы выглядят как обычное ожидание. Одобрять заявки — в разделе Операции."
       >
         {loading && !withdrawalSettings ? (
           <div className="h-4 w-56 animate-pulse rounded bg-surface-raised" />
         ) : (
           <div className="space-y-4">
+            <label className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={withdrawalForm.gifts_manual}
+                onChange={(e) =>
+                  setWithdrawalSettings({ ...withdrawalForm, gifts_manual: e.target.checked })
+                }
+              />
+              <span className={withdrawalForm.gifts_manual ? "font-medium text-danger" : undefined}>
+                Ручной вывод подарков
+              </span>
+            </label>
+            <p className="text-xs text-muted -mt-2 ml-7">
+              Все выводы подарков уходят в очередь. Игрок видит «Вывод в обработке», без упоминания проверки.
+            </p>
+
             <label className="flex items-center gap-2.5 text-sm">
               <input
                 type="checkbox"
@@ -236,24 +268,28 @@ export default function SystemSection() {
                 }
               />
               <span className={withdrawalForm.enabled ? "font-medium text-danger" : undefined}>
-                Выводы отключены для всех (тихо)
+                Тихий холд TON (и подарков)
               </span>
             </label>
+            <p className="text-xs text-muted -mt-2 ml-7">
+              Новые выводы TON уходят на ручную проверку. Подарки тоже ставятся в очередь.
+            </p>
 
             <AdminToolbar>
               <AdminButton
-                variant={withdrawalForm.enabled ? "danger" : "primary"}
+                variant={withdrawalForm.enabled || withdrawalForm.gifts_manual ? "danger" : "primary"}
                 disabled={savingWithdrawals || (loading && !withdrawalSettings)}
                 onClick={async () => {
                   setSavingWithdrawals(true);
                   try {
-                    await updateAdminWithdrawalSettings({ enabled: withdrawalForm.enabled });
+                    await updateAdminWithdrawalSettings({
+                      enabled: withdrawalForm.enabled,
+                      gifts_manual: withdrawalForm.gifts_manual,
+                    });
                     primeCache("admin:system:v2", [form, withdrawalForm]);
                     showToast({
                       variant: "success",
-                      title: withdrawalForm.enabled
-                        ? "Глобальный холд выводов включён"
-                        : "Глобальный холд выводов выключен",
+                      title: "Настройки выводов сохранены",
                     });
                   } catch (error) {
                     showToast({
@@ -270,9 +306,15 @@ export default function SystemSection() {
               </AdminButton>
             </AdminToolbar>
 
-            {withdrawalForm.enabled ? (
+            {withdrawalForm.gifts_manual || withdrawalForm.enabled ? (
               <p className="text-xs text-danger">
-                Новые выводы TON и подарков уходят в ожидание. Игрок видит обычный статус «в ожидании».
+                {[
+                  withdrawalForm.gifts_manual ? "подарки — ручная очередь" : null,
+                  withdrawalForm.enabled ? "TON — тихий холд" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                . Очередь: Операции.
               </p>
             ) : null}
           </div>

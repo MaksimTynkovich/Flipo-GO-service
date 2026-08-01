@@ -1292,6 +1292,7 @@ export type AdminMaintenanceSettings = {
 export type AdminWithdrawalSettings = {
   id?: number;
   enabled: boolean;
+  gifts_manual: boolean;
   updated_at?: string;
 };
 
@@ -1639,6 +1640,122 @@ export async function updateAdminMarketListingPrice(id: string, priceNanoton: nu
     method: "PATCH",
     body: JSON.stringify({ price_nanoton: priceNanoton }),
   });
+}
+
+export type AdminMarketListingPage = {
+  items: MarketListing[];
+  total: number;
+};
+
+export async function getAdminMarketListings(params?: {
+  q?: string;
+  collection?: string;
+  source?: "bot" | "user";
+  status?: string;
+  price_min?: number;
+  price_max?: number;
+  sort?: "newest" | "price_asc" | "price_desc";
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.q) q.set("q", params.q);
+  if (params?.collection) q.set("collection", params.collection);
+  if (params?.source) q.set("source", params.source);
+  if (params?.status) q.set("status", params.status);
+  if (params?.price_min != null) q.set("price_min", String(params.price_min));
+  if (params?.price_max != null) q.set("price_max", String(params.price_max));
+  if (params?.sort) q.set("sort", params.sort);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return api<AdminMarketListingPage>(`/api/v1/admin/market/listings${qs ? `?${qs}` : ""}`);
+}
+
+export async function cancelAdminMarketListing(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/market/listings/${id}`, { method: "DELETE" });
+}
+
+export type AdminMarketBulkResult = {
+  updated: number;
+  failed: number;
+  errors?: string[];
+};
+
+export async function bulkAdminMarketListings(input: {
+  action: "cancel" | "reprice_percent";
+  ids: string[];
+  percent?: number;
+}) {
+  return api<AdminMarketBulkResult>("/api/v1/admin/market/listings/bulk", {
+    method: "POST",
+    body: JSON.stringify({
+      action: input.action,
+      ids: input.ids,
+      percent: input.percent ?? 0,
+    }),
+  });
+}
+
+export type AdminBotStockItem = {
+  id: string;
+  name: string;
+  sub_name: string;
+  model?: string;
+  symbol?: string;
+  backdrop?: string;
+  image_url: string;
+  collection_slug: string;
+  floor_price_nanoton: number;
+  status: string;
+  listed: boolean;
+  listing_id?: string;
+  listing_price_nanoton?: number;
+  suggested_price_nanoton?: number;
+};
+
+export type AdminBotStockPage = {
+  items: AdminBotStockItem[];
+  total: number;
+};
+
+export async function getAdminBotMarketStock(params?: {
+  q?: string;
+  listed?: boolean;
+  limit?: number;
+  offset?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.q) q.set("q", params.q);
+  if (params?.listed != null) q.set("listed", params.listed ? "true" : "false");
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  return api<AdminBotStockPage>(`/api/v1/admin/market/bot-stock${qs ? `?${qs}` : ""}`);
+}
+
+export async function createAdminBotMarketListing(itemId: string, priceNanoton?: number) {
+  return api<MarketListing>("/api/v1/admin/market/bot-listings", {
+    method: "POST",
+    body: JSON.stringify({
+      item_id: itemId,
+      price_nanoton: priceNanoton ?? 0,
+    }),
+  });
+}
+
+export type AdminMarketStats = {
+  sold_count: number;
+  volume_nanoton: number;
+  fees_nanoton: number;
+  active_count: number;
+};
+
+export async function getAdminMarketStats(days?: number) {
+  const q = new URLSearchParams();
+  if (days != null) q.set("days", String(days));
+  const qs = q.toString();
+  return api<AdminMarketStats>(`/api/v1/admin/market/stats${qs ? `?${qs}` : ""}`);
 }
 
 export type AdminBotGiftSyncResult = {
@@ -2094,7 +2211,9 @@ export async function getAdminWithdrawalSettings() {
   return api<AdminWithdrawalSettings>("/api/v1/admin/withdrawals/settings");
 }
 
-export async function updateAdminWithdrawalSettings(settings: Pick<AdminWithdrawalSettings, "enabled">) {
+export async function updateAdminWithdrawalSettings(
+  settings: Pick<AdminWithdrawalSettings, "enabled" | "gifts_manual">,
+) {
   return api<{ ok: boolean }>("/api/v1/admin/withdrawals/settings", {
     method: "PATCH",
     body: JSON.stringify(settings),

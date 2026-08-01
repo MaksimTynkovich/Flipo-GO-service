@@ -39,3 +39,24 @@ type MarketListing struct {
 	Item   InventoryItem `gorm:"foreignKey:InventoryItemID" json:"-"`
 	Buyer  *User         `gorm:"foreignKey:BuyerID" json:"-"`
 }
+
+// MarketListingFilter is used by admin listing browse.
+type MarketListingFilter struct {
+	Source     *ListingSource
+	Status     *ListingStatus
+	Query      string
+	Collection string
+	PriceMin   *int64
+	PriceMax   *int64
+	Sort       string
+	Limit      int
+	Offset     int
+}
+
+// MarketStats aggregates sold volume and estimated fees.
+type MarketStats struct {
+	SoldCount      int64 `json:"sold_count"`
+	VolumeNanoton  int64 `json:"volume_nanoton"`
+	FeesNanoton    int64 `json:"fees_nanoton"`
+	ActiveCount    int64 `json:"active_count"`
+}

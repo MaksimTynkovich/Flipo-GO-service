@@ -223,7 +223,7 @@ func (s *Service) EvaluateWithdrawal(ctx context.Context, userID uuid.UUID, netN
 	}, nil
 }
 
-// IsWithdrawHeld reports whether TON/gift withdrawals should be soft-held for this user.
+// IsWithdrawHeld reports whether TON withdrawals should be soft-held for this user.
 func (s *Service) IsWithdrawHeld(ctx context.Context, user *domain.User) (bool, string, error) {
 	if user == nil {
 		return false, "", nil
@@ -241,13 +241,46 @@ func (s *Service) IsWithdrawHeld(ctx context.Context, user *domain.User) (bool, 
 	return false, "", nil
 }
 
-// IsUserWithdrawHeld loads the user and checks the silent withdrawal hold.
+// IsGiftWithdrawHeld reports whether gift withdrawals should queue for admin (silent).
+func (s *Service) IsGiftWithdrawHeld(ctx context.Context, user *domain.User) (bool, string, error) {
+	if user == nil {
+		return false, "", nil
+	}
+	if user.WithdrawalsDisabled {
+		return true, "withdrawals_disabled", nil
+	}
+	settings, err := s.platform.GetWithdrawalSettings(ctx)
+	if err != nil {
+		return false, "", err
+	}
+	if settings == nil {
+		return false, "", nil
+	}
+	if settings.GiftsManual {
+		return true, "gifts_manual", nil
+	}
+	if settings.Enabled {
+		return true, "global_withdrawals_disabled", nil
+	}
+	return false, "", nil
+}
+
+// IsUserWithdrawHeld loads the user and checks the silent TON withdrawal hold.
 func (s *Service) IsUserWithdrawHeld(ctx context.Context, userID uuid.UUID) (bool, string, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return false, "", err
 	}
 	return s.IsWithdrawHeld(ctx, user)
+}
+
+// IsUserGiftWithdrawHeld loads the user and checks the silent gift withdrawal hold.
+func (s *Service) IsUserGiftWithdrawHeld(ctx context.Context, userID uuid.UUID) (bool, string, error) {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return false, "", err
+	}
+	return s.IsGiftWithdrawHeld(ctx, user)
 }
 
 func dedupe(items []string) []string {

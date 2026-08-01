@@ -112,8 +112,9 @@ type CaseRepository interface {
 }
 
 type MarketRepository interface {
-	ListActive(ctx context.Context, limit, offset int, sort string) ([]MarketListing, error)
+	ListActive(ctx context.Context, limit, offset int, sort string, source *ListingSource) ([]MarketListing, error)
 	ListActiveBySource(ctx context.Context, source ListingSource) ([]MarketListing, error)
+	ListFiltered(ctx context.Context, filter MarketListingFilter) ([]MarketListing, int64, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*MarketListing, error)
 	ListBySeller(ctx context.Context, sellerID uuid.UUID) ([]MarketListing, error)
 	FindActiveByItemID(ctx context.Context, itemID uuid.UUID) (*MarketListing, error)
@@ -126,6 +127,7 @@ type MarketRepository interface {
 	AcquireGiftFromBet(ctx context.Context, itemID uuid.UUID) error
 	EnsureBotUser(ctx context.Context) (*User, error)
 	CountActive(ctx context.Context) (int64, error)
+	MarketStats(ctx context.Context, since *time.Time) (*MarketStats, error)
 }
 
 type StakingRepository interface {

@@ -381,6 +381,7 @@ func main() {
 
 	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
 	adminHandler.SetBotGiftSync(botSyncSvc)
+	adminHandler.SetMarketService(marketSvc)
 	adminHandler.SetWheelService(wheelSvc)
 	adminHandler.SetCasesService(caseSvc)
 	adminHandler.SetCasesUploadDir(cfg.CasesUploadDir)

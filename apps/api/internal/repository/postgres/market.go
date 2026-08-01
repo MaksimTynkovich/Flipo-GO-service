@@ -20,7 +20,7 @@ func NewMarketRepo(db *gorm.DB) *MarketRepo {
 	return &MarketRepo{db: db}
 }
 
-func (r *MarketRepo) ListActive(ctx context.Context, limit, offset int, sort string) ([]domain.MarketListing, error) {
+func (r *MarketRepo) ListActive(ctx context.Context, limit, offset int, sort string, source *domain.ListingSource) ([]domain.MarketListing, error) {
 	var listings []domain.MarketListing
 	order := marketListOrder(sort)
 	q := r.db.WithContext(ctx).
@@ -28,11 +28,75 @@ func (r *MarketRepo) ListActive(ctx context.Context, limit, offset int, sort str
 		Preload("Seller").
 		Where("status = ?", domain.ListingActive).
 		Order(order)
+	if source != nil {
+		q = q.Where("source = ?", *source)
+	}
 	if limit > 0 {
 		q = q.Limit(limit).Offset(offset)
 	}
 	err := q.Find(&listings).Error
 	return listings, err
+}
+
+func (r *MarketRepo) ListFiltered(ctx context.Context, filter domain.MarketListingFilter) ([]domain.MarketListing, int64, error) {
+	applyFilters := func(q *gorm.DB) *gorm.DB {
+		if filter.Source != nil {
+			q = q.Where("market_listings.source = ?", *filter.Source)
+		}
+		if filter.Status != nil {
+			q = q.Where("market_listings.status = ?", *filter.Status)
+		} else {
+			q = q.Where("market_listings.status = ?", domain.ListingActive)
+		}
+		if filter.PriceMin != nil {
+			q = q.Where("market_listings.price_nanoton >= ?", *filter.PriceMin)
+		}
+		if filter.PriceMax != nil {
+			q = q.Where("market_listings.price_nanoton <= ?", *filter.PriceMax)
+		}
+		if filter.Collection != "" || filter.Query != "" {
+			q = q.Joins("JOIN inventory_items ON inventory_items.id = market_listings.inventory_item_id")
+		}
+		if filter.Collection != "" {
+			q = q.Where("inventory_items.collection_slug = ?", filter.Collection)
+		}
+		if filter.Query != "" {
+			like := "%" + filter.Query + "%"
+			q = q.Where(
+				"(inventory_items.name ILIKE ? OR inventory_items.collection_slug ILIKE ? OR COALESCE(inventory_items.metadata::text, '') ILIKE ?)",
+				like, like, like,
+			)
+		}
+		return q
+	}
+
+	var total int64
+	countQ := applyFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{}))
+	if err := countQ.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var listings []domain.MarketListing
+	err := applyFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{})).
+		Preload("Item").
+		Preload("Seller").
+		Order(marketListOrderPrefixed(filter.Sort)).
+		Limit(limit).
+		Offset(offset).
+		Find(&listings).Error
+	return listings, total, err
 }
 
 func marketListOrder(sort string) string {
@@ -43,6 +107,17 @@ func marketListOrder(sort string) string {
 		return "price_nanoton DESC, created_at DESC"
 	default: // newest
 		return "created_at DESC, price_nanoton DESC"
+	}
+}
+
+func marketListOrderPrefixed(sort string) string {
+	switch sort {
+	case "price_asc":
+		return "market_listings.price_nanoton ASC, market_listings.created_at DESC"
+	case "price_desc":
+		return "market_listings.price_nanoton DESC, market_listings.created_at DESC"
+	default:
+		return "market_listings.created_at DESC, market_listings.price_nanoton DESC"
 	}
 }
 
@@ -453,6 +528,53 @@ func (r *MarketRepo) CountActive(ctx context.Context) (int64, error) {
 	err := r.db.WithContext(ctx).Model(&domain.MarketListing{}).
 		Where("status = ?", domain.ListingActive).Count(&count).Error
 	return count, err
+}
+
+func (r *MarketRepo) MarketStats(ctx context.Context, since *time.Time) (*domain.MarketStats, error) {
+	stats := &domain.MarketStats{}
+
+	countQ := r.db.WithContext(ctx).Model(&domain.MarketListing{}).Where("status = ?", domain.ListingSold)
+	if since != nil {
+		countQ = countQ.Where("sold_at >= ?", *since)
+	}
+	if err := countQ.Count(&stats.SoldCount).Error; err != nil {
+		return nil, err
+	}
+
+	volQ := r.db.WithContext(ctx).Model(&domain.MarketListing{}).Where("status = ?", domain.ListingSold)
+	if since != nil {
+		volQ = volQ.Where("sold_at >= ?", *since)
+	}
+	if err := volQ.Select("COALESCE(SUM(price_nanoton), 0)").Scan(&stats.VolumeNanoton).Error; err != nil {
+		return nil, err
+	}
+
+	var buyAbs, sellSum int64
+	buyQ := r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("type = ?", domain.LedgerMarketBuy)
+	sellQ := r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("type = ?", domain.LedgerMarketSell)
+	if since != nil {
+		buyQ = buyQ.Where("created_at >= ?", *since)
+		sellQ = sellQ.Where("created_at >= ?", *since)
+	}
+	if err := buyQ.Select("COALESCE(SUM(ABS(amount_nanoton)), 0)").Scan(&buyAbs).Error; err != nil {
+		return nil, err
+	}
+	if err := sellQ.Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&sellSum).Error; err != nil {
+		return nil, err
+	}
+	stats.FeesNanoton = buyAbs - sellSum
+	if stats.FeesNanoton < 0 {
+		stats.FeesNanoton = 0
+	}
+
+	active, err := r.CountActive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stats.ActiveCount = active
+	return stats, nil
 }
 
 var _ domain.MarketRepository = (*MarketRepo)(nil)

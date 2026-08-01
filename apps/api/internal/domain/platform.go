@@ -166,12 +166,14 @@ type PlatformMaintenanceSettings struct {
 
 func (PlatformMaintenanceSettings) TableName() string { return "platform_maintenance_settings" }
 
-// PlatformWithdrawalSettings — silent hold for TON and gift withdrawals (singleton id=1).
-// When Enabled, new withdrawals look like "pending" to the player.
+// PlatformWithdrawalSettings — silent hold for withdrawals (singleton id=1).
+// When Enabled, TON (and gift) withdrawals look like "pending" to the player.
+// When GiftsManual, all gift withdrawals queue for admin review/fulfillment.
 type PlatformWithdrawalSettings struct {
-	ID        int       `gorm:"primaryKey" json:"id"`
-	Enabled   bool      `gorm:"not null;default:false" json:"enabled"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          int       `gorm:"primaryKey" json:"id"`
+	Enabled     bool      `gorm:"not null;default:false" json:"enabled"`
+	GiftsManual bool      `gorm:"not null;default:false" json:"gifts_manual"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func (PlatformWithdrawalSettings) TableName() string { return "platform_withdrawal_settings" }

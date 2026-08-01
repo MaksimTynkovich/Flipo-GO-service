@@ -55,6 +55,18 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 		Where("type = ?", domain.LedgerStakeYield).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&summary.StakingExpenseNanoton)
 
+	var marketBuyAbs, marketSellSum int64
+	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("type = ?", domain.LedgerMarketBuy).
+		Select("COALESCE(SUM(ABS(amount_nanoton)), 0)").Scan(&marketBuyAbs)
+	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+		Where("type = ?", domain.LedgerMarketSell).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&marketSellSum)
+	summary.MarketFeesNanoton = marketBuyAbs - marketSellSum
+	if summary.MarketFeesNanoton < 0 {
+		summary.MarketFeesNanoton = 0
+	}
+
 	var pvpFees int64
 	r.db.WithContext(ctx).Model(&domain.PvPRoom{}).
 		Where("status = ? AND payout_nanoton IS NOT NULL", "finished").

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -63,7 +64,9 @@ func (s *Service) List(ctx context.Context, limit, offset int, sort string) ([]L
 	if err := domain.EnsureMarketEnabled(); err != nil {
 		return nil, err
 	}
-	listings, err := s.market.ListActive(ctx, limit, offset, sort)
+	// Player storefront is bot-only.
+	source := domain.ListingSourceBot
+	listings, err := s.market.ListActive(ctx, limit, offset, sort, &source)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +85,9 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*ListingView, error) {
 	listing, err := s.market.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if listing.Source != domain.ListingSourceBot || listing.Status != domain.ListingActive {
+		return nil, gorm.ErrRecordNotFound
 	}
 	refreshed := s.refreshBotListing(ctx, *listing)
 	v := toListingView(refreshed)
@@ -103,61 +109,15 @@ func (s *Service) ListMine(ctx context.Context, userID uuid.UUID) ([]ListingView
 	return out, nil
 }
 
+// CreateListing is disabled for players — market is bot-only.
 func (s *Service) CreateListing(ctx context.Context, userID, itemID uuid.UUID, priceNanoton int64) (*ListingView, error) {
 	if err := domain.EnsureMarketEnabled(); err != nil {
 		return nil, err
 	}
-	if priceNanoton <= 0 {
-		return nil, domain.ErrInvalidAmount
-	}
-
-	item, err := s.inventory.FindByID(ctx, itemID)
-	if err != nil {
-		return nil, err
-	}
-	if item.UserID != userID {
-		return nil, domain.ErrForbidden
-	}
-	if item.Status != domain.InvAvailable {
-		return nil, domain.ErrInvalidAmount
-	}
-	if domain.IsProfileVirtualItem(*item) {
-		return nil, domain.ErrInvalidAmount
-	}
-
-	if _, err := s.market.FindActiveByItemID(ctx, itemID); err == nil {
-		return nil, domain.ErrAlreadyListed
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-
-	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvLocked); err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	listing := &domain.MarketListing{
-		ID:              uuid.New(),
-		SellerID:        userID,
-		InventoryItemID: itemID,
-		PriceNanoton:    priceNanoton,
-		Status:          domain.ListingActive,
-		Source:          domain.ListingSourceUser,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
-
-	if err := s.market.CreateListing(ctx, listing); err != nil {
-		_ = s.inventory.UpdateStatus(ctx, itemID, domain.InvLocked, domain.InvAvailable)
-		return nil, err
-	}
-
-	full, err := s.market.FindByID(ctx, listing.ID)
-	if err != nil {
-		return nil, err
-	}
-	v := toListingView(*full)
-	return &v, nil
+	_ = userID
+	_ = itemID
+	_ = priceNanoton
+	return nil, domain.ErrForbidden
 }
 
 func (s *Service) CancelListing(ctx context.Context, userID, listingID uuid.UUID) error {
@@ -435,4 +395,275 @@ func parseGiftMeta(raw datatypes.JSON) giftMeta {
 		return giftMeta{}
 	}
 	return m
+}
+
+type AdminListingPage struct {
+	Items []ListingView `json:"items"`
+	Total int64         `json:"total"`
+}
+
+func (s *Service) AdminListListings(ctx context.Context, filter domain.MarketListingFilter) (*AdminListingPage, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
+	listings, total, err := s.market.ListFiltered(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ListingView, 0, len(listings))
+	for _, l := range listings {
+		out = append(out, toListingView(l))
+	}
+	return &AdminListingPage{Items: out, Total: total}, nil
+}
+
+func (s *Service) AdminCancelListing(ctx context.Context, listingID uuid.UUID) error {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return err
+	}
+	listing, err := s.market.FindByID(ctx, listingID)
+	if err != nil {
+		return err
+	}
+	if listing.Status != domain.ListingActive {
+		return domain.ErrNotFound
+	}
+	return s.market.CancelListing(ctx, listing.ID, listing.SellerID)
+}
+
+type BulkActionResult struct {
+	Updated int      `json:"updated"`
+	Failed  int      `json:"failed"`
+	Errors  []string `json:"errors,omitempty"`
+}
+
+func (s *Service) AdminBulkListings(ctx context.Context, action string, ids []uuid.UUID, percent float64) (*BulkActionResult, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
+	result := &BulkActionResult{}
+	switch action {
+	case "cancel":
+		for _, id := range ids {
+			if err := s.AdminCancelListing(ctx, id); err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, id.String()+": "+err.Error())
+				continue
+			}
+			result.Updated++
+		}
+	case "reprice_percent":
+		if percent <= -100 {
+			return nil, domain.ErrInvalidAmount
+		}
+		mult := 1 + percent/100
+		for _, id := range ids {
+			listing, err := s.market.FindByID(ctx, id)
+			if err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, id.String()+": "+err.Error())
+				continue
+			}
+			if listing.Status != domain.ListingActive {
+				result.Failed++
+				result.Errors = append(result.Errors, id.String()+": not active")
+				continue
+			}
+			newPrice := int64(float64(listing.PriceNanoton) * mult)
+			if newPrice <= 0 {
+				result.Failed++
+				result.Errors = append(result.Errors, id.String()+": invalid price")
+				continue
+			}
+			if err := s.RepriceListing(ctx, listing.ID, listing.InventoryItemID, newPrice); err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, id.String()+": "+err.Error())
+				continue
+			}
+			result.Updated++
+		}
+	default:
+		return nil, domain.ErrInvalidAmount
+	}
+	return result, nil
+}
+
+type BotStockItem struct {
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	SubName           string `json:"sub_name"`
+	Model             string `json:"model,omitempty"`
+	Symbol            string `json:"symbol,omitempty"`
+	Backdrop          string `json:"backdrop,omitempty"`
+	ImageURL          string `json:"image_url"`
+	CollectionSlug    string `json:"collection_slug"`
+	FloorPriceNanoton int64  `json:"floor_price_nanoton"`
+	Status            string `json:"status"`
+	Listed            bool   `json:"listed"`
+	ListingID         string `json:"listing_id,omitempty"`
+	ListingPrice      int64  `json:"listing_price_nanoton,omitempty"`
+	SuggestedPrice    int64  `json:"suggested_price_nanoton,omitempty"`
+}
+
+type BotStockPage struct {
+	Items []BotStockItem `json:"items"`
+	Total int64          `json:"total"`
+}
+
+func (s *Service) AdminListBotStock(ctx context.Context, q string, listed *bool, limit, offset int) (*BotStockPage, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
+	botUser, err := s.market.EnsureBotUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.inventory.ListByUser(ctx, botUser.ID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]BotStockItem, 0, len(items))
+	for _, item := range items {
+		if item.Status != domain.InvAvailable && item.Status != domain.InvLocked {
+			continue
+		}
+		if domain.IsProfileVirtualItem(item) {
+			continue
+		}
+		meta := parseGiftMeta(item.Metadata)
+		if q != "" {
+			ql := strings.ToLower(q)
+			hay := strings.ToLower(item.Name + " " + item.CollectionSlug + " " + meta.Model + " " + meta.SubName)
+			if !strings.Contains(hay, ql) {
+				continue
+			}
+		}
+		row := BotStockItem{
+			ID:                item.ID.String(),
+			Name:              item.Name,
+			SubName:           meta.SubName,
+			Model:             meta.Model,
+			Symbol:            meta.Symbol,
+			Backdrop:          meta.Backdrop,
+			ImageURL:          item.ImageURL,
+			CollectionSlug:    item.CollectionSlug,
+			FloorPriceNanoton: item.FloorPriceNanoton,
+			Status:            string(item.Status),
+		}
+		if listing, err := s.market.FindActiveByItemID(ctx, item.ID); err == nil {
+			row.Listed = true
+			row.ListingID = listing.ID.String()
+			row.ListingPrice = listing.PriceNanoton
+		}
+		if listed != nil && *listed != row.Listed {
+			continue
+		}
+		if !row.Listed && s.valuator != nil {
+			gift := gifts.ScannedGiftFromItem(item)
+			if price, _ := s.valuator.QuoteValuation(ctx, gift); price > 0 {
+				row.SuggestedPrice = price
+			}
+		}
+		out = append(out, row)
+	}
+
+	total := int64(len(out))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(out) {
+		offset = len(out)
+	}
+	end := offset + limit
+	if end > len(out) {
+		end = len(out)
+	}
+	return &BotStockPage{Items: out[offset:end], Total: total}, nil
+}
+
+func (s *Service) AdminCreateBotListing(ctx context.Context, itemID uuid.UUID, priceNanoton int64) (*ListingView, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
+	botUser, err := s.market.EnsureBotUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	item, err := s.inventory.FindByID(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	if item.UserID != botUser.ID {
+		return nil, domain.ErrForbidden
+	}
+	if domain.IsProfileVirtualItem(*item) {
+		return nil, domain.ErrInvalidAmount
+	}
+	if _, err := s.market.FindActiveByItemID(ctx, itemID); err == nil {
+		return nil, domain.ErrAlreadyListed
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	if priceNanoton <= 0 && s.valuator != nil {
+		gift := gifts.ScannedGiftFromItem(*item)
+		priceNanoton, _ = s.valuator.QuoteValuation(ctx, gift)
+	}
+	if priceNanoton <= 0 {
+		priceNanoton = item.FloorPriceNanoton
+	}
+	if priceNanoton <= 0 {
+		return nil, domain.ErrInvalidAmount
+	}
+
+	switch item.Status {
+	case domain.InvAvailable:
+		if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvLocked); err != nil {
+			return nil, err
+		}
+	case domain.InvLocked:
+		// already locked — list as-is
+	default:
+		return nil, domain.ErrInvalidAmount
+	}
+
+	now := time.Now().UTC()
+	listing := &domain.MarketListing{
+		ID:              uuid.New(),
+		SellerID:        botUser.ID,
+		InventoryItemID: itemID,
+		PriceNanoton:    priceNanoton,
+		Status:          domain.ListingActive,
+		Source:          domain.ListingSourceBot,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := s.market.CreateListing(ctx, listing); err != nil {
+		if item.Status == domain.InvAvailable {
+			_ = s.inventory.UpdateStatus(ctx, itemID, domain.InvLocked, domain.InvAvailable)
+		}
+		return nil, err
+	}
+	_ = s.inventory.UpdateFloorPriceNanoton(ctx, itemID, priceNanoton)
+
+	full, err := s.market.FindByID(ctx, listing.ID)
+	if err != nil {
+		return nil, err
+	}
+	v := toListingView(*full)
+	return &v, nil
+}
+
+func (s *Service) AdminStats(ctx context.Context, since *time.Time) (*domain.MarketStats, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
+	return s.market.MarketStats(ctx, since)
 }

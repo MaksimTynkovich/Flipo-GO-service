@@ -5,6 +5,7 @@ import CaseStatsSection from "./sections/CaseStatsSection";
 import DashboardSection from "./sections/DashboardSection";
 import FinanceSection from "./sections/FinanceSection";
 import GamesSection from "./sections/GamesSection";
+import GiftPricingSection from "./sections/GiftPricingSection";
 import MarketAdminSection from "./sections/MarketAdminSection";
 import MarketDisabledSection from "./sections/MarketDisabledSection";
 import MarketingSection from "./sections/MarketingSection";
@@ -25,6 +26,7 @@ export type AdminSectionId =
   | "cases"
   | "case-stats"
   | "market"
+  | "gift-pricing"
   | "finance"
   | "marketing"
   | "staking"
@@ -49,6 +51,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "case-stats", href: "/admin/case-stats", label: "Статистика кейсов" },
   { id: "outcome", href: "/admin/outcome", label: "Исходы" },
   { id: "market", href: "/admin/market", label: "Маркет", disabled: !MARKET_ENABLED },
+  { id: "gift-pricing", href: "/admin/gift-pricing", label: "Цены подарков" },
   { id: "finance", href: "/admin/finance", label: "Операции" },
   { id: "staking", href: "/admin/staking", label: "Стейкинг" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг" },
@@ -65,6 +68,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   cases: CasesSection,
   "case-stats": CaseStatsSection,
   market: MARKET_ENABLED ? MarketAdminSection : MarketDisabledSection,
+  "gift-pricing": GiftPricingSection,
   finance: FinanceSection,
   staking: StakingSection,
   marketing: MarketingSection,
@@ -83,6 +87,7 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/case-stats": "case-stats",
   "/admin/outcome": "outcome",
   "/admin/market": "market",
+  "/admin/gift-pricing": "gift-pricing",
   "/admin/finance": "finance",
   "/admin/staking": "staking",
   "/admin/marketing": "marketing",

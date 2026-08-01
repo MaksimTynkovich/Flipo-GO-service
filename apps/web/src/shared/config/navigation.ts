@@ -113,7 +113,7 @@ export const APP_SCREENS: AppScreenItem[] = [
           href: APP_ROUTES.market,
           label: "Маркет",
           level: "tab" as const,
-          description: "Магазин и торговля игровыми предметами.",
+          description: "Магазин подарков от платформы.",
         },
       ]
     : []),

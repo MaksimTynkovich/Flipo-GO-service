@@ -291,7 +291,7 @@ export function MarketSection({ onPurchased }: Props) {
           <Gift className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
           <p className="text-sm font-medium">Маркет пуст</p>
           <p className="max-w-[15rem] text-xs leading-relaxed text-muted">
-            Лоты появятся, когда игроки выставят предметы
+            Скоро здесь появятся подарки от платформы
           </p>
         </div>
       )}

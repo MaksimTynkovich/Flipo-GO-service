@@ -37,9 +37,9 @@ type Service struct {
 
 var fetchGiftTraits = telegram.FetchNFTPageTraits
 
-// WithdrawHoldChecker reports silent withdrawal holds (global or per-user).
+// WithdrawHoldChecker reports silent gift withdrawal holds (global, gifts_manual, or per-user).
 type WithdrawHoldChecker interface {
-	IsUserWithdrawHeld(ctx context.Context, userID uuid.UUID) (held bool, reason string, err error)
+	IsUserGiftWithdrawHeld(ctx context.Context, userID uuid.UUID) (held bool, reason string, err error)
 }
 
 func NewService(
@@ -261,7 +261,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 	}
 
 	if s.withdrawHold != nil {
-		held, _, holdErr := s.withdrawHold.IsUserWithdrawHeld(ctx, userID)
+		held, _, holdErr := s.withdrawHold.IsUserGiftWithdrawHeld(ctx, userID)
 		if holdErr != nil {
 			return false, "", holdErr
 		}

@@ -25,6 +25,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/wheel"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type AdminHandler struct {
@@ -37,6 +38,7 @@ type AdminHandler struct {
 	wheel               *wheel.Service
 	cases               *casesuc.Service
 	inventory           *inventory.Service
+	market              *market.Service
 	botSync             *market.BotSyncService
 	hotAddr             string
 	casesUploadDir      string
@@ -67,6 +69,10 @@ func (h *AdminHandler) SetMaintenanceUpdater(fn func(domain.PlatformMaintenanceS
 
 func (h *AdminHandler) SetBotGiftSync(sync *market.BotSyncService) {
 	h.botSync = sync
+}
+
+func (h *AdminHandler) SetMarketService(svc *market.Service) {
+	h.market = svc
 }
 
 func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
@@ -641,6 +647,210 @@ func (h *AdminHandler) UpdateMarketListingPrice(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) ListMarketListings(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
+	if h.market == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "market not configured"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	filter := domain.MarketListingFilter{
+		Query:      strings.TrimSpace(c.Query("q")),
+		Collection: strings.TrimSpace(c.Query("collection")),
+		Sort:       c.DefaultQuery("sort", "newest"),
+		Limit:      limit,
+		Offset:     offset,
+	}
+	if src := c.Query("source"); src == "bot" || src == "user" {
+		s := domain.ListingSource(src)
+		filter.Source = &s
+	}
+	if st := c.Query("status"); st != "" {
+		s := domain.ListingStatus(st)
+		filter.Status = &s
+	}
+	if v := c.Query("price_min"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			filter.PriceMin = &n
+		}
+	}
+	if v := c.Query("price_max"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			filter.PriceMax = &n
+		}
+	}
+	page, err := h.market.AdminListListings(c.Request.Context(), filter)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, page)
+}
+
+func (h *AdminHandler) CancelMarketListing(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
+	if h.market == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "market not configured"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	listingID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID лота"})
+		return
+	}
+	if err := h.market.AdminCancelListing(c.Request.Context(), listingID); err != nil {
+		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Лот не найден"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), adminID, "market_listing_cancelled", "market_listing", listingID.String(), nil)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) BulkMarketListings(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
+	if h.market == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "market not configured"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	var body struct {
+		Action  string    `json:"action" binding:"required"`
+		IDs     []string  `json:"ids" binding:"required"`
+		Percent float64   `json:"percent"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(body.IDs))
+	for _, raw := range body.IDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID лота"})
+			return
+		}
+		ids = append(ids, id)
+	}
+	result, err := h.market.AdminBulkListings(c.Request.Context(), body.Action, ids, body.Percent)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), adminID, "market_listings_bulk", "market_listing", "", map[string]any{
+		"action":  body.Action,
+		"count":   len(ids),
+		"updated": result.Updated,
+		"failed":  result.Failed,
+		"percent": body.Percent,
+	})
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) ListBotMarketStock(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
+	if h.market == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "market not configured"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	q := strings.TrimSpace(c.Query("q"))
+	var listed *bool
+	switch c.Query("listed") {
+	case "true", "1":
+		v := true
+		listed = &v
+	case "false", "0":
+		v := false
+		listed = &v
+	}
+	page, err := h.market.AdminListBotStock(c.Request.Context(), q, listed, limit, offset)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, page)
+}
+
+func (h *AdminHandler) CreateBotMarketListing(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
+	if h.market == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "market not configured"})
+		return
+	}
+	adminID := middleware.GetUserID(c)
+	var body struct {
+		ItemID       string `json:"item_id" binding:"required"`
+		PriceNanoton int64  `json:"price_nanoton"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	itemID, err := uuid.Parse(body.ItemID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID предмета"})
+		return
+	}
+	listing, err := h.market.AdminCreateBotListing(c.Request.Context(), itemID, body.PriceNanoton)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, domain.ErrForbidden) {
+			status = http.StatusForbidden
+		} else if errors.Is(err, domain.ErrAlreadyListed) {
+			status = http.StatusConflict
+		} else if errors.Is(err, domain.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), adminID, "market_bot_listing_created", "market_listing", listing.ID, map[string]any{
+		"item_id":       body.ItemID,
+		"price_nanoton": listing.PriceNanoton,
+	})
+	c.JSON(http.StatusCreated, listing)
+}
+
+func (h *AdminHandler) MarketStats(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
+	if h.market == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "market not configured"})
+		return
+	}
+	var since *time.Time
+	if daysRaw := c.Query("days"); daysRaw != "" {
+		if days, err := strconv.Atoi(daysRaw); err == nil && days > 0 {
+			t := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+			since = &t
+		}
+	}
+	stats, err := h.market.AdminStats(c.Request.Context(), since)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
 }
 
 func (h *AdminHandler) SyncBotMarketGifts(c *gin.Context) {
