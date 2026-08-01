@@ -187,8 +187,17 @@ func (n *AdminNotifier) NotifyDepositConfirmed(ctx context.Context, actor AdminA
 }
 
 // NotifyAltDepositConfirmed — Stars / Crypto Bot payment credited.
+// Always notifies (including when the actor is an admin) so ops see every confirmation.
 func (n *AdminNotifier) NotifyAltDepositConfirmed(ctx context.Context, actor AdminActor, amountNanoton int64, provider string) {
-	n.notifyDepositConfirmed(ctx, actor, amountNanoton, provider)
+	label := altDepositProviderLabel(provider)
+	amount := amountNanoton
+	n.persist(ctx, false, actor, "deposit_confirmed", "finance", "info",
+		"Депозит подтверждён · "+label,
+		fmt.Sprintf("%s · %s TON · %s", FormatActor(actor), formatTON(amountNanoton), label),
+		fmt.Sprintf("%s\nСумма: %s TON\nСпособ: %s", FormatActor(actor), formatTON(amountNanoton), label),
+		&amount,
+		map[string]any{"provider": provider, "provider_label": label},
+	)
 }
 
 func (n *AdminNotifier) notifyDepositConfirmed(ctx context.Context, actor AdminActor, amountNanoton int64, provider string) {

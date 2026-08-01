@@ -182,25 +182,42 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
         throw new Error("Не получена ссылка на оплату");
       }
       setPendingId(intent.id);
+      showToast({
+        variant: "info",
+        title: "Оплатите счёт Stars — зачисление придёт автоматически",
+      });
       openTelegramInvoice(intent.pay_url, (status) => {
         if (status === "paid") {
-          void getPaymentIntent(intent.id).then(async (fresh) => {
-            if (fresh.status === "paid") {
-              setPendingId(null);
-              try {
-                const me = await getMe();
-                setUser((prev) =>
-                  prev ? patchUserBalance(prev, { betting_balance: me.betting_balance }) : me,
-                );
-              } catch {
-                /* ignore */
+          showToast({ variant: "info", title: "Оплата прошла, зачисляем…" });
+          // Webhook may lag behind the Mini App callback — poll briefly.
+          const started = Date.now();
+          const poll = async () => {
+            try {
+              const fresh = await getPaymentIntent(intent.id);
+              if (fresh.status === "paid") {
+                setPendingId(null);
+                try {
+                  const me = await getMe();
+                  setUser((prev) =>
+                    prev ? patchUserBalance(prev, { betting_balance: me.betting_balance }) : me,
+                  );
+                } catch {
+                  /* ignore */
+                }
+                showToast({
+                  variant: "success",
+                  title: `Зачислено ${formatTON(fresh.amount_nanoton)} TON`,
+                });
+                return;
               }
-              showToast({
-                variant: "success",
-                title: `Зачислено ${formatTON(fresh.amount_nanoton)} TON`,
-              });
+            } catch {
+              /* ignore */
             }
-          });
+            if (Date.now() - started < 45000) {
+              window.setTimeout(() => void poll(), 1500);
+            }
+          };
+          void poll();
         } else if (status === "cancelled" || status === "failed") {
           showToast({ variant: "error", title: "Оплата не завершена" });
         }

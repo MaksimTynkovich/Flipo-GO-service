@@ -13,6 +13,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/cryptopay"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
+	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
 )
@@ -26,13 +27,14 @@ type Config struct {
 }
 
 type Service struct {
-	users    domain.UserRepository
-	intents  domain.PaymentIntentRepository
-	crypto   *cryptopay.Client
-	bot      *telegram.BotAPI
-	cfg      Config
-	notifier balance.BalanceNotifier
-	admin    AdminNotifier
+	users     domain.UserRepository
+	intents   domain.PaymentIntentRepository
+	crypto    *cryptopay.Client
+	bot       *telegram.BotAPI
+	cfg       Config
+	notifier  balance.BalanceNotifier
+	admin     AdminNotifier
+	analytics *analyticsuc.Service
 }
 
 type AdminNotifier interface {
@@ -61,6 +63,7 @@ func NewService(
 
 func (s *Service) SetBalanceNotifier(n balance.BalanceNotifier) { s.notifier = n }
 func (s *Service) SetAdminNotifier(n AdminNotifier)             { s.admin = n }
+func (s *Service) SetAnalytics(a *analyticsuc.Service)          { s.analytics = a }
 
 func (s *Service) CryptoBotEnabled() bool { return s.crypto != nil && s.crypto.Enabled() }
 func (s *Service) StarsEnabled() bool     { return s.bot != nil && s.bot.Enabled() }
@@ -238,7 +241,7 @@ func (s *Service) CreateStarsIntent(ctx context.Context, userID uuid.UUID, amoun
 	payload := fmt.Sprintf("st:%s", strings.ReplaceAll(intentID.String(), "-", ""))
 	expiresAt := time.Now().UTC().Add(s.cfg.DepositTTL)
 
-	title := "Пополнение баланса"
+	title := "пополнение баланса"
 	description := fmt.Sprintf("Пополнение баланса на %s TON", formatTONAmount(amountNanoton))
 	prices := []telegram.LabeledPrice{{Label: description, Amount: stars}}
 
@@ -357,8 +360,16 @@ func (s *Service) HandlePreCheckout(ctx context.Context, queryID, payload string
 }
 
 func (s *Service) HandleSuccessfulPayment(ctx context.Context, telegramID int64, payload string, totalAmount int64, currency, telegramChargeID string) error {
+	slog.Info("stars successful_payment received",
+		"telegram_id", telegramID,
+		"payload", strings.TrimSpace(payload),
+		"total_amount", totalAmount,
+		"currency", currency,
+		"charge_id", telegramChargeID,
+	)
 	intent, err := s.intents.FindByPayload(ctx, strings.TrimSpace(payload))
 	if err != nil {
+		slog.Warn("stars payment intent not found", "payload", payload, "error", err)
 		return err
 	}
 	if intent.Provider != domain.PaymentProviderStars {
@@ -368,7 +379,7 @@ func (s *Service) HandleSuccessfulPayment(ctx context.Context, telegramID int64,
 	if err != nil {
 		return err
 	}
-	if user.TelegramID != telegramID {
+	if telegramID > 0 && user.TelegramID != telegramID {
 		slog.Warn("stars payment telegram mismatch", "intent", intent.ID, "expected", user.TelegramID, "got", telegramID)
 		return domain.ErrForbidden
 	}
@@ -381,7 +392,9 @@ func (s *Service) HandleSuccessfulPayment(ctx context.Context, telegramID int64,
 	}
 	if telegramChargeID != "" {
 		intent.ProviderInvoiceID = telegramChargeID
-		_ = s.intents.Update(ctx, intent)
+		if err := s.intents.Update(ctx, intent); err != nil {
+			slog.Warn("stars charge id update failed", "intent", intent.ID, "error", err)
+		}
 	}
 	return s.creditIntent(ctx, intent.ID)
 }
@@ -401,15 +414,35 @@ func (s *Service) creditIntent(ctx context.Context, intentID uuid.UUID) error {
 	if s.notifier != nil {
 		s.notifier.BalanceUpdated(intent.UserID, balanceAfter, intent.AmountNanoton, domain.LedgerDeposit)
 	}
-	if s.admin != nil {
-		if user, err := s.users.FindByID(ctx, intent.UserID); err == nil && user != nil {
-			s.admin.NotifyAltDepositConfirmed(ctx, telegram.AdminActor{
-				TelegramID: user.TelegramID,
-				Username:   user.Username,
-				FirstName:  user.FirstName,
-				LastName:   user.LastName,
-			}, intent.AmountNanoton, intent.Provider)
-		}
+	user, userErr := s.users.FindByID(ctx, intent.UserID)
+	if s.admin != nil && userErr == nil && user != nil {
+		s.admin.NotifyAltDepositConfirmed(ctx, telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}, intent.AmountNanoton, intent.Provider)
+	}
+	if s.analytics != nil && userErr == nil && user != nil {
+		uid := intent.UserID
+		tgID := user.TelegramID
+		s.analytics.Track(ctx, analyticsuc.EventInput{
+			UserID:        &uid,
+			ReferrerID:    user.ReferrerID,
+			TelegramID:    &tgID,
+			Source:        "api",
+			EventName:     "deposit_confirmed",
+			EventCategory: "wallet",
+			Status:        "success",
+			StakingTier:   string(user.StakingTier),
+			Properties: map[string]any{
+				"amount_nanoton":    intent.AmountNanoton,
+				"provider":          intent.Provider,
+				"provider_amount":   intent.ProviderAmount,
+				"provider_currency": intent.ProviderCurrency,
+				"intent_id":         intent.ID.String(),
+			},
+		})
 	}
 	slog.Info("alt deposit credited",
 		"provider", intent.Provider,

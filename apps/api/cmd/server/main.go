@@ -199,6 +199,7 @@ func main() {
 	referralSvc.SetPromoActivator(promoSvc)
 	walletSvc.SetAdminNotifier(adminNotifier)
 	paymentsSvc.SetAdminNotifier(adminNotifier)
+	paymentsSvc.SetAnalytics(analyticsSvc)
 	giftVerifier := telegram.NewBotGiftVerifier(cfg.BotToken)
 	mtprotoCfg := telegram.MTProtoConfigFromEnv(cfg.TelegramAPIID, cfg.TelegramAPIHash, cfg.TelegramSessionPath, cfg.TelegramMTProtoEnabled)
 	if mtprotoCfg.Enabled() {

@@ -188,13 +188,17 @@ func (h *BotUpdates) handlePreCheckout(ctx context.Context, q *PreCheckoutQuery)
 }
 
 func (h *BotUpdates) handleSuccessfulPayment(ctx context.Context, msg *Message) error {
-	if msg == nil || msg.SuccessfulPayment == nil || msg.From == nil || h.starsPay == nil {
+	if msg == nil || msg.SuccessfulPayment == nil || h.starsPay == nil {
 		return nil
 	}
 	sp := msg.SuccessfulPayment
+	var telegramID int64
+	if msg.From != nil {
+		telegramID = msg.From.ID
+	}
 	return h.starsPay.HandleSuccessfulPayment(
 		ctx,
-		msg.From.ID,
+		telegramID,
 		sp.InvoicePayload,
 		sp.TotalAmount,
 		sp.Currency,
