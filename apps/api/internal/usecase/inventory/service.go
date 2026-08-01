@@ -169,8 +169,9 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	if isProfileVirtualItem(*item) {
 		return 0, domain.ErrInvalidAmount
 	}
+	// Case prizes sell at the guaranteed case cashout (not market buyback), including unbacked.
 	if domain.IsCaseClaimItem(*item) && domain.CaseClaimCashoutNanoton(item.Metadata) > 0 {
-		return 0, domain.ErrCaseClaimCashoutOnly
+		return s.LiquidateCaseClaim(ctx, userID, itemID)
 	}
 	if domain.IsUnbackedCaseClaim(*item) {
 		return 0, domain.ErrUnbackedBuyback

@@ -224,7 +224,7 @@ func TestLiquidateCaseClaimBackedHouseGiftWithoutCaseTxRef(t *testing.T) {
 	}
 }
 
-func TestLiquidateRejectsCaseClaimsWithGuaranteedCashout(t *testing.T) {
+func TestLiquidateRoutesCaseClaimsToGuaranteedCashout(t *testing.T) {
 	userID := uuid.New()
 	itemID := uuid.New()
 	repo := &inventoryRepoStub{
@@ -236,11 +236,42 @@ func TestLiquidateRejectsCaseClaimsWithGuaranteedCashout(t *testing.T) {
 			Metadata:      []byte(`{"case_cashout_nanoton":4200000000}`),
 		},
 	}
-	svc := &Service{inventory: repo, market: &liquidationBrokerStub{}}
+	broker := &liquidationBrokerStub{}
+	svc := &Service{inventory: repo, market: broker}
 
-	_, err := svc.Liquidate(context.Background(), userID, itemID)
-	if !errors.Is(err, domain.ErrCaseClaimCashoutOnly) {
-		t.Fatalf("expected ErrCaseClaimCashoutOnly, got %v", err)
+	balance, err := svc.Liquidate(context.Background(), userID, itemID)
+	if err != nil {
+		t.Fatalf("liquidate: %v", err)
+	}
+	if balance != 777 {
+		t.Fatalf("balance %d", balance)
+	}
+	if broker.calls != 1 || broker.payout != 4200000000 {
+		t.Fatalf("settle calls=%d payout=%d", broker.calls, broker.payout)
+	}
+}
+
+func TestLiquidateRoutesUnbackedCaseClaimsToGuaranteedCashout(t *testing.T) {
+	userID := uuid.New()
+	itemID := uuid.New()
+	repo := &inventoryRepoStub{
+		item: &domain.InventoryItem{
+			ID:            itemID,
+			UserID:        userID,
+			Status:        domain.InvAvailable,
+			TelegramTxRef: domain.CaseClaimTxRefPrefix + uuid.NewString(),
+			Metadata:      []byte(`{"fulfillment":"unbacked","case_cashout_nanoton":1500000000}`),
+		},
+	}
+	broker := &liquidationBrokerStub{}
+	svc := &Service{inventory: repo, market: broker}
+
+	balance, err := svc.Liquidate(context.Background(), userID, itemID)
+	if err != nil {
+		t.Fatalf("liquidate: %v", err)
+	}
+	if balance != 777 || broker.payout != 1500000000 {
+		t.Fatalf("balance=%d payout=%d", balance, broker.payout)
 	}
 }
 

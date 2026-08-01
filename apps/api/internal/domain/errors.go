@@ -47,7 +47,7 @@ var (
 	ErrCaseNoLoot             = errors.New("у кейса нет призов")
 	ErrCaseNameTagRequired    = errors.New("добавьте тег в имя Telegram")
 	ErrCaseShareRequired      = errors.New("поделитесь ссылкой чтобы открыть кейс")
-	ErrUnbackedBuyback        = errors.New("виртуальный приз кейса нельзя продать — дождитесь выдачи NFT или выведите подарок")
+	ErrUnbackedBuyback        = errors.New("виртуальный приз кейса нельзя продать по рыночной цене — продайте по цене кейса или выведите подарок")
 	ErrCaseClaimCashoutOnly   = errors.New("кейсовый приз продаётся только по гарантированной цене кейса")
 	ErrAdminPasswordNotSet    = errors.New("пароль админки не настроен")
 	ErrAdminPasswordInvalid   = errors.New("неверный пароль")

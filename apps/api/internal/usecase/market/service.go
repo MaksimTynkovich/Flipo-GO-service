@@ -72,7 +72,8 @@ func (s *Service) List(ctx context.Context, limit, offset int, sort string) ([]L
 	}
 	out := make([]ListingView, 0, len(listings))
 	for _, l := range listings {
-		l = s.refreshBotListing(ctx, l)
+		// Do not live-reprice on list: QuoteValuation hits Portals/MRKT per row and makes
+		// the storefront multi-second. Prices are refreshed on Get/Purchase and via admin reprice.
 		out = append(out, toListingView(l))
 	}
 	return out, nil
