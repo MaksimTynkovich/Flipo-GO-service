@@ -164,7 +164,8 @@ export function sharePreparedMessage(preparedMessageId: string): Promise<boolean
   const id = preparedMessageId?.trim();
   if (!id) return Promise.resolve(false);
   const webApp = getTelegramWebApp();
-  if (!webApp?.shareMessage) {
+  const shareMessage = webApp?.shareMessage?.bind(webApp);
+  if (!shareMessage) {
     return Promise.resolve(false);
   }
   return new Promise((resolve) => {
@@ -175,7 +176,7 @@ export function sharePreparedMessage(preparedMessageId: string): Promise<boolean
       resolve(ok);
     };
     try {
-      webApp.shareMessage(id, (success) => finish(Boolean(success)));
+      shareMessage(id, (success) => finish(Boolean(success)));
     } catch {
       finish(false);
     }
