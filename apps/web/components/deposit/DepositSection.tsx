@@ -54,7 +54,7 @@ export function DepositSection() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Выбери способ зачисления средств</p>
+      <p className="text-sm text-muted">Выберите способ зачисления средств</p>
 
       <div className="segment-control overflow-x-auto">
         {tabs.map(({ id, label, icon: Icon, disabled }) => (

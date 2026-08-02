@@ -343,7 +343,7 @@ export default function MarketAdminSection() {
       showToast({
         variant: result.listed > 0 ? "success" : "info",
         title: "Синхронизация бота",
-        subtitle: `скан: ${result.scanned} · выгружено: ${result.listed} · без цены: ${result.skipped_unpriced}`,
+        subtitle: `скан: ${result.scanned} · выгружено: ${result.listed} · уже в инвентаре: ${result.skipped_owned} · депозит: ${result.skipped_pending_deposit} · без цены: ${result.skipped_unpriced}`,
       });
     } catch (err) {
       showToast({

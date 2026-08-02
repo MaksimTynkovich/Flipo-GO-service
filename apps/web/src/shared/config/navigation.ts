@@ -235,7 +235,7 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   {
     href: APP_ROUTES.roulette,
     title: "Рулетка",
-    description: "Выбери цвет — красный, чёрный или зелёный — и жди результат.",
+    description: "Выберите цвет — красный, чёрный или зелёный — и ждите результат.",
     badge: "Онлайн",
     icon: CircleDot,
     tone: "roulette",

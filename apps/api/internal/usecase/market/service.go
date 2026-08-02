@@ -286,8 +286,8 @@ func (s *Service) RepriceListing(ctx context.Context, listingID, itemID uuid.UUI
 	return s.inventory.UpdateFloorPriceNanoton(ctx, itemID, priceNanoton)
 }
 
-// RelistBotGiftIfNeeded creates a market listing when the bot owns a locked inventory item
-// without an active listing (e.g. gift returned after a lost bet).
+// RelistBotGiftIfNeeded creates a market listing when the bot owns an available/locked
+// inventory item without an active listing (e.g. after cancel, or house stock still on the account).
 func (s *Service) RelistBotGiftIfNeeded(ctx context.Context, item *domain.InventoryItem, priceNanoton int64) (bool, error) {
 	if item == nil || priceNanoton <= 0 {
 		return false, nil
@@ -296,13 +296,26 @@ func (s *Service) RelistBotGiftIfNeeded(ctx context.Context, item *domain.Invent
 	if err != nil {
 		return false, err
 	}
-	if item.UserID != botUser.ID || item.Status != domain.InvLocked {
+	if item.UserID != botUser.ID {
+		return false, nil
+	}
+	if item.Status != domain.InvAvailable && item.Status != domain.InvLocked {
+		return false, nil
+	}
+	if domain.IsProfileVirtualItem(*item) {
 		return false, nil
 	}
 	if _, err := s.market.FindActiveByItemID(ctx, item.ID); err == nil {
 		return false, nil
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, err
+	}
+
+	wasAvailable := item.Status == domain.InvAvailable
+	if wasAvailable {
+		if err := s.inventory.UpdateStatus(ctx, item.ID, domain.InvAvailable, domain.InvLocked); err != nil {
+			return false, err
+		}
 	}
 
 	now := time.Now().UTC()
@@ -317,6 +330,9 @@ func (s *Service) RelistBotGiftIfNeeded(ctx context.Context, item *domain.Invent
 		UpdatedAt:       now,
 	}
 	if err := s.market.CreateListing(ctx, listing); err != nil {
+		if wasAvailable {
+			_ = s.inventory.UpdateStatus(ctx, item.ID, domain.InvLocked, domain.InvAvailable)
+		}
 		return false, err
 	}
 	if err := s.inventory.UpdateFloorPriceNanoton(ctx, item.ID, priceNanoton); err != nil {
