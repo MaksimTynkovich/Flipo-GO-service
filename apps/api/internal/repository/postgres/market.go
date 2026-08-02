@@ -38,40 +38,40 @@ func (r *MarketRepo) ListActive(ctx context.Context, limit, offset int, sort str
 	return listings, err
 }
 
-func (r *MarketRepo) ListFiltered(ctx context.Context, filter domain.MarketListingFilter) ([]domain.MarketListing, int64, error) {
-	applyFilters := func(q *gorm.DB) *gorm.DB {
-		if filter.Source != nil {
-			q = q.Where("market_listings.source = ?", *filter.Source)
-		}
-		if filter.Status != nil {
-			q = q.Where("market_listings.status = ?", *filter.Status)
-		} else {
-			q = q.Where("market_listings.status = ?", domain.ListingActive)
-		}
-		if filter.PriceMin != nil {
-			q = q.Where("market_listings.price_nanoton >= ?", *filter.PriceMin)
-		}
-		if filter.PriceMax != nil {
-			q = q.Where("market_listings.price_nanoton <= ?", *filter.PriceMax)
-		}
-		if filter.Collection != "" || filter.Query != "" {
-			q = q.Joins("JOIN inventory_items ON inventory_items.id = market_listings.inventory_item_id")
-		}
-		if filter.Collection != "" {
-			q = q.Where("inventory_items.collection_slug = ?", filter.Collection)
-		}
-		if filter.Query != "" {
-			like := "%" + filter.Query + "%"
-			q = q.Where(
-				"(inventory_items.name ILIKE ? OR inventory_items.collection_slug ILIKE ? OR COALESCE(inventory_items.metadata::text, '') ILIKE ?)",
-				like, like, like,
-			)
-		}
-		return q
+func applyMarketListingFilters(q *gorm.DB, filter domain.MarketListingFilter) *gorm.DB {
+	if filter.Source != nil {
+		q = q.Where("market_listings.source = ?", *filter.Source)
 	}
+	if filter.Status != nil {
+		q = q.Where("market_listings.status = ?", *filter.Status)
+	} else {
+		q = q.Where("market_listings.status = ?", domain.ListingActive)
+	}
+	if filter.PriceMin != nil {
+		q = q.Where("market_listings.price_nanoton >= ?", *filter.PriceMin)
+	}
+	if filter.PriceMax != nil {
+		q = q.Where("market_listings.price_nanoton <= ?", *filter.PriceMax)
+	}
+	if filter.Collection != "" || filter.Query != "" {
+		q = q.Joins("JOIN inventory_items ON inventory_items.id = market_listings.inventory_item_id")
+	}
+	if filter.Collection != "" {
+		q = q.Where("inventory_items.collection_slug = ?", filter.Collection)
+	}
+	if filter.Query != "" {
+		like := "%" + filter.Query + "%"
+		q = q.Where(
+			"(inventory_items.name ILIKE ? OR inventory_items.collection_slug ILIKE ? OR COALESCE(inventory_items.metadata::text, '') ILIKE ?)",
+			like, like, like,
+		)
+	}
+	return q
+}
 
+func (r *MarketRepo) ListFiltered(ctx context.Context, filter domain.MarketListingFilter) ([]domain.MarketListing, int64, error) {
 	var total int64
-	countQ := applyFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{}))
+	countQ := applyMarketListingFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{}), filter)
 	if err := countQ.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -89,7 +89,7 @@ func (r *MarketRepo) ListFiltered(ctx context.Context, filter domain.MarketListi
 	}
 
 	var listings []domain.MarketListing
-	err := applyFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{})).
+	err := applyMarketListingFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{}), filter).
 		Preload("Item").
 		Preload("Seller").
 		Order(marketListOrderPrefixed(filter.Sort)).
@@ -97,6 +97,23 @@ func (r *MarketRepo) ListFiltered(ctx context.Context, filter domain.MarketListi
 		Offset(offset).
 		Find(&listings).Error
 	return listings, total, err
+}
+
+const marketFilteredIDsCap = 10_000
+
+func (r *MarketRepo) ListFilteredIDs(ctx context.Context, filter domain.MarketListingFilter) ([]uuid.UUID, int64, error) {
+	var total int64
+	countQ := applyMarketListingFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{}), filter)
+	if err := countQ.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var ids []uuid.UUID
+	err := applyMarketListingFilters(r.db.WithContext(ctx).Model(&domain.MarketListing{}), filter).
+		Order(marketListOrderPrefixed(filter.Sort)).
+		Limit(marketFilteredIDsCap).
+		Pluck("market_listings.id", &ids).Error
+	return ids, total, err
 }
 
 func marketListOrder(sort string) string {

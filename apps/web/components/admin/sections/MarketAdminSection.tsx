@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, X } from "lucide-react";
 import { AdminButton, AdminChip, AdminPage, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
@@ -11,6 +11,7 @@ import {
   createAdminBotMarketListing,
   formatTON,
   getAdminBotMarketStock,
+  getAdminMarketListingIDs,
   getAdminMarketListings,
   getAdminMarketStats,
   repriceAdminBotMarketGifts,
@@ -63,11 +64,13 @@ export default function MarketAdminSection() {
 
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [listingsTotal, setListingsTotal] = useState(0);
-  const [listingsOffset, setListingsOffset] = useState(0);
   const [listingsLoading, setListingsLoading] = useState(true);
+  const [listingsLoadingMore, setListingsLoadingMore] = useState(false);
+  const [listingsHasMore, setListingsHasMore] = useState(true);
   const [draftPrices, setDraftPrices] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllBusy, setSelectAllBusy] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkPercent, setBulkPercent] = useState("0");
 
@@ -85,8 +88,9 @@ export default function MarketAdminSection() {
 
   const [stock, setStock] = useState<AdminBotStockItem[]>([]);
   const [stockTotal, setStockTotal] = useState(0);
-  const [stockOffset, setStockOffset] = useState(0);
   const [stockLoading, setStockLoading] = useState(false);
+  const [stockLoadingMore, setStockLoadingMore] = useState(false);
+  const [stockHasMore, setStockHasMore] = useState(true);
   const [stockQ, setStockQ] = useState("");
   const [stockQDraft, setStockQDraft] = useState("");
   const [listedFilter, setListedFilter] = useState<ListedFilter>("unlisted");
@@ -101,9 +105,31 @@ export default function MarketAdminSection() {
   const [repricingBot, setRepricingBot] = useState(false);
   const [detail, setDetail] = useState<MarketListing | null>(null);
 
+  const listingsOffsetRef = useRef(0);
+  const listingsLoadingMoreRef = useRef(false);
+  const listingsHasMoreRef = useRef(true);
+  const listingsSentinelRef = useRef<HTMLDivElement | null>(null);
+  const stockOffsetRef = useRef(0);
+  const stockLoadingMoreRef = useRef(false);
+  const stockHasMoreRef = useRef(true);
+  const stockSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const listingFilters = useMemo(
+    () => ({
+      q,
+      collection,
+      source: sourceFilter,
+      status: statusFilter,
+      priceMinTon,
+      priceMaxTon,
+      sort,
+    }),
+    [collection, priceMaxTon, priceMinTon, q, sort, sourceFilter, statusFilter],
+  );
+
   const loadListings = useCallback(
     async (opts?: {
-      offset?: number;
+      append?: boolean;
       q?: string;
       collection?: string;
       source?: SourceFilter;
@@ -112,15 +138,30 @@ export default function MarketAdminSection() {
       priceMaxTon?: string;
       sort?: "newest" | "price_asc" | "price_desc";
     }) => {
-      const offset = opts?.offset ?? listingsOffset;
-      const nextQ = opts?.q ?? q;
-      const nextCollection = opts?.collection ?? collection;
-      const nextSource = opts?.source ?? sourceFilter;
-      const nextStatus = opts?.status ?? statusFilter;
-      const nextPriceMin = opts?.priceMinTon ?? priceMinTon;
-      const nextPriceMax = opts?.priceMaxTon ?? priceMaxTon;
-      const nextSort = opts?.sort ?? sort;
-      setListingsLoading(true);
+      const append = Boolean(opts?.append);
+      if (append) {
+        if (listingsLoadingMoreRef.current || !listingsHasMoreRef.current) return;
+        listingsLoadingMoreRef.current = true;
+        setListingsLoadingMore(true);
+      } else {
+        listingsLoadingMoreRef.current = false;
+        listingsHasMoreRef.current = true;
+        listingsOffsetRef.current = 0;
+        setListingsHasMore(true);
+        setListingsLoadingMore(false);
+        setListingsLoading(true);
+        setSelectedIds(new Set());
+      }
+
+      const nextQ = opts?.q ?? listingFilters.q;
+      const nextCollection = opts?.collection ?? listingFilters.collection;
+      const nextSource = opts?.source ?? listingFilters.source;
+      const nextStatus = opts?.status ?? listingFilters.status;
+      const nextPriceMin = opts?.priceMinTon ?? listingFilters.priceMinTon;
+      const nextPriceMax = opts?.priceMaxTon ?? listingFilters.priceMaxTon;
+      const nextSort = opts?.sort ?? listingFilters.sort;
+      const offset = append ? listingsOffsetRef.current : 0;
+
       try {
         const priceMin = tonInputToNanoton(nextPriceMin);
         const priceMax = tonInputToNanoton(nextPriceMax);
@@ -135,60 +176,106 @@ export default function MarketAdminSection() {
           limit: PAGE_SIZE,
           offset,
         });
-        setListings(data.items);
+        setListings((prev) => {
+          if (!append) return data.items;
+          const seen = new Set(prev.map((item) => item.id));
+          return [...prev, ...data.items.filter((item) => !seen.has(item.id))];
+        });
         setListingsTotal(data.total);
-        setDraftPrices(
-          Object.fromEntries(data.items.map((listing) => [listing.id, nanotonToTonInput(listing.price_nanoton)])),
-        );
-        setSelectedIds(new Set());
+        setDraftPrices((prev) => {
+          const next = append ? { ...prev } : {};
+          for (const listing of data.items) {
+            next[listing.id] = nanotonToTonInput(listing.price_nanoton);
+          }
+          return next;
+        });
+        const nextOffset = offset + data.items.length;
+        listingsOffsetRef.current = nextOffset;
+        const more = nextOffset < data.total && data.items.length > 0;
+        listingsHasMoreRef.current = more;
+        setListingsHasMore(more);
       } catch (err) {
         showToast({
           variant: "error",
           title: err instanceof Error ? err.message : "Не удалось загрузить лоты",
         });
       } finally {
-        setListingsLoading(false);
+        if (append) {
+          listingsLoadingMoreRef.current = false;
+          setListingsLoadingMore(false);
+        } else {
+          setListingsLoading(false);
+        }
       }
     },
-    [collection, listingsOffset, priceMaxTon, priceMinTon, q, showToast, sort, sourceFilter, statusFilter],
+    [listingFilters, showToast],
   );
 
   const loadStock = useCallback(
-    async (opts?: { offset?: number }) => {
-      const offset = opts?.offset ?? stockOffset;
-      setStockLoading(true);
+    async (opts?: { append?: boolean; q?: string; listed?: ListedFilter }) => {
+      const append = Boolean(opts?.append);
+      if (append) {
+        if (stockLoadingMoreRef.current || !stockHasMoreRef.current) return;
+        stockLoadingMoreRef.current = true;
+        setStockLoadingMore(true);
+      } else {
+        stockLoadingMoreRef.current = false;
+        stockHasMoreRef.current = true;
+        stockOffsetRef.current = 0;
+        setStockHasMore(true);
+        setStockLoadingMore(false);
+        setStockLoading(true);
+      }
+
+      const nextQ = opts?.q ?? stockQ;
+      const nextListed = opts?.listed ?? listedFilter;
+      const offset = append ? stockOffsetRef.current : 0;
+
       try {
         const data = await getAdminBotMarketStock({
-          q: stockQ || undefined,
-          listed: listedFilter === "all" ? undefined : listedFilter === "listed",
+          q: nextQ || undefined,
+          listed: nextListed === "all" ? undefined : nextListed === "listed",
           limit: PAGE_SIZE,
           offset,
         });
-        setStock(data.items);
+        setStock((prev) => {
+          if (!append) return data.items;
+          const seen = new Set(prev.map((item) => item.id));
+          return [...prev, ...data.items.filter((item) => !seen.has(item.id))];
+        });
         setStockTotal(data.total);
-        setStockDraftPrices(
-          Object.fromEntries(
-            data.items.map((item) => [
-              item.id,
-              nanotonToTonInput(
-                item.listing_price_nanoton ||
-                  item.suggested_price_nanoton ||
-                  item.floor_price_nanoton ||
-                  0,
-              ),
-            ]),
-          ),
-        );
+        setStockDraftPrices((prev) => {
+          const next = append ? { ...prev } : {};
+          for (const item of data.items) {
+            next[item.id] = nanotonToTonInput(
+              item.listing_price_nanoton ||
+                item.suggested_price_nanoton ||
+                item.floor_price_nanoton ||
+                0,
+            );
+          }
+          return next;
+        });
+        const nextOffset = offset + data.items.length;
+        stockOffsetRef.current = nextOffset;
+        const more = nextOffset < data.total && data.items.length > 0;
+        stockHasMoreRef.current = more;
+        setStockHasMore(more);
       } catch (err) {
         showToast({
           variant: "error",
           title: err instanceof Error ? err.message : "Не удалось загрузить сток",
         });
       } finally {
-        setStockLoading(false);
+        if (append) {
+          stockLoadingMoreRef.current = false;
+          setStockLoadingMore(false);
+        } else {
+          setStockLoading(false);
+        }
       }
     },
-    [listedFilter, showToast, stockOffset, stockQ],
+    [listedFilter, showToast, stockQ],
   );
 
   const loadStats = useCallback(async () => {
@@ -206,25 +293,55 @@ export default function MarketAdminSection() {
   }, [showToast, statsDays]);
 
   useEffect(() => {
-    setListingsOffset(0);
-    loadListings({ offset: 0, source: sourceFilter, status: statusFilter, sort }).catch(() => {});
+    loadListings({
+      source: sourceFilter,
+      status: statusFilter,
+      sort,
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFilter, statusFilter, sort]);
 
   useEffect(() => {
-    if (tab === "stock") loadStock().catch(() => {});
+    if (tab === "stock") {
+      loadStock().catch(() => {});
+    }
     if (tab === "stats") loadStats().catch(() => {});
   }, [tab, loadStock, loadStats]);
 
-  const listingsPageCount = useMemo(
-    () => Math.max(1, Math.ceil(listingsTotal / PAGE_SIZE)),
-    [listingsTotal],
-  );
-  const listingsPageIndex = Math.floor(listingsOffset / PAGE_SIZE) + 1;
-  const stockPageCount = useMemo(() => Math.max(1, Math.ceil(stockTotal / PAGE_SIZE)), [stockTotal]);
-  const stockPageIndex = Math.floor(stockOffset / PAGE_SIZE) + 1;
+  useEffect(() => {
+    if (tab !== "listings") return;
+    const node = listingsSentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadListings({ append: true });
+        }
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [tab, loadListings, listings.length, listingsHasMore]);
 
-  const allSelected = listings.length > 0 && listings.every((l) => selectedIds.has(l.id));
+  useEffect(() => {
+    if (tab !== "stock") return;
+    const node = stockSentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadStock({ append: true });
+        }
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [tab, loadStock, stock.length, stockHasMore]);
+
+  const allMatchingSelected =
+    listingsTotal > 0 && selectedIds.size > 0 && selectedIds.size >= listingsTotal;
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -235,12 +352,40 @@ export default function MarketAdminSection() {
     });
   }
 
-  function toggleSelectAll() {
-    if (allSelected) {
+  async function toggleSelectAllMatching() {
+    if (allMatchingSelected || (selectedIds.size > 0 && selectedIds.size >= listingsTotal)) {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(listings.map((l) => l.id)));
+    setSelectAllBusy(true);
+    try {
+      const priceMin = tonInputToNanoton(priceMinTon);
+      const priceMax = tonInputToNanoton(priceMaxTon);
+      const data = await getAdminMarketListingIDs({
+        q: q || undefined,
+        collection: collection || undefined,
+        source: sourceFilter === "all" ? undefined : sourceFilter,
+        status: statusFilter || undefined,
+        price_min: priceMin > 0 ? priceMin : undefined,
+        price_max: priceMax > 0 ? priceMax : undefined,
+        sort,
+      });
+      setSelectedIds(new Set(data.ids));
+      if (data.ids.length < data.total) {
+        showToast({
+          variant: "info",
+          title: `Выбрано ${data.ids.length} из ${data.total}`,
+          subtitle: "Лимит выбора — 10 000 лотов",
+        });
+      }
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: err instanceof Error ? err.message : "Не удалось выбрать лоты",
+      });
+    } finally {
+      setSelectAllBusy(false);
+    }
   }
 
   async function handleSaveListing(listing: MarketListing) {
@@ -338,7 +483,7 @@ export default function MarketAdminSection() {
     setSyncingBot(true);
     try {
       const result = await syncAdminBotMarketGifts();
-      await loadListings({ offset: listingsOffset });
+      await loadListings();
       if (tab === "stock") await loadStock();
       showToast({
         variant: result.listed > 0 ? "success" : "info",
@@ -359,7 +504,7 @@ export default function MarketAdminSection() {
     setRepricingBot(true);
     try {
       const result = await repriceAdminBotMarketGifts();
-      await loadListings({ offset: listingsOffset });
+      await loadListings();
       showToast({
         variant: result.updated > 0 ? "success" : "info",
         title: "Цены обновлены по алгоритму",
@@ -532,9 +677,7 @@ export default function MarketAdminSection() {
                   setCollection(nextCollection);
                   setPriceMinTon(priceMinDraft);
                   setPriceMaxTon(priceMaxDraft);
-                  setListingsOffset(0);
                   loadListings({
-                    offset: 0,
                     q: nextQ,
                     collection: nextCollection,
                     source: sourceFilter,
@@ -552,8 +695,16 @@ export default function MarketAdminSection() {
 
           {statusFilter === "active" ? (
             <AdminToolbar>
-              <AdminButton variant="secondary" onClick={toggleSelectAll}>
-                {allSelected ? "Снять выбор" : "Выбрать все на стр."}
+              <AdminButton
+                variant="secondary"
+                disabled={selectAllBusy || listingsTotal === 0}
+                onClick={() => void toggleSelectAllMatching()}
+              >
+                {selectAllBusy
+                  ? "Выбор…"
+                  : allMatchingSelected
+                    ? "Снять выбор"
+                    : `Выбрать все (${listingsTotal})`}
               </AdminButton>
               <label className="flex items-center gap-2 text-xs text-muted">
                 Bulk %
@@ -577,7 +728,10 @@ export default function MarketAdminSection() {
               >
                 Снять выбранные
               </AdminButton>
-              <span className="text-xs text-muted">Выбрано: {selectedIds.size}</span>
+              <span className="text-xs text-muted">
+                Выбрано: {selectedIds.size}
+                {listingsTotal > 0 ? ` / ${listingsTotal}` : ""}
+              </span>
             </AdminToolbar>
           ) : null}
 
@@ -653,40 +807,17 @@ export default function MarketAdminSection() {
                     ) : null}
                   </div>
                 ))}
+                <div ref={listingsSentinelRef} className="h-1 w-full" />
+                {listingsLoadingMore ? (
+                  <p className="py-2 text-center text-xs text-muted">Загрузка…</p>
+                ) : null}
+                {!listingsHasMore && listings.length > 0 ? (
+                  <p className="py-2 text-center text-xs text-muted">
+                    Показано {listings.length} из {listingsTotal}
+                  </p>
+                ) : null}
               </div>
             )}
-
-            {listingsTotal > PAGE_SIZE ? (
-              <div className="flex items-center justify-between gap-2 pt-2">
-                <p className="text-xs text-muted">
-                  Стр. {listingsPageIndex} / {listingsPageCount}
-                </p>
-                <div className="flex gap-2">
-                  <AdminButton
-                    variant="secondary"
-                    disabled={listingsOffset <= 0 || listingsLoading}
-                    onClick={() => {
-                      const next = Math.max(0, listingsOffset - PAGE_SIZE);
-                      setListingsOffset(next);
-                      loadListings({ offset: next }).catch(() => {});
-                    }}
-                  >
-                    Назад
-                  </AdminButton>
-                  <AdminButton
-                    variant="secondary"
-                    disabled={listingsOffset + PAGE_SIZE >= listingsTotal || listingsLoading}
-                    onClick={() => {
-                      const next = listingsOffset + PAGE_SIZE;
-                      setListingsOffset(next);
-                      loadListings({ offset: next }).catch(() => {});
-                    }}
-                  >
-                    Далее
-                  </AdminButton>
-                </div>
-              </div>
-            ) : null}
           </AdminPanel>
         </>
       ) : null}
@@ -702,7 +833,6 @@ export default function MarketAdminSection() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   setStockQ(stockQDraft.trim());
-                  setStockOffset(0);
                 }
               }}
             />
@@ -718,8 +848,6 @@ export default function MarketAdminSection() {
             <AdminButton
               onClick={() => {
                 setStockQ(stockQDraft.trim());
-                setStockOffset(0);
-                loadStock({ offset: 0 }).catch(() => {});
               }}
             >
               Найти
@@ -799,40 +927,17 @@ export default function MarketAdminSection() {
                     </div>
                   </div>
                 ))}
+                <div ref={stockSentinelRef} className="h-1 w-full" />
+                {stockLoadingMore ? (
+                  <p className="py-2 text-center text-xs text-muted">Загрузка…</p>
+                ) : null}
+                {!stockHasMore && stock.length > 0 ? (
+                  <p className="py-2 text-center text-xs text-muted">
+                    Показано {stock.length} из {stockTotal}
+                  </p>
+                ) : null}
               </div>
             )}
-
-            {stockTotal > PAGE_SIZE ? (
-              <div className="flex items-center justify-between gap-2 pt-2">
-                <p className="text-xs text-muted">
-                  Стр. {stockPageIndex} / {stockPageCount}
-                </p>
-                <div className="flex gap-2">
-                  <AdminButton
-                    variant="secondary"
-                    disabled={stockOffset <= 0 || stockLoading}
-                    onClick={() => {
-                      const next = Math.max(0, stockOffset - PAGE_SIZE);
-                      setStockOffset(next);
-                      loadStock({ offset: next }).catch(() => {});
-                    }}
-                  >
-                    Назад
-                  </AdminButton>
-                  <AdminButton
-                    variant="secondary"
-                    disabled={stockOffset + PAGE_SIZE >= stockTotal || stockLoading}
-                    onClick={() => {
-                      const next = stockOffset + PAGE_SIZE;
-                      setStockOffset(next);
-                      loadStock({ offset: next }).catch(() => {});
-                    }}
-                  >
-                    Далее
-                  </AdminButton>
-                </div>
-              </div>
-            ) : null}
           </AdminPanel>
         </>
       ) : null}

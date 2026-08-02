@@ -284,8 +284,9 @@ func (s *BotSyncService) syncOne(ctx context.Context, gift telegram.IncomingGift
 		return "", err
 	}
 
-	// Gift still attributable to a registered user → leave for auto-deposit.
-	if gift.SenderTelegramID != 0 {
+	// When gift deposits are enabled, leave gifts from registered senders for auto-deposit.
+	// While deposits are paused, list them on the bot market instead of stalling forever.
+	if domain.GiftDepositEnabled && gift.SenderTelegramID != 0 {
 		if _, err := s.users.FindByTelegramID(ctx, gift.SenderTelegramID); err == nil {
 			return "pending_deposit", nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {

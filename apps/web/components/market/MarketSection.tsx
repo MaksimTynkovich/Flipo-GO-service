@@ -72,7 +72,7 @@ export function MarketSection({ onPurchased }: Props) {
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<MarketSort>("newest");
+  const [sort, setSort] = useState<MarketSort>("price_desc");
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
 
   const offsetRef = useRef(0);
@@ -206,7 +206,7 @@ export function MarketSection({ onPurchased }: Props) {
   );
 
   const hasActiveFilters = Boolean(
-    query.trim() || selectedCollections.length > 0 || sort !== "newest",
+    query.trim() || selectedCollections.length > 0 || sort !== "price_desc",
   );
 
   async function handleBuy() {

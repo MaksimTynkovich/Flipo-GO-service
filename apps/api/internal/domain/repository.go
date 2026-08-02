@@ -115,6 +115,7 @@ type MarketRepository interface {
 	ListActive(ctx context.Context, limit, offset int, sort string, source *ListingSource) ([]MarketListing, error)
 	ListActiveBySource(ctx context.Context, source ListingSource) ([]MarketListing, error)
 	ListFiltered(ctx context.Context, filter MarketListingFilter) ([]MarketListing, int64, error)
+	ListFilteredIDs(ctx context.Context, filter MarketListingFilter) ([]uuid.UUID, int64, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*MarketListing, error)
 	ListBySeller(ctx context.Context, sellerID uuid.UUID) ([]MarketListing, error)
 	FindActiveByItemID(ctx context.Context, itemID uuid.UUID) (*MarketListing, error)

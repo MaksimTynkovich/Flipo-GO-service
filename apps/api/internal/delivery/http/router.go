@@ -210,6 +210,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/users/:id/transfers", deps.AdminHandler.UserTransfers)
 			adminAuthed.PATCH("/market/listings/:id", deps.AdminHandler.UpdateMarketListingPrice)
 			adminAuthed.GET("/market/listings", deps.AdminHandler.ListMarketListings)
+			adminAuthed.GET("/market/listings/ids", deps.AdminHandler.ListMarketListingIDs)
 			adminAuthed.DELETE("/market/listings/:id", deps.AdminHandler.CancelMarketListing)
 			adminAuthed.POST("/market/listings/bulk", deps.AdminHandler.BulkMarketListings)
 			adminAuthed.GET("/market/bot-stock", deps.AdminHandler.ListBotMarketStock)

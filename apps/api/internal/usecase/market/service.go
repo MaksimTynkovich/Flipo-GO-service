@@ -419,6 +419,11 @@ type AdminListingPage struct {
 	Total int64         `json:"total"`
 }
 
+type AdminListingIDsPage struct {
+	IDs   []string `json:"ids"`
+	Total int64    `json:"total"`
+}
+
 func (s *Service) AdminListListings(ctx context.Context, filter domain.MarketListingFilter) (*AdminListingPage, error) {
 	if err := domain.EnsureMarketEnabled(); err != nil {
 		return nil, err
@@ -432,6 +437,21 @@ func (s *Service) AdminListListings(ctx context.Context, filter domain.MarketLis
 		out = append(out, toListingView(l))
 	}
 	return &AdminListingPage{Items: out, Total: total}, nil
+}
+
+func (s *Service) AdminListListingIDs(ctx context.Context, filter domain.MarketListingFilter) (*AdminListingIDsPage, error) {
+	if err := domain.EnsureMarketEnabled(); err != nil {
+		return nil, err
+	}
+	ids, total, err := s.market.ListFilteredIDs(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return &AdminListingIDsPage{IDs: out, Total: total}, nil
 }
 
 func (s *Service) AdminCancelListing(ctx context.Context, listingID uuid.UUID) error {

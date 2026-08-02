@@ -1672,6 +1672,32 @@ export async function getAdminMarketListings(params?: {
   return api<AdminMarketListingPage>(`/api/v1/admin/market/listings${qs ? `?${qs}` : ""}`);
 }
 
+export type AdminMarketListingIDsPage = {
+  ids: string[];
+  total: number;
+};
+
+export async function getAdminMarketListingIDs(params?: {
+  q?: string;
+  collection?: string;
+  source?: "bot" | "user";
+  status?: string;
+  price_min?: number;
+  price_max?: number;
+  sort?: "newest" | "price_asc" | "price_desc";
+}) {
+  const q = new URLSearchParams();
+  if (params?.q) q.set("q", params.q);
+  if (params?.collection) q.set("collection", params.collection);
+  if (params?.source) q.set("source", params.source);
+  if (params?.status) q.set("status", params.status);
+  if (params?.price_min != null) q.set("price_min", String(params.price_min));
+  if (params?.price_max != null) q.set("price_max", String(params.price_max));
+  if (params?.sort) q.set("sort", params.sort);
+  const qs = q.toString();
+  return api<AdminMarketListingIDsPage>(`/api/v1/admin/market/listings/ids${qs ? `?${qs}` : ""}`);
+}
+
 export async function cancelAdminMarketListing(id: string) {
   return api<{ ok: boolean }>(`/api/v1/admin/market/listings/${id}`, { method: "DELETE" });
 }

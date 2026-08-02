@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 export type MarketSort = "newest" | "price_asc" | "price_desc";
 
-const SORT_CYCLE: MarketSort[] = ["newest", "price_asc", "price_desc"];
+const SORT_CYCLE: MarketSort[] = ["price_desc", "newest", "price_asc"];
 
 const SORT_META: Record<
   MarketSort,
@@ -128,7 +128,7 @@ export function MarketToolbar({
           aria-label={SORT_META[sort].label}
           className={cn(
             "app-control relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-muted",
-            sort !== "newest" && "text-accent",
+            sort !== "price_desc" && "text-accent",
           )}
         >
           <SortIcon className="h-4 w-4" strokeWidth={2} />

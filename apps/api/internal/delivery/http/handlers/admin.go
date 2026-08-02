@@ -692,6 +692,45 @@ func (h *AdminHandler) ListMarketListings(c *gin.Context) {
 	c.JSON(http.StatusOK, page)
 }
 
+func (h *AdminHandler) ListMarketListingIDs(c *gin.Context) {
+	if respondMarketDisabled(c) {
+		return
+	}
+	if h.market == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "market not configured"})
+		return
+	}
+	filter := domain.MarketListingFilter{
+		Query:      strings.TrimSpace(c.Query("q")),
+		Collection: strings.TrimSpace(c.Query("collection")),
+		Sort:       c.DefaultQuery("sort", "newest"),
+	}
+	if src := c.Query("source"); src == "bot" || src == "user" {
+		s := domain.ListingSource(src)
+		filter.Source = &s
+	}
+	if st := c.Query("status"); st != "" {
+		s := domain.ListingStatus(st)
+		filter.Status = &s
+	}
+	if v := c.Query("price_min"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			filter.PriceMin = &n
+		}
+	}
+	if v := c.Query("price_max"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			filter.PriceMax = &n
+		}
+	}
+	page, err := h.market.AdminListListingIDs(c.Request.Context(), filter)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, page)
+}
+
 func (h *AdminHandler) CancelMarketListing(c *gin.Context) {
 	if respondMarketDisabled(c) {
 		return
