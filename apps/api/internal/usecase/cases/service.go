@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +58,10 @@ type Service struct {
 	feedBuf         *liveDropBuffer
 	liveSim         *LiveSim
 	isAdmin         func(telegramID int64) bool
+	botAPI          *telegram.BotAPI
+	botUsername     string
+	webAppShortName string
+	webAppURL       string
 }
 
 type AdminCaseNotifier interface {
@@ -98,6 +104,13 @@ func (s *Service) SetChannelRequirement(channel string, checker ChannelChecker) 
 
 func (s *Service) SetAdminChecker(isAdmin func(telegramID int64) bool) {
 	s.isAdmin = isAdmin
+}
+
+func (s *Service) SetPreparedShareBot(api *telegram.BotAPI, botUsername, webAppShortName, webAppURL string) {
+	s.botAPI = api
+	s.botUsername = strings.TrimPrefix(strings.TrimSpace(botUsername), "@")
+	s.webAppShortName = strings.Trim(strings.TrimSpace(webAppShortName), "/")
+	s.webAppURL = strings.TrimRight(strings.TrimSpace(webAppURL), "/")
 }
 
 func (s *Service) telegramIsAdmin(telegramID int64) bool {
@@ -1002,17 +1015,17 @@ func (s *Service) AdminCaseOpenStats(ctx context.Context, since *time.Time) (*do
 
 // AdminCaseOpenDetailedView — rich open-stats payload for the admin case-stats section.
 type AdminCaseOpenDetailedView struct {
-	Today              AdminCaseOpenPeriodView       `json:"today"`
-	Last7Days          AdminCaseOpenPeriodView       `json:"last_7_days"`
-	AllTime            AdminCaseOpenPeriodView       `json:"all_time"`
-	SourcesToday       AdminCaseOpenSourceBreakdown  `json:"sources_today"`
-	SourcesAllTime     AdminCaseOpenSourceBreakdown  `json:"sources_all_time"`
-	PrizeTypes7d       []AdminCaseOpenPrizeTypeView  `json:"prize_types_7d"`
-	PrizeTypesAllTime  []AdminCaseOpenPrizeTypeView  `json:"prize_types_all_time"`
-	ByCase7d           []AdminCaseOpenCaseView       `json:"by_case_7d"`
-	ByCaseAllTime      []AdminCaseOpenCaseView       `json:"by_case_all_time"`
-	TopPrizes7d        []AdminCaseOpenPrizeHitView   `json:"top_prizes_7d"`
-	OpensByDay         []AdminCaseOpenDailyView      `json:"opens_by_day"`
+	Today             AdminCaseOpenPeriodView      `json:"today"`
+	Last7Days         AdminCaseOpenPeriodView      `json:"last_7_days"`
+	AllTime           AdminCaseOpenPeriodView      `json:"all_time"`
+	SourcesToday      AdminCaseOpenSourceBreakdown `json:"sources_today"`
+	SourcesAllTime    AdminCaseOpenSourceBreakdown `json:"sources_all_time"`
+	PrizeTypes7d      []AdminCaseOpenPrizeTypeView `json:"prize_types_7d"`
+	PrizeTypesAllTime []AdminCaseOpenPrizeTypeView `json:"prize_types_all_time"`
+	ByCase7d          []AdminCaseOpenCaseView      `json:"by_case_7d"`
+	ByCaseAllTime     []AdminCaseOpenCaseView      `json:"by_case_all_time"`
+	TopPrizes7d       []AdminCaseOpenPrizeHitView  `json:"top_prizes_7d"`
+	OpensByDay        []AdminCaseOpenDailyView     `json:"opens_by_day"`
 }
 
 type AdminCaseOpenPeriodView struct {
@@ -1667,13 +1680,26 @@ func nameContainsTag(firstName, lastName, tag string) bool {
 		strings.Contains(strings.ToLower(lastName), needle)
 }
 
-// RecordShare increments quest share count and returns updated case quest status.
-func (s *Service) RecordShare(ctx context.Context, userID uuid.UUID, telegramID int64, idOrSlug string) (*CaseView, error) {
+// PrepareShareResult is returned to the Mini App for WebApp.shareMessage.
+type PrepareShareResult struct {
+	PreparedMessageID string `json:"prepared_message_id"`
+	ResultID          string `json:"result_id"`
+	ExpirationDate    int64  `json:"expiration_date,omitempty"`
+}
+
+// PrepareShare creates a Telegram prepared inline message for the case quest share.
+func (s *Service) PrepareShare(ctx context.Context, userID uuid.UUID, telegramID int64, idOrSlug string) (*PrepareShareResult, error) {
 	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
 		return nil, err
 	}
-	if userID == uuid.Nil {
+	if userID == uuid.Nil || telegramID == 0 {
 		return nil, domain.ErrForbidden
+	}
+	if s.botAPI == nil || !s.botAPI.Enabled() {
+		return nil, domain.ErrCasesDisabled
+	}
+	if s.botUsername == "" || s.webAppShortName == "" {
+		return nil, domain.ErrCasesDisabled
 	}
 	c, err := s.findCase(ctx, idOrSlug)
 	if err != nil {
@@ -1685,7 +1711,122 @@ func (s *Service) RecordShare(ctx context.Context, userID uuid.UUID, telegramID 
 	if !c.RequireShare {
 		return nil, domain.ErrInvalidAmount
 	}
-	if _, err := s.cases.IncrementCaseQuestShare(ctx, userID, c.ID); err != nil {
+
+	resultID := "cqs_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	startPayload := referralStartPayload(telegramID)
+	shareURL := fmt.Sprintf(
+		"https://t.me/%s/%s?startapp=%s",
+		s.botUsername,
+		s.webAppShortName,
+		url.QueryEscape(startPayload),
+	)
+	title := "Flipo"
+	if strings.TrimSpace(c.Title) != "" {
+		title = strings.TrimSpace(c.Title)
+	}
+	description := "Заходи в Flipo — получи бесплатный кейс и забирай подарки!"
+	caption := description + "\n\n" + shareURL
+	replyMarkup := map[string]any{
+		"inline_keyboard": [][]map[string]any{{
+			{"text": "🎁 Открыть бесплатный кейс", "url": shareURL},
+		}},
+	}
+
+	var inlineResult map[string]any
+	photoURL := caseQuestSharePromoURL(s.webAppURL)
+	if photoURL != "" {
+		// Photo result embeds the promo art in the shared message.
+		inlineResult = map[string]any{
+			"type":           "photo",
+			"id":             resultID,
+			"photo_url":      photoURL,
+			"thumbnail_url":  photoURL,
+			"photo_width":    1024,
+			"photo_height":   1024,
+			"title":          title,
+			"description":    description,
+			"caption":        caption,
+			"reply_markup":   replyMarkup,
+		}
+	} else {
+		inlineResult = map[string]any{
+			"type":        "article",
+			"id":          resultID,
+			"title":       title,
+			"description": description,
+			"input_message_content": map[string]any{
+				"message_text": caption,
+				"link_preview_options": map[string]any{
+					"is_disabled": false,
+				},
+			},
+			"reply_markup": replyMarkup,
+		}
+	}
+
+	prepared, err := s.botAPI.SavePreparedInlineMessage(ctx, telegram.SavePreparedInlineMessageRequest{
+		UserID:            telegramID,
+		Result:            inlineResult,
+		AllowUserChats:    true,
+		AllowBotChats:     false,
+		AllowGroupChats:   true,
+		AllowChannelChats: false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("prepare share: %w", err)
+	}
+
+	row := &domain.CaseQuestSharePrepared{
+		ResultID:          resultID,
+		UserID:            userID,
+		CaseID:            c.ID,
+		PreparedMessageID: prepared.ID,
+		CreatedAt:         time.Now().UTC(),
+	}
+	if err := s.cases.CreateCaseQuestSharePrepared(ctx, row); err != nil {
+		return nil, err
+	}
+	return &PrepareShareResult{
+		PreparedMessageID: prepared.ID,
+		ResultID:          resultID,
+		ExpirationDate:    prepared.ExpirationDate,
+	}, nil
+}
+
+// ConfirmShare credits the case quest after a successful shareMessage / chosen_inline_result.
+func (s *Service) ConfirmShare(ctx context.Context, userID uuid.UUID, telegramID int64, resultID string) (*CaseView, error) {
+	if err := s.ensureCasesEnabled(ctx, telegramID); err != nil {
+		return nil, err
+	}
+	resultID = strings.TrimSpace(resultID)
+	if resultID == "" {
+		return nil, domain.ErrInvalidAmount
+	}
+	if userID == uuid.Nil {
+		return nil, domain.ErrForbidden
+	}
+
+	first, row, err := s.cases.ConfirmCaseQuestSharePrepared(ctx, resultID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, domain.ErrNotFound
+	}
+	if row.UserID != userID {
+		return nil, domain.ErrForbidden
+	}
+	if first {
+		if _, err := s.cases.IncrementCaseQuestShare(ctx, row.UserID, row.CaseID); err != nil {
+			return nil, err
+		}
+	}
+
+	c, err := s.cases.FindByID(ctx, row.CaseID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrNotFound
+		}
 		return nil, err
 	}
 	view := s.toCaseView(ctx, *c, true)
@@ -1699,6 +1840,54 @@ func (s *Service) RecordShare(ctx context.Context, userID uuid.UUID, telegramID 
 	s.attachChannelStatus(ctx, &view, userID)
 	s.attachQuestStatus(ctx, &view, userID)
 	return &view, nil
+}
+
+// ConfirmPreparedShareByTelegramID is used by the bot webhook (chosen_inline_result).
+func (s *Service) ConfirmPreparedShareByTelegramID(ctx context.Context, telegramID int64, resultID string) error {
+	resultID = strings.TrimSpace(resultID)
+	if telegramID == 0 || resultID == "" {
+		return nil
+	}
+	if !strings.HasPrefix(resultID, "cqs_") {
+		return nil
+	}
+	user, err := s.users.FindByTelegramID(ctx, telegramID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	_, err = s.ConfirmShare(ctx, user.ID, telegramID, resultID)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, domain.ErrNotFound) ||
+		errors.Is(err, domain.ErrForbidden) ||
+		errors.Is(err, domain.ErrCasesDisabled) ||
+		errors.Is(err, domain.ErrInvalidAmount) {
+		return nil
+	}
+	return err
+}
+
+func referralStartPayload(telegramID int64) string {
+	if telegramID <= 0 {
+		return "ref"
+	}
+	return "ref_" + strings.ToLower(strconv.FormatInt(telegramID, 36))
+}
+
+// caseQuestSharePromoURL is the public HTTPS image used in prepared share messages.
+func caseQuestSharePromoURL(webAppURL string) string {
+	base := strings.TrimRight(strings.TrimSpace(webAppURL), "/")
+	if base == "" {
+		return ""
+	}
+	if !strings.HasPrefix(base, "https://") && !strings.HasPrefix(base, "http://") {
+		return ""
+	}
+	return base + "/share/case-quest-promo.jpg"
 }
 
 func (s *Service) attachChannelStatus(ctx context.Context, view *CaseView, userID uuid.UUID) {

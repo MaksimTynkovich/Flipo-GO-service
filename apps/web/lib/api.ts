@@ -1296,6 +1296,12 @@ export type AdminWithdrawalSettings = {
   updated_at?: string;
 };
 
+export type AdminDepositSettings = {
+  id?: number;
+  stars_usd_rate: number;
+  updated_at?: string;
+};
+
 export type AdminPendingGiftWithdraw = {
   item_id: string;
   user_id: string;
@@ -2246,6 +2252,19 @@ export async function updateAdminWithdrawalSettings(
   });
 }
 
+export async function getAdminDepositSettings() {
+  return api<AdminDepositSettings>("/api/v1/admin/deposits/settings");
+}
+
+export async function updateAdminDepositSettings(
+  settings: Pick<AdminDepositSettings, "stars_usd_rate">,
+) {
+  return api<{ ok: boolean }>("/api/v1/admin/deposits/settings", {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
+}
+
 export async function getAdminPendingGiftWithdrawals() {
   return api<AdminPendingGiftWithdraw[]>("/api/v1/admin/withdrawals/gifts");
 }
@@ -2502,10 +2521,21 @@ export async function getCase(idOrSlug: string) {
   return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}`);
 }
 
-export async function shareCaseQuest(idOrSlug: string) {
-  return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/share`, {
+export async function prepareCaseShare(idOrSlug: string) {
+  return api<{
+    prepared_message_id: string;
+    result_id: string;
+    expiration_date?: number;
+  }>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/share/prepare`, {
     method: "POST",
     body: "{}",
+  });
+}
+
+export async function confirmCaseShare(idOrSlug: string, resultId: string) {
+  return api<CaseView>(`/api/v1/cases/${encodeURIComponent(idOrSlug)}/share/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ result_id: resultId }),
   });
 }
 

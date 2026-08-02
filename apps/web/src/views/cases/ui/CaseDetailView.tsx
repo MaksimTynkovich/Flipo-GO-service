@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { CaseDetailPlayerPreview } from "@/components/cases/CaseDetailPlayerPreview";
@@ -11,13 +11,14 @@ import { formatCasePrice } from "@/components/cases/case-ui";
 import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
 import {
   ApiRequestError,
+  confirmCaseShare,
   getCase,
   getMe,
   liquidateCaseClaimItem,
   liquidateItem,
   openCase,
+  prepareCaseShare,
   silentReauth,
-  shareCaseQuest,
   type CaseLootPreview,
   type CaseOpenResult,
   type CaseView,
@@ -28,7 +29,6 @@ import {
   setCasePrizeBalanceHold,
   takePendingCasePrizeBalance,
 } from "@/lib/case-prize-balance";
-import { referralTelegramUrl } from "@/lib/bot";
 import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
@@ -36,7 +36,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
-import { openTelegramLink, openTelegramShare } from "@/src/shared/lib/twa";
+import { openTelegramLink, sharePreparedMessage } from "@/src/shared/lib/twa";
 import { Gift } from "lucide-react";
 
 type Phase = "idle" | "revealing" | "won";
@@ -85,8 +85,6 @@ export function CaseDetailView() {
   const [promoCode, setPromoCode] = useState("");
   const [cooldownMs, setCooldownMs] = useState(0);
   const [questBusy, setQuestBusy] = useState(false);
-  const [shareAwaitingReturn, setShareAwaitingReturn] = useState(false);
-  const shareResumeRef = useRef<CaseView | null>(null);
 
   const notifyError = useCallback(
     (message: string) => {
@@ -254,13 +252,9 @@ export function CaseDetailView() {
       const step = nextQuestStep(fresh);
       if (step) {
         setQuestStep(step);
-        setShareAwaitingReturn(false);
-        shareResumeRef.current = null;
         return;
       }
       setQuestStep(null);
-      setShareAwaitingReturn(false);
-      shareResumeRef.current = null;
       if (fresh.require_channel && fresh.channel_subscribed === false) {
         setChannelSheetOpen(true);
         return;
@@ -271,16 +265,6 @@ export function CaseDetailView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [promoCode, idOrSlug],
   );
-
-  const resumeAfterShare = useCallback(() => {
-    const fresh = shareResumeRef.current;
-    if (!fresh || questBusy || opening) return;
-    setShareAwaitingReturn(false);
-    shareResumeRef.current = null;
-    haptics.notificationOccurred("success");
-    void continueAfterQuests(fresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [continueAfterQuests, questBusy, opening]);
 
   async function handleOpen() {
     if (!caseItem || opening || phase !== "idle" || cooldownBlocked || questBusy) return;
@@ -326,19 +310,18 @@ export function CaseDetailView() {
     if (!caseItem || !user || questBusy) return;
     setQuestBusy(true);
     try {
-      const url = referralTelegramUrl(user.telegram_id);
-      const text = "Заходи в Flipo — открываем кейсы и стейкаем подарки!";
-      // Record share BEFORE opening the sheet — Telegram can cancel in-flight fetches.
-      const fresh = await shareCaseQuest(caseItem.slug || idOrSlug);
+      const prepared = await prepareCaseShare(caseItem.slug || idOrSlug);
+      const sent = await sharePreparedMessage(prepared.prepared_message_id);
+      if (!sent) {
+        notifyError("Отправка отменена — поделитесь постом, чтобы открыть кейс");
+        return;
+      }
+      const fresh = await confirmCaseShare(caseItem.slug || idOrSlug, prepared.result_id);
       setCaseItem(fresh);
-      shareResumeRef.current = fresh;
-      setShareAwaitingReturn(true);
-      openTelegramShare({ url, text });
-      // Opening continues only when the user taps «Продолжить».
+      haptics.notificationOccurred("success");
+      await continueAfterQuests(fresh);
     } catch (e) {
-      notifyError(formatUserError(e, "Не удалось зафиксировать share"));
-      setShareAwaitingReturn(false);
-      shareResumeRef.current = null;
+      notifyError(formatUserError(e, "Не удалось поделиться"));
     } finally {
       setQuestBusy(false);
     }
@@ -519,15 +502,11 @@ export function CaseDetailView() {
           step={questStep}
           nameTag={nameTag}
           busy={questBusy}
-          awaitingReturn={shareAwaitingReturn}
           onClose={() => {
             setQuestStep(null);
-            setShareAwaitingReturn(false);
-            shareResumeRef.current = null;
             void load();
           }}
           onShare={() => void handleShareQuest()}
-          onContinueAfterShare={resumeAfterShare}
           onCheckName={() => void handleCheckNameQuest()}
         />
       ) : null}

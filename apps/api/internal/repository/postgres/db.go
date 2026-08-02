@@ -64,6 +64,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.TelegramBotSettings{},
 		&domain.PlatformMaintenanceSettings{},
 		&domain.PlatformWithdrawalSettings{},
+		&domain.PlatformDepositSettings{},
 		&domain.PlatformYieldSettings{},
 		&domain.AnalyticsEvent{},
 		&domain.PromoRedemption{},
@@ -86,6 +87,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.CasePromoCode{},
 		&domain.CasePromoRedemption{},
 		&domain.CaseQuestShare{},
+		&domain.CaseQuestSharePrepared{},
 		&domain.CaseLiveFeedSettings{},
 		&domain.PaymentIntent{},
 	); err != nil {

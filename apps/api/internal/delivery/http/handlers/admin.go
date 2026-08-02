@@ -1210,6 +1210,32 @@ func (h *AdminHandler) UpdateWithdrawalSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *AdminHandler) GetDepositSettings(c *gin.Context) {
+	settings, err := h.admin.GetDepositSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *AdminHandler) UpdateDepositSettings(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	var body struct {
+		StarsUSDRate float64 `json:"stars_usd_rate"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	settings := domain.PlatformDepositSettings{StarsUSDRate: body.StarsUSDRate}
+	if err := h.admin.UpdateDepositSettings(c.Request.Context(), adminID, settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (h *AdminHandler) ListPendingGiftWithdrawals(c *gin.Context) {
 	if h.inventory == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "инвентарь недоступен"})

@@ -29,6 +29,7 @@ type Config struct {
 type Service struct {
 	users     domain.UserRepository
 	intents   domain.PaymentIntentRepository
+	platform  domain.PlatformRepository
 	crypto    *cryptopay.Client
 	bot       *telegram.BotAPI
 	cfg       Config
@@ -61,6 +62,7 @@ func NewService(
 	return &Service{users: users, intents: intents, crypto: crypto, bot: bot, cfg: cfg}
 }
 
+func (s *Service) SetPlatform(platform domain.PlatformRepository) { s.platform = platform }
 func (s *Service) SetBalanceNotifier(n balance.BalanceNotifier) { s.notifier = n }
 func (s *Service) SetAdminNotifier(n AdminNotifier)             { s.admin = n }
 func (s *Service) SetAnalytics(a *analyticsuc.Service)          { s.analytics = a }
@@ -99,11 +101,12 @@ type StarsQuoteView struct {
 }
 
 func (s *Service) Features(ctx context.Context) FeaturesView {
+	starsRate := s.resolveStarsUSDRate(ctx)
 	out := FeaturesView{
 		CryptoBotEnabled:  s.CryptoBotEnabled(),
 		StarsEnabled:      s.StarsEnabled(),
 		MinDepositNanoton: s.cfg.MinDepositNanoton,
-		StarsUSDRate:      s.cfg.StarsUSDRate,
+		StarsUSDRate:      starsRate,
 	}
 	if s.CryptoBotEnabled() {
 		if rate, err := s.crypto.TonUSDRate(ctx); err == nil {
@@ -118,29 +121,30 @@ func (s *Service) QuoteStars(ctx context.Context, amountNanoton, starsCount int6
 	if err != nil {
 		return nil, err
 	}
+	starsRate := s.resolveStarsUSDRate(ctx)
 	if starsCount > 0 {
 		if starsCount < 1 {
 			return nil, domain.ErrInvalidAmount
 		}
-		nanoton := s.nanotonFromStars(starsCount, tonUSD)
-		usd := float64(starsCount) * s.cfg.StarsUSDRate
+		nanoton := nanotonFromStars(starsCount, tonUSD, starsRate)
+		usd := float64(starsCount) * starsRate
 		return &StarsQuoteView{
 			AmountNanoton: nanoton,
 			StarsCount:    starsCount,
 			TonUSDRate:    tonUSD,
-			StarsUSDRate:  s.cfg.StarsUSDRate,
+			StarsUSDRate:  starsRate,
 			USDValue:      usd,
 		}, nil
 	}
 	if amountNanoton < s.cfg.MinDepositNanoton {
 		return nil, domain.ErrInvalidAmount
 	}
-	stars, usd := s.starsForNanoton(amountNanoton, tonUSD)
+	stars, usd := starsForNanoton(amountNanoton, tonUSD, starsRate)
 	return &StarsQuoteView{
 		AmountNanoton: amountNanoton,
 		StarsCount:    stars,
 		TonUSDRate:    tonUSD,
-		StarsUSDRate:  s.cfg.StarsUSDRate,
+		StarsUSDRate:  starsRate,
 		USDValue:      usd,
 	}, nil
 }
@@ -219,16 +223,17 @@ func (s *Service) CreateStarsIntent(ctx context.Context, userID uuid.UUID, amoun
 	if err != nil {
 		return nil, err
 	}
+	starsRate := s.resolveStarsUSDRate(ctx)
 
 	var stars int64
 	if starsCount > 0 {
 		stars = starsCount
-		amountNanoton = s.nanotonFromStars(stars, tonUSD)
+		amountNanoton = nanotonFromStars(stars, tonUSD, starsRate)
 	} else {
 		if amountNanoton < s.cfg.MinDepositNanoton {
 			return nil, domain.ErrInvalidAmount
 		}
-		stars, _ = s.starsForNanoton(amountNanoton, tonUSD)
+		stars, _ = starsForNanoton(amountNanoton, tonUSD, starsRate)
 	}
 	if stars < 1 {
 		return nil, domain.ErrInvalidAmount
@@ -269,7 +274,7 @@ func (s *Service) CreateStarsIntent(ctx context.Context, userID uuid.UUID, amoun
 		PayURL:            link,
 		Payload:           payload,
 		TonUSDRate:        formatFloat(tonUSD),
-		StarsUSDRate:      formatFloat(s.cfg.StarsUSDRate),
+		StarsUSDRate:      formatFloat(starsRate),
 		ExpiresAt:         &expiresAt,
 	}
 	if err := s.intents.Create(ctx, intent); err != nil {
@@ -461,24 +466,36 @@ func (s *Service) tonUSDRate(ctx context.Context) (float64, error) {
 	return 5.0, nil
 }
 
-func (s *Service) starsForNanoton(amountNanoton int64, tonUSD float64) (stars int64, usd float64) {
+func (s *Service) resolveStarsUSDRate(ctx context.Context) float64 {
+	if s.platform != nil {
+		if settings, err := s.platform.GetDepositSettings(ctx); err == nil && settings != nil && settings.StarsUSDRate > 0 {
+			return settings.StarsUSDRate
+		}
+	}
+	if s.cfg.StarsUSDRate > 0 {
+		return s.cfg.StarsUSDRate
+	}
+	return 0.013
+}
+
+func starsForNanoton(amountNanoton int64, tonUSD, starsUSDRate float64) (stars int64, usd float64) {
 	ton := float64(amountNanoton) / 1e9
 	usd = ton * tonUSD
-	if s.cfg.StarsUSDRate <= 0 {
+	if starsUSDRate <= 0 {
 		return int64(math.Ceil(usd)), usd
 	}
-	stars = int64(math.Ceil(usd / s.cfg.StarsUSDRate))
+	stars = int64(math.Ceil(usd / starsUSDRate))
 	if stars < 1 {
 		stars = 1
 	}
 	return stars, usd
 }
 
-func (s *Service) nanotonFromStars(stars int64, tonUSD float64) int64 {
-	if stars < 1 || tonUSD <= 0 || s.cfg.StarsUSDRate <= 0 {
+func nanotonFromStars(stars int64, tonUSD, starsUSDRate float64) int64 {
+	if stars < 1 || tonUSD <= 0 || starsUSDRate <= 0 {
 		return 0
 	}
-	usd := float64(stars) * s.cfg.StarsUSDRate
+	usd := float64(stars) * starsUSDRate
 	ton := usd / tonUSD
 	nanoton := int64(math.Floor(ton*1e9 + 1e-9))
 	if nanoton < 0 {

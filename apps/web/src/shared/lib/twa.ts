@@ -62,6 +62,8 @@ export type TelegramWebApp = {
   openTelegramLink?: (url: string) => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
   openInvoice?: (url: string, callback?: (status: "paid" | "cancelled" | "failed" | "pending" | string) => void) => void;
+  /** Bot API 8.0+ — share a prepared inline message previously saved by the bot. */
+  shareMessage?: (msgId: string, callback?: (success: boolean) => void) => void;
   BackButton?: TelegramBackButton;
   HapticFeedback?: {
     selectionChanged?: () => void;
@@ -155,6 +157,29 @@ export function openTelegramShare(opts: { url: string; text?: string }): boolean
     shareUrl += `&text=${encodeURIComponent(opts.text.trim())}`;
   }
   return openTelegramLink(shareUrl);
+}
+
+/** Share a bot-prepared inline message (Bot API 8.0+). Resolves true only if Telegram reports send success. */
+export function sharePreparedMessage(preparedMessageId: string): Promise<boolean> {
+  const id = preparedMessageId?.trim();
+  if (!id) return Promise.resolve(false);
+  const webApp = getTelegramWebApp();
+  if (!webApp?.shareMessage) {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    try {
+      webApp.shareMessage(id, (success) => finish(Boolean(success)));
+    } catch {
+      finish(false);
+    }
+  });
 }
 
 export function isTelegramMobilePlatform(platform?: string) {

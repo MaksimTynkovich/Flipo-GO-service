@@ -11,10 +11,18 @@ import (
 )
 
 type Update struct {
-	UpdateID         int64             `json:"update_id"`
-	Message          *Message          `json:"message"`
-	CallbackQuery    *CallbackQuery    `json:"callback_query"`
-	PreCheckoutQuery *PreCheckoutQuery `json:"pre_checkout_query"`
+	UpdateID           int64                `json:"update_id"`
+	Message            *Message             `json:"message"`
+	CallbackQuery      *CallbackQuery       `json:"callback_query"`
+	PreCheckoutQuery   *PreCheckoutQuery    `json:"pre_checkout_query"`
+	ChosenInlineResult *ChosenInlineResult  `json:"chosen_inline_result"`
+}
+
+type ChosenInlineResult struct {
+	ResultID        string       `json:"result_id"`
+	From            *MessageFrom `json:"from"`
+	Query           string       `json:"query"`
+	InlineMessageID string       `json:"inline_message_id"`
 }
 
 type CallbackQuery struct {
@@ -91,6 +99,12 @@ type BotUpdates struct {
 	users                    UserLookup
 	analytics                *analyticsuc.Service
 	starsPay                 StarsPaymentHandler
+	caseShareConfirm         CaseShareConfirmer
+}
+
+// CaseShareConfirmer credits a prepared case-quest share after chosen_inline_result.
+type CaseShareConfirmer interface {
+	ConfirmPreparedShareByTelegramID(ctx context.Context, telegramID int64, resultID string) error
 }
 
 // AdminLoginApprover resolves pending /admin password logins from Telegram buttons.
@@ -144,6 +158,10 @@ func (h *BotUpdates) SetStarsPaymentHandler(handler StarsPaymentHandler) {
 	h.starsPay = handler
 }
 
+func (h *BotUpdates) SetCaseShareConfirmer(confirmer CaseShareConfirmer) {
+	h.caseShareConfirm = confirmer
+}
+
 func (h *BotUpdates) Enabled() bool {
 	return h.api != nil && h.api.Enabled()
 }
@@ -157,6 +175,9 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 	}
 	if update.CallbackQuery != nil {
 		return h.handleCallbackQuery(ctx, update.CallbackQuery)
+	}
+	if update.ChosenInlineResult != nil {
+		return h.handleChosenInlineResult(ctx, update.ChosenInlineResult)
 	}
 	if update.Message == nil {
 		return nil
@@ -175,6 +196,13 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 	h.maybeNotifyBotStart(ctx, update.Message)
 
 	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload)
+}
+
+func (h *BotUpdates) handleChosenInlineResult(ctx context.Context, result *ChosenInlineResult) error {
+	if result == nil || h.caseShareConfirm == nil || result.From == nil {
+		return nil
+	}
+	return h.caseShareConfirm.ConfirmPreparedShareByTelegramID(ctx, result.From.ID, result.ResultID)
 }
 
 func (h *BotUpdates) handlePreCheckout(ctx context.Context, q *PreCheckoutQuery) error {

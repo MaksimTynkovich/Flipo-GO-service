@@ -1,24 +1,19 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
-import { Copy, Loader2, Share2, UserRound, X } from "lucide-react";
+import { type CSSProperties } from "react";
+import { Copy, Share2, UserRound, X } from "lucide-react";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { useToast } from "@/components/providers/ToastProvider";
 import { cn } from "@/lib/utils";
 
 export type CaseQuestStep = "share" | "name";
 
-const SHARE_CONTINUE_DELAY_MS = 5_000;
-
 type Props = {
   step: CaseQuestStep;
   nameTag?: string;
   busy?: boolean;
-  /** Share was sent — waiting for manual continue. */
-  awaitingReturn?: boolean;
   onClose: () => void;
   onShare: () => void;
-  onContinueAfterShare: () => void;
   onCheckName: () => void;
 };
 
@@ -26,26 +21,13 @@ export function CaseQuestSheet({
   step,
   nameTag = "",
   busy = false,
-  awaitingReturn = false,
   onClose,
   onShare,
-  onContinueAfterShare,
   onCheckName,
 }: Props) {
   const { showToast } = useToast();
   const isShare = step === "share";
   const tag = nameTag.trim() || "@flipoGameBot";
-  const [continueReady, setContinueReady] = useState(false);
-
-  useEffect(() => {
-    if (!awaitingReturn || !isShare) {
-      setContinueReady(false);
-      return;
-    }
-    setContinueReady(false);
-    const id = window.setTimeout(() => setContinueReady(true), SHARE_CONTINUE_DELAY_MS);
-    return () => window.clearTimeout(id);
-  }, [awaitingReturn, isShare]);
 
   async function copyTag() {
     try {
@@ -55,8 +37,6 @@ export function CaseQuestSheet({
       showToast({ variant: "error", title: "Не удалось скопировать" });
     }
   }
-
-  const shareWaiting = isShare && awaitingReturn;
 
   return (
     <ModalOverlay
@@ -106,17 +86,11 @@ export function CaseQuestSheet({
               id="case-quest-title"
               className="text-[1.125rem] font-semibold tracking-tight text-foreground"
             >
-              {isShare
-                ? "Поделитесь с друзьями"
-                : "Добавьте бота в имя"}
+              {isShare ? "Поделитесь с друзьями" : "Добавьте бота в имя"}
             </h2>
             <p className="mt-2 max-w-[20rem] text-sm leading-relaxed text-muted">
               {isShare ? (
-                awaitingReturn ? (
-                  "Когда вернётесь — нажмите «Продолжить», чтобы открыть кейс"
-                ) : (
-                  "Разошлите ссылку 5 друзьям, чтобы открыть кейс"
-                )
+                "Отправьте пост другу в Telegram, чтобы открыть кейс"
               ) : (
                 <>
                   Добавьте <span className="font-semibold text-foreground">{tag}</span> в имя
@@ -138,14 +112,8 @@ export function CaseQuestSheet({
 
             <button
               type="button"
-              disabled={busy || (shareWaiting && !continueReady)}
-              onClick={
-                isShare
-                  ? awaitingReturn
-                    ? onContinueAfterShare
-                    : onShare
-                  : onCheckName
-              }
+              disabled={busy}
+              onClick={isShare ? onShare : onCheckName}
               className={cn(
                 "mt-6 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-[0.95rem] font-semibold text-white transition-opacity",
                 "disabled:opacity-55",
@@ -155,19 +123,7 @@ export function CaseQuestSheet({
                   "linear-gradient(180deg, var(--quest-cta) 0%, var(--quest-cta-deep) 100%)",
               }}
             >
-              {busy ? (
-                "…"
-              ) : shareWaiting && !continueReady ? (
-                <Loader2 className="size-5 animate-spin" aria-label="Загрузка" />
-              ) : isShare ? (
-                awaitingReturn ? (
-                  "Продолжить"
-                ) : (
-                  "Поделиться"
-                )
-              ) : (
-                "Проверить и продолжить"
-              )}
+              {busy ? "…" : isShare ? "Поделиться" : "Проверить и продолжить"}
             </button>
 
             {!isShare ? (

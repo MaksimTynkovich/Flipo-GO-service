@@ -869,6 +869,58 @@ func (r *CaseRepo) ResetCaseQuestShare(ctx context.Context, userID, caseID uuid.
 	).Error
 }
 
+func (r *CaseRepo) CreateCaseQuestSharePrepared(ctx context.Context, row *domain.CaseQuestSharePrepared) error {
+	if row == nil {
+		return fmt.Errorf("prepared share row is nil")
+	}
+	if row.ID == uuid.Nil {
+		row.ID = uuid.New()
+	}
+	if row.CreatedAt.IsZero() {
+		row.CreatedAt = time.Now().UTC()
+	}
+	return r.db.WithContext(ctx).Create(row).Error
+}
+
+func (r *CaseRepo) GetCaseQuestSharePreparedByResultID(ctx context.Context, resultID string) (*domain.CaseQuestSharePrepared, error) {
+	resultID = strings.TrimSpace(resultID)
+	if resultID == "" {
+		return nil, nil
+	}
+	var row domain.CaseQuestSharePrepared
+	err := r.db.WithContext(ctx).Where("result_id = ?", resultID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *CaseRepo) ConfirmCaseQuestSharePrepared(ctx context.Context, resultID string) (bool, *domain.CaseQuestSharePrepared, error) {
+	resultID = strings.TrimSpace(resultID)
+	if resultID == "" {
+		return false, nil, nil
+	}
+	now := time.Now().UTC()
+	res := r.db.WithContext(ctx).Exec(
+		`UPDATE case_quest_share_prepared SET confirmed_at = ? WHERE result_id = ? AND confirmed_at IS NULL`,
+		now, resultID,
+	)
+	if res.Error != nil {
+		return false, nil, res.Error
+	}
+	row, err := r.GetCaseQuestSharePreparedByResultID(ctx, resultID)
+	if err != nil {
+		return false, nil, err
+	}
+	if row == nil {
+		return false, nil, nil
+	}
+	return res.RowsAffected > 0, row, nil
+}
+
 var _ domain.CaseRepository = (*CaseRepo)(nil)
 
 func (r *InventoryRepo) TakeHouseGiftForCollection(ctx context.Context, botUserID, toUserID uuid.UUID, collectionSlug, backdrop string) (*domain.InventoryItem, error) {

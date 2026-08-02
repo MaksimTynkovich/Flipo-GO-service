@@ -178,6 +178,16 @@ type PlatformWithdrawalSettings struct {
 
 func (PlatformWithdrawalSettings) TableName() string { return "platform_withdrawal_settings" }
 
+// PlatformDepositSettings — singleton (id=1) for alternate deposit FX (Telegram Stars).
+// StarsUSDRate is USD per 1 Star; combined with live TON/USD to price TON credits.
+type PlatformDepositSettings struct {
+	ID           int       `gorm:"primaryKey" json:"id"`
+	StarsUSDRate float64   `gorm:"type:decimal(12,6);not null;default:0.013" json:"stars_usd_rate"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (PlatformDepositSettings) TableName() string { return "platform_deposit_settings" }
+
 // PlatformYieldSettings - singleton row (id=1) for staking, referral and gift price adjustments.
 type PlatformYieldSettings struct {
 	ID                              int       `gorm:"primaryKey" json:"id"`

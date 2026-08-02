@@ -483,7 +483,7 @@ type CasePromoRedemption struct {
 
 func (CasePromoRedemption) TableName() string { return "case_promo_redemptions" }
 
-// CaseQuestShare tracks share-button clicks for case quest unlock.
+// CaseQuestShare tracks confirmed shares for case quest unlock.
 type CaseQuestShare struct {
 	UserID     uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
 	CaseID     uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"case_id"`
@@ -492,6 +492,19 @@ type CaseQuestShare struct {
 }
 
 func (CaseQuestShare) TableName() string { return "case_quest_shares" }
+
+// CaseQuestSharePrepared maps a Telegram prepared inline result to a case quest share.
+type CaseQuestSharePrepared struct {
+	ID                 uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ResultID           string     `gorm:"type:text;uniqueIndex;not null" json:"result_id"`
+	UserID             uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
+	CaseID             uuid.UUID  `gorm:"type:uuid;not null;index" json:"case_id"`
+	PreparedMessageID  string     `gorm:"type:text;not null;default:''" json:"prepared_message_id"`
+	ConfirmedAt        *time.Time `json:"confirmed_at,omitempty"`
+	CreatedAt          time.Time  `gorm:"not null" json:"created_at"`
+}
+
+func (CaseQuestSharePrepared) TableName() string { return "case_quest_share_prepared" }
 
 // CaseLiveDrop — recent case open for the catalog live feed.
 type CaseLiveDrop struct {

@@ -142,7 +142,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/cases/live", deps.CasesHandler.Live)
 			authed.GET("/cases/:id", deps.CasesHandler.Get)
 			authed.POST("/cases/:id/open", deps.CasesHandler.Open)
-			authed.POST("/cases/:id/share", deps.CasesHandler.Share)
+			authed.POST("/cases/:id/share/prepare", deps.CasesHandler.PrepareShare)
+			authed.POST("/cases/:id/share/confirm", deps.CasesHandler.ConfirmShare)
 
 			authed.POST("/wallet/deposit/intent", deps.WalletHandler.CreateDepositIntent)
 			authed.POST("/wallet/deposit/:id/confirm", deps.WalletHandler.ConfirmDeposit)
@@ -245,6 +246,8 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.PATCH("/maintenance", deps.AdminHandler.UpdateMaintenanceSettings)
 			adminAuthed.GET("/withdrawals/settings", deps.AdminHandler.GetWithdrawalSettings)
 			adminAuthed.PATCH("/withdrawals/settings", deps.AdminHandler.UpdateWithdrawalSettings)
+			adminAuthed.GET("/deposits/settings", deps.AdminHandler.GetDepositSettings)
+			adminAuthed.PATCH("/deposits/settings", deps.AdminHandler.UpdateDepositSettings)
 			adminAuthed.GET("/withdrawals/gifts", deps.AdminHandler.ListPendingGiftWithdrawals)
 			adminAuthed.POST("/withdrawals/gifts/:id/review", deps.AdminHandler.ReviewGiftWithdrawal)
 			adminAuthed.POST("/withdrawals/gifts/:id/fulfill", deps.AdminHandler.FulfillGiftWithdrawal)

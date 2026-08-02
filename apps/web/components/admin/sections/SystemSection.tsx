@@ -5,10 +5,13 @@ import { AdminPage, AdminButton, AdminField, AdminPanel, AdminToolbar } from "@/
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
+  getAdminDepositSettings,
   getAdminMaintenanceSettings,
   getAdminWithdrawalSettings,
+  updateAdminDepositSettings,
   updateAdminMaintenanceSettings,
   updateAdminWithdrawalSettings,
+  type AdminDepositSettings,
   type AdminMaintenanceSettings,
   type AdminWithdrawalSettings,
 } from "@/lib/api";
@@ -24,39 +27,58 @@ const DEFAULT_WITHDRAWAL: AdminWithdrawalSettings = {
   gifts_manual: false,
 };
 
+const DEFAULT_DEPOSIT: AdminDepositSettings = {
+  stars_usd_rate: 0.013,
+};
+
+type SystemCache = [AdminMaintenanceSettings, AdminWithdrawalSettings, AdminDepositSettings];
+
+const CACHE_KEY = "admin:system:v3";
+
 export default function SystemSection() {
   const { showToast } = useToast();
   const [settings, setSettings] = useState<AdminMaintenanceSettings | null>(null);
   const [withdrawalSettings, setWithdrawalSettings] = useState<AdminWithdrawalSettings | null>(null);
+  const [depositSettings, setDepositSettings] = useState<AdminDepositSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingWithdrawals, setSavingWithdrawals] = useState(false);
+  const [savingDeposit, setSavingDeposit] = useState(false);
+  const [starsRateInput, setStarsRateInput] = useState("0.013");
 
   async function load() {
     setLoading(true);
     try {
-      const [maintenance, withdrawals] = await loadCached("admin:system:v2", () =>
-        Promise.all([getAdminMaintenanceSettings(), getAdminWithdrawalSettings()]),
+      const [maintenance, withdrawals, deposits] = await loadCached(CACHE_KEY, () =>
+        Promise.all([
+          getAdminMaintenanceSettings(),
+          getAdminWithdrawalSettings(),
+          getAdminDepositSettings(),
+        ]),
       );
-      setSettings({
+      const nextMaintenance = {
         ...maintenance,
         accept_bets: maintenance.accept_bets !== false,
-      });
-      setWithdrawalSettings({
+      };
+      const nextWithdrawal = {
         ...DEFAULT_WITHDRAWAL,
         ...withdrawals,
         gifts_manual: Boolean(withdrawals.gifts_manual),
         enabled: Boolean(withdrawals.enabled),
-      });
-      primeCache("admin:system:v2", [
-        { ...maintenance, accept_bets: maintenance.accept_bets !== false },
-        {
-          ...DEFAULT_WITHDRAWAL,
-          ...withdrawals,
-          gifts_manual: Boolean(withdrawals.gifts_manual),
-          enabled: Boolean(withdrawals.enabled),
-        },
-      ]);
+      };
+      const nextDeposit = {
+        ...DEFAULT_DEPOSIT,
+        ...deposits,
+        stars_usd_rate:
+          typeof deposits.stars_usd_rate === "number" && deposits.stars_usd_rate > 0
+            ? deposits.stars_usd_rate
+            : DEFAULT_DEPOSIT.stars_usd_rate,
+      };
+      setSettings(nextMaintenance);
+      setWithdrawalSettings(nextWithdrawal);
+      setDepositSettings(nextDeposit);
+      setStarsRateInput(String(nextDeposit.stars_usd_rate));
+      primeCache(CACHE_KEY, [nextMaintenance, nextWithdrawal, nextDeposit]);
     } finally {
       setLoading(false);
     }
@@ -64,10 +86,12 @@ export default function SystemSection() {
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cached = readCached<[AdminMaintenanceSettings, AdminWithdrawalSettings]>("admin:system:v2");
+      const cached = readCached<SystemCache>(CACHE_KEY);
       if (cached) {
         setSettings(cached[0]);
         setWithdrawalSettings(cached[1]);
+        setDepositSettings(cached[2]);
+        setStarsRateInput(String(cached[2]?.stars_usd_rate ?? DEFAULT_DEPOSIT.stars_usd_rate));
       }
       load().catch(() => {});
     });
@@ -80,6 +104,18 @@ export default function SystemSection() {
     gifts_manual: Boolean(withdrawalSettings?.gifts_manual),
     enabled: Boolean(withdrawalSettings?.enabled),
   };
+  const depositForm: AdminDepositSettings = {
+    ...DEFAULT_DEPOSIT,
+    ...(depositSettings ?? {}),
+  };
+
+  function cacheSnapshot(
+    nextMaintenance = form,
+    nextWithdrawal = withdrawalForm,
+    nextDeposit = depositForm,
+  ) {
+    primeCache(CACHE_KEY, [nextMaintenance, nextWithdrawal, nextDeposit]);
+  }
 
   return (
     <AdminPage
@@ -117,11 +153,9 @@ export default function SystemSection() {
                       accept_bets: form.accept_bets,
                       message: form.message.trim(),
                     });
-                    setSettings({ ...form, message: form.message.trim() });
-                    primeCache("admin:system:v2", [
-                      { ...form, message: form.message.trim() },
-                      withdrawalForm,
-                    ]);
+                    const next = { ...form, message: form.message.trim() };
+                    setSettings(next);
+                    cacheSnapshot(next);
                     showToast({
                       variant: "success",
                       title: form.accept_bets
@@ -200,11 +234,9 @@ export default function SystemSection() {
                       accept_bets: form.accept_bets,
                       message: form.message.trim(),
                     });
-                    setSettings({ ...form, message: form.message.trim() });
-                    primeCache("admin:system:v2", [
-                      { ...form, message: form.message.trim() },
-                      withdrawalForm,
-                    ]);
+                    const next = { ...form, message: form.message.trim() };
+                    setSettings(next);
+                    cacheSnapshot(next);
                     showToast({
                       variant: "success",
                       title: form.enabled
@@ -231,6 +263,73 @@ export default function SystemSection() {
                 Сейчас игроки не смогут пользоваться приложением. Для админов всё работает без ограничений.
               </p>
             ) : null}
+          </div>
+        )}
+      </AdminPanel>
+
+      <AdminPanel
+        title="Депозит Stars"
+        description="Курс Telegram Stars → USD. Вместе с живым TON/USD из Crypto Bot считает, сколько TON игрок получит за Stars."
+      >
+        {loading && !depositSettings ? (
+          <div className="h-4 w-56 animate-pulse rounded bg-surface-raised" />
+        ) : (
+          <div className="space-y-4">
+            <AdminField
+              label="USD за 1 Star"
+              hint="Лист-прайс Telegram ~0.013. Ниже — выгоднее игроку (больше TON за те же Stars), выше — дороже."
+            >
+              <input
+                className="input-field"
+                type="number"
+                inputMode="decimal"
+                min={0.0001}
+                max={10}
+                step={0.001}
+                value={starsRateInput}
+                onChange={(e) => setStarsRateInput(e.target.value.replace(",", "."))}
+              />
+            </AdminField>
+
+            <AdminToolbar>
+              <AdminButton
+                disabled={savingDeposit || (loading && !depositSettings)}
+                onClick={async () => {
+                  const rate = Number(starsRateInput);
+                  if !Number.isFinite(rate) || rate <= 0 || rate > 10) {
+                    showToast({
+                      variant: "error",
+                      title: "Некорректный курс",
+                      subtitle: "Укажите число больше 0 и не больше 10.",
+                    });
+                    return;
+                  }
+                  setSavingDeposit(true);
+                  try {
+                    await updateAdminDepositSettings({ stars_usd_rate: rate });
+                    const next = { ...depositForm, stars_usd_rate: rate };
+                    setDepositSettings(next);
+                    setStarsRateInput(String(rate));
+                    cacheSnapshot(form, withdrawalForm, next);
+                    showToast({
+                      variant: "success",
+                      title: "Курс Stars сохранён",
+                      subtitle: `$${rate} за 1 Star`,
+                    });
+                  } catch (error) {
+                    showToast({
+                      variant: "error",
+                      title: "Не удалось сохранить",
+                      subtitle: error instanceof Error ? error.message : undefined,
+                    });
+                  } finally {
+                    setSavingDeposit(false);
+                  }
+                }}
+              >
+                {savingDeposit ? "Сохранение…" : "Сохранить"}
+              </AdminButton>
+            </AdminToolbar>
           </div>
         )}
       </AdminPanel>
@@ -286,7 +385,7 @@ export default function SystemSection() {
                       enabled: withdrawalForm.enabled,
                       gifts_manual: withdrawalForm.gifts_manual,
                     });
-                    primeCache("admin:system:v2", [form, withdrawalForm]);
+                    cacheSnapshot(form, withdrawalForm);
                     showToast({
                       variant: "success",
                       title: "Настройки выводов сохранены",

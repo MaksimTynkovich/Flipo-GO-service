@@ -160,6 +160,7 @@ func main() {
 		WebAppURL:         cfg.WebAppURL,
 		BotUsername:       cfg.BotUsername,
 	})
+	paymentsSvc.SetPlatform(platformRepo)
 	adminNotifRepo := postgres.NewAdminNotificationRepo(db)
 	adminSvc.SetNotificationRepo(adminNotifRepo)
 	var notifStore domain.AdminNotificationRepository = adminNotifRepo
@@ -228,6 +229,7 @@ func main() {
 	invSvc.SetWithdrawHoldChecker(riskSvc)
 	caseRepo := postgres.NewCaseRepo(db)
 	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
+	caseSvc.SetPreparedShareBot(botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
 	caseSvc.SetAdminChecker(authSvc.IsAdmin)
 	caseSvc.SetValuator(giftValuator)
 	caseSvc.SetBotResolver(marketRepo)
@@ -351,6 +353,7 @@ func main() {
 	})
 	botUpdates.SetAnalytics(analyticsSvc)
 	botUpdates.SetStarsPaymentHandler(paymentsSvc)
+	botUpdates.SetCaseShareConfirmer(caseSvc)
 	botUpdates.SetWebAppURLResolver(func(ctx context.Context) string {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {

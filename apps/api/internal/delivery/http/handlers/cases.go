@@ -74,10 +74,28 @@ func (h *CasesHandler) Open(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-func (h *CasesHandler) Share(c *gin.Context) {
+func (h *CasesHandler) PrepareShare(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	telegramID := middleware.GetTelegramID(c)
-	out, err := h.cases.RecordShare(c.Request.Context(), userID, telegramID, c.Param("id"))
+	out, err := h.cases.PrepareShare(c.Request.Context(), userID, telegramID, c.Param("id"))
+	if err != nil {
+		writeCasesError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *CasesHandler) ConfirmShare(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	telegramID := middleware.GetTelegramID(c)
+	var body struct {
+		ResultID string `json:"result_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.ResultID) == "" {
+		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "result_id обязателен", "code": "invalid_amount"})
+		return
+	}
+	out, err := h.cases.ConfirmShare(c.Request.Context(), userID, telegramID, body.ResultID)
 	if err != nil {
 		writeCasesError(c, err)
 		return
@@ -152,6 +170,8 @@ func writeCasesError(c *gin.Context, err error) {
 		})
 	case errors.Is(err, domain.ErrInvalidAmount):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Некорректный запрос", "code": "invalid_amount"})
+	case errors.Is(err, domain.ErrForbidden):
+		httperr.Respond(c, http.StatusForbidden, err, gin.H{"error": "Доступ запрещён", "code": "forbidden"})
 	case errors.Is(err, domain.ErrPromoInvalid):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{"error": "Промокод недействителен", "code": "promo_invalid"})
 	case errors.Is(err, domain.ErrPromoExpired):

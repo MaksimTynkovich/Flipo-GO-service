@@ -109,6 +109,11 @@ type CaseRepository interface {
 	GetCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) (*CaseQuestShare, error)
 	IncrementCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) (int, error)
 	ResetCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) error
+
+	CreateCaseQuestSharePrepared(ctx context.Context, row *CaseQuestSharePrepared) error
+	GetCaseQuestSharePreparedByResultID(ctx context.Context, resultID string) (*CaseQuestSharePrepared, error)
+	// ConfirmCaseQuestSharePrepared sets confirmed_at once and returns whether this call was the first confirm.
+	ConfirmCaseQuestSharePrepared(ctx context.Context, resultID string) (firstConfirm bool, row *CaseQuestSharePrepared, err error)
 }
 
 type MarketRepository interface {
@@ -262,6 +267,8 @@ type PlatformRepository interface {
 	UpdateMaintenanceSettings(ctx context.Context, settings *PlatformMaintenanceSettings) error
 	GetWithdrawalSettings(ctx context.Context) (*PlatformWithdrawalSettings, error)
 	UpdateWithdrawalSettings(ctx context.Context, settings *PlatformWithdrawalSettings) error
+	GetDepositSettings(ctx context.Context) (*PlatformDepositSettings, error)
+	UpdateDepositSettings(ctx context.Context, settings *PlatformDepositSettings) error
 	GetYieldSettings(ctx context.Context) (*PlatformYieldSettings, error)
 	UpdateYieldSettings(ctx context.Context, settings *PlatformYieldSettings) error
 	GetPromoCode(ctx context.Context, code string) (*PromoCode, error)

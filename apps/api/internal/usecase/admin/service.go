@@ -504,6 +504,22 @@ func (s *Service) UpdateWithdrawalSettings(ctx context.Context, adminID uuid.UUI
 	})
 }
 
+func (s *Service) GetDepositSettings(ctx context.Context) (*domain.PlatformDepositSettings, error) {
+	return s.platform.GetDepositSettings(ctx)
+}
+
+func (s *Service) UpdateDepositSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformDepositSettings) error {
+	if settings.StarsUSDRate <= 0 || settings.StarsUSDRate > 10 {
+		return domain.ErrInvalidAmount
+	}
+	if err := s.platform.UpdateDepositSettings(ctx, &settings); err != nil {
+		return err
+	}
+	return s.audit(ctx, adminID, "deposit_settings_updated", "platform_deposit_settings", "1", map[string]any{
+		"stars_usd_rate": settings.StarsUSDRate,
+	})
+}
+
 func (s *Service) RecordAudit(ctx context.Context, adminID uuid.UUID, action, targetType, targetID string, meta any) error {
 	return s.audit(ctx, adminID, action, targetType, targetID, meta)
 }

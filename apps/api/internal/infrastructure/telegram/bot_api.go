@@ -514,7 +514,7 @@ func (b *BotAPI) SetWebhook(ctx context.Context, webhookURL, secret string) erro
 
 	form := url.Values{}
 	form.Set("url", webhookURL)
-	form.Set("allowed_updates", `["message","callback_query","pre_checkout_query"]`)
+	form.Set("allowed_updates", `["message","callback_query","pre_checkout_query","chosen_inline_result"]`)
 	if secret != "" {
 		form.Set("secret_token", secret)
 	}
@@ -628,4 +628,73 @@ func (b *BotAPI) AnswerPreCheckoutQuery(ctx context.Context, queryID string, ok 
 		return fmt.Errorf("telegram answerPreCheckoutQuery: %s", result.Description)
 	}
 	return nil
+}
+
+// PreparedInlineMessage is returned by savePreparedInlineMessage.
+type PreparedInlineMessage struct {
+	ID             string `json:"id"`
+	ExpirationDate int64  `json:"expiration_date"`
+}
+
+// SavePreparedInlineMessageRequest stores a Mini App share payload via Bot API.
+type SavePreparedInlineMessageRequest struct {
+	UserID            int64
+	Result            map[string]any
+	AllowUserChats    bool
+	AllowBotChats     bool
+	AllowGroupChats   bool
+	AllowChannelChats bool
+}
+
+// SavePreparedInlineMessage stores a message that can be shared via WebApp.shareMessage.
+func (b *BotAPI) SavePreparedInlineMessage(ctx context.Context, req SavePreparedInlineMessageRequest) (*PreparedInlineMessage, error) {
+	if !b.Enabled() {
+		return nil, fmt.Errorf("telegram bot disabled")
+	}
+	if req.UserID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	if len(req.Result) == 0 {
+		return nil, fmt.Errorf("result is required")
+	}
+
+	payload := map[string]any{
+		"user_id":             req.UserID,
+		"result":              req.Result,
+		"allow_user_chats":    req.AllowUserChats,
+		"allow_bot_chats":     req.AllowBotChats,
+		"allow_group_chats":   req.AllowGroupChats,
+		"allow_channel_chats": req.AllowChannelChats,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/savePreparedInlineMessage", b.token)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := b.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		OK          bool                   `json:"ok"`
+		Description string                 `json:"description"`
+		Result      *PreparedInlineMessage `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("telegram savePreparedInlineMessage decode: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK || !result.OK || result.Result == nil || result.Result.ID == "" {
+		if result.Description == "" {
+			result.Description = resp.Status
+		}
+		return nil, fmt.Errorf("telegram savePreparedInlineMessage: %s", result.Description)
+	}
+	return result.Result, nil
 }
