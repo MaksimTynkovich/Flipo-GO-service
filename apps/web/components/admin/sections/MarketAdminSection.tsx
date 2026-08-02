@@ -607,8 +607,21 @@ export default function MarketAdminSection() {
                   onChange={(e) => setQDraft(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      setQ(qDraft.trim());
-                      setListingsOffset(0);
+                      const nextQ = qDraft.trim();
+                      const nextCollection = collectionDraft.trim();
+                      setQ(nextQ);
+                      setCollection(nextCollection);
+                      setPriceMinTon(priceMinDraft);
+                      setPriceMaxTon(priceMaxDraft);
+                      loadListings({
+                        q: nextQ,
+                        collection: nextCollection,
+                        source: sourceFilter,
+                        status: statusFilter,
+                        priceMinTon: priceMinDraft,
+                        priceMaxTon: priceMaxDraft,
+                        sort,
+                      }).catch(() => {});
                     }
                   }}
                 />
