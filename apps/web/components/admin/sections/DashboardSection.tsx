@@ -115,8 +115,8 @@ function RevenueTooltip({
 }
 
 export default function DashboardSection() {
-  const metaKey = "admin:dashboard:v4:meta";
-  const revenueKey = (days: number) => `admin:dashboard:v4:revenue:${days}`;
+  const metaKey = "admin:dashboard:v5:meta";
+  const revenueKey = (days: number) => `admin:dashboard:v5:revenue:${days}`;
 
   const [summary, setSummary] = useState<AdminRevenueSummary | null>(null);
   const [timeseries, setTimeseries] = useState<AdminRevenuePoint[]>([]);

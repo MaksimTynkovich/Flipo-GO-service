@@ -23,9 +23,14 @@ func NewAdminRepo(db *gorm.DB) *AdminRepo {
 func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary, error) {
 	summary := &domain.RevenueSummary{}
 
+	var tonDeposits, altDeposits int64
 	r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
 		Where("direction = ? AND status = ?", domain.TonDirectionDeposit, domain.TonStatusCompleted).
-		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&summary.DepositsNanoton)
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&tonDeposits)
+	r.db.WithContext(ctx).Model(&domain.PaymentIntent{}).
+		Where("status = ?", domain.PaymentStatusPaid).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&altDeposits)
+	summary.DepositsNanoton = tonDeposits + altDeposits
 
 	r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
 		Where("direction = ? AND status = ?", domain.TonDirectionWithdraw, domain.TonStatusCompleted).
@@ -95,37 +100,44 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 	start := time.Time{}
 	switch {
 	case days == -1:
-		// "All time": find the earliest day among completed deposits (confirmed_at) and bets (created_at).
-		// We intentionally include bets regardless of status (same behavior as previous N+1 loop).
-		var minDeposit sql.NullTime
+		// "All time": earliest day among on-chain deposits, alt deposits (Stars/CryptoBot), and bets.
+		var minDeposit, minAltDeposit, minBet sql.NullTime
 		if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
 			Select("MIN(confirmed_at)").
 			Where("direction = ? AND status = ? AND confirmed_at IS NOT NULL", domain.TonDirectionDeposit, domain.TonStatusCompleted).
 			Scan(&minDeposit).Error; err != nil {
 			return nil, err
 		}
-
-		var minBet sql.NullTime
+		if err := r.db.WithContext(ctx).Model(&domain.PaymentIntent{}).
+			Select("MIN(paid_at)").
+			Where("status = ? AND paid_at IS NOT NULL", domain.PaymentStatusPaid).
+			Scan(&minAltDeposit).Error; err != nil {
+			return nil, err
+		}
 		if err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
 			Select("MIN(created_at)").
 			Scan(&minBet).Error; err != nil {
 			return nil, err
 		}
 
-		switch {
-		case minDeposit.Valid && minBet.Valid:
-			if minDeposit.Time.Before(minBet.Time) {
-				start = minDeposit.Time
-			} else {
-				start = minBet.Time
-			}
-		case minDeposit.Valid:
-			start = minDeposit.Time
-		case minBet.Valid:
-			start = minBet.Time
-		default:
-			// No data at all yet.
+		candidates := make([]time.Time, 0, 3)
+		if minDeposit.Valid {
+			candidates = append(candidates, minDeposit.Time)
+		}
+		if minAltDeposit.Valid {
+			candidates = append(candidates, minAltDeposit.Time)
+		}
+		if minBet.Valid {
+			candidates = append(candidates, minBet.Time)
+		}
+		if len(candidates) == 0 {
 			return []domain.RevenueTimeseriesPoint{}, nil
+		}
+		start = candidates[0]
+		for _, t := range candidates[1:] {
+			if t.Before(start) {
+				start = t
+			}
 		}
 		start = start.UTC().Truncate(24 * time.Hour)
 
@@ -148,14 +160,23 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 	}
 
 	// Fetch daily aggregates using GROUP BY (fast even for "all time").
-	depositsRows := make([]daySumRow, 0, dayCount)
+	tonDepositRows := make([]daySumRow, 0, dayCount)
 	if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
 		Select("DATE_TRUNC('day', confirmed_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
 		Where("direction = ? AND status = ? AND confirmed_at >= ? AND confirmed_at < ?",
 			domain.TonDirectionDeposit, domain.TonStatusCompleted, start, end).
 		Group("DATE_TRUNC('day', confirmed_at)").
 		Order("day").
-		Scan(&depositsRows).Error; err != nil {
+		Scan(&tonDepositRows).Error; err != nil {
+		return nil, err
+	}
+	altDepositRows := make([]daySumRow, 0, dayCount)
+	if err := r.db.WithContext(ctx).Model(&domain.PaymentIntent{}).
+		Select("DATE_TRUNC('day', paid_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
+		Where("status = ? AND paid_at >= ? AND paid_at < ?", domain.PaymentStatusPaid, start, end).
+		Group("DATE_TRUNC('day', paid_at)").
+		Order("day").
+		Scan(&altDepositRows).Error; err != nil {
 		return nil, err
 	}
 
@@ -180,9 +201,12 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 		return nil, err
 	}
 
-	depositsByDay := make(map[string]int64, len(depositsRows))
-	for _, row := range depositsRows {
-		depositsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
+	depositsByDay := make(map[string]int64, len(tonDepositRows)+len(altDepositRows))
+	for _, row := range tonDepositRows {
+		depositsByDay[row.Day.UTC().Format("2006-01-02")] += row.Sum
+	}
+	for _, row := range altDepositRows {
+		depositsByDay[row.Day.UTC().Format("2006-01-02")] += row.Sum
 	}
 	withdrawalsByDay := make(map[string]int64, len(withdrawalsRows))
 	for _, row := range withdrawalsRows {
@@ -671,11 +695,32 @@ func (r *AdminRepo) UserTransfersSummary(ctx context.Context, userID uuid.UUID, 
 	if err := q.Scan(&a).Error; err != nil {
 		return out, err
 	}
-	out.Deposits = a.Deposits
+
+	type altAgg struct {
+		Deposits int64 `gorm:"column:deposits"`
+		DepVol   int64 `gorm:"column:dep_vol"`
+		Failed   int64 `gorm:"column:failed"`
+	}
+	var alt altAgg
+	altQ := r.db.WithContext(ctx).Model(&domain.PaymentIntent{}).
+		Select(`
+			COUNT(*) FILTER (WHERE status = 'paid') AS deposits,
+			COALESCE(SUM(amount_nanoton) FILTER (WHERE status = 'paid'), 0) AS dep_vol,
+			COUNT(*) FILTER (WHERE status IN ('failed', 'expired')) AS failed
+		`).
+		Where("user_id = ?", userID)
+	if since != nil {
+		altQ = altQ.Where("created_at >= ?", *since)
+	}
+	if err := altQ.Scan(&alt).Error; err != nil {
+		return out, err
+	}
+
+	out.Deposits = a.Deposits + alt.Deposits
 	out.Withdrawals = a.Withdrawals
-	out.DepositVolumeNanoton = a.DepVol
+	out.DepositVolumeNanoton = a.DepVol + alt.DepVol
 	out.WithdrawalVolumeNanoton = a.WdVol
-	out.Failed = a.Failed
+	out.Failed = a.Failed + alt.Failed
 	return out, nil
 }
 
