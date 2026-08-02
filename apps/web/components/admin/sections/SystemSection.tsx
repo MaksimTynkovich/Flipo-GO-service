@@ -296,7 +296,7 @@ export default function SystemSection() {
                 disabled={savingDeposit || (loading && !depositSettings)}
                 onClick={async () => {
                   const rate = Number(starsRateInput);
-                  if !Number.isFinite(rate) || rate <= 0 || rate > 10) {
+                  if (!Number.isFinite(rate) || rate <= 0 || rate > 10) {
                     showToast({
                       variant: "error",
                       title: "Некорректный курс",
