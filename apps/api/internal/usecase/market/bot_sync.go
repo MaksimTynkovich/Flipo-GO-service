@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
@@ -310,7 +311,12 @@ func (s *BotSyncService) syncOne(ctx context.Context, gift telegram.IncomingGift
 		} else if relisted {
 			return "listed", nil
 		}
-		return "owned", nil
+		// Terminal rows (liquidated/withdrawn/…) must not block a fresh bot listing.
+		switch existing.Status {
+		case domain.InvAvailable, domain.InvLocked, domain.InvStaked, domain.InvInBet, domain.InvWithdrawPending:
+			return "owned", nil
+		}
+		txRef = fmt.Sprintf("%s:relist:%d", txRef, time.Now().UTC().Unix())
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", err
 	}
