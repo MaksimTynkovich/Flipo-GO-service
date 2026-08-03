@@ -205,6 +205,7 @@ export default function NotificationsSection() {
   queryRef.current = query;
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
+  const detailRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     load({ withUnread: true }).catch(() => {});
@@ -275,6 +276,9 @@ export default function NotificationsSection() {
 
   async function openItem(item: AdminNotification) {
     setSelectedId(item.id);
+    requestAnimationFrame(() => {
+      detailRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
     if (item.read_at) return;
     try {
       await markAdminNotificationRead(item.id);
@@ -453,7 +457,8 @@ export default function NotificationsSection() {
         </div>
 
         {selected ? (
-          <aside className="admin-notif-detail">
+          <div className="admin-notif-detail-rail">
+            <aside ref={detailRef} className="admin-notif-detail">
             <div className="admin-notif-detail__head">
               <span className={cn("admin-notif-pill", `admin-notif-pill--${selected.category}`)}>
                 {CATEGORY_LABEL[selected.category] ?? selected.category}
@@ -522,7 +527,8 @@ export default function NotificationsSection() {
                 Закрыть
               </AdminButton>
             </div>
-          </aside>
+            </aside>
+          </div>
         ) : null}
       </div>
     </AdminPage>

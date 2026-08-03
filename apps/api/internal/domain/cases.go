@@ -112,9 +112,19 @@ func (UserCaseState) TableName() string { return "user_case_state" }
 
 // UserCaseCooldown — atomic claim for daily/free case 24h opens (prevents parallel bypass).
 type UserCaseCooldown struct {
-	UserID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
-	CaseID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"case_id"`
-	LastClaimedAt time.Time `gorm:"not null;index" json:"last_claimed_at"`
+	UserID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
+	CaseID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"case_id"`
+	LastClaimedAt   time.Time  `gorm:"not null;index" json:"last_claimed_at"`
+	ReadyNotifiedAt *time.Time `json:"ready_notified_at,omitempty"` // Telegram "daily ready" for this claim cycle
+}
+
+// CaseCooldownReadyNotify — row ready for "daily case available" Telegram push.
+type CaseCooldownReadyNotify struct {
+	UserID     uuid.UUID
+	CaseID     uuid.UUID
+	TelegramID int64
+	CaseTitle  string
+	CaseSlug   string
 }
 
 func (UserCaseCooldown) TableName() string { return "user_case_cooldowns" }
@@ -157,6 +167,11 @@ type CaseCatalogSettings struct {
 	PromoPoolMaxPrizeBps        int        `gorm:"not null;default:5000" json:"promo_pool_max_prize_bps"`
 	PromoPoolDailyRefillNanoton int64      `gorm:"not null;default:0" json:"promo_pool_daily_refill_nanoton"`
 	PromoPoolLastRefillDate     *time.Time `gorm:"type:date" json:"promo_pool_last_refill_date,omitempty"`
+
+	// Deposit surplus boost — better mid/fat odds for depositors when paid bank is healthy.
+	DepositBoostEnabled    bool  `gorm:"not null;default:true" json:"deposit_boost_enabled"`
+	DepositBoostMinNanoton int64 `gorm:"not null;default:10000000000" json:"deposit_boost_min_nanoton"` // 10 TON
+	DepositBoostBiasWeight int   `gorm:"not null;default:40" json:"deposit_boost_bias_weight"`          // +40% on >= median
 }
 
 func (CaseCatalogSettings) TableName() string { return "case_catalog_settings" }
@@ -323,6 +338,22 @@ func CaseRecoveryProgress(balance, lossThreshold, recoveryTarget int64) float64 
 	return p
 }
 
+// NormalizeDepositBoost clamps deposit-boost knobs.
+func NormalizeDepositBoost(s *CaseCatalogSettings) {
+	if s == nil {
+		return
+	}
+	if s.DepositBoostMinNanoton < 0 {
+		s.DepositBoostMinNanoton = 0
+	}
+	if s.DepositBoostBiasWeight < 0 {
+		s.DepositBoostBiasWeight = 0
+	}
+	if s.DepositBoostBiasWeight > 100 {
+		s.DepositBoostBiasWeight = 100
+	}
+}
+
 // SyncCaseBankHysteresis updates BankRecoveryActive from bank vs thresholds (paid pool only).
 func SyncCaseBankHysteresis(s *CaseCatalogSettings) {
 	if s == nil {
@@ -353,6 +384,7 @@ func SyncCaseBankHysteresis(s *CaseCatalogSettings) {
 		s.PromoPoolMaxPrizeBps = 10000
 	}
 	NormalizeCaseRecoverySmooth(s)
+	NormalizeDepositBoost(s)
 	if !s.BankEnabled {
 		s.BankRecoveryActive = false
 		s.BankRecoveryPaceCounter = 0

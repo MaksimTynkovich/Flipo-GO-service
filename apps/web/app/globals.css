@@ -455,6 +455,8 @@ html.admin-mode body {
 
 .admin-notif-layout--split {
   grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.9fr);
+  /* Stretch so the detail rail is as tall as the feed — required for sticky. */
+  align-items: stretch;
 }
 
 .admin-notif-feed {
@@ -462,6 +464,11 @@ html.admin-mode body {
   flex-direction: column;
   gap: 0.4rem;
   min-width: 0;
+}
+
+.admin-notif-detail-rail {
+  min-width: 0;
+  min-height: 100%;
 }
 
 .admin-notif-row {
@@ -602,6 +609,8 @@ html.admin-mode body {
 .admin-notif-detail {
   position: sticky;
   top: 1rem;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
   border-radius: 1rem;
   border: 1px solid var(--admin-border);
   background: var(--admin-surface);
@@ -696,10 +705,17 @@ html.admin-mode body {
 @media (max-width: 960px) {
   .admin-notif-layout--split {
     grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .admin-notif-detail-rail {
+    min-height: 0;
   }
 
   .admin-notif-detail {
     position: static;
+    max-height: none;
+    overflow-y: visible;
   }
 }
 

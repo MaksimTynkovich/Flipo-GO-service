@@ -36,6 +36,9 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 		Where("direction = ? AND status = ?", domain.TonDirectionWithdraw, domain.TonStatusCompleted).
 		Select("COALESCE(SUM(amount_nanoton - fee_nanoton), 0)").Scan(&summary.WithdrawalsNanoton)
 
+	r.db.WithContext(ctx).Model(&domain.GiftWithdrawal{}).
+		Select("COALESCE(SUM(cost_nanoton), 0)").Scan(&summary.GiftWithdrawalsNanoton)
+
 	r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
 		Where("direction = ? AND status = ?", domain.TonDirectionWithdraw, domain.TonStatusCompleted).
 		Select("COALESCE(SUM(fee_nanoton), 0)").Scan(&summary.WithdrawalFeesNanoton)
@@ -44,6 +47,10 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 		Where("direction = ? AND status IN ?", domain.TonDirectionWithdraw,
 			[]domain.TonTransferStatus{domain.TonStatusQueued, domain.TonStatusPendingReview, domain.TonStatusApproved, domain.TonStatusBroadcasting}).
 		Select("COALESCE(SUM(amount_nanoton - fee_nanoton), 0)").Scan(&summary.PendingLiabilityNanoton)
+
+	r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+		Where("status = ? AND source = ?", domain.InvWithdrawPending, domain.NFTSourceTelegramGift).
+		Select("COALESCE(SUM(floor_price_nanoton), 0)").Scan(&summary.PendingGiftLiabilityNanoton)
 
 	r.db.WithContext(ctx).Model(&domain.GameBet{}).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&summary.GameBetsNanoton)
@@ -80,9 +87,10 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 
 	summary.GGRNanoton = summary.GameBetsNanoton - summary.GameWinsNanoton
 	summary.NGRNanoton = summary.GGRNanoton + summary.WithdrawalFeesNanoton + summary.PvPFeesNanoton +
-		summary.MarketFeesNanoton - summary.ReferralExpenseNanoton - summary.StakingExpenseNanoton
-	summary.NetRevenueNanoton = summary.DepositsNanoton - summary.WithdrawalsNanoton
-	summary.HotWalletExposureNanoton = summary.PendingLiabilityNanoton
+		summary.MarketFeesNanoton - summary.ReferralExpenseNanoton - summary.StakingExpenseNanoton -
+		summary.GiftWithdrawalsNanoton
+	summary.NetRevenueNanoton = summary.DepositsNanoton - summary.WithdrawalsNanoton - summary.GiftWithdrawalsNanoton
+	summary.HotWalletExposureNanoton = summary.PendingLiabilityNanoton + summary.PendingGiftLiabilityNanoton
 
 	since := time.Now().UTC().Add(-24 * time.Hour)
 	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
@@ -100,8 +108,8 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 	start := time.Time{}
 	switch {
 	case days == -1:
-		// "All time": earliest day among on-chain deposits, alt deposits (Stars/CryptoBot), and bets.
-		var minDeposit, minAltDeposit, minBet sql.NullTime
+		// "All time": earliest day among deposits, withdrawals (TON + gifts), and bets.
+		var minDeposit, minAltDeposit, minBet, minGiftWithdraw sql.NullTime
 		if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
 			Select("MIN(confirmed_at)").
 			Where("direction = ? AND status = ? AND confirmed_at IS NOT NULL", domain.TonDirectionDeposit, domain.TonStatusCompleted).
@@ -119,8 +127,13 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 			Scan(&minBet).Error; err != nil {
 			return nil, err
 		}
+		if err := r.db.WithContext(ctx).Model(&domain.GiftWithdrawal{}).
+			Select("MIN(withdrawn_at)").
+			Scan(&minGiftWithdraw).Error; err != nil {
+			return nil, err
+		}
 
-		candidates := make([]time.Time, 0, 3)
+		candidates := make([]time.Time, 0, 4)
 		if minDeposit.Valid {
 			candidates = append(candidates, minDeposit.Time)
 		}
@@ -129,6 +142,9 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 		}
 		if minBet.Valid {
 			candidates = append(candidates, minBet.Time)
+		}
+		if minGiftWithdraw.Valid {
+			candidates = append(candidates, minGiftWithdraw.Time)
 		}
 		if len(candidates) == 0 {
 			return []domain.RevenueTimeseriesPoint{}, nil
@@ -201,6 +217,16 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 		return nil, err
 	}
 
+	giftWithdrawRows := make([]daySumRow, 0, dayCount)
+	if err := r.db.WithContext(ctx).Model(&domain.GiftWithdrawal{}).
+		Select("DATE_TRUNC('day', withdrawn_at) AS day, COALESCE(SUM(cost_nanoton), 0) AS sum").
+		Where("withdrawn_at >= ? AND withdrawn_at < ?", start, end).
+		Group("DATE_TRUNC('day', withdrawn_at)").
+		Order("day").
+		Scan(&giftWithdrawRows).Error; err != nil {
+		return nil, err
+	}
+
 	depositsByDay := make(map[string]int64, len(tonDepositRows)+len(altDepositRows))
 	for _, row := range tonDepositRows {
 		depositsByDay[row.Day.UTC().Format("2006-01-02")] += row.Sum
@@ -211,6 +237,10 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 	withdrawalsByDay := make(map[string]int64, len(withdrawalsRows))
 	for _, row := range withdrawalsRows {
 		withdrawalsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
+	}
+	giftWithdrawalsByDay := make(map[string]int64, len(giftWithdrawRows))
+	for _, row := range giftWithdrawRows {
+		giftWithdrawalsByDay[row.Day.UTC().Format("2006-01-02")] = row.Sum
 	}
 	betsByDay := make(map[string]int64, len(betsRows))
 	for _, row := range betsRows {
@@ -223,13 +253,15 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 		period := day.Format("2006-01-02")
 		deposits := depositsByDay[period]
 		withdrawals := withdrawalsByDay[period]
+		giftWithdrawals := giftWithdrawalsByDay[period]
 		bets := betsByDay[period]
 		points = append(points, domain.RevenueTimeseriesPoint{
-			Period:             period,
-			RevenueNanoton:     deposits - withdrawals,
-			DepositsNanoton:    deposits,
-			WithdrawalsNanoton: withdrawals,
-			GameBetsNanoton:    bets,
+			Period:                 period,
+			RevenueNanoton:         deposits - withdrawals - giftWithdrawals,
+			DepositsNanoton:        deposits,
+			WithdrawalsNanoton:     withdrawals,
+			GiftWithdrawalsNanoton: giftWithdrawals,
+			GameBetsNanoton:        bets,
 		})
 	}
 	return points, nil
@@ -721,6 +753,116 @@ func (r *AdminRepo) UserTransfersSummary(ctx context.Context, userID uuid.UUID, 
 	out.DepositVolumeNanoton = a.DepVol + alt.DepVol
 	out.WithdrawalVolumeNanoton = a.WdVol
 	out.Failed = a.Failed + alt.Failed
+	return out, nil
+}
+
+func (r *AdminRepo) ListUserLedger(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]domain.BalanceLedger, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if since != nil {
+		q = q.Where("created_at >= ?", *since)
+	}
+	var items []domain.BalanceLedger
+	err := q.Order("created_at DESC").Limit(limit).Find(&items).Error
+	return items, err
+}
+
+func (r *AdminRepo) ListUserInventory(ctx context.Context, userID uuid.UUID, limit int) ([]domain.InventoryItem, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var items []domain.InventoryItem
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND status <> ?", userID, domain.InvDissolved).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&items).Error
+	return items, err
+}
+
+func (r *AdminRepo) ListUserCaseOpens(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]domain.AdminUserCaseOpenItem, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	type row struct {
+		OpenID           uuid.UUID  `gorm:"column:open_id"`
+		CaseID           uuid.UUID  `gorm:"column:case_id"`
+		CaseTitle        string     `gorm:"column:case_title"`
+		CaseSlug         string     `gorm:"column:case_slug"`
+		Source           string     `gorm:"column:source"`
+		PrizeType        string     `gorm:"column:prize_type"`
+		PrizeName        string     `gorm:"column:prize_name"`
+		PricePaidNanoton int64      `gorm:"column:price_paid_nanoton"`
+		PrizeNanoton     int64      `gorm:"column:prize_nanoton"`
+		InventoryItemID  *uuid.UUID `gorm:"column:inventory_item_id"`
+		CreatedAt        time.Time  `gorm:"column:created_at"`
+	}
+	q := r.db.WithContext(ctx).Table("case_opens AS o").
+		Select(`
+			o.id AS open_id,
+			o.case_id,
+			COALESCE(c.title, '') AS case_title,
+			COALESCE(c.slug, '') AS case_slug,
+			o.source,
+			COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift') AS prize_type,
+			COALESCE(NULLIF(e.display_name, ''), NULLIF(i.name, ''), 'приз') AS prize_name,
+			o.price_paid_nanoton,
+			o.prize_nanoton,
+			o.inventory_item_id,
+			o.created_at
+		`).
+		Joins("LEFT JOIN cases c ON c.id = o.case_id").
+		Joins("LEFT JOIN case_loot_entries e ON e.id = o.loot_entry_id").
+		Joins("LEFT JOIN inventory_items i ON i.id = o.inventory_item_id").
+		Where("o.user_id = ?", userID)
+	if since != nil {
+		q = q.Where("o.created_at >= ?", *since)
+	}
+	var rows []row
+	if err := q.Order("o.created_at DESC").Limit(limit).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.AdminUserCaseOpenItem, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.AdminUserCaseOpenItem{
+			OpenID:           row.OpenID,
+			CaseID:           row.CaseID,
+			CaseTitle:        row.CaseTitle,
+			CaseSlug:         row.CaseSlug,
+			Source:           row.Source,
+			PrizeType:        row.PrizeType,
+			PrizeName:        row.PrizeName,
+			PricePaidNanoton: row.PricePaidNanoton,
+			PrizeNanoton:     row.PrizeNanoton,
+			InventoryItemID:  row.InventoryItemID,
+			CreatedAt:        row.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
+func (r *AdminRepo) ListUserMarketBuysByItemIDs(ctx context.Context, userID uuid.UUID, itemIDs []uuid.UUID) (map[uuid.UUID]int64, error) {
+	out := map[uuid.UUID]int64{}
+	if len(itemIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		InventoryItemID uuid.UUID `gorm:"column:inventory_item_id"`
+		PriceNanoton    int64     `gorm:"column:price_nanoton"`
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).Table("market_listings").
+		Select("inventory_item_id, price_nanoton").
+		Where("buyer_id = ? AND inventory_item_id IN ? AND status = ?", userID, itemIDs, domain.ListingSold).
+		Scan(&rows).Error
+	if err != nil {
+		return out, err
+	}
+	for _, row := range rows {
+		out[row.InventoryItemID] = row.PriceNanoton
+	}
 	return out, nil
 }
 

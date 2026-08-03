@@ -44,6 +44,9 @@ func (s *inventoryRepoStub) FindByTelegramTxRef(context.Context, string) (*domai
 	return nil, domain.ErrNotFound
 }
 func (s *inventoryRepoStub) Create(context.Context, *domain.InventoryItem) error { return nil }
+func (s *inventoryRepoStub) CreateGiftWithdrawal(context.Context, *domain.GiftWithdrawal) error {
+	return nil
+}
 func (s *inventoryRepoStub) PromoteProfileToDeposit(context.Context, uuid.UUID, uuid.UUID, string, int64, []byte, string, string) error {
 	return nil
 }

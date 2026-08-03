@@ -209,30 +209,33 @@ func (PlatformYieldSettings) TableName() string { return "platform_yield_setting
 
 // RevenueSummary — aggregated financial metrics for admin dashboard.
 type RevenueSummary struct {
-	NetRevenueNanoton        int64 `json:"net_revenue_nanoton"`
-	DepositsNanoton          int64 `json:"deposits_nanoton"`
-	WithdrawalsNanoton       int64 `json:"withdrawals_nanoton"`
-	PendingLiabilityNanoton  int64 `json:"pending_liability_nanoton"`
-	WithdrawalFeesNanoton    int64 `json:"withdrawal_fees_nanoton"`
-	MarketFeesNanoton        int64 `json:"market_fees_nanoton"`
-	PvPFeesNanoton           int64 `json:"pvp_fees_nanoton"`
-	GameBetsNanoton          int64 `json:"game_bets_nanoton"`
-	GameWinsNanoton          int64 `json:"game_wins_nanoton"`
-	ReferralExpenseNanoton   int64 `json:"referral_expense_nanoton"`
-	StakingExpenseNanoton    int64 `json:"staking_expense_nanoton"`
-	HotWalletExposureNanoton int64 `json:"hot_wallet_exposure_nanoton"`
-	ActiveUsers24h           int64 `json:"active_users_24h"`
-	GGRNanoton               int64 `json:"ggr_nanoton"`
-	NGRNanoton               int64 `json:"ngr_nanoton"`
+	NetRevenueNanoton           int64 `json:"net_revenue_nanoton"`
+	DepositsNanoton             int64 `json:"deposits_nanoton"`
+	WithdrawalsNanoton          int64 `json:"withdrawals_nanoton"`
+	GiftWithdrawalsNanoton      int64 `json:"gift_withdrawals_nanoton"`
+	PendingLiabilityNanoton     int64 `json:"pending_liability_nanoton"`
+	PendingGiftLiabilityNanoton int64 `json:"pending_gift_liability_nanoton"`
+	WithdrawalFeesNanoton       int64 `json:"withdrawal_fees_nanoton"`
+	MarketFeesNanoton           int64 `json:"market_fees_nanoton"`
+	PvPFeesNanoton              int64 `json:"pvp_fees_nanoton"`
+	GameBetsNanoton             int64 `json:"game_bets_nanoton"`
+	GameWinsNanoton             int64 `json:"game_wins_nanoton"`
+	ReferralExpenseNanoton      int64 `json:"referral_expense_nanoton"`
+	StakingExpenseNanoton       int64 `json:"staking_expense_nanoton"`
+	HotWalletExposureNanoton    int64 `json:"hot_wallet_exposure_nanoton"`
+	ActiveUsers24h              int64 `json:"active_users_24h"`
+	GGRNanoton                  int64 `json:"ggr_nanoton"`
+	NGRNanoton                  int64 `json:"ngr_nanoton"`
 }
 
 // RevenueTimeseriesPoint — daily revenue breakdown.
 type RevenueTimeseriesPoint struct {
-	Period             string `json:"period"`
-	RevenueNanoton     int64  `json:"revenue_nanoton"`
-	DepositsNanoton    int64  `json:"deposits_nanoton"`
-	WithdrawalsNanoton int64  `json:"withdrawals_nanoton"`
-	GameBetsNanoton    int64  `json:"game_bets_nanoton"`
+	Period                 string `json:"period"`
+	RevenueNanoton         int64  `json:"revenue_nanoton"`
+	DepositsNanoton        int64  `json:"deposits_nanoton"`
+	WithdrawalsNanoton     int64  `json:"withdrawals_nanoton"`
+	GiftWithdrawalsNanoton int64  `json:"gift_withdrawals_nanoton"`
+	GameBetsNanoton        int64  `json:"game_bets_nanoton"`
 }
 
 // AdminGameStat — per-game GGR and volume.
@@ -333,6 +336,70 @@ type AdminUserTransfersResponse struct {
 	Period  string                    `json:"period"`
 	Summary AdminUserTransfersSummary `json:"summary"`
 	Items   []TonTransfer             `json:"items"`
+}
+
+// AdminUserLedgerItem — one balance movement with human-readable source.
+type AdminUserLedgerItem struct {
+	ID            uuid.UUID  `json:"id"`
+	Type          LedgerType `json:"type"`
+	TypeLabel     string     `json:"type_label"`
+	AmountNanoton int64      `json:"amount_nanoton"`
+	BalanceAfter  int64      `json:"balance_after"`
+	ReferenceType string     `json:"reference_type"`
+	ReferenceID   uuid.UUID  `json:"reference_id"`
+	SourceLabel   string     `json:"source_label"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
+// AdminUserLedgerResponse — account movements for one user.
+type AdminUserLedgerResponse struct {
+	Period string                `json:"period"`
+	Items  []AdminUserLedgerItem `json:"items"`
+}
+
+// AdminUserInventoryItem — gift with decoded origin (deposit / case / market / …).
+type AdminUserInventoryItem struct {
+	ID                 uuid.UUID       `json:"id"`
+	Name               string          `json:"name"`
+	CollectionSlug     string          `json:"collection_slug"`
+	ImageURL           string          `json:"image_url"`
+	Status             InventoryStatus `json:"status"`
+	FloorPriceNanoton  int64           `json:"floor_price_nanoton"`
+	OriginKind         string          `json:"origin_kind"`  // deposit|case|market_buy|profile|other
+	OriginLabel        string          `json:"origin_label"` // human text
+	CaseSlug           string          `json:"case_slug,omitempty"`
+	Fulfillment        string          `json:"fulfillment,omitempty"`
+	CashoutNanoton     int64           `json:"cashout_nanoton,omitempty"`
+	TelegramTxRef      string          `json:"telegram_tx_ref,omitempty"`
+	MarketPriceNanoton int64           `json:"market_price_nanoton,omitempty"`
+	DepositedAt        time.Time       `json:"deposited_at"`
+	CreatedAt          time.Time       `json:"created_at"`
+}
+
+// AdminUserInventoryResponse — gifts currently/formerly owned by user.
+type AdminUserInventoryResponse struct {
+	Items []AdminUserInventoryItem `json:"items"`
+}
+
+// AdminUserCaseOpenItem — one case open for admin user card.
+type AdminUserCaseOpenItem struct {
+	OpenID           uuid.UUID  `json:"open_id"`
+	CaseID           uuid.UUID  `json:"case_id"`
+	CaseTitle        string     `json:"case_title"`
+	CaseSlug         string     `json:"case_slug"`
+	Source           string     `json:"source"`
+	PrizeType        string     `json:"prize_type"`
+	PrizeName        string     `json:"prize_name"`
+	PricePaidNanoton int64      `json:"price_paid_nanoton"`
+	PrizeNanoton     int64      `json:"prize_nanoton"`
+	InventoryItemID  *uuid.UUID `json:"inventory_item_id,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+}
+
+// AdminUserCaseOpensResponse — case open history for one user.
+type AdminUserCaseOpensResponse struct {
+	Period string                  `json:"period"`
+	Items  []AdminUserCaseOpenItem `json:"items"`
 }
 
 // AdminReferrerStat — top invite sources for the admin users page.

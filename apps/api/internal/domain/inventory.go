@@ -51,6 +51,22 @@ type InventoryItem struct {
 	User User `gorm:"foreignKey:UserID" json:"-"`
 }
 
+// GiftWithdrawal — durable expense row when a user gift leaves the platform.
+type GiftWithdrawal struct {
+	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	InventoryItemID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"inventory_item_id"`
+	UserID          uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	CostNanoton     int64     `gorm:"not null;default:0" json:"cost_nanoton"`
+	FloorNanoton    int64     `gorm:"not null;default:0" json:"floor_nanoton"`
+	CollectionSlug  string    `gorm:"size:128;not null;default:''" json:"collection_slug"`
+	Name            string    `gorm:"size:256;not null;default:''" json:"name"`
+	Source          string    `gorm:"size:32;not null;default:user" json:"source"` // user|admin_review|admin_fulfill|backfill
+	WithdrawnAt     time.Time `gorm:"not null;index" json:"withdrawn_at"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+func (GiftWithdrawal) TableName() string { return "gift_withdrawals" }
+
 // IsProfileVirtualItem — запись создана только для стейка из профиля Telegram, без депозита в бота.
 func IsProfileVirtualItem(item InventoryItem) bool {
 	return strings.HasPrefix(item.TelegramTxRef, "profile:")

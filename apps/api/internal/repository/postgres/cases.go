@@ -221,7 +221,10 @@ func (r *CaseRepo) ClaimCaseCooldown(ctx context.Context, userID, caseID uuid.UU
 			if now.Before(row.LastClaimedAt.UTC().Add(cooldown)) {
 				return domain.ErrCaseCooldown
 			}
-			return tx.Model(&row).Update("last_claimed_at", now).Error
+			return tx.Model(&row).Updates(map[string]any{
+				"last_claimed_at":   now,
+				"ready_notified_at": nil,
+			}).Error
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			return tx.Create(&domain.UserCaseCooldown{
 				UserID:        userID,
@@ -247,6 +250,41 @@ func (r *CaseRepo) FindCaseCooldownClaim(ctx context.Context, userID, caseID uui
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *CaseRepo) ListDailyCooldownsReadyForNotify(ctx context.Context, cooldown time.Duration, limit int) ([]domain.CaseCooldownReadyNotify, error) {
+	if cooldown <= 0 {
+		cooldown = 24 * time.Hour
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	cutoff := time.Now().UTC().Add(-cooldown)
+	var rows []domain.CaseCooldownReadyNotify
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			ucc.user_id,
+			ucc.case_id,
+			u.telegram_id,
+			c.title AS case_title,
+			c.slug AS case_slug
+		FROM user_case_cooldowns ucc
+		INNER JOIN users u ON u.id = ucc.user_id
+		INNER JOIN cases c ON c.id = ucc.case_id AND c.deleted_at IS NULL AND c.active = TRUE AND c.kind = ?
+		WHERE ucc.last_claimed_at <= ?
+		  AND (ucc.ready_notified_at IS NULL OR ucc.ready_notified_at < ucc.last_claimed_at)
+		  AND u.telegram_id > 0
+		ORDER BY ucc.last_claimed_at ASC
+		LIMIT ?
+	`, domain.CaseKindDaily, cutoff, limit).Scan(&rows).Error
+	return rows, err
+}
+
+func (r *CaseRepo) MarkCaseCooldownReadyNotified(ctx context.Context, userID, caseID uuid.UUID, notifiedAt time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.UserCaseCooldown{}).
+		Where("user_id = ? AND case_id = ?", userID, caseID).
+		Update("ready_notified_at", notifiedAt.UTC()).Error
 }
 
 func (r *CaseRepo) ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.CaseOpen, error) {
@@ -343,6 +381,9 @@ func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogS
 		BankRecoveryReliefMaxPrizeBps: 3000,
 		DailyPoolMaxPrizeBps:          5000,
 		PromoPoolMaxPrizeBps:          5000,
+		DepositBoostEnabled:           true,
+		DepositBoostMinNanoton:        10_000_000_000,
+		DepositBoostBiasWeight:        40,
 		UpdatedAt:                     time.Now().UTC(),
 	}
 	if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
@@ -394,6 +435,9 @@ func catalogSettingsUpdateMap(s *domain.CaseCatalogSettings) map[string]any {
 		"promo_pool_max_prize_bps":            s.PromoPoolMaxPrizeBps,
 		"promo_pool_daily_refill_nanoton":     s.PromoPoolDailyRefillNanoton,
 		"promo_pool_last_refill_date":         s.PromoPoolLastRefillDate,
+		"deposit_boost_enabled":               s.DepositBoostEnabled,
+		"deposit_boost_min_nanoton":           s.DepositBoostMinNanoton,
+		"deposit_boost_bias_weight":           s.DepositBoostBiasWeight,
 		"updated_at":                          s.UpdatedAt,
 	}
 }
@@ -416,6 +460,9 @@ func (r *CaseRepo) ApplyCasePoolDelta(ctx context.Context, kind domain.CasePoolK
 					BankRecoveryReliefMaxPrizeBps: 3000,
 					DailyPoolMaxPrizeBps:          5000,
 					PromoPoolMaxPrizeBps:          5000,
+					DepositBoostEnabled:           true,
+					DepositBoostMinNanoton:        10_000_000_000,
+					DepositBoostBiasWeight:        40,
 					UpdatedAt:                     time.Now().UTC(),
 				}
 				if createErr := tx.Create(&settings).Error; createErr != nil {

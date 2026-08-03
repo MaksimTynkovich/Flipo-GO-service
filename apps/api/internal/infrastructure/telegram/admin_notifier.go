@@ -377,27 +377,24 @@ func (n *AdminNotifier) NotifyCaseOpen(
 	summary := fmt.Sprintf("%s · %s · %s", FormatActor(actor), caseTitle, prizeName)
 	body := fmt.Sprintf("%s\nКейс: %s\nПриз: %s\nИсточник: %s", FormatActor(actor), caseTitle, prizeName, sourceLabel)
 	meta := map[string]any{
-		"case_title": caseTitle,
-		"prize_name": prizeName,
-		"source":     source,
-		"source_label": sourceLabel,
-		"backed":     backed,
+		"case_title":    caseTitle,
+		"prize_name":    prizeName,
+		"source":        source,
+		"source_label":  sourceLabel,
+		"backed":        backed,
 		"price_nanoton": priceNanoton,
 	}
 	var amount *int64
-	if priceNanoton > 0 {
-		v := priceNanoton
-		amount = &v
-		body += fmt.Sprintf("\nЦена: %s TON", formatTON(priceNanoton))
-		summary = fmt.Sprintf("%s · %s · %s · %s TON", FormatActor(actor), caseTitle, prizeName, formatTON(priceNanoton))
-	}
+	// UI amount column shows prize value, not case open price.
 	if prizeFloorNanoton > 0 {
-		body += fmt.Sprintf("\nОценка приза: %s TON", formatTON(prizeFloorNanoton))
+		v := prizeFloorNanoton
+		amount = &v
 		meta["prize_floor_nanoton"] = prizeFloorNanoton
-		if amount == nil {
-			v := prizeFloorNanoton
-			amount = &v
-		}
+		body += fmt.Sprintf("\nОценка приза: %s TON", formatTON(prizeFloorNanoton))
+		summary = fmt.Sprintf("%s · %s · %s · %s TON", FormatActor(actor), caseTitle, prizeName, formatTON(prizeFloorNanoton))
+	}
+	if priceNanoton > 0 {
+		body += fmt.Sprintf("\nЦена кейса: %s TON", formatTON(priceNanoton))
 	}
 	if backed {
 		body += "\nПриз: обеспечен"

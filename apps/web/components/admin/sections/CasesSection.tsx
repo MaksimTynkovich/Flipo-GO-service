@@ -54,6 +54,8 @@ import {
   upsertAdminCasePromoCode,
   deleteAdminCase,
   simulateAdminCase,
+  playerSimulateAdminCase,
+  playerSimulateAllAdminCases,
   getAdminCaseEconomyStats,
   formatTON,
   type AdminCase,
@@ -63,6 +65,8 @@ import {
   type AdminCaseLootEntry,
   type AdminCasePromoCode,
   type AdminCaseSimulateResult,
+  type AdminCasePlayerSimulateResult,
+  type AdminCasePlayerSimulateBatch,
   type AdminCaseUpsert,
 } from "@/lib/api";
 import { Upload } from "lucide-react";
@@ -406,6 +410,11 @@ export default function CasesSection() {
   const [simWithBank, setSimWithBank] = useState(false);
   const [simIterations, setSimIterations] = useState(DEFAULT_SIM_ITERATIONS);
   const [simResult, setSimResult] = useState<AdminCaseSimulateResult | null>(null);
+  const [playerSimDepositsTon, setPlayerSimDepositsTon] = useState(10);
+  const [playerSimulating, setPlayerSimulating] = useState(false);
+  const [playerSimResult, setPlayerSimResult] = useState<AdminCasePlayerSimulateResult | null>(null);
+  const [playerSimBatch, setPlayerSimBatch] = useState<AdminCasePlayerSimulateBatch | null>(null);
+  const [playerSimBatchRunning, setPlayerSimBatchRunning] = useState(false);
   const [economy, setEconomy] = useState<AdminCaseCatalogSettings>(DEFAULT_CATALOG_ECONOMY);
   const [economyStats, setEconomyStats] = useState<AdminCaseEconomyStats | null>(null);
   const [savingEconomy, setSavingEconomy] = useState(false);
@@ -482,6 +491,7 @@ export default function CasesSection() {
     setCasePromos([]);
     setCasePromoDraft(EMPTY_CASE_PROMO);
     setSimResult(null);
+    setPlayerSimResult(null);
   }
 
   async function runSimulate() {
@@ -497,6 +507,7 @@ export default function CasesSection() {
     try {
       const result = await simulateAdminCase(draft.id, iterations, simWithBank);
       setSimResult(result);
+      setPlayerSimResult(null);
       const rtpLine = result.rtp_available
         ? `RTP ${bpsPct(result.simulated_rtp_bps)} (теор ${bpsPct(result.theoretical_rtp_bps)})`
         : "RTP — (цена 0)";
@@ -512,6 +523,71 @@ export default function CasesSection() {
       });
     } finally {
       setSimulating(false);
+    }
+  }
+
+  async function runPlayerSimulate() {
+    if (!draft.id) return;
+    const iterations = Math.min(
+      MAX_SIM_ITERATIONS,
+      Math.max(MIN_SIM_ITERATIONS, Math.round(simIterations) || DEFAULT_SIM_ITERATIONS),
+    );
+    if (iterations !== simIterations) {
+      setSimIterations(iterations);
+    }
+    const depositsNanoton = Math.max(0, Math.round(playerSimDepositsTon * 1e9));
+    setPlayerSimulating(true);
+    try {
+      const result = await playerSimulateAdminCase(draft.id, {
+        iterations,
+        depositsNanoton,
+        sampleLimit: Math.min(80, Math.max(20, iterations)),
+        withBank: true,
+      });
+      setPlayerSimResult(result);
+      setSimResult(null);
+      showToast({
+        title: `Игрок · деп ${formatTON(result.deposits_nanoton)} · ${result.iterations} открытий`,
+        subtitle: `RTP ${result.rtp_available ? bpsPct(result.simulated_rtp_bps) : "—"} · boost ${result.boost_applied_opens}/${result.iterations} · edge ${formatTON(result.house_edge_nanoton)}`,
+        variant: "success",
+      });
+    } catch (e) {
+      showToast({
+        title: formatUserError(e, "Не удалось прогнать тест игрока"),
+        variant: "error",
+      });
+    } finally {
+      setPlayerSimulating(false);
+    }
+  }
+
+  async function runPlayerSimulateAll() {
+    const iterations = Math.min(
+      MAX_SIM_ITERATIONS,
+      Math.max(MIN_SIM_ITERATIONS, Math.round(simIterations) || DEFAULT_SIM_ITERATIONS),
+    );
+    const depositsNanoton = Math.max(0, Math.round(playerSimDepositsTon * 1e9));
+    setPlayerSimBatchRunning(true);
+    try {
+      const result = await playerSimulateAllAdminCases({
+        iterations,
+        depositsNanoton,
+        sampleLimit: 8,
+        withBank: true,
+      });
+      setPlayerSimBatch(result);
+      showToast({
+        title: `Все кейсы · ${result.cases.length} шт · деп ${formatTON(result.deposits_nanoton)}`,
+        subtitle: `${result.iterations} открытий на кейс · сортировка по RTP`,
+        variant: "success",
+      });
+    } catch (e) {
+      showToast({
+        title: formatUserError(e, "Не удалось прогнать все кейсы"),
+        variant: "error",
+      });
+    } finally {
+      setPlayerSimBatchRunning(false);
     }
   }
 
@@ -1294,11 +1370,100 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
             увеличивать `Bias weight`.
           </p>
         </div>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <AdminButton disabled={savingEconomy} onClick={() => void saveEconomy()}>
             {savingEconomy ? "…" : "Сохранить экономику"}
           </AdminButton>
+          <AdminButton
+            variant="secondary"
+            disabled={playerSimBatchRunning || savingEconomy}
+            onClick={() => void runPlayerSimulateAll()}
+            title="Прогнать все платные кейсы как игрок с указанным депозитом"
+          >
+            {playerSimBatchRunning ? "…" : "Прогнать все кейсы (игрок)"}
+          </AdminButton>
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <span>деп TON</span>
+            <input
+              type="number"
+              className="input-field w-[5rem] py-1 text-xs"
+              min={0}
+              step={1}
+              value={playerSimDepositsTon}
+              disabled={playerSimBatchRunning}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (!Number.isFinite(n)) return;
+                setPlayerSimDepositsTon(Math.max(0, n));
+              }}
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <span>открытий</span>
+            <input
+              type="number"
+              className="input-field w-[5rem] py-1 text-xs"
+              min={MIN_SIM_ITERATIONS}
+              max={MAX_SIM_ITERATIONS}
+              value={simIterations}
+              disabled={playerSimBatchRunning}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (!Number.isFinite(n)) return;
+                setSimIterations(Math.min(MAX_SIM_ITERATIONS, Math.max(0, Math.round(n))));
+              }}
+            />
+          </label>
         </div>
+        {playerSimBatch && playerSimBatch.cases.length > 0 ? (
+          <div className="mt-3 overflow-x-auto rounded-xl bg-surface-raised/50 px-3 py-2.5">
+            <p className="mb-2 text-xs text-muted">
+              Сводка по платным кейсам · деп {formatTON(playerSimBatch.deposits_nanoton)} TON ·{" "}
+              {playerSimBatch.iterations} открытий · сортировка по RTP
+            </p>
+            <table className="w-full min-w-[40rem] border-collapse text-left text-xs">
+              <thead>
+                <tr className="text-muted">
+                  <th className="py-1 pr-2 font-medium">Кейс</th>
+                  <th className="py-1 pr-2 font-medium">Цена</th>
+                  <th className="py-1 pr-2 font-medium">RTP</th>
+                  <th className="py-1 pr-2 font-medium">Target</th>
+                  <th className="py-1 pr-2 font-medium">Edge</th>
+                  <th className="py-1 pr-2 font-medium">Boost</th>
+                  <th className="py-1 font-medium">Банк end</th>
+                </tr>
+              </thead>
+              <tbody>
+                {playerSimBatch.cases.map((row) => (
+                  <tr
+                    key={row.case_id}
+                    className="cursor-pointer border-t border-white/[0.04] hover:bg-white/[0.03]"
+                    onClick={() => {
+                      const found = cases.find((c) => c.id === row.case_id);
+                      if (found) selectCase(found);
+                      setPlayerSimResult(row);
+                      setSimResult(null);
+                    }}
+                  >
+                    <td className="max-w-[12rem] truncate py-1 pr-2" title={row.title}>
+                      {row.title}
+                    </td>
+                    <td className="py-1 pr-2 tabular-nums">{formatTON(row.price_nanoton)}</td>
+                    <td className="py-1 pr-2 tabular-nums">
+                      {row.rtp_available ? bpsPct(row.simulated_rtp_bps) : "—"}
+                    </td>
+                    <td className="py-1 pr-2 tabular-nums">{bpsPct(row.target_rtp_bps)}</td>
+                    <td className="py-1 pr-2 tabular-nums">{formatTON(row.house_edge_nanoton)}</td>
+                    <td className="py-1 pr-2 tabular-nums">
+                      {row.boost_applied_opens}/{row.iterations}
+                    </td>
+                    <td className="py-1 tabular-nums">{formatTON(row.bank_end_nanoton)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </AdminPanel>
 
       {loading && cases.length === 0 ? (
@@ -1812,6 +1977,33 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
               >
                 {simulating ? "…" : "Тест"}
               </AdminButton>
+              <AdminButton
+                variant="secondary"
+                disabled={
+                  !draft.id || playerSimulating || loot.length === 0 || deletingCase || draft.price_nanoton <= 0
+                }
+                onClick={() => void runPlayerSimulate()}
+                title="Имитация обычного игрока: депозит + банк + deposit boost"
+              >
+                {playerSimulating ? "…" : "Тест игрока"}
+              </AdminButton>
+              <label className="flex items-center gap-1.5 text-xs text-muted">
+                <span className="whitespace-nowrap">деп TON</span>
+                <input
+                  type="number"
+                  className="input-field w-[5rem] py-1 text-xs"
+                  min={0}
+                  step={1}
+                  value={playerSimDepositsTon}
+                  disabled={playerSimulating || playerSimBatchRunning || deletingCase}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    setPlayerSimDepositsTon(Math.max(0, n));
+                  }}
+                  title="Сумма депозитов имитируемого игрока (порог буста по умолчанию 10 TON)"
+                />
+              </label>
               <label className="flex items-center gap-1.5 text-xs text-muted">
                 <span className="whitespace-nowrap">открытий</span>
                 <input
@@ -1821,7 +2013,7 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                   max={MAX_SIM_ITERATIONS}
                   step={1}
                   value={simIterations}
-                  disabled={simulating || deletingCase}
+                  disabled={simulating || playerSimulating || deletingCase}
                   onChange={(e) => {
                     const n = Number(e.target.value);
                     if (!Number.isFinite(n)) return;
@@ -1844,7 +2036,7 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                   checked={simWithBank}
                   onChange={(e) => setSimWithBank(e.target.checked)}
                 />
-                с банком
+                с банком (простой тест)
               </label>
               {draft.id ? (
                 <AdminButton
@@ -1856,6 +2048,106 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                 </AdminButton>
               ) : null}
             </div>
+            {playerSimResult ? (
+              <div className="mt-3 space-y-3 rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 font-medium">
+                  <span>
+                    Игрок · деп {formatTON(playerSimResult.deposits_nanoton)} TON ·{" "}
+                    {playerSimResult.iterations} открытий
+                  </span>
+                  <span className="text-xs font-normal text-muted">
+                    {playerSimResult.boost_eligible
+                      ? `boost +${playerSimResult.boost_strength}% · применён ${playerSimResult.boost_applied_opens}/${playerSimResult.iterations}`
+                      : "deposit boost выкл (мало депов / recovery / банк off)"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted">
+                  Spent {formatTON(playerSimResult.spent_nanoton)} · Prize{" "}
+                  {formatTON(playerSimResult.prize_total_nanoton)} · Edge{" "}
+                  {formatTON(playerSimResult.house_edge_nanoton)} · RTP{" "}
+                  {playerSimResult.rtp_available
+                    ? bpsPct(playerSimResult.simulated_rtp_bps)
+                    : "—"}{" "}
+                  (теор {playerSimResult.rtp_available ? bpsPct(playerSimResult.theoretical_rtp_bps) : "—"} /
+                  target {bpsPct(playerSimResult.target_rtp_bps)})
+                </p>
+                <p className="text-xs text-muted">
+                  Банк: start {formatTON(playerSimResult.bank_start_nanoton)} → end{" "}
+                  {formatTON(playerSimResult.bank_end_nanoton)} · min{" "}
+                  {formatTON(playerSimResult.bank_min_nanoton)} · max{" "}
+                  {formatTON(playerSimResult.bank_max_nanoton)} · recovery opens{" "}
+                  {playerSimResult.recovery_opens}
+                </p>
+                {playerSimResult.warnings && playerSimResult.warnings.length > 0 ? (
+                  <p className="text-xs text-amber-400/90">{playerSimResult.warnings.join(" · ")}</p>
+                ) : null}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[28rem] border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="text-muted">
+                        <th className="py-1 pr-2 font-medium">Приз</th>
+                        <th className="py-1 pr-2 font-medium">Ожид.</th>
+                        <th className="py-1 pr-2 font-medium">Факт</th>
+                        <th className="py-1 pr-2 font-medium">Hits</th>
+                        <th className="py-1 pr-2 font-medium">Floor</th>
+                        <th className="py-1 font-medium">Σ prize</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {playerSimResult.entries.map((row) => (
+                        <tr key={row.loot_entry_id} className="border-t border-white/[0.04]">
+                          <td className="max-w-[10rem] truncate py-1 pr-2" title={row.display_name}>
+                            {row.display_name}
+                          </td>
+                          <td className="py-1 pr-2 tabular-nums">{bpsPct(row.expected_pct_bps)}</td>
+                          <td className="py-1 pr-2 tabular-nums">{bpsPct(row.actual_pct_bps)}</td>
+                          <td className="py-1 pr-2 tabular-nums">{row.hits}</td>
+                          <td className="py-1 pr-2 tabular-nums">{formatTON(row.floor_price_nanoton)}</td>
+                          <td className="py-1 tabular-nums">{formatTON(row.prize_sum_nanoton)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {playerSimResult.sample_opens.length > 0 ? (
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted">
+                      Лента открытий (первые {playerSimResult.sample_opens.length})
+                    </p>
+                    <div className="max-h-56 overflow-y-auto rounded-lg border border-white/[0.06]">
+                      <table className="w-full min-w-[32rem] border-collapse text-left text-[11px]">
+                        <thead className="sticky top-0 bg-surface-raised">
+                          <tr className="text-muted">
+                            <th className="px-2 py-1 font-medium">#</th>
+                            <th className="px-2 py-1 font-medium">Приз</th>
+                            <th className="px-2 py-1 font-medium">Цена</th>
+                            <th className="px-2 py-1 font-medium">Boost</th>
+                            <th className="px-2 py-1 font-medium">Recovery</th>
+                            <th className="px-2 py-1 font-medium">Банк до→после</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {playerSimResult.sample_opens.map((op) => (
+                            <tr key={op.index} className="border-t border-white/[0.04]">
+                              <td className="px-2 py-0.5 tabular-nums text-muted">{op.index}</td>
+                              <td className="max-w-[12rem] truncate px-2 py-0.5" title={op.display_name}>
+                                {op.display_name}
+                              </td>
+                              <td className="px-2 py-0.5 tabular-nums">{formatTON(op.prize_nanoton)}</td>
+                              <td className="px-2 py-0.5">{op.boost_applied ? "да" : "—"}</td>
+                              <td className="px-2 py-0.5">{op.recovery ? "да" : "—"}</td>
+                              <td className="px-2 py-0.5 tabular-nums text-muted">
+                                {formatTON(op.bank_before_nanoton)} → {formatTON(op.bank_after_nanoton)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {simResult ? (
               <div className="mt-3 space-y-2 rounded-xl bg-surface-raised/50 px-3 py-2.5 text-sm">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 font-medium">

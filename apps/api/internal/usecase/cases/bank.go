@@ -270,6 +270,46 @@ func biasLootWeights(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64, po
 	return out
 }
 
+// depositBoostEligible is true when a paying user with enough deposits opens while paid bank is healthy.
+func depositBoostEligible(pool domain.CasePoolSnapshot, casePrice, deposits int64, enabled bool, minDeposits int64, strength int) bool {
+	if !enabled || strength <= 0 || casePrice <= 0 || deposits < minDeposits {
+		return false
+	}
+	if pool.Kind != domain.CasePoolPaid || !pool.Enabled || pool.Recovery {
+		return false
+	}
+	// House in plus: at or above recovery target (often 0).
+	if pool.Balance < pool.RecoveryTarget {
+		return false
+	}
+	return true
+}
+
+// applyDepositSurplusBoost raises weights for above-median prizes (good gifts) for retained depositors.
+func applyDepositSurplusBoost(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64, strength int) []domain.CaseLootEntry {
+	if strength <= 0 || len(loot) == 0 {
+		return loot
+	}
+	median := medianLootPrice(loot, floors)
+	if median <= 0 {
+		return loot
+	}
+	out := make([]domain.CaseLootEntry, len(loot))
+	copy(out, loot)
+	for i := range out {
+		price := lootPrice(out[i], floors)
+		if price < median || price <= 0 {
+			continue
+		}
+		w := out[i].Weight
+		if w <= 0 {
+			continue
+		}
+		out[i].Weight = w * (100 + strength) / 100
+	}
+	return out
+}
+
 func (s *Service) stockChecker(ctx context.Context) func(domain.CaseLootEntry) bool {
 	var botID uuid.UUID
 	var resolved bool
@@ -302,11 +342,13 @@ func (s *Service) stockChecker(ctx context.Context) func(domain.CaseLootEntry) b
 }
 
 // prepareLootForOpen builds bank-aware effective loot for rolling.
+// depositBoostStrength > 0 adds an extra mid/fat weight lift (paid + healthy bank + enough deposits).
 func (s *Service) prepareLootForOpen(
 	ctx context.Context,
 	loot []domain.CaseLootEntry,
 	pool domain.CasePoolSnapshot,
 	casePrice int64,
+	depositBoostStrength int,
 ) ([]domain.CaseLootEntry, map[uuid.UUID]int64) {
 	floors := make(map[uuid.UUID]int64, len(loot))
 	for _, e := range loot {
@@ -321,5 +363,9 @@ func (s *Service) prepareLootForOpen(
 		stockFn = s.stockChecker(ctx)
 	}
 	filtered := filterLootForPool(loot, floors, pool, casePrice, stockFn)
-	return biasLootWeights(filtered, floors, pool), floors
+	biased := biasLootWeights(filtered, floors, pool)
+	if depositBoostStrength > 0 {
+		biased = applyDepositSurplusBoost(biased, floors, depositBoostStrength)
+	}
+	return biased, floors
 }

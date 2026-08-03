@@ -51,9 +51,11 @@ type Service struct {
 	balance         *balance.Service
 	valuator        *gifts.Valuator
 	bot             BotUserResolver
+	deposits        DepositSummer
 	requiredChannel string
 	channelChecker  ChannelChecker
 	admin           AdminCaseNotifier
+	userNotifier    CaseUserNotifier
 	live            LiveDropPublisher
 	feedBuf         *liveDropBuffer
 	liveSim         *LiveSim
@@ -62,6 +64,16 @@ type Service struct {
 	botUsername     string
 	webAppShortName string
 	webAppURL       string
+}
+
+// DepositSummer sums successful TON/payment deposits for a user (nanoton).
+type DepositSummer interface {
+	SumDeposits(ctx context.Context, userID uuid.UUID) (int64, error)
+}
+
+// CaseUserNotifier sends user-facing Telegram messages about cases.
+type CaseUserNotifier interface {
+	SendCaseDailyReady(ctx context.Context, telegramUserID int64, caseTitle, caseSlug string) error
 }
 
 type AdminCaseNotifier interface {
@@ -92,7 +104,9 @@ func NewService(
 
 func (s *Service) SetValuator(v *gifts.Valuator)               { s.valuator = v }
 func (s *Service) SetBotResolver(bot BotUserResolver)          { s.bot = bot }
+func (s *Service) SetDepositSummer(d DepositSummer)            { s.deposits = d }
 func (s *Service) SetAdminNotifier(notifier AdminCaseNotifier) { s.admin = notifier }
+func (s *Service) SetUserNotifier(notifier CaseUserNotifier)   { s.userNotifier = notifier }
 func (s *Service) SetLiveDropPublisher(publisher LiveDropPublisher) {
 	s.live = NewBufferingLivePublisher(publisher, s.feedBuf)
 }
@@ -410,14 +424,16 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 
 	poolKind := domain.CasePoolForKind(c.Kind)
 	var pool domain.CasePoolSnapshot
+	var catalogSettings *domain.CaseCatalogSettings
 	if settings, err := s.cases.GetCatalogSettings(ctx); err == nil && settings != nil {
+		catalogSettings = settings
 		// Trigger daily/promo refill via zero delta when those pools are used.
 		if poolKind == domain.CasePoolDaily || poolKind == domain.CasePoolPromo {
 			if refreshed, dErr := s.cases.ApplyCasePoolDelta(ctx, poolKind, 0); dErr == nil && refreshed != nil {
-				settings = refreshed
+				catalogSettings = refreshed
 			}
 		}
-		pool = settings.PoolSnapshot(poolKind)
+		pool = catalogSettings.PoolSnapshot(poolKind)
 	}
 
 	openID := uuid.New()
@@ -464,7 +480,27 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		}
 	}
 
-	effectiveLoot, _ := s.prepareLootForOpen(ctx, loot, pool, price)
+	depositBoost := 0
+	if price > 0 && s.deposits != nil {
+		enabled := true
+		minDep := int64(10_000_000_000)
+		strength := 40
+		if catalogSettings != nil {
+			domain.NormalizeDepositBoost(catalogSettings)
+			enabled = catalogSettings.DepositBoostEnabled
+			minDep = catalogSettings.DepositBoostMinNanoton
+			strength = catalogSettings.DepositBoostBiasWeight
+			if !catalogSettings.DepositBoostEnabled && catalogSettings.DepositBoostMinNanoton == 0 && catalogSettings.DepositBoostBiasWeight == 0 {
+				enabled, minDep, strength = true, 10_000_000_000, 40
+			}
+		}
+		deposits, _ := s.deposits.SumDeposits(ctx, userID)
+		if depositBoostEligible(pool, price, deposits, enabled, minDep, strength) {
+			depositBoost = strength
+		}
+	}
+
+	effectiveLoot, _ := s.prepareLootForOpen(ctx, loot, pool, price, depositBoost)
 	entry, roll, err := pickWeighted(effectiveLoot)
 	if err != nil {
 		if price > 0 {
@@ -950,6 +986,10 @@ type CatalogSettingsPatch struct {
 	PromoPoolMaxPrizeBps        *int
 	PromoPoolDailyRefillNanoton *int64
 	PromoPoolAdjustNanoton      *int64
+
+	DepositBoostEnabled    *bool
+	DepositBoostMinNanoton *int64
+	DepositBoostBiasWeight *int
 }
 
 func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogSettingsPatch) (*domain.CaseCatalogSettings, error) {
@@ -1032,10 +1072,45 @@ func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogS
 	if patch.PromoPoolAdjustNanoton != nil {
 		settings.PromoPoolNanoton += *patch.PromoPoolAdjustNanoton
 	}
+	if patch.DepositBoostEnabled != nil {
+		settings.DepositBoostEnabled = *patch.DepositBoostEnabled
+	}
+	if patch.DepositBoostMinNanoton != nil {
+		settings.DepositBoostMinNanoton = *patch.DepositBoostMinNanoton
+	}
+	if patch.DepositBoostBiasWeight != nil {
+		settings.DepositBoostBiasWeight = *patch.DepositBoostBiasWeight
+	}
 	if err := s.cases.UpdateCatalogSettings(ctx, settings); err != nil {
 		return nil, err
 	}
 	return s.cases.GetCatalogSettings(ctx)
+}
+
+// NotifyDailyCasesReady sends Telegram pushes for daily cases whose 24h cooldown just ended.
+func (s *Service) NotifyDailyCasesReady(ctx context.Context) (int, error) {
+	if s.userNotifier == nil {
+		return 0, nil
+	}
+	rows, err := s.cases.ListDailyCooldownsReadyForNotify(ctx, caseOpenCooldown, 100)
+	if err != nil {
+		return 0, err
+	}
+	sent := 0
+	now := time.Now().UTC()
+	for _, row := range rows {
+		if row.TelegramID <= 0 {
+			continue
+		}
+		if err := s.userNotifier.SendCaseDailyReady(ctx, row.TelegramID, row.CaseTitle, row.CaseSlug); err != nil {
+			continue
+		}
+		if err := s.cases.MarkCaseCooldownReadyNotified(ctx, row.UserID, row.CaseID, now); err != nil {
+			continue
+		}
+		sent++
+	}
+	return sent, nil
 }
 
 func (s *Service) AdminCaseOpenStats(ctx context.Context, since *time.Time) (*domain.CaseOpenStats, error) {

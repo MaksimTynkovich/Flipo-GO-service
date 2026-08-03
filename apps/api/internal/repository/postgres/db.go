@@ -91,6 +91,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.CaseQuestSharePrepared{},
 		&domain.CaseLiveFeedSettings{},
 		&domain.PaymentIntent{},
+		&domain.GiftWithdrawal{},
 	); err != nil {
 		return err
 	}

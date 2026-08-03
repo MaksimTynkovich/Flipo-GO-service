@@ -40,6 +40,7 @@ type InventoryRepository interface {
 	FindActiveByGiftSlug(ctx context.Context, slug string) (*InventoryItem, error)
 	FindByTelegramTxRef(ctx context.Context, txRef string) (*InventoryItem, error)
 	Create(ctx context.Context, item *InventoryItem) error
+	CreateGiftWithdrawal(ctx context.Context, row *GiftWithdrawal) error
 	// PromoteProfileToDeposit converts a profile-virtual row into a real bot deposit
 	// (tx_ref deposit:…, available, owned by depositor). Used when the NFT lands on the bank account.
 	PromoteProfileToDeposit(ctx context.Context, itemID, userID uuid.UUID, txRef string, floorPriceNanoton int64, metadata []byte, name, imageURL string) error
@@ -80,6 +81,8 @@ type CaseRepository interface {
 	ClaimCaseCooldown(ctx context.Context, userID, caseID uuid.UUID, cooldown time.Duration) error
 	ReleaseCaseCooldown(ctx context.Context, userID, caseID uuid.UUID) error
 	FindCaseCooldownClaim(ctx context.Context, userID, caseID uuid.UUID) (*UserCaseCooldown, error)
+	ListDailyCooldownsReadyForNotify(ctx context.Context, cooldown time.Duration, limit int) ([]CaseCooldownReadyNotify, error)
+	MarkCaseCooldownReadyNotified(ctx context.Context, userID, caseID uuid.UUID, notifiedAt time.Time) error
 	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
 	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
@@ -316,6 +319,10 @@ type AdminRepository interface {
 	UserBetsSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserBetsSummary, error)
 	ListUserTransfers(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]TonTransfer, error)
 	UserTransfersSummary(ctx context.Context, userID uuid.UUID, since *time.Time) (AdminUserTransfersSummary, error)
+	ListUserLedger(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]BalanceLedger, error)
+	ListUserInventory(ctx context.Context, userID uuid.UUID, limit int) ([]InventoryItem, error)
+	ListUserCaseOpens(ctx context.Context, userID uuid.UUID, since *time.Time, limit int) ([]AdminUserCaseOpenItem, error)
+	ListUserMarketBuysByItemIDs(ctx context.Context, userID uuid.UUID, itemIDs []uuid.UUID) (map[uuid.UUID]int64, error)
 	StakingOverview(ctx context.Context) (*AdminStakingOverview, error)
 	ListStakingEpochs(ctx context.Context, limit, offset int) ([]AdminStakingEpochRow, int64, error)
 	ListStakingPositions(ctx context.Context, filter AdminStakingPositionFilter) ([]AdminStakingPositionRow, int64, error)

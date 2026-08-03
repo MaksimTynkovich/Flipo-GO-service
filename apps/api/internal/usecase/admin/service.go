@@ -283,6 +283,205 @@ func (s *Service) UserTransfers(ctx context.Context, userID uuid.UUID, period st
 	}, nil
 }
 
+func (s *Service) UserLedger(ctx context.Context, userID uuid.UUID, period string) (*domain.AdminUserLedgerResponse, error) {
+	normalized, since := adminPeriodSince(period)
+	rows, err := s.admin.ListUserLedger(ctx, userID, since, 100)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.AdminUserLedgerItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, domain.AdminUserLedgerItem{
+			ID:            row.ID,
+			Type:          row.Type,
+			TypeLabel:     ledgerTypeLabel(row.Type),
+			AmountNanoton: row.AmountNanoton,
+			BalanceAfter:  row.BalanceAfter,
+			ReferenceType: row.ReferenceType,
+			ReferenceID:   row.ReferenceID,
+			SourceLabel:   ledgerSourceLabel(row.Type, row.ReferenceType),
+			CreatedAt:     row.CreatedAt,
+		})
+	}
+	return &domain.AdminUserLedgerResponse{Period: normalized, Items: items}, nil
+}
+
+func (s *Service) UserInventory(ctx context.Context, userID uuid.UUID) (*domain.AdminUserInventoryResponse, error) {
+	rows, err := s.admin.ListUserInventory(ctx, userID, 100)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	buys, _ := s.admin.ListUserMarketBuysByItemIDs(ctx, userID, ids)
+	items := make([]domain.AdminUserInventoryItem, 0, len(rows))
+	for _, row := range rows {
+		item := domain.AdminUserInventoryItem{
+			ID:                row.ID,
+			Name:              row.Name,
+			CollectionSlug:    row.CollectionSlug,
+			ImageURL:          row.ImageURL,
+			Status:            row.Status,
+			FloorPriceNanoton: row.FloorPriceNanoton,
+			TelegramTxRef:     row.TelegramTxRef,
+			DepositedAt:       row.DepositedAt,
+			CreatedAt:         row.CreatedAt,
+		}
+		switch {
+		case domain.IsCaseClaimItem(row):
+			item.OriginKind = "case"
+			slug := metaString(row.Metadata, domain.CaseClaimMetaCaseSlug)
+			item.CaseSlug = slug
+			item.Fulfillment = domain.CaseClaimFulfillment(row.Metadata)
+			item.CashoutNanoton = domain.CaseClaimCashoutNanoton(row.Metadata)
+			if slug != "" {
+				item.OriginLabel = "Кейс · " + slug
+			} else {
+				item.OriginLabel = "Кейс"
+			}
+			if item.Fulfillment == domain.CaseFulfillmentUnbacked {
+				item.OriginLabel += " · необеспеченный"
+			}
+		case domain.IsProfileVirtualItem(row):
+			item.OriginKind = "profile"
+			item.OriginLabel = "Профиль (виртуальный)"
+		case strings.HasPrefix(row.TelegramTxRef, "deposit:"):
+			item.OriginKind = "deposit"
+			item.OriginLabel = "Депозит Telegram"
+		default:
+			if price, ok := buys[row.ID]; ok {
+				item.OriginKind = "market_buy"
+				item.MarketPriceNanoton = price
+				item.OriginLabel = "Покупка на маркете"
+			} else {
+				item.OriginKind = "other"
+				if row.TelegramTxRef != "" {
+					item.OriginLabel = row.TelegramTxRef
+				} else {
+					item.OriginLabel = "Неизвестно"
+				}
+			}
+		}
+		items = append(items, item)
+	}
+	return &domain.AdminUserInventoryResponse{Items: items}, nil
+}
+
+func (s *Service) UserCaseOpens(ctx context.Context, userID uuid.UUID, period string) (*domain.AdminUserCaseOpensResponse, error) {
+	normalized, since := adminPeriodSince(period)
+	limit := 100
+	if since == nil {
+		limit = 300
+	}
+	items, err := s.admin.ListUserCaseOpens(ctx, userID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []domain.AdminUserCaseOpenItem{}
+	}
+	return &domain.AdminUserCaseOpensResponse{Period: normalized, Items: items}, nil
+}
+
+func ledgerTypeLabel(t domain.LedgerType) string {
+	switch t {
+	case domain.LedgerDeposit:
+		return "Депозит"
+	case domain.LedgerWithdraw:
+		return "Вывод"
+	case domain.LedgerBet:
+		return "Ставка"
+	case domain.LedgerWin:
+		return "Выигрыш"
+	case domain.LedgerCaseOpen:
+		return "Открытие кейса"
+	case domain.LedgerCasePrize:
+		return "Приз кейса (TON)"
+	case domain.LedgerCaseCashout:
+		return "Продажа приза кейса"
+	case domain.LedgerLiquidate:
+		return "Ликвидация подарка"
+	case domain.LedgerMarketBuy:
+		return "Покупка на маркете"
+	case domain.LedgerMarketSell:
+		return "Продажа на маркете"
+	case domain.LedgerPromoBonus:
+		return "Промобонус"
+	case domain.LedgerWheelPrize:
+		return "Приз колеса"
+	case domain.LedgerStakeYield:
+		return "Стейкинг"
+	case domain.LedgerReferralBonus:
+		return "Реферальный бонус"
+	case domain.LedgerRefund:
+		return "Возврат"
+	case domain.LedgerAdminAdjust:
+		return "Админ-корректировка"
+	default:
+		return string(t)
+	}
+}
+
+func ledgerSourceLabel(t domain.LedgerType, refType string) string {
+	switch refType {
+	case "ton_deposit":
+		return "TON on-chain"
+	case "ton_withdraw", "ton_withdraw_refund", "ton_withdraw_rejected":
+		return "TON вывод"
+	case "payment_cryptobot":
+		return "CryptoBot"
+	case "payment_stars":
+		return "Telegram Stars"
+	case "case_open":
+		return "Кейс"
+	case "case_claim":
+		return "Продажа приза кейса"
+	case "market_listing":
+		return "Маркет"
+	case "inventory":
+		return "Инвентарь / buyback"
+	case "game_bet":
+		return "Игра"
+	case "pvp_hold", "pvp_room":
+		return "PvP"
+	case "wheel_spin":
+		return "Колесо"
+	case "promo_code":
+		return "Промокод"
+	case "staking_daily":
+		return "Стейкинг (сутки)"
+	case "referral_daily", "referral_ggr", "referral_milestone":
+		return "Рефералы"
+	case "admin_balance":
+		return "Админ"
+	case "social_sim_bot_fund":
+		return "Системный бот"
+	default:
+		if refType == "" {
+			return ledgerTypeLabel(t)
+		}
+		return refType
+	}
+}
+
+func metaString(raw datatypes.JSON, key string) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return ""
+	}
+	v, ok := m[key]
+	if !ok {
+		return ""
+	}
+	s, _ := v.(string)
+	return strings.TrimSpace(s)
+}
+
 func (s *Service) ReviewWithdrawal(ctx context.Context, adminID, transferID uuid.UUID, approve bool, note string) error {
 	if approve {
 		if err := s.transfers.ApproveWithdrawal(ctx, transferID, adminID); err != nil {

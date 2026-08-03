@@ -73,6 +73,34 @@ func (n *BotNotifier) SendWheelBonusSpins(ctx context.Context, telegramUserID in
 	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, text, markup, ""))
 }
 
+func (n *BotNotifier) SendCaseDailyReady(ctx context.Context, telegramUserID int64, caseTitle, caseSlug string) error {
+	if !n.Enabled() || telegramUserID == 0 {
+		return nil
+	}
+	title := strings.TrimSpace(caseTitle)
+	if title == "" {
+		title = "Дневной кейс"
+	}
+	text := fmt.Sprintf("🎁 %s снова доступен!\n\nЗаберите бесплатный приз — открытие снова готово.", title)
+	opts := n.openApp
+	opts.ButtonText = "🎁 Открыть кейс"
+	slug := strings.TrimSpace(caseSlug)
+	if slug != "" {
+		opts.StartPayload = "case_" + slug
+	} else if strings.TrimSpace(opts.StartPayload) == "" {
+		opts.StartPayload = "cases"
+	}
+	if webURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/"); webURL != "" && !isTelegramDeepLink(webURL) {
+		if slug != "" {
+			opts.WebAppURL = webURL + "/cases/" + slug
+		} else {
+			opts.WebAppURL = webURL + "/cases"
+		}
+	}
+	markup := OpenAppButtonMarkup(opts)
+	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, text, markup, ""))
+}
+
 func ignoreUnavailable(err error) error {
 	if IsRecipientUnavailable(err) {
 		return nil

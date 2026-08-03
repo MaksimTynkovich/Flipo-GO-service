@@ -575,6 +575,48 @@ func (h *AdminHandler) UserTransfers(c *gin.Context) {
 	})
 }
 
+func (h *AdminHandler) UserLedger(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
+		return
+	}
+	resp, err := h.admin.UserLedger(c.Request.Context(), userID, c.DefaultQuery("period", "7d"))
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *AdminHandler) UserInventory(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
+		return
+	}
+	resp, err := h.admin.UserInventory(c.Request.Context(), userID)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *AdminHandler) UserCaseOpens(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID пользователя"})
+		return
+	}
+	resp, err := h.admin.UserCaseOpens(c.Request.Context(), userID, c.DefaultQuery("period", "7d"))
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *AdminHandler) ListGameConfigs(c *gin.Context) {
 	configs, err := h.admin.ListGameConfigs(c.Request.Context())
 	if err != nil {
@@ -1376,6 +1418,10 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		PromoPoolMaxPrizeBps        *int   `json:"promo_pool_max_prize_bps"`
 		PromoPoolDailyRefillNanoton *int64 `json:"promo_pool_daily_refill_nanoton"`
 		PromoPoolAdjustNanoton      *int64 `json:"promo_pool_adjust_nanoton"`
+
+		DepositBoostEnabled    *bool  `json:"deposit_boost_enabled"`
+		DepositBoostMinNanoton *int64 `json:"deposit_boost_min_nanoton"`
+		DepositBoostBiasWeight *int   `json:"deposit_boost_bias_weight"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1407,6 +1453,9 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		PromoPoolMaxPrizeBps:        req.PromoPoolMaxPrizeBps,
 		PromoPoolDailyRefillNanoton: req.PromoPoolDailyRefillNanoton,
 		PromoPoolAdjustNanoton:      req.PromoPoolAdjustNanoton,
+		DepositBoostEnabled:         req.DepositBoostEnabled,
+		DepositBoostMinNanoton:      req.DepositBoostMinNanoton,
+		DepositBoostBiasWeight:      req.DepositBoostBiasWeight,
 	})
 	if err != nil {
 		respondInternal(c, err)
@@ -1582,6 +1631,79 @@ func (h *AdminHandler) SimulateCase(c *gin.Context) {
 		default:
 			respondInternal(c, err)
 		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) PlayerSimulateCase(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	var req struct {
+		Iterations      int   `json:"iterations"`
+		DepositsNanoton int64 `json:"deposits_nanoton"`
+		SampleLimit     int   `json:"sample_limit"`
+		WithBank        *bool `json:"with_bank"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	withBank := true
+	if req.WithBank != nil {
+		withBank = *req.WithBank
+	}
+	result, err := h.cases.AdminPlayerSimulateCase(
+		c.Request.Context(),
+		caseID,
+		req.Iterations,
+		req.DepositsNanoton,
+		req.SampleLimit,
+		withBank,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "кейс не найден"})
+		case errors.Is(err, domain.ErrCaseNoLoot):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "у кейса нет лута"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *AdminHandler) PlayerSimulateAllCases(c *gin.Context) {
+	if h.cases == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "кейсы недоступны"})
+		return
+	}
+	var req struct {
+		Iterations      int   `json:"iterations"`
+		DepositsNanoton int64 `json:"deposits_nanoton"`
+		SampleLimit     int   `json:"sample_limit"`
+		WithBank        *bool `json:"with_bank"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	withBank := true
+	if req.WithBank != nil {
+		withBank = *req.WithBank
+	}
+	result, err := h.cases.AdminPlayerSimulateAll(
+		c.Request.Context(),
+		req.Iterations,
+		req.DepositsNanoton,
+		req.SampleLimit,
+		withBank,
+	)
+	if err != nil {
+		respondInternal(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, result)

@@ -1116,7 +1116,9 @@ export type AdminRevenueSummary = {
   net_revenue_nanoton: number;
   deposits_nanoton: number;
   withdrawals_nanoton: number;
+  gift_withdrawals_nanoton: number;
   pending_liability_nanoton: number;
+  pending_gift_liability_nanoton: number;
   withdrawal_fees_nanoton: number;
   market_fees_nanoton: number;
   pvp_fees_nanoton: number;
@@ -1135,6 +1137,7 @@ export type AdminRevenuePoint = {
   revenue_nanoton: number;
   deposits_nanoton: number;
   withdrawals_nanoton: number;
+  gift_withdrawals_nanoton: number;
   game_bets_nanoton: number;
 };
 
@@ -2022,6 +2025,80 @@ export async function getAdminUserTransfers(userId: string, period: AdminUserPer
   );
 }
 
+export type AdminUserLedgerItem = {
+  id: string;
+  type: string;
+  type_label: string;
+  amount_nanoton: number;
+  balance_after: number;
+  reference_type: string;
+  reference_id: string;
+  source_label: string;
+  created_at: string;
+};
+
+export type AdminUserLedgerResponse = {
+  period: AdminUserPeriod | string;
+  items: AdminUserLedgerItem[];
+};
+
+export type AdminUserInventoryItem = {
+  id: string;
+  name: string;
+  collection_slug: string;
+  image_url: string;
+  status: string;
+  floor_price_nanoton: number;
+  origin_kind: string;
+  origin_label: string;
+  case_slug?: string;
+  fulfillment?: string;
+  cashout_nanoton?: number;
+  telegram_tx_ref?: string;
+  market_price_nanoton?: number;
+  deposited_at: string;
+  created_at: string;
+};
+
+export type AdminUserInventoryResponse = {
+  items: AdminUserInventoryItem[];
+};
+
+export type AdminUserCaseOpenItem = {
+  open_id: string;
+  case_id: string;
+  case_title: string;
+  case_slug: string;
+  source: string;
+  prize_type: string;
+  prize_name: string;
+  price_paid_nanoton: number;
+  prize_nanoton: number;
+  inventory_item_id?: string;
+  created_at: string;
+};
+
+export type AdminUserCaseOpensResponse = {
+  period: AdminUserPeriod | string;
+  items: AdminUserCaseOpenItem[];
+};
+
+export async function getAdminUserLedger(userId: string, period: AdminUserPeriod = "7d") {
+  return api<AdminUserLedgerResponse>(
+    `/api/v1/admin/users/${userId}/ledger?period=${encodeURIComponent(period)}`,
+  );
+}
+
+export async function getAdminUserInventory(userId: string) {
+  return api<AdminUserInventoryResponse>(`/api/v1/admin/users/${userId}/inventory`);
+}
+
+export async function getAdminUserCaseOpens(userId: string, period: AdminUserPeriod = "7d") {
+  return api<AdminUserCaseOpensResponse>(
+    `/api/v1/admin/users/${userId}/case-opens?period=${encodeURIComponent(period)}`,
+  );
+}
+
 export async function getAdminAnalyticsOverview(
   days = 1,
   filters: { errorCode?: string; inputId?: string } = {},
@@ -2680,6 +2757,10 @@ export type AdminCaseCatalogSettings = {
   promo_pool_max_prize_bps?: number;
   promo_pool_daily_refill_nanoton?: number;
   promo_pool_last_refill_date?: string;
+
+  deposit_boost_enabled?: boolean;
+  deposit_boost_min_nanoton?: number;
+  deposit_boost_bias_weight?: number;
 };
 
 export type AdminCaseCatalogSettingsPatch = {
@@ -2708,6 +2789,9 @@ export type AdminCaseCatalogSettingsPatch = {
   promo_pool_max_prize_bps?: number;
   promo_pool_daily_refill_nanoton?: number;
   promo_pool_adjust_nanoton?: number;
+  deposit_boost_enabled?: boolean;
+  deposit_boost_min_nanoton?: number;
+  deposit_boost_bias_weight?: number;
 };
 
 export async function getAdminCaseCatalogSettings() {
@@ -2917,6 +3001,95 @@ export async function simulateAdminCase(
       body: JSON.stringify({ iterations, with_bank: withBank }),
     },
   );
+}
+
+export type AdminCasePlayerSimulateOpen = {
+  index: number;
+  loot_entry_id: string;
+  display_name: string;
+  prize_nanoton: number;
+  boost_applied: boolean;
+  bank_before_nanoton: number;
+  bank_after_nanoton: number;
+  recovery: boolean;
+  price_nanoton: number;
+};
+
+export type AdminCasePlayerSimulateResult = {
+  case_id: string;
+  slug: string;
+  title: string;
+  kind: string;
+  iterations: number;
+  price_nanoton: number;
+  deposits_nanoton: number;
+  boost_eligible: boolean;
+  boost_strength: number;
+  boost_applied_opens: number;
+  spent_nanoton: number;
+  prize_total_nanoton: number;
+  house_edge_nanoton: number;
+  simulated_rtp_bps: number;
+  theoretical_rtp_bps: number;
+  target_rtp_bps: number;
+  rtp_available: boolean;
+  with_bank: boolean;
+  bank_start_nanoton: number;
+  bank_min_nanoton: number;
+  bank_max_nanoton: number;
+  bank_end_nanoton: number;
+  recovery_opens: number;
+  entries: AdminCaseSimulateEntry[];
+  sample_opens: AdminCasePlayerSimulateOpen[];
+  warnings?: string[];
+};
+
+export type AdminCasePlayerSimulateBatch = {
+  deposits_nanoton: number;
+  iterations: number;
+  cases: AdminCasePlayerSimulateResult[];
+};
+
+export async function playerSimulateAdminCase(
+  caseId: string,
+  opts: {
+    iterations?: number;
+    depositsNanoton?: number;
+    sampleLimit?: number;
+    withBank?: boolean;
+  } = {},
+) {
+  return api<AdminCasePlayerSimulateResult>(
+    `/api/v1/admin/cases/${encodeURIComponent(caseId)}/player-simulate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        iterations: opts.iterations ?? 100,
+        deposits_nanoton: opts.depositsNanoton ?? 0,
+        sample_limit: opts.sampleLimit ?? 40,
+        with_bank: opts.withBank ?? true,
+      }),
+    },
+  );
+}
+
+export async function playerSimulateAllAdminCases(
+  opts: {
+    iterations?: number;
+    depositsNanoton?: number;
+    sampleLimit?: number;
+    withBank?: boolean;
+  } = {},
+) {
+  return api<AdminCasePlayerSimulateBatch>("/api/v1/admin/cases/player-simulate-all", {
+    method: "POST",
+    body: JSON.stringify({
+      iterations: opts.iterations ?? 100,
+      deposits_nanoton: opts.depositsNanoton ?? 0,
+      sample_limit: opts.sampleLimit ?? 10,
+      with_bank: opts.withBank ?? true,
+    }),
+  });
 }
 
 export type AdminCasePromoCode = {

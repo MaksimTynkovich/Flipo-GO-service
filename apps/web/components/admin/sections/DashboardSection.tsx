@@ -23,7 +23,7 @@ import {
 } from "@/lib/api";
 
 type RevenuePeriodId = "7d" | "30d" | "all";
-type RevenueSeriesId = "revenue" | "deposits" | "withdrawals" | "bets";
+type RevenueSeriesId = "revenue" | "deposits" | "withdrawals" | "gift_withdrawals" | "bets";
 
 const REVENUE_PERIODS: Record<RevenuePeriodId, { label: string; days: number }> = {
   "7d": { label: "7 дней", days: 7 },
@@ -39,7 +39,8 @@ const REVENUE_SERIES: Array<{
 }> = [
   { id: "revenue", label: "Чистая прибыль", dataKey: "revenueNanoton", color: "#2dd4bf" },
   { id: "deposits", label: "Депозиты", dataKey: "depositsNanoton", color: "#60a5fa" },
-  { id: "withdrawals", label: "Выводы", dataKey: "withdrawalsNanoton", color: "#f59e0b" },
+  { id: "withdrawals", label: "Выводы TON", dataKey: "withdrawalsNanoton", color: "#f59e0b" },
+  { id: "gift_withdrawals", label: "Выводы подарков", dataKey: "giftWithdrawalsNanoton", color: "#fb7185" },
   { id: "bets", label: "Ставки", dataKey: "gameBetsNanoton", color: "#a78bfa" },
 ];
 
@@ -56,6 +57,7 @@ function downsampleRevenuePoints(points: AdminRevenuePoint[], targetMaxPoints: n
       revenue_nanoton: chunk.reduce((sum, p) => sum + p.revenue_nanoton, 0),
       deposits_nanoton: chunk.reduce((sum, p) => sum + p.deposits_nanoton, 0),
       withdrawals_nanoton: chunk.reduce((sum, p) => sum + p.withdrawals_nanoton, 0),
+      gift_withdrawals_nanoton: chunk.reduce((sum, p) => sum + (p.gift_withdrawals_nanoton ?? 0), 0),
       game_bets_nanoton: chunk.reduce((sum, p) => sum + p.game_bets_nanoton, 0),
     });
   }
@@ -75,6 +77,7 @@ type RevenueChartPoint = {
   revenueNanoton: number;
   depositsNanoton: number;
   withdrawalsNanoton: number;
+  giftWithdrawalsNanoton: number;
   gameBetsNanoton: number;
 };
 
@@ -105,7 +108,10 @@ function RevenueTooltip({
         Депозиты: {formatTON(point.depositsNanoton)} TON
       </p>
       <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
-        Выводы: {formatTON(point.withdrawalsNanoton)} TON
+        Выводы TON: {formatTON(point.withdrawalsNanoton)} TON
+      </p>
+      <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
+        Выводы подарков: {formatTON(point.giftWithdrawalsNanoton)} TON
       </p>
       <p className="mt-0.5 text-xs text-[var(--admin-muted)]">
         Ставки: {formatTON(point.gameBetsNanoton)} TON
@@ -115,8 +121,8 @@ function RevenueTooltip({
 }
 
 export default function DashboardSection() {
-  const metaKey = "admin:dashboard:v5:meta";
-  const revenueKey = (days: number) => `admin:dashboard:v5:revenue:${days}`;
+  const metaKey = "admin:dashboard:v6:meta";
+  const revenueKey = (days: number) => `admin:dashboard:v6:revenue:${days}`;
 
   const [summary, setSummary] = useState<AdminRevenueSummary | null>(null);
   const [timeseries, setTimeseries] = useState<AdminRevenuePoint[]>([]);
@@ -126,6 +132,7 @@ export default function DashboardSection() {
     revenue: true,
     deposits: true,
     withdrawals: true,
+    gift_withdrawals: true,
     bets: false,
   });
   const [loadingMeta, setLoadingMeta] = useState(true);
@@ -192,7 +199,7 @@ export default function DashboardSection() {
   }, [periodId]);
 
   async function refresh() {
-    invalidateCached("admin:dashboard:v4");
+    invalidateCached("admin:dashboard:v6");
     await Promise.all([loadMeta(), loadRevenue(REVENUE_PERIODS[periodId].days)]);
   }
 
@@ -214,6 +221,7 @@ export default function DashboardSection() {
         revenueNanoton: point.revenue_nanoton,
         depositsNanoton: point.deposits_nanoton,
         withdrawalsNanoton: point.withdrawals_nanoton,
+        giftWithdrawalsNanoton: point.gift_withdrawals_nanoton ?? 0,
         gameBetsNanoton: point.game_bets_nanoton,
       })),
     [displaySeries],
@@ -250,7 +258,7 @@ export default function DashboardSection() {
         <AdminMetric
           label="Чистая прибыль"
           value={summary ? `${formatTON(summary.net_revenue_nanoton)} TON` : "—"}
-          hint="Депозиты минус выводы"
+          hint="Депозиты минус выводы TON и подарков"
           accent
         />
         <AdminMetric
@@ -260,8 +268,29 @@ export default function DashboardSection() {
           accent
         />
         <AdminMetric
-          label="Выводы"
+          label="Выводы TON"
           value={summary ? `${formatTON(summary.withdrawals_nanoton)} TON` : "—"}
+        />
+        <AdminMetric
+          label="Выводы подарков"
+          value={summary ? `${formatTON(summary.gift_withdrawals_nanoton ?? 0)} TON` : "—"}
+        />
+      </section>
+
+      <section className="grid grid-cols-4 gap-4">
+        <AdminMetric
+          label="NGR"
+          value={summary ? `${formatTON(summary.ngr_nanoton)} TON` : "—"}
+          hint="С учётом расходов и выводов подарков"
+        />
+        <AdminMetric
+          label="Депозиты"
+          value={summary ? `${formatTON(summary.deposits_nanoton)} TON` : "—"}
+        />
+        <AdminMetric
+          label="Обязательства TON"
+          value={summary ? `${formatTON(summary.pending_liability_nanoton)} TON` : "—"}
+          hint="Непокрытые выводы TON"
         />
         <AdminMetric
           label="Онлайн (24ч)"
@@ -269,24 +298,7 @@ export default function DashboardSection() {
         />
       </section>
 
-      <section className="grid grid-cols-3 gap-4">
-        <AdminMetric
-          label="NGR"
-          value={summary ? `${formatTON(summary.ngr_nanoton)} TON` : "—"}
-          hint="С учётом расходов"
-        />
-        <AdminMetric
-          label="Депозиты"
-          value={summary ? `${formatTON(summary.deposits_nanoton)} TON` : "—"}
-        />
-        <AdminMetric
-          label="Обязательства"
-          value={summary ? `${formatTON(summary.pending_liability_nanoton)} TON` : "—"}
-          hint="Непокрытые выводы"
-        />
-      </section>
-
-      <AdminPanel title="Доход за период" description="Чистая прибыль, депозиты, выводы и ставки по дням в выбранном периоде.">
+      <AdminPanel title="Доход за период" description="Чистая прибыль, депозиты, выводы TON/подарков и ставки по дням.">
         <div className="flex flex-wrap items-center gap-2">
           {(Object.keys(REVENUE_PERIODS) as RevenuePeriodId[]).map((id) => (
             <AdminChip key={id} active={periodId === id} onClick={() => setPeriodId(id)}>

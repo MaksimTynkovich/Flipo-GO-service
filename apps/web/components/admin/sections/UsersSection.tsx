@@ -26,6 +26,9 @@ import {
   getAdminUserAudience,
   getAdminUserBets,
   getAdminUserTransfers,
+  getAdminUserLedger,
+  getAdminUserInventory,
+  getAdminUserCaseOpens,
   getAdminRiskUsers,
   getAdminUsers,
   setAdminUserBalance,
@@ -39,6 +42,10 @@ import {
   type AdminUserSession,
   type AdminUserSort,
   type AdminUserTransfersResponse,
+  type AdminUserLedgerResponse,
+  type AdminUserInventoryResponse,
+  type AdminUserCaseOpensResponse,
+  type AdminUserCaseOpenItem,
   type AdminRiskUser,
   type AdminUser,
   type AnalyticsHourPoint,
@@ -48,7 +55,7 @@ import { formatUserError } from "@/lib/user-errors";
 import { cn } from "@/lib/utils";
 
 type UsersPayload = [AdminUserAudience, AdminUser[], AdminRiskUser[]];
-type DetailTab = "bets" | "transfers" | "activity";
+type DetailTab = "bets" | "transfers" | "ledger" | "gifts" | "cases" | "activity";
 
 const SORT_OPTIONS: { id: AdminUserSort; label: string }[] = [
   { id: "last_login", label: "Последний вход" },
@@ -118,8 +125,13 @@ export default function UsersSection() {
   const [analytics, setAnalytics] = useState<AdminUserAnalytics | null>(null);
   const [bets, setBets] = useState<AdminUserBetsResponse | null>(null);
   const [transfers, setTransfers] = useState<AdminUserTransfersResponse | null>(null);
+  const [ledger, setLedger] = useState<AdminUserLedgerResponse | null>(null);
+  const [inventory, setInventory] = useState<AdminUserInventoryResponse | null>(null);
+  const [caseOpens, setCaseOpens] = useState<AdminUserCaseOpensResponse | null>(null);
   const [betsPeriod, setBetsPeriod] = useState<AdminUserPeriod>("7d");
   const [transfersPeriod, setTransfersPeriod] = useState<AdminUserPeriod>("7d");
+  const [ledgerPeriod, setLedgerPeriod] = useState<AdminUserPeriod>("7d");
+  const [casesPeriod, setCasesPeriod] = useState<AdminUserPeriod>("all");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("bets");
   const [showMoreStats, setShowMoreStats] = useState(false);
@@ -194,6 +206,21 @@ export default function UsersSection() {
     setTransfers(data);
   }
 
+  async function loadUserLedger(userId: string, period: AdminUserPeriod) {
+    const data = await getAdminUserLedger(userId, period);
+    setLedger(data);
+  }
+
+  async function loadUserInventory(userId: string) {
+    const data = await getAdminUserInventory(userId);
+    setInventory(data);
+  }
+
+  async function loadUserCaseOpens(userId: string, period: AdminUserPeriod) {
+    const data = await getAdminUserCaseOpens(userId, period);
+    setCaseOpens(data);
+  }
+
   async function loadUserAnalytics(user: AdminUser, sessionId?: string | null) {
     const analyticsData = await getAdminUserAnalytics(user.id, 80, sessionId || undefined);
     setAnalytics(analyticsData);
@@ -203,11 +230,16 @@ export default function UsersSection() {
   async function selectUser(user: AdminUser) {
     setSelected(user);
     setSelectedSessionId(null);
-    setDetailTab("bets");
+    setDetailTab("ledger");
     setBetsPeriod("7d");
     setTransfersPeriod("7d");
+    setLedgerPeriod("7d");
+    setCasesPeriod("all");
     setBets(null);
     setTransfers(null);
+    setLedger(null);
+    setInventory(null);
+    setCaseOpens(null);
     setAnalytics(null);
     setBanReason("");
     setBalanceDraft(user.betting_balance ?? 0);
@@ -218,6 +250,9 @@ export default function UsersSection() {
         loadUserAnalytics(user, null),
         loadUserBets(user.id, "7d"),
         loadUserTransfers(user.id, "7d"),
+        loadUserLedger(user.id, "7d"),
+        loadUserInventory(user.id),
+        loadUserCaseOpens(user.id, "all"),
       ]);
     } finally {
       setDetailLoading(false);
@@ -260,6 +295,26 @@ export default function UsersSection() {
     setTransfersPeriod(period);
     try {
       await loadUserTransfers(selected.id, period);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function changeLedgerPeriod(period: AdminUserPeriod) {
+    if (!selected) return;
+    setLedgerPeriod(period);
+    try {
+      await loadUserLedger(selected.id, period);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function changeCasesPeriod(period: AdminUserPeriod) {
+    if (!selected) return;
+    setCasesPeriod(period);
+    try {
+      await loadUserCaseOpens(selected.id, period);
     } catch {
       /* ignore */
     }
@@ -765,8 +820,17 @@ export default function UsersSection() {
               <AdminToolbar className="mt-3">
                 {(
                   [
-                    { id: "bets" as const, label: "Ставки" },
+                    { id: "ledger" as const, label: "Движения" },
+                    { id: "gifts" as const, label: "Подарки" },
+                    {
+                      id: "cases" as const,
+                      label:
+                        caseOpens && caseOpens.items.length > 0
+                          ? `Кейсы (${caseOpens.items.length})`
+                          : "Кейсы",
+                    },
                     { id: "transfers" as const, label: "Переводы" },
+                    { id: "bets" as const, label: "Ставки" },
                     { id: "activity" as const, label: "Активность" },
                   ] as const
                 ).map((tab) => (
@@ -779,6 +843,28 @@ export default function UsersSection() {
                   </AdminChip>
                 ))}
               </AdminToolbar>
+
+              {detailTab === "ledger" ? (
+                <LedgerPanel
+                  ledger={ledger}
+                  period={ledgerPeriod}
+                  loading={detailLoading && !ledger}
+                  onPeriod={changeLedgerPeriod}
+                />
+              ) : null}
+
+              {detailTab === "gifts" ? (
+                <GiftsPanel inventory={inventory} loading={detailLoading && !inventory} />
+              ) : null}
+
+              {detailTab === "cases" ? (
+                <CasesPanel
+                  caseOpens={caseOpens}
+                  period={casesPeriod}
+                  loading={detailLoading && !caseOpens}
+                  onPeriod={changeCasesPeriod}
+                />
+              ) : null}
 
               {detailTab === "bets" ? (
                 <BetsPanel
@@ -913,6 +999,290 @@ function BetsPanel({
               })}
             </div>
           )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function LedgerPanel({
+  ledger,
+  period,
+  loading,
+  onPeriod,
+}: {
+  ledger: AdminUserLedgerResponse | null;
+  period: AdminUserPeriod;
+  loading: boolean;
+  onPeriod: (period: AdminUserPeriod) => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2.5">
+      <PeriodChips period={period} onPeriod={onPeriod} />
+      {loading ? (
+        <p className="text-sm text-muted">Загружаем движения…</p>
+      ) : !ledger ? (
+        <p className="text-sm text-muted">Нет данных.</p>
+      ) : ledger.items.length === 0 ? (
+        <AdminEmpty>Нет движений по балансу за период.</AdminEmpty>
+      ) : (
+        <div className="max-h-[28rem] space-y-1 overflow-auto">
+          {ledger.items.map((row) => {
+            const positive = row.amount_nanoton >= 0;
+            return (
+              <div
+                key={row.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.06] bg-surface-raised/40 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{row.type_label}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {row.source_label}
+                    {row.reference_type ? ` · ${row.reference_type}` : ""}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted">{formatWhen(row.created_at)}</p>
+                </div>
+                <div className="shrink-0 text-right text-xs tabular-nums">
+                  <p className={cn("font-semibold", positive ? "text-emerald-400" : "text-red-300")}>
+                    {positive ? "+" : ""}
+                    {formatTON(row.amount_nanoton)} TON
+                  </p>
+                  <p className="text-muted">→ {formatTON(row.balance_after)}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GiftsPanel({
+  inventory,
+  loading,
+}: {
+  inventory: AdminUserInventoryResponse | null;
+  loading: boolean;
+}) {
+  return (
+    <div className="mt-3 space-y-2.5">
+      {loading ? (
+        <p className="text-sm text-muted">Загружаем подарки…</p>
+      ) : !inventory ? (
+        <p className="text-sm text-muted">Нет данных.</p>
+      ) : inventory.items.length === 0 ? (
+        <AdminEmpty>У пользователя нет подарков в инвентаре.</AdminEmpty>
+      ) : (
+        <div className="max-h-[28rem] space-y-1 overflow-auto">
+          {inventory.items.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.06] bg-surface-raised/40 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium" title={item.name}>
+                  {item.name || item.collection_slug || "Подарок"}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">{item.origin_label}</p>
+                <p className="mt-0.5 text-[11px] text-muted">
+                  {item.status}
+                  {item.case_slug ? ` · ${item.case_slug}` : ""}
+                  {item.fulfillment ? ` · ${item.fulfillment}` : ""}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted">{formatWhen(item.deposited_at)}</p>
+              </div>
+              <div className="shrink-0 text-right text-xs tabular-nums">
+                <p className="font-semibold">{formatTON(item.floor_price_nanoton)} TON</p>
+                {item.market_price_nanoton ? (
+                  <p className="text-muted">маркет {formatTON(item.market_price_nanoton)}</p>
+                ) : null}
+                {item.cashout_nanoton ? (
+                  <p className="text-muted">cashout {formatTON(item.cashout_nanoton)}</p>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function caseOpenSourceLabel(source: string) {
+  switch (source) {
+    case "paid":
+      return "платный";
+    case "daily":
+      return "ежедневный";
+    case "free":
+      return "бесплатный";
+    case "promo":
+      return "промо";
+    default:
+      return source || "—";
+  }
+}
+
+function casePrizeTypeLabel(prizeType: string) {
+  switch (prizeType) {
+    case "ton":
+      return "TON";
+    case "gift":
+      return "подарок";
+    default:
+      return prizeType || "приз";
+  }
+}
+
+type CaseOpenSummaryRow = {
+  key: string;
+  title: string;
+  slug: string;
+  opens: number;
+  paidOpens: number;
+  paidNanoton: number;
+  prizeNanoton: number;
+};
+
+function summarizeCaseOpens(items: AdminUserCaseOpenItem[]): CaseOpenSummaryRow[] {
+  const map = new Map<string, CaseOpenSummaryRow>();
+  for (const op of items) {
+    const key = op.case_id || op.case_slug || op.case_title || "unknown";
+    const cur = map.get(key) ?? {
+      key,
+      title: op.case_title || op.case_slug || "Кейс",
+      slug: op.case_slug || "",
+      opens: 0,
+      paidOpens: 0,
+      paidNanoton: 0,
+      prizeNanoton: 0,
+    };
+    cur.opens += 1;
+    if (op.source === "paid" || op.price_paid_nanoton > 0) {
+      cur.paidOpens += 1;
+      cur.paidNanoton += op.price_paid_nanoton;
+    }
+    cur.prizeNanoton += op.prize_nanoton;
+    if (!cur.title && op.case_title) cur.title = op.case_title;
+    if (!cur.slug && op.case_slug) cur.slug = op.case_slug;
+    map.set(key, cur);
+  }
+  return Array.from(map.values()).sort((a, b) => b.opens - a.opens || a.title.localeCompare(b.title));
+}
+
+function CasesPanel({
+  caseOpens,
+  period,
+  loading,
+  onPeriod,
+}: {
+  caseOpens: AdminUserCaseOpensResponse | null;
+  period: AdminUserPeriod;
+  loading: boolean;
+  onPeriod: (period: AdminUserPeriod) => void;
+}) {
+  const summary = useMemo(
+    () => (caseOpens?.items?.length ? summarizeCaseOpens(caseOpens.items) : []),
+    [caseOpens],
+  );
+  const totals = useMemo(() => {
+    if (!caseOpens?.items?.length) {
+      return { opens: 0, paidNanoton: 0, prizeNanoton: 0 };
+    }
+    return caseOpens.items.reduce(
+      (acc, op) => {
+        acc.opens += 1;
+        acc.paidNanoton += op.price_paid_nanoton;
+        acc.prizeNanoton += op.prize_nanoton;
+        return acc;
+      },
+      { opens: 0, paidNanoton: 0, prizeNanoton: 0 },
+    );
+  }, [caseOpens]);
+
+  return (
+    <div className="mt-3 space-y-2.5">
+      <PeriodChips period={period} onPeriod={onPeriod} />
+      {loading ? (
+        <p className="text-sm text-muted">Загружаем открытия…</p>
+      ) : !caseOpens ? (
+        <p className="text-sm text-muted">Нет данных.</p>
+      ) : caseOpens.items.length === 0 ? (
+        <AdminEmpty>Нет открытий кейсов за период.</AdminEmpty>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <AdminMetric label="Открытий" value={String(totals.opens)} />
+            <AdminMetric label="Потрачено" value={`${formatTON(totals.paidNanoton)} TON`} />
+            <AdminMetric label="Призы" value={`${formatTON(totals.prizeNanoton)} TON`} />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted">Какие кейсы открывал</p>
+            <div className="max-h-40 space-y-1 overflow-auto">
+              {summary.map((row) => {
+                const net = row.prizeNanoton - row.paidNanoton;
+                return (
+                  <div
+                    key={row.key}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.06] bg-surface-raised/40 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{row.title}</p>
+                      <p className="mt-0.5 text-[11px] text-muted">
+                        {row.opens} откр.
+                        {row.paidOpens > 0 ? ` · ${row.paidOpens} платных` : ""}
+                        {row.slug ? ` · ${row.slug}` : ""}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right text-xs tabular-nums">
+                      <p className="text-muted">−{formatTON(row.paidNanoton)}</p>
+                      <p className="font-semibold">+{formatTON(row.prizeNanoton)}</p>
+                      <p className={cn(net >= 0 ? "text-emerald-400" : "text-red-300")}>
+                        {net >= 0 ? "+" : ""}
+                        {formatTON(net)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted">История открытий</p>
+            <div className="max-h-[22rem] space-y-1 overflow-auto">
+              {caseOpens.items.map((op) => {
+                const net = op.prize_nanoton - op.price_paid_nanoton;
+                return (
+                  <div
+                    key={op.open_id}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-white/[0.06] bg-surface-raised/40 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {op.case_title || op.case_slug || "Кейс"}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted" title={op.prize_name}>
+                        {op.prize_name} · {casePrizeTypeLabel(op.prize_type)} ·{" "}
+                        {caseOpenSourceLabel(op.source)}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted">{formatWhen(op.created_at)}</p>
+                    </div>
+                    <div className="shrink-0 text-right text-xs tabular-nums">
+                      <p className="font-semibold">{formatTON(op.prize_nanoton)} TON</p>
+                      <p className="text-muted">цена {formatTON(op.price_paid_nanoton)}</p>
+                      <p className={cn(net >= 0 ? "text-emerald-400" : "text-red-300")}>
+                        {net >= 0 ? "+" : ""}
+                        {formatTON(net)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </>
       )}
     </div>

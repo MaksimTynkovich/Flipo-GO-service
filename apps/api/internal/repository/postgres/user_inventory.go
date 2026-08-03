@@ -371,6 +371,21 @@ func (r *InventoryRepo) Create(ctx context.Context, item *domain.InventoryItem) 
 	return r.db.WithContext(ctx).Create(item).Error
 }
 
+func (r *InventoryRepo) CreateGiftWithdrawal(ctx context.Context, row *domain.GiftWithdrawal) error {
+	if row == nil {
+		return nil
+	}
+	if row.WithdrawnAt.IsZero() {
+		row.WithdrawnAt = time.Now().UTC()
+	}
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "inventory_item_id"}},
+			DoNothing: true,
+		}).
+		Create(row).Error
+}
+
 func (r *InventoryRepo) PromoteProfileToDeposit(
 	ctx context.Context,
 	itemID, userID uuid.UUID,

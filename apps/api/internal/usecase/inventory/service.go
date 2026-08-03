@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
@@ -314,6 +316,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn); err != nil {
 		return false, "", err
 	}
+	s.recordGiftWithdrawal(ctx, item, "user")
 	if s.admin != nil {
 		s.admin.NotifyGiftWithdraw(ctx, telegram.AdminActor{
 			TelegramID: user.TelegramID,
@@ -392,7 +395,11 @@ func (s *Service) ReviewPendingWithdrawal(ctx context.Context, itemID uuid.UUID,
 		}
 		return err
 	}
-	return s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn)
+	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn); err != nil {
+		return err
+	}
+	s.recordGiftWithdrawal(ctx, item, "admin_review")
+	return nil
 }
 
 // FulfillPendingWithdrawal binds a real telegram gift slug to an unbacked claim and sends it.
@@ -456,7 +463,40 @@ func (s *Service) FulfillPendingWithdrawal(ctx context.Context, itemID uuid.UUID
 		}
 		return err
 	}
-	return s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn)
+	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn); err != nil {
+		return err
+	}
+	item.TelegramGiftID = telegramGiftID
+	s.recordGiftWithdrawal(ctx, item, "admin_fulfill")
+	return nil
+}
+
+func (s *Service) recordGiftWithdrawal(ctx context.Context, item *domain.InventoryItem, source string) {
+	if item == nil {
+		return
+	}
+	cost := item.FloorPriceNanoton
+	if cashout := domain.CaseClaimCashoutNanoton(item.Metadata); cashout > 0 {
+		cost = cashout
+	}
+	row := &domain.GiftWithdrawal{
+		InventoryItemID: item.ID,
+		UserID:          item.UserID,
+		CostNanoton:     cost,
+		FloorNanoton:    item.FloorPriceNanoton,
+		CollectionSlug:  item.CollectionSlug,
+		Name:            item.Name,
+		Source:          source,
+		WithdrawnAt:     time.Now().UTC(),
+	}
+	if err := s.inventory.CreateGiftWithdrawal(ctx, row); err != nil {
+		slog.Warn("gift withdrawal analytics row failed",
+			"item_id", item.ID,
+			"user_id", item.UserID,
+			"source", source,
+			"error", err,
+		)
+	}
 }
 
 func (s *Service) SetFloorPrice(ctx context.Context, slug string, price int64) error {

@@ -52,6 +52,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/wallet"
 	"github.com/flipo/flipo/apps/api/internal/usecase/wheel"
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
+	casesworker "github.com/flipo/flipo/apps/api/internal/worker/cases"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
 	pvpworker "github.com/flipo/flipo/apps/api/internal/worker/pvp"
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
@@ -233,8 +234,17 @@ func main() {
 	caseSvc.SetAdminChecker(authSvc.IsAdmin)
 	caseSvc.SetValuator(giftValuator)
 	caseSvc.SetBotResolver(marketRepo)
+	caseSvc.SetDepositSummer(stakeRepo)
 	caseSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 	caseSvc.SetAdminNotifier(adminNotifier)
+	caseBot := telegram.NewBotNotifier(cfg.BotToken)
+	caseBot.SetOpenApp(telegram.OpenAppButtonOptions{
+		WebAppURL:       cfg.WebAppURL,
+		BotUsername:     cfg.BotUsername,
+		WebAppShortName: cfg.WebAppShortName,
+		StartPayload:    "cases",
+	})
+	caseSvc.SetUserNotifier(caseBot)
 
 	hub := websocket.NewHub()
 	adminNotifier.SetRealtime(hub)
@@ -329,6 +339,10 @@ func main() {
 	stakeWorker := stakingworker.NewWorker(stakeSvc)
 	stakeWorker.Start(ctx)
 	defer stakeWorker.Stop()
+
+	caseWorker := casesworker.NewWorker(caseSvc)
+	caseWorker.Start(ctx)
+	defer caseWorker.Stop()
 
 	botSyncSvc := market.NewBotSyncService(mtprotoCfg, marketSvc, invRepo, userRepo, giftValuator)
 	giftDepositWorker := giftdepositworker.NewWorker(mtprotoCfg, autoDepositSvc)
