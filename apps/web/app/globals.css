@@ -156,16 +156,21 @@ svg text {
   user-select: text !important;
 }
 
-/* Admin web shell — isolated from Mini App frame */
-html.admin-mode,
-html.admin-mode body {
+/* Admin web shell — isolated from Mini App frame.
+ * Only one scrollport (documentElement): sticky sidebars break if both html and body scroll. */
+html.admin-mode {
   height: auto;
   min-height: 100dvh;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: auto;
 }
 
 html.admin-mode body {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+  overscroll-behavior: auto;
   background:
     radial-gradient(90% 60% at 70% -10%, color-mix(in srgb, #2dd4bf 10%, transparent), transparent 55%),
     #12141a;
@@ -447,16 +452,15 @@ html.admin-mode body {
 }
 
 .admin-notif-layout {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .admin-notif-layout--split {
-  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.9fr);
-  /* Stretch so the detail rail is as tall as the feed — required for sticky. */
-  align-items: stretch;
+  flex-direction: row;
+  align-items: flex-start;
 }
 
 .admin-notif-feed {
@@ -464,24 +468,25 @@ html.admin-mode body {
   flex-direction: column;
   gap: 0.4rem;
   min-width: 0;
+  flex: 1 1 0;
 }
 
 .admin-notif-detail-rail {
-  position: relative;
-  min-width: 0;
-  /* Stretch with the feed so sticky detail can travel the full list height. */
-  min-height: 100%;
-  align-self: stretch;
-}
-
-.admin-notif-detail {
+  flex: 0 0 clamp(18rem, 38%, 26rem);
+  width: clamp(18rem, 38%, 26rem);
+  max-width: 100%;
   position: sticky;
   top: 1rem;
   z-index: 5;
-  box-sizing: border-box;
-  /* Fill the viewport — stays with the user while they scroll the feed. */
   height: calc(100dvh - 2rem);
   max-height: calc(100dvh - 2rem);
+  align-self: flex-start;
+}
+
+.admin-notif-detail {
+  box-sizing: border-box;
+  height: 100%;
+  max-height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -713,16 +718,19 @@ html.admin-mode body {
 
 @media (max-width: 960px) {
   .admin-notif-layout--split {
-    grid-template-columns: 1fr;
-    align-items: start;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .admin-notif-detail-rail {
-    min-height: 0;
+    position: static;
+    flex: 1 1 auto;
+    width: 100%;
+    height: auto;
+    max-height: none;
   }
 
   .admin-notif-detail {
-    position: static;
     height: auto;
     max-height: none;
     overflow-y: visible;
