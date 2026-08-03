@@ -83,8 +83,9 @@ func Load() *Config {
 		BotToken:  getEnv("BOT_TOKEN", ""),
 		BotUsername: firstNonEmpty(
 			getEnv("BOT_USERNAME", ""),
-			getEnv("NEXT_PUBLIC_GIFT_TRANSFER_BOT_USERNAME", ""),
 			getEnv("NEXT_PUBLIC_BOT_USERNAME", ""),
+			// Do NOT fall back to NEXT_PUBLIC_GIFT_TRANSFER_BOT_USERNAME —
+			// that is the deposit / MTProto gift-bank account, not the Mini App bot.
 		),
 		WebAppShortName:              firstNonEmpty(getEnv("WEBAPP_SHORT_NAME", ""), getEnv("NEXT_PUBLIC_WEBAPP_SHORT_NAME", "")),
 		WebAppURL:                    firstNonEmpty(getEnv("TELEGRAM_WEBAPP_URL", ""), getEnv("WEBAPP_URL", "")),
