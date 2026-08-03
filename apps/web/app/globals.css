@@ -467,8 +467,32 @@ html.admin-mode body {
 }
 
 .admin-notif-detail-rail {
+  position: relative;
   min-width: 0;
+  /* Stretch with the feed so sticky detail can travel the full list height. */
   min-height: 100%;
+  align-self: stretch;
+}
+
+.admin-notif-detail {
+  position: sticky;
+  top: 1rem;
+  z-index: 5;
+  box-sizing: border-box;
+  /* Fill the viewport — stays with the user while they scroll the feed. */
+  height: calc(100dvh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 1rem;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
 }
 
 .admin-notif-row {
@@ -606,21 +630,6 @@ html.admin-mode body {
   background: var(--admin-raised);
 }
 
-.admin-notif-detail {
-  position: sticky;
-  top: 1rem;
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
-  border-radius: 1rem;
-  border: 1px solid var(--admin-border);
-  background: var(--admin-surface);
-  padding: 1rem 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  min-width: 0;
-}
-
 .admin-notif-detail__head {
   display: flex;
   flex-direction: column;
@@ -714,6 +723,7 @@ html.admin-mode body {
 
   .admin-notif-detail {
     position: static;
+    height: auto;
     max-height: none;
     overflow-y: visible;
   }
