@@ -78,6 +78,75 @@ func (r *WheelRepo) SaveState(ctx context.Context, state *domain.UserWheelState)
 	return r.db.WithContext(ctx).Save(state).Error
 }
 
+// ClaimDailyOrBonusSpin locks user_wheel_state and consumes either today's daily spin
+// or one bonus spin. This closes the race where parallel /wheel/spin all saw daily available.
+func (r *WheelRepo) ClaimDailyOrBonusSpin(ctx context.Context, userID uuid.UUID, today time.Time) (string, *domain.UserWheelState, error) {
+	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	var source string
+	var out domain.UserWheelState
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).
+			Create(&domain.UserWheelState{UserID: userID}).Error; err != nil {
+			return err
+		}
+		var state domain.UserWheelState
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).First(&state).Error; err != nil {
+			return err
+		}
+		dailyAvailable := state.LastDailySpinDate == nil ||
+			state.LastDailySpinDate.UTC().Year() != todayDate.Year() ||
+			state.LastDailySpinDate.UTC().Month() != todayDate.Month() ||
+			state.LastDailySpinDate.UTC().Day() != todayDate.Day()
+		switch {
+		case dailyAvailable:
+			source = domain.WheelSpinSourceDaily
+			state.LastDailySpinDate = &todayDate
+		case state.BonusSpins > 0:
+			source = domain.WheelSpinSourceBonus
+			state.BonusSpins--
+		default:
+			return domain.ErrWheelNoSpins
+		}
+		state.UpdatedAt = time.Now().UTC()
+		if err := tx.Save(&state).Error; err != nil {
+			return err
+		}
+		out = state
+		return nil
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return source, &out, nil
+}
+
+func (r *WheelRepo) ReleaseSpinClaim(ctx context.Context, userID uuid.UUID, source string, today time.Time) error {
+	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var state domain.UserWheelState
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ?", userID).First(&state).Error; err != nil {
+			return err
+		}
+		switch source {
+		case domain.WheelSpinSourceDaily:
+			if state.LastDailySpinDate != nil &&
+				state.LastDailySpinDate.UTC().Year() == todayDate.Year() &&
+				state.LastDailySpinDate.UTC().Month() == todayDate.Month() &&
+				state.LastDailySpinDate.UTC().Day() == todayDate.Day() {
+				state.LastDailySpinDate = nil
+			}
+		case domain.WheelSpinSourceBonus:
+			state.BonusSpins++
+		default:
+			return nil
+		}
+		state.UpdatedAt = time.Now().UTC()
+		return tx.Save(&state).Error
+	})
+}
+
 func (r *WheelRepo) AddBonusSpins(ctx context.Context, userID uuid.UUID, delta int) error {
 	if delta == 0 {
 		return nil

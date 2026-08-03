@@ -252,11 +252,6 @@ func (s *Service) Spin(ctx context.Context, userID uuid.UUID, telegramID int64) 
 		return nil, domain.ErrWheelUnavailable
 	}
 
-	state, err := s.wheel.GetOrCreateState(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
 	now := time.Now().UTC()
 	today := utcDate(now)
 	spinsToday, err := s.wheel.CountSpinsSince(ctx, userID, today)
@@ -265,33 +260,35 @@ func (s *Service) Spin(ctx context.Context, userID uuid.UUID, telegramID int64) 
 	}
 
 	spinSource := ""
+	var state *domain.UserWheelState
 	if admin {
 		spinSource = domain.WheelSpinSourceAdmin
+		state, err = s.wheel.GetOrCreateState(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		dailyAvailable := !sameDate(state.LastDailySpinDate, today)
-		switch {
-		case dailyAvailable:
-			spinSource = domain.WheelSpinSourceDaily
-		case state.BonusSpins > 0:
-			spinSource = domain.WheelSpinSourceBonus
-			state.BonusSpins--
-		default:
-			return nil, domain.ErrWheelNoSpins
+		// Atomic claim under row lock — blocks parallel daily spins.
+		spinSource, state, err = s.wheel.ClaimDailyOrBonusSpin(ctx, userID, today)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	segment, roll, err := s.resolveSpinSegment(ctx, userID, segments)
 	if err != nil {
+		if !admin {
+			_ = s.wheel.ReleaseSpinClaim(ctx, userID, spinSource, today)
+		}
 		return nil, err
 	}
 
 	spinID := uuid.New()
 	if _, err := s.balance.Credit(ctx, userID, segment.AmountNanoton, domain.LedgerWheelPrize, "wheel_spin", spinID); err != nil {
+		if !admin {
+			_ = s.wheel.ReleaseSpinClaim(ctx, userID, spinSource, today)
+		}
 		return nil, err
-	}
-
-	if spinSource == domain.WheelSpinSourceDaily {
-		state.LastDailySpinDate = &today
 	}
 
 	spin := &domain.WheelSpin{
@@ -304,9 +301,9 @@ func (s *Service) Spin(ctx context.Context, userID uuid.UUID, telegramID int64) 
 		CreatedAt:    now,
 	}
 	if err := s.wheel.CreateSpin(ctx, spin); err != nil {
-		return nil, err
-	}
-	if err := s.wheel.SaveState(ctx, state); err != nil {
+		if !admin {
+			_ = s.wheel.ReleaseSpinClaim(ctx, userID, spinSource, today)
+		}
 		return nil, err
 	}
 

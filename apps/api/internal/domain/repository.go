@@ -204,6 +204,11 @@ type WheelRepository interface {
 	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserWheelState, error)
 	SaveState(ctx context.Context, state *UserWheelState) error
 	AddBonusSpins(ctx context.Context, userID uuid.UUID, delta int) error
+	// ClaimDailyOrBonusSpin atomically consumes the UTC daily spin or one bonus spin.
+	// Concurrent callers serialize on user_wheel_state row lock — prevents double daily.
+	ClaimDailyOrBonusSpin(ctx context.Context, userID uuid.UUID, today time.Time) (source string, state *UserWheelState, err error)
+	// ReleaseSpinClaim undoes a successful ClaimDailyOrBonusSpin (e.g. prize credit failed).
+	ReleaseSpinClaim(ctx context.Context, userID uuid.UUID, source string, today time.Time) error
 	// TryAddReferralBonusSpin grants +1 bonus spin if referrer is under the MSK daily cap.
 	TryAddReferralBonusSpin(ctx context.Context, userID uuid.UUID, day time.Time, dailyLimit int) (granted bool, err error)
 	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
