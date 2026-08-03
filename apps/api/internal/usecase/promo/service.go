@@ -86,14 +86,11 @@ func (s *Service) activate(ctx context.Context, userID uuid.UUID, code string) (
 		return nil, domain.ErrPromoInvalid
 	}
 
-	redeemed, err := s.platform.HasRedeemedPromoCode(ctx, userID, code)
-	if err != nil {
+	if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
 		return nil, err
 	}
-	if redeemed {
-		return nil, domain.ErrPromoAlreadyRedeemed
-	}
 
+	// Soft pre-checks for clearer errors; authoritative claim is atomic below.
 	promo, err := s.platform.GetPromoCode(ctx, code)
 	if err != nil {
 		return nil, err
@@ -104,32 +101,15 @@ func (s *Service) activate(ctx context.Context, userID uuid.UUID, code string) (
 	if promo.ExpiresAt != nil && time.Now().UTC().After(*promo.ExpiresAt) {
 		return nil, domain.ErrPromoExpired
 	}
-	if promo.MaxUses > 0 && promo.UsedCount >= promo.MaxUses {
-		return nil, domain.ErrPromoExhausted
-	}
 
-	if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+	redemption, err := s.platform.ClaimPromoRedemption(ctx, userID, promo.Code, promo.BonusNanoton)
+	if err != nil {
 		return nil, err
 	}
-
-	now := time.Now().UTC()
-	redemptionID := uuid.New()
-	if _, err := s.balance.Credit(ctx, userID, promo.BonusNanoton, domain.LedgerPromoBonus, "promo_code", redemptionID); err != nil {
+	if _, err := s.balance.Credit(ctx, userID, redemption.BonusNanoton, domain.LedgerPromoBonus, "promo_code", redemption.ID); err != nil {
+		_ = s.platform.ReleasePromoRedemption(ctx, redemption.ID, promo.Code)
 		return nil, err
 	}
-
-	redemption := &domain.PromoRedemption{
-		ID:           redemptionID,
-		UserID:       userID,
-		PromoCode:    promo.Code,
-		BonusNanoton: promo.BonusNanoton,
-		Status:       "completed",
-		CompletedAt:  &now,
-	}
-	if err := s.platform.CreateRedemption(ctx, redemption); err != nil {
-		return nil, err
-	}
-	_ = s.platform.IncrementPromoUsed(ctx, promo.Code)
 
 	if s.admin != nil {
 		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
@@ -138,14 +118,14 @@ func (s *Service) activate(ctx context.Context, userID uuid.UUID, code string) (
 				Username:   user.Username,
 				FirstName:  user.FirstName,
 				LastName:   user.LastName,
-			}, promo.Code, promo.BonusNanoton)
+			}, promo.Code, redemption.BonusNanoton)
 		}
 	}
 
 	return &StatusView{
 		Active:       false,
 		PromoCode:    promo.Code,
-		BonusNanoton: promo.BonusNanoton,
+		BonusNanoton: redemption.BonusNanoton,
 	}, nil
 }
 

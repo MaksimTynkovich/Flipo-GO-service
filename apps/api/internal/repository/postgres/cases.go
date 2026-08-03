@@ -183,6 +183,72 @@ func (r *CaseRepo) FindLatestOpenByUserCase(ctx context.Context, userID, caseID 
 	return &open, nil
 }
 
+func caseCooldownLockKeys(userID, caseID uuid.UUID) (int32, int32) {
+	// Stable 64-bit mix into two int32 advisory lock keys.
+	b := append(userID[:], caseID[:]...)
+	var h uint64
+	for _, v := range b {
+		h = h*131 + uint64(v)
+	}
+	return int32(h >> 32), int32(h)
+}
+
+// ClaimCaseCooldown reserves the next free/daily open under an advisory xact lock.
+func (r *CaseRepo) ClaimCaseCooldown(ctx context.Context, userID, caseID uuid.UUID, cooldown time.Duration) error {
+	if cooldown <= 0 {
+		cooldown = 24 * time.Hour
+	}
+	now := time.Now().UTC()
+	cutoff := now.Add(-cooldown)
+	k1, k2 := caseCooldownLockKeys(userID, caseID)
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?, ?)", k1, k2).Error; err != nil {
+			return err
+		}
+		var recent int64
+		if err := tx.Model(&domain.CaseOpen{}).
+			Where("user_id = ? AND case_id = ? AND created_at > ?", userID, caseID, cutoff).
+			Count(&recent).Error; err != nil {
+			return err
+		}
+		if recent > 0 {
+			return domain.ErrCaseCooldown
+		}
+		var row domain.UserCaseCooldown
+		err := tx.Where("user_id = ? AND case_id = ?", userID, caseID).First(&row).Error
+		switch {
+		case err == nil:
+			if now.Before(row.LastClaimedAt.UTC().Add(cooldown)) {
+				return domain.ErrCaseCooldown
+			}
+			return tx.Model(&row).Update("last_claimed_at", now).Error
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			return tx.Create(&domain.UserCaseCooldown{
+				UserID:        userID,
+				CaseID:        caseID,
+				LastClaimedAt: now,
+			}).Error
+		default:
+			return err
+		}
+	})
+}
+
+func (r *CaseRepo) ReleaseCaseCooldown(ctx context.Context, userID, caseID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND case_id = ?", userID, caseID).
+		Delete(&domain.UserCaseCooldown{}).Error
+}
+
+func (r *CaseRepo) FindCaseCooldownClaim(ctx context.Context, userID, caseID uuid.UUID) (*domain.UserCaseCooldown, error) {
+	var row domain.UserCaseCooldown
+	err := r.db.WithContext(ctx).Where("user_id = ? AND case_id = ?", userID, caseID).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *CaseRepo) ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.CaseOpen, error) {
 	if limit <= 0 {
 		limit = 50
@@ -801,7 +867,17 @@ func (r *CaseRepo) CreateCasePromoRedemption(ctx context.Context, redemption *do
 	if redemption.CreatedAt.IsZero() {
 		redemption.CreatedAt = time.Now().UTC()
 	}
-	return r.db.WithContext(ctx).Create(redemption).Error
+	err := r.db.WithContext(ctx).Create(redemption).Error
+	if err != nil && isUniqueViolation(err) {
+		return domain.ErrPromoAlreadyRedeemed
+	}
+	return err
+}
+
+func (r *CaseRepo) DeleteCasePromoRedemption(ctx context.Context, userID uuid.UUID, code string) error {
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND code = ?", userID, code).
+		Delete(&domain.CasePromoRedemption{}).Error
 }
 
 func (r *CaseRepo) IncrementCasePromoUsed(ctx context.Context, code string) error {
@@ -815,6 +891,20 @@ func (r *CaseRepo) IncrementCasePromoUsed(ctx context.Context, code string) erro
 		return domain.ErrPromoExhausted
 	}
 	return nil
+}
+
+func (r *CaseRepo) DecrementCasePromoUsed(ctx context.Context, code string) error {
+	return r.db.WithContext(ctx).Model(&domain.CasePromoCode{}).
+		Where("code = ? AND used_count > 0", code).
+		UpdateColumn("used_count", gorm.Expr("used_count - 1")).Error
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique constraint")
 }
 
 func (r *CaseRepo) GetCaseQuestShareCount(ctx context.Context, userID, caseID uuid.UUID) (int, error) {

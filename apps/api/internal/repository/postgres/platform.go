@@ -427,13 +427,107 @@ func (r *PlatformRepo) CreateRedemption(ctx context.Context, redemption *domain.
 	if redemption.CreatedAt.IsZero() {
 		redemption.CreatedAt = time.Now().UTC()
 	}
-	return r.db.WithContext(ctx).Create(redemption).Error
+	err := r.db.WithContext(ctx).Create(redemption).Error
+	if err != nil && isUniqueViolation(err) {
+		return domain.ErrPromoAlreadyRedeemed
+	}
+	return err
+}
+
+func (r *PlatformRepo) DeleteRedemption(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&domain.PromoRedemption{}).Error
 }
 
 func (r *PlatformRepo) IncrementPromoUsed(ctx context.Context, code string) error {
-	return r.db.WithContext(ctx).Model(&domain.PromoCode{}).
-		Where("code = ?", code).
-		UpdateColumn("used_count", gorm.Expr("used_count + 1")).Error
+	res := r.db.WithContext(ctx).Model(&domain.PromoCode{}).
+		Where("code = ? AND (max_uses = 0 OR used_count < max_uses)", code).
+		UpdateColumn("used_count", gorm.Expr("used_count + 1"))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrPromoExhausted
+	}
+	return nil
+}
+
+// ClaimPromoRedemption locks the promo row, inserts redemption, then bumps used_count.
+// Call before crediting balance; use ReleasePromoRedemption if credit fails.
+func (r *PlatformRepo) ClaimPromoRedemption(ctx context.Context, userID uuid.UUID, code string, bonusNanoton int64) (*domain.PromoRedemption, error) {
+	now := time.Now().UTC()
+	var out domain.PromoRedemption
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var promo domain.PromoCode
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&promo, "code = ?", code).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return domain.ErrPromoInvalid
+			}
+			return err
+		}
+		if !promo.Active {
+			return domain.ErrPromoInvalid
+		}
+		if promo.ExpiresAt != nil && now.After(*promo.ExpiresAt) {
+			return domain.ErrPromoExpired
+		}
+		if promo.MaxUses > 0 && promo.UsedCount >= promo.MaxUses {
+			return domain.ErrPromoExhausted
+		}
+		if bonusNanoton <= 0 {
+			bonusNanoton = promo.BonusNanoton
+		}
+
+		var existing int64
+		if err := tx.Model(&domain.PromoRedemption{}).
+			Where("user_id = ? AND promo_code = ?", userID, promo.Code).
+			Count(&existing).Error; err != nil {
+			return err
+		}
+		if existing > 0 {
+			return domain.ErrPromoAlreadyRedeemed
+		}
+
+		out = domain.PromoRedemption{
+			ID:           uuid.New(),
+			UserID:       userID,
+			PromoCode:    promo.Code,
+			BonusNanoton: bonusNanoton,
+			Status:       "completed",
+			CreatedAt:    now,
+			CompletedAt:  &now,
+		}
+		if err := tx.Create(&out).Error; err != nil {
+			if isUniqueViolation(err) {
+				return domain.ErrPromoAlreadyRedeemed
+			}
+			return err
+		}
+		res := tx.Model(&domain.PromoCode{}).
+			Where("code = ? AND (max_uses = 0 OR used_count < max_uses)", promo.Code).
+			UpdateColumn("used_count", gorm.Expr("used_count + 1"))
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domain.ErrPromoExhausted
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (r *PlatformRepo) ReleasePromoRedemption(ctx context.Context, redemptionID uuid.UUID, code string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ?", redemptionID).Delete(&domain.PromoRedemption{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&domain.PromoCode{}).
+			Where("code = ? AND used_count > 0", code).
+			UpdateColumn("used_count", gorm.Expr("used_count - 1")).Error
+	})
 }
 
 func (r *PlatformRepo) CreateBroadcast(ctx context.Context, broadcast *domain.TelegramBroadcast) error {

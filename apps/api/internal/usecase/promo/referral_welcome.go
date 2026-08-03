@@ -33,7 +33,7 @@ func (s *Service) ActivateReferralWelcome(ctx context.Context, userID uuid.UUID)
 
 	promo, err := s.platform.GetPromoCode(ctx, domain.RefWelcomePromoCode)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrPromoInvalid) {
 			return nil
 		}
 		return err
@@ -42,23 +42,19 @@ func (s *Service) ActivateReferralWelcome(ctx context.Context, userID uuid.UUID)
 		return nil
 	}
 
-	now := time.Now().UTC()
-	redemptionID := uuid.New()
-	if _, err := s.balance.Credit(ctx, userID, promo.BonusNanoton, domain.LedgerPromoBonus, "promo_code", redemptionID); err != nil {
+	redemption, err := s.platform.ClaimPromoRedemption(ctx, userID, promo.Code, promo.BonusNanoton)
+	if err != nil {
+		if errors.Is(err, domain.ErrPromoAlreadyRedeemed) ||
+			errors.Is(err, domain.ErrPromoExhausted) ||
+			errors.Is(err, domain.ErrPromoInvalid) ||
+			errors.Is(err, domain.ErrPromoExpired) {
+			return nil
+		}
 		return err
 	}
-
-	redemption := &domain.PromoRedemption{
-		ID:           redemptionID,
-		UserID:       userID,
-		PromoCode:    promo.Code,
-		BonusNanoton: promo.BonusNanoton,
-		Status:       "completed",
-		CompletedAt:  &now,
-	}
-	if err := s.platform.CreateRedemption(ctx, redemption); err != nil {
+	if _, err := s.balance.Credit(ctx, userID, redemption.BonusNanoton, domain.LedgerPromoBonus, "promo_code", redemption.ID); err != nil {
+		_ = s.platform.ReleasePromoRedemption(ctx, redemption.ID, promo.Code)
 		return err
 	}
-	_ = s.platform.IncrementPromoUsed(ctx, promo.Code)
 	return nil
 }

@@ -377,31 +377,30 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		if err := s.ensureCaseQuestsDone(ctx, userID, c); err != nil {
 			return nil, err
 		}
-		ok, err := s.caseOpenCooldownAvailable(ctx, userID, c.ID)
-		if err != nil {
+		if err := s.cases.ClaimCaseCooldown(ctx, userID, c.ID, caseOpenCooldown); err != nil {
 			return nil, err
-		}
-		if !ok {
-			return nil, domain.ErrCaseCooldown
 		}
 	case price <= 0:
 		// Free catalog/featured cases must require channel subscription.
 		if !c.RequireChannel {
 			return nil, domain.ErrInvalidAmount
 		}
-		ok, err := s.caseOpenCooldownAvailable(ctx, userID, c.ID)
-		if err != nil {
+		if err := s.cases.ClaimCaseCooldown(ctx, userID, c.ID, caseOpenCooldown); err != nil {
 			return nil, err
-		}
-		if !ok {
-			return nil, domain.ErrCaseCooldown
 		}
 		source = domain.CaseOpenSourceFree
 		price = 0
 	}
+	cooldownClaimed := source == domain.CaseOpenSourceDaily || source == domain.CaseOpenSourceFree
+	releaseCooldown := func() {
+		if cooldownClaimed {
+			_ = s.cases.ReleaseCaseCooldown(ctx, userID, c.ID)
+		}
+	}
 
 	if c.RequireChannel {
 		if err := s.ensureChannelSubscribed(ctx, userID); err != nil {
+			releaseCooldown()
 			if promo != nil {
 				s.notifyPromoActivationFailed(ctx, userID, promoCode, casePromoFailureReason(err, c.Title))
 			}
@@ -423,8 +422,39 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 
 	openID := uuid.New()
 
+	promoClaimed := false
+	releasePromo := func() {
+		if !promoClaimed || promo == nil {
+			return
+		}
+		_ = s.cases.DeleteCasePromoRedemption(ctx, userID, promo.Code)
+		_ = s.cases.DecrementCasePromoUsed(ctx, promo.Code)
+		promoClaimed = false
+	}
+	if promo != nil {
+		if err := s.cases.CreateCasePromoRedemption(ctx, &domain.CasePromoRedemption{
+			UserID:     userID,
+			Code:       promo.Code,
+			CaseID:     c.ID,
+			CaseOpenID: openID,
+		}); err != nil {
+			releaseCooldown()
+			s.notifyPromoActivationFailed(ctx, userID, promoCode, casePromoFailureReason(err, c.Title))
+			return nil, err
+		}
+		if err := s.cases.IncrementCasePromoUsed(ctx, promo.Code); err != nil {
+			_ = s.cases.DeleteCasePromoRedemption(ctx, userID, promo.Code)
+			releaseCooldown()
+			s.notifyPromoActivationFailed(ctx, userID, promoCode, casePromoFailureReason(err, c.Title))
+			return nil, err
+		}
+		promoClaimed = true
+	}
+
 	if price > 0 {
 		if _, err := s.balance.Debit(ctx, userID, price, domain.LedgerCaseOpen, "case_open", openID); err != nil {
+			releasePromo()
+			releaseCooldown()
 			return nil, err
 		}
 		if pool.Enabled {
@@ -443,6 +473,8 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 				_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
 			}
 		}
+		releasePromo()
+		releaseCooldown()
 		return nil, err
 	}
 
@@ -462,6 +494,8 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
 				}
 			}
+			releasePromo()
+			releaseCooldown()
 			return nil, domain.ErrInvalidAmount
 		}
 		if _, err := s.balance.Credit(ctx, userID, prizeNanoton, domain.LedgerCasePrize, "case_open", openID); err != nil {
@@ -471,6 +505,8 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
 				}
 			}
+			releasePromo()
+			releaseCooldown()
 			return nil, err
 		}
 	} else {
@@ -486,6 +522,8 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
 				}
 			}
+			releasePromo()
+			releaseCooldown()
 			return nil, err
 		}
 		item = granted
@@ -524,28 +562,19 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	}
 	if err := s.cases.CreateOpen(ctx, open); err != nil {
 		if existing, findErr := s.cases.FindOpenByIdempotency(ctx, idempotencyKey); findErr == nil && existing != nil {
+			// Another request with the same key won; drop our reservation.
+			releasePromo()
+			releaseCooldown()
 			return s.openResultFromExisting(ctx, existing)
 		}
+		releasePromo()
+		releaseCooldown()
 		return nil, err
 	}
 
 	// Share is required again before the next open.
 	if c.RequireShare {
 		_ = s.cases.ResetCaseQuestShare(ctx, userID, c.ID)
-	}
-
-	if promo != nil {
-		if err := s.cases.CreateCasePromoRedemption(ctx, &domain.CasePromoRedemption{
-			UserID:     userID,
-			Code:       promo.Code,
-			CaseID:     c.ID,
-			CaseOpenID: openID,
-		}); err != nil {
-			return nil, err
-		}
-		if err := s.cases.IncrementCasePromoUsed(ctx, promo.Code); err != nil {
-			return nil, err
-		}
 	}
 
 	lootPreview := toLootPreview(entry)
@@ -1511,17 +1540,37 @@ func (s *Service) findCase(ctx context.Context, idOrSlug string) (*domain.Case, 
 }
 
 func (s *Service) caseOpenCooldownAvailability(ctx context.Context, userID, caseID uuid.UUID) (bool, *time.Time, error) {
+	now := time.Now().UTC()
+	var nextCandidates []time.Time
+
 	open, err := s.cases.FindLatestOpenByUserCase(ctx, userID, caseID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return true, nil, nil
-		}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil, err
 	}
-	now := time.Now().UTC()
-	next := open.CreatedAt.UTC().Add(caseOpenCooldown)
-	if !now.Before(next) {
+	if err == nil {
+		next := open.CreatedAt.UTC().Add(caseOpenCooldown)
+		if now.Before(next) {
+			nextCandidates = append(nextCandidates, next)
+		}
+	}
+	claim, err := s.cases.FindCaseCooldownClaim(ctx, userID, caseID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil, err
+	}
+	if err == nil {
+		next := claim.LastClaimedAt.UTC().Add(caseOpenCooldown)
+		if now.Before(next) {
+			nextCandidates = append(nextCandidates, next)
+		}
+	}
+	if len(nextCandidates) == 0 {
 		return true, nil, nil
+	}
+	next := nextCandidates[0]
+	for _, t := range nextCandidates[1:] {
+		if t.After(next) {
+			next = t
+		}
 	}
 	return false, &next, nil
 }

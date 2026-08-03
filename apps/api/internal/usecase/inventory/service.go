@@ -291,7 +291,13 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 		recipient = telegram.ScanTargetByUsername(user.Username)
 	}
 
+	// Claim item before irreversible Telegram send — blocks parallel withdraw races.
+	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
+		return false, "", err
+	}
+
 	if err := s.giftTransfer.SendGift(ctx, item.TelegramGiftID, recipient); err != nil {
+		_ = s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvAvailable)
 		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
 			return false, "", fmt.Errorf("вывод подарков временно недоступен")
 		}
@@ -305,7 +311,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 		return false, "", fmt.Errorf("вывод подарков временно недоступен")
 	}
 
-	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawn); err != nil {
+	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn); err != nil {
 		return false, "", err
 	}
 	if s.admin != nil {

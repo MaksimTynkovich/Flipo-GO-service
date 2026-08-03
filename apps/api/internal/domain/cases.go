@@ -110,6 +110,15 @@ type UserCaseState struct {
 
 func (UserCaseState) TableName() string { return "user_case_state" }
 
+// UserCaseCooldown — atomic claim for daily/free case 24h opens (prevents parallel bypass).
+type UserCaseCooldown struct {
+	UserID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
+	CaseID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"case_id"`
+	LastClaimedAt time.Time `gorm:"not null;index" json:"last_claimed_at"`
+}
+
+func (UserCaseCooldown) TableName() string { return "user_case_cooldowns" }
+
 // CaseCatalogSettings — singleton (id=1) for catalog UI knobs + case economy pools.
 type CaseCatalogSettings struct {
 	ID             int       `gorm:"primaryKey" json:"id"`

@@ -77,6 +77,9 @@ type CaseRepository interface {
 	CreateOpen(ctx context.Context, open *CaseOpen) error
 	FindOpenByIdempotency(ctx context.Context, key string) (*CaseOpen, error)
 	FindLatestOpenByUserCase(ctx context.Context, userID, caseID uuid.UUID) (*CaseOpen, error)
+	ClaimCaseCooldown(ctx context.Context, userID, caseID uuid.UUID, cooldown time.Duration) error
+	ReleaseCaseCooldown(ctx context.Context, userID, caseID uuid.UUID) error
+	FindCaseCooldownClaim(ctx context.Context, userID, caseID uuid.UUID) (*UserCaseCooldown, error)
 	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
 	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
@@ -103,7 +106,9 @@ type CaseRepository interface {
 	DeleteCasePromoCode(ctx context.Context, code string) error
 	HasRedeemedCasePromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
 	CreateCasePromoRedemption(ctx context.Context, redemption *CasePromoRedemption) error
+	DeleteCasePromoRedemption(ctx context.Context, userID uuid.UUID, code string) error
 	IncrementCasePromoUsed(ctx context.Context, code string) error
+	DecrementCasePromoUsed(ctx context.Context, code string) error
 
 	GetCaseQuestShareCount(ctx context.Context, userID, caseID uuid.UUID) (int, error)
 	GetCaseQuestShare(ctx context.Context, userID, caseID uuid.UUID) (*CaseQuestShare, error)
@@ -279,7 +284,11 @@ type PlatformRepository interface {
 	GetPromoCode(ctx context.Context, code string) (*PromoCode, error)
 	HasRedeemedPromoCode(ctx context.Context, userID uuid.UUID, code string) (bool, error)
 	CreateRedemption(ctx context.Context, redemption *PromoRedemption) error
+	DeleteRedemption(ctx context.Context, id uuid.UUID) error
 	IncrementPromoUsed(ctx context.Context, code string) error
+	// ClaimPromoRedemption inserts redemption + bumps used_count under locks before balance credit.
+	ClaimPromoRedemption(ctx context.Context, userID uuid.UUID, code string, bonusNanoton int64) (*PromoRedemption, error)
+	ReleasePromoRedemption(ctx context.Context, redemptionID uuid.UUID, code string) error
 	CreateBroadcast(ctx context.Context, broadcast *TelegramBroadcast) error
 	GetBroadcast(ctx context.Context, id uuid.UUID) (*TelegramBroadcast, error)
 	UpdateBroadcast(ctx context.Context, broadcast *TelegramBroadcast) error

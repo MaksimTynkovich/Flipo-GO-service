@@ -138,6 +138,12 @@ func (r *TonTransferRepo) CreateWithdrawalAtomic(
 	var transfer domain.TonTransfer
 	var balanceAfter int64
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user domain.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
+			return err
+		}
+
+		// Re-check after user row lock so parallel withdraws serialize correctly.
 		active, err := r.hasActiveWithdrawalTx(tx, userID)
 		if err != nil {
 			return err
@@ -146,10 +152,6 @@ func (r *TonTransferRepo) CreateWithdrawalAtomic(
 			return domain.ErrTransferPending
 		}
 
-		var user domain.User
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
-			return err
-		}
 		if user.TonWallet == "" || user.TonWallet != walletAddress {
 			return domain.ErrWalletNotLinked
 		}

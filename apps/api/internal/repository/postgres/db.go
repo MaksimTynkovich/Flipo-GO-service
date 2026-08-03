@@ -83,6 +83,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.CaseLootEntry{},
 		&domain.CaseOpen{},
 		&domain.UserCaseState{},
+		&domain.UserCaseCooldown{},
 		&domain.CaseCatalogSettings{},
 		&domain.CasePromoCode{},
 		&domain.CasePromoRedemption{},
