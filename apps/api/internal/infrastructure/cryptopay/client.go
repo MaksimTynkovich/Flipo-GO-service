@@ -100,15 +100,26 @@ func (c *Client) CreateInvoice(ctx context.Context, req CreateInvoiceRequest) (*
 }
 
 func (c *Client) GetInvoices(ctx context.Context, invoiceIDs string) ([]Invoice, error) {
-	var out []Invoice
 	body := map[string]any{}
 	if invoiceIDs != "" {
 		body["invoice_ids"] = invoiceIDs
 	}
-	if err := c.post(ctx, "getInvoices", body, &out); err != nil {
+	var raw json.RawMessage
+	if err := c.post(ctx, "getInvoices", body, &raw); err != nil {
 		return nil, err
 	}
-	return out, nil
+	// Crypto Pay wraps invoices in {"items": [...]}, older responses returned a bare array.
+	var wrapped struct {
+		Items []Invoice `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil && wrapped.Items != nil {
+		return wrapped.Items, nil
+	}
+	var list []Invoice
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, fmt.Errorf("cryptopay getInvoices: result: %w", err)
+	}
+	return list, nil
 }
 
 func (c *Client) GetExchangeRates(ctx context.Context) ([]ExchangeRate, error) {

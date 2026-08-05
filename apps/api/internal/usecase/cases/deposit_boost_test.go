@@ -8,45 +8,67 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestDepositBoostEligible(t *testing.T) {
+func TestResolveDepositBoost(t *testing.T) {
+	settings := &domain.CaseCatalogSettings{
+		DepositBoostEnabled:         true,
+		BankTargetNanoton:           100e9,
+		DepositBoostTier1MinNanoton: 1e9,
+		DepositBoostTier2MinNanoton: 2e9,
+		DepositBoostTier3MinNanoton: 5e9,
+		DepositBoostTier4MinNanoton: 10e9,
+		DepositBoostTier1BiasWeight: 0,
+		DepositBoostTier2BiasWeight: 5,
+		DepositBoostTier3BiasWeight: 10,
+		DepositBoostTier4BiasWeight: 15,
+		DepositBoostSurplusShareBps: 2500,
+		DepositBoostRampNanoton:     10e9,
+	}
 	healthy := domain.CasePoolSnapshot{
 		Kind:           domain.CasePoolPaid,
 		Enabled:        true,
-		Balance:        50e9,
+		Balance:        140e9,
 		RecoveryTarget: 0,
 		Recovery:       false,
 	}
 	const price = int64(1e9)
-	const minDep = int64(10e9)
-	const strength = 40
 
-	if !depositBoostEligible(healthy, price, 10e9, true, minDep, strength) {
-		t.Fatal("expected boost for depositor when bank healthy")
+	boost := resolveDepositBoost(settings, healthy, price, 10e9)
+	if !boost.Eligible || boost.EffectiveStrength != 15 {
+		t.Fatalf("expected full tier-4 boost 15, got %+v", boost)
 	}
-	if depositBoostEligible(healthy, price, 9e9, true, minDep, strength) {
-		t.Fatal("expected no boost below deposit threshold")
+
+	scaled := healthy
+	scaled.Balance = 120e9
+	boost = resolveDepositBoost(settings, scaled, price, 10e9)
+	if !boost.Eligible || boost.EffectiveStrength != 7 {
+		t.Fatalf("expected scaled boost 7 at 120 TON, got %+v", boost)
 	}
-	if depositBoostEligible(healthy, 0, 20e9, true, minDep, strength) {
-		t.Fatal("expected no boost on free open")
+
+	if got := resolveDepositBoost(settings, healthy, price, 1e9); got.Eligible {
+		t.Fatalf("tier1 should stay off with 0%% boost, got %+v", got)
+	}
+	if got := resolveDepositBoost(settings, healthy, 0, 20e9); got.Eligible {
+		t.Fatalf("expected no boost on free open, got %+v", got)
 	}
 	recovering := healthy
 	recovering.Recovery = true
-	if depositBoostEligible(recovering, price, 20e9, true, minDep, strength) {
-		t.Fatal("expected no boost in recovery")
+	if got := resolveDepositBoost(settings, recovering, price, 20e9); got.Eligible {
+		t.Fatalf("expected no boost in recovery, got %+v", got)
 	}
 	underwater := healthy
-	underwater.Balance = -1
-	underwater.RecoveryTarget = 0
-	if depositBoostEligible(underwater, price, 20e9, true, minDep, strength) {
-		t.Fatal("expected no boost when balance below recovery target")
+	underwater.Balance = 99e9
+	if got := resolveDepositBoost(settings, underwater, price, 20e9); got.Eligible {
+		t.Fatalf("expected no boost when reserve not yet filled, got %+v", got)
 	}
 	daily := healthy
 	daily.Kind = domain.CasePoolDaily
-	if depositBoostEligible(daily, price, 20e9, true, minDep, strength) {
-		t.Fatal("expected no boost on daily pool")
+	if got := resolveDepositBoost(settings, daily, price, 20e9); got.Eligible {
+		t.Fatalf("expected no boost on daily pool, got %+v", got)
 	}
-	if depositBoostEligible(healthy, price, 20e9, false, minDep, strength) {
-		t.Fatal("expected no boost when disabled")
+	disabled := *settings
+	disabled.DepositBoostEnabled = false
+	if got := resolveDepositBoost(&disabled, healthy, price, 20e9); got.Eligible {
+		t.Fatalf("expected no boost when disabled, got %+v", got)
 	}
 }
 
@@ -76,53 +98,64 @@ func TestApplyDepositSurplusBoostRaisesFat(t *testing.T) {
 	}
 }
 
-func TestDepositBoostWorkflowDemo_1TON_vs_10TON(t *testing.T) {
-	// Demo workflow: same paid case, healthy bank, two players.
-	// Case price 1 TON; loot: trash / mid gift / fat gift.
+func TestDepositBoostWorkflowDemo_1_2_5_10TON(t *testing.T) {
 	cheapID := uuid.New()
 	midID := uuid.New()
 	fatID := uuid.New()
 	baseLoot := []domain.CaseLootEntry{
-		{ID: cheapID, Weight: 80, FloorPriceNanoton: 1e9, DisplayName: "Trash gift 1 TON"},
-		{ID: midID, Weight: 15, FloorPriceNanoton: 5e9, DisplayName: "Good gift 5 TON"},
-		{ID: fatID, Weight: 5, FloorPriceNanoton: 40e9, DisplayName: "Fat gift 40 TON"},
+		{ID: cheapID, Weight: 65, FloorPriceNanoton: 3e9, DisplayName: "Cheap 3 TON"},
+		{ID: midID, Weight: 25, FloorPriceNanoton: 6e9, DisplayName: "Good 6 TON"},
+		{ID: fatID, Weight: 10, FloorPriceNanoton: 12e9, DisplayName: "Fat 12 TON"},
 	}
-	floors := map[uuid.UUID]int64{cheapID: 1e9, midID: 5e9, fatID: 40e9}
+	floors := map[uuid.UUID]int64{cheapID: 3e9, midID: 6e9, fatID: 12e9}
+	settings := &domain.CaseCatalogSettings{
+		DepositBoostEnabled:         true,
+		BankTargetNanoton:           100e9,
+		DepositBoostTier1MinNanoton: 1e9,
+		DepositBoostTier2MinNanoton: 2e9,
+		DepositBoostTier3MinNanoton: 5e9,
+		DepositBoostTier4MinNanoton: 10e9,
+		DepositBoostTier1BiasWeight: 0,
+		DepositBoostTier2BiasWeight: 5,
+		DepositBoostTier3BiasWeight: 10,
+		DepositBoostTier4BiasWeight: 15,
+		DepositBoostSurplusShareBps: 2500,
+		DepositBoostRampNanoton:     10e9,
+	}
 
 	pool := domain.CasePoolSnapshot{
 		Kind:           domain.CasePoolPaid,
 		Enabled:        true,
-		Balance:        100e9, // house +100 TON
+		Balance:        140e9,
 		RecoveryTarget: 0,
 		Recovery:       false,
 		BiasWeight:     50,
-		TargetBalance:  50e9,
+		TargetBalance:  100e9,
 	}
-	const casePrice = int64(1e9) // 1 TON open
-	const minDep = int64(10e9)   // boost from 10 TON deposits
-	const strength = 40
+	const casePrice = int64(5e9)
 
 	type player struct {
 		name     string
 		deposits int64
 	}
 	players := []player{
-		{name: "Alice (деп 1 TON)", deposits: 1e9},
-		{name: "Bob (деп 10 TON)", deposits: 10e9},
+		{name: "Tier 1 TON", deposits: 1e9},
+		{name: "Tier 2 TON", deposits: 2e9},
+		{name: "Tier 5 TON", deposits: 5e9},
+		{name: "Tier 10 TON", deposits: 10e9},
 	}
 
-	t.Log("=== WORKFLOW: paid open, bank healthy ===")
-	t.Logf("case_price=1 TON | deposit_boost_min=10 TON | strength=+%d%% on >=median | bank_balance=100 TON recovery=false", strength)
-	t.Log("loot table (base weights): Trash 80 | Good 15 | Fat 5")
+	t.Log("=== WORKFLOW: reserve-first paid open, bank above 100 TON reserve ===")
+	t.Log("case_price=5 TON | reserve_target=100 TON | bank_balance=140 TON | surplus_share=25% | ramp=10 TON")
+	t.Log("loot table (base weights): Cheap 65 | Good 25 | Fat 10")
 
 	const opens = 10_000
+	prevGoodWeight := -1
 	for _, p := range players {
-		eligible := depositBoostEligible(pool, casePrice, p.deposits, true, minDep, strength)
+		boost := resolveDepositBoost(settings, pool, casePrice, p.deposits)
 		loot := biasLootWeights(baseLoot, floors, pool)
-		boostStr := 0
-		if eligible {
-			boostStr = strength
-			loot = applyDepositSurplusBoost(loot, floors, boostStr)
+		if boost.EffectiveStrength > 0 {
+			loot = applyDepositSurplusBoost(loot, floors, boost.EffectiveStrength)
 		}
 
 		var wTrash, wGood, wFat int
@@ -150,36 +183,21 @@ func TestDepositBoostWorkflowDemo_1TON_vs_10TON(t *testing.T) {
 			}
 		}
 
-		t.Logf("--- %s | deposits=%.0f TON | boost_eligible=%v ---", p.name, float64(p.deposits)/1e9, eligible)
+		t.Logf("--- %s | deposits=%.0f TON | boost=%d%% scale=%d%% ---", p.name, float64(p.deposits)/1e9, boost.EffectiveStrength, boost.SurplusScaleBps/100)
 		t.Logf("effective weights: Trash=%d Good=%d Fat=%d", wTrash, wGood, wFat)
 		t.Logf("12 sample opens: %v", sample)
 		t.Logf("over %d opens: Trash=%d (%.1f%%) | Good=%d (%.1f%%) | Fat=%d (%.1f%%)",
 			opens,
-			hits["Trash gift 1 TON"], 100*float64(hits["Trash gift 1 TON"])/float64(opens),
-			hits["Good gift 5 TON"], 100*float64(hits["Good gift 5 TON"])/float64(opens),
-			hits["Fat gift 40 TON"], 100*float64(hits["Fat gift 40 TON"])/float64(opens),
+			hits["Cheap 3 TON"], 100*float64(hits["Cheap 3 TON"])/float64(opens),
+			hits["Good 6 TON"], 100*float64(hits["Good 6 TON"])/float64(opens),
+			hits["Fat 12 TON"], 100*float64(hits["Fat 12 TON"])/float64(opens),
 		)
-	}
-
-	// Sanity: 10 TON player must get more good+fat than 1 TON player on same table.
-	aliceLoot := biasLootWeights(baseLoot, floors, pool)
-	bobLoot := applyDepositSurplusBoost(biasLootWeights(baseLoot, floors, pool), floors, strength)
-	aliceGood, bobGood := 0, 0
-	for i := 0; i < opens; i++ {
-		a, _, _ := pickWeighted(aliceLoot)
-		b, _, _ := pickWeighted(bobLoot)
-		if a.ID == midID || a.ID == fatID {
-			aliceGood++
+		goodWeight := wGood + wFat
+		if prevGoodWeight >= 0 && goodWeight < prevGoodWeight {
+			t.Fatalf("expected monotonic better good-prize weight by tier, got prev=%d now=%d", prevGoodWeight, goodWeight)
 		}
-		if b.ID == midID || b.ID == fatID {
-			bobGood++
-		}
+		prevGoodWeight = goodWeight
 	}
-	if bobGood <= aliceGood {
-		t.Fatalf("expected 10 TON depositor more mid+fat hits: alice=%d bob=%d", aliceGood, bobGood)
-	}
-	t.Logf("=== COMPARE mid+fat hits over %d opens: 1TON=%d (%.1f%%) vs 10TON=%d (%.1f%%) ===",
-		opens, aliceGood, 100*float64(aliceGood)/float64(opens), bobGood, 100*float64(bobGood)/float64(opens))
 }
 
 func TestDepositBoostMonteCarloHitRate(t *testing.T) {

@@ -1422,6 +1422,16 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		DepositBoostEnabled    *bool  `json:"deposit_boost_enabled"`
 		DepositBoostMinNanoton *int64 `json:"deposit_boost_min_nanoton"`
 		DepositBoostBiasWeight *int   `json:"deposit_boost_bias_weight"`
+		DepositBoostTier1MinNanoton *int64 `json:"deposit_boost_tier1_min_nanoton"`
+		DepositBoostTier2MinNanoton *int64 `json:"deposit_boost_tier2_min_nanoton"`
+		DepositBoostTier3MinNanoton *int64 `json:"deposit_boost_tier3_min_nanoton"`
+		DepositBoostTier4MinNanoton *int64 `json:"deposit_boost_tier4_min_nanoton"`
+		DepositBoostTier1BiasWeight *int   `json:"deposit_boost_tier1_bias_weight"`
+		DepositBoostTier2BiasWeight *int   `json:"deposit_boost_tier2_bias_weight"`
+		DepositBoostTier3BiasWeight *int   `json:"deposit_boost_tier3_bias_weight"`
+		DepositBoostTier4BiasWeight *int   `json:"deposit_boost_tier4_bias_weight"`
+		DepositBoostSurplusShareBps *int   `json:"deposit_boost_surplus_share_bps"`
+		DepositBoostRampNanoton     *int64 `json:"deposit_boost_ramp_nanoton"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1456,6 +1466,16 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		DepositBoostEnabled:         req.DepositBoostEnabled,
 		DepositBoostMinNanoton:      req.DepositBoostMinNanoton,
 		DepositBoostBiasWeight:      req.DepositBoostBiasWeight,
+		DepositBoostTier1MinNanoton: req.DepositBoostTier1MinNanoton,
+		DepositBoostTier2MinNanoton: req.DepositBoostTier2MinNanoton,
+		DepositBoostTier3MinNanoton: req.DepositBoostTier3MinNanoton,
+		DepositBoostTier4MinNanoton: req.DepositBoostTier4MinNanoton,
+		DepositBoostTier1BiasWeight: req.DepositBoostTier1BiasWeight,
+		DepositBoostTier2BiasWeight: req.DepositBoostTier2BiasWeight,
+		DepositBoostTier3BiasWeight: req.DepositBoostTier3BiasWeight,
+		DepositBoostTier4BiasWeight: req.DepositBoostTier4BiasWeight,
+		DepositBoostSurplusShareBps: req.DepositBoostSurplusShareBps,
+		DepositBoostRampNanoton:     req.DepositBoostRampNanoton,
 	})
 	if err != nil {
 		respondInternal(c, err)

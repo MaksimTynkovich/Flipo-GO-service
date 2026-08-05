@@ -270,22 +270,111 @@ func biasLootWeights(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64, po
 	return out
 }
 
-// depositBoostEligible is true when a paying user with enough deposits opens while paid bank is healthy.
-func depositBoostEligible(pool domain.CasePoolSnapshot, casePrice, deposits int64, enabled bool, minDeposits int64, strength int) bool {
-	if !enabled || strength <= 0 || casePrice <= 0 || deposits < minDeposits {
-		return false
-	}
-	if pool.Kind != domain.CasePoolPaid || !pool.Enabled || pool.Recovery {
-		return false
-	}
-	// House in plus: at or above recovery target (often 0).
-	if pool.Balance < pool.RecoveryTarget {
-		return false
-	}
-	return true
+type depositBoostDecision struct {
+	Eligible           bool
+	TierLabel          string
+	BaseStrength       int
+	EffectiveStrength  int
+	SurplusScaleBps    int
+	ReserveTarget      int64
+	AllocatableSurplus int64
 }
 
-// applyDepositSurplusBoost raises weights for above-median prizes (good gifts) for retained depositors.
+type depositBoostTier struct {
+	Label       string
+	MinDeposits int64
+	Strength    int
+}
+
+func depositBoostTiers(settings *domain.CaseCatalogSettings) []depositBoostTier {
+	if settings == nil {
+		return nil
+	}
+	tiers := []depositBoostTier{
+		{Label: "1 TON", MinDeposits: settings.DepositBoostTier1MinNanoton, Strength: settings.DepositBoostTier1BiasWeight},
+		{Label: "2 TON", MinDeposits: settings.DepositBoostTier2MinNanoton, Strength: settings.DepositBoostTier2BiasWeight},
+		{Label: "5 TON", MinDeposits: settings.DepositBoostTier3MinNanoton, Strength: settings.DepositBoostTier3BiasWeight},
+		{Label: "10 TON", MinDeposits: settings.DepositBoostTier4MinNanoton, Strength: settings.DepositBoostTier4BiasWeight},
+	}
+	legacyConfigured := settings.DepositBoostMinNanoton > 0 || settings.DepositBoostBiasWeight > 0
+	adaptiveConfigured := settings.DepositBoostTier2MinNanoton > 0 ||
+		settings.DepositBoostTier3MinNanoton > 0 ||
+		settings.DepositBoostTier4MinNanoton > 0 ||
+		settings.DepositBoostTier2BiasWeight > 0 ||
+		settings.DepositBoostTier3BiasWeight > 0 ||
+		settings.DepositBoostTier4BiasWeight > 0
+	if !adaptiveConfigured && legacyConfigured {
+		return []depositBoostTier{{Label: "legacy", MinDeposits: settings.DepositBoostMinNanoton, Strength: settings.DepositBoostBiasWeight}}
+	}
+	return tiers
+}
+
+func resolveDepositBoost(settings *domain.CaseCatalogSettings, pool domain.CasePoolSnapshot, casePrice, deposits int64) depositBoostDecision {
+	decision := depositBoostDecision{}
+	if settings == nil || !settings.DepositBoostEnabled || casePrice <= 0 || deposits <= 0 {
+		return decision
+	}
+	if pool.Kind != domain.CasePoolPaid || !pool.Enabled || pool.Recovery {
+		return decision
+	}
+
+	var matched *depositBoostTier
+	for _, tier := range depositBoostTiers(settings) {
+		if tier.Strength <= 0 || deposits < tier.MinDeposits {
+			continue
+		}
+		t := tier
+		matched = &t
+	}
+	if matched == nil {
+		return decision
+	}
+
+	reserveTarget := settings.BankTargetNanoton
+	if reserveTarget < 0 {
+		reserveTarget = 0
+	}
+	if pool.Balance < reserveTarget {
+		return decision
+	}
+	ramp := settings.DepositBoostRampNanoton
+	if ramp < 0 {
+		ramp = 0
+	}
+	shareBps := settings.DepositBoostSurplusShareBps
+	if shareBps < 0 {
+		shareBps = 0
+	}
+	if shareBps > 10000 {
+		shareBps = 10000
+	}
+	surplus := pool.Balance - reserveTarget
+	if surplus < 0 {
+		surplus = 0
+	}
+	allocatable := surplus * int64(shareBps) / 10000
+	scaleBps := 10000
+	if ramp > 0 {
+		scaleBps = int(allocatable * 10000 / ramp)
+		if scaleBps > 10000 {
+			scaleBps = 10000
+		}
+	}
+	effective := matched.Strength * scaleBps / 10000
+	if effective <= 0 {
+		return decision
+	}
+	decision.Eligible = true
+	decision.TierLabel = matched.Label
+	decision.BaseStrength = matched.Strength
+	decision.EffectiveStrength = effective
+	decision.SurplusScaleBps = scaleBps
+	decision.ReserveTarget = reserveTarget
+	decision.AllocatableSurplus = allocatable
+	return decision
+}
+
+// applyDepositSurplusBoost raises weights for above-median prizes for deposit tiers.
 func applyDepositSurplusBoost(loot []domain.CaseLootEntry, floors map[uuid.UUID]int64, strength int) []domain.CaseLootEntry {
 	if strength <= 0 || len(loot) == 0 {
 		return loot
@@ -342,13 +431,12 @@ func (s *Service) stockChecker(ctx context.Context) func(domain.CaseLootEntry) b
 }
 
 // prepareLootForOpen builds bank-aware effective loot for rolling.
-// depositBoostStrength > 0 adds an extra mid/fat weight lift (paid + healthy bank + enough deposits).
 func (s *Service) prepareLootForOpen(
 	ctx context.Context,
 	loot []domain.CaseLootEntry,
 	pool domain.CasePoolSnapshot,
 	casePrice int64,
-	depositBoostStrength int,
+	boost depositBoostDecision,
 ) ([]domain.CaseLootEntry, map[uuid.UUID]int64) {
 	floors := make(map[uuid.UUID]int64, len(loot))
 	for _, e := range loot {
@@ -364,8 +452,8 @@ func (s *Service) prepareLootForOpen(
 	}
 	filtered := filterLootForPool(loot, floors, pool, casePrice, stockFn)
 	biased := biasLootWeights(filtered, floors, pool)
-	if depositBoostStrength > 0 {
-		biased = applyDepositSurplusBoost(biased, floors, depositBoostStrength)
+	if boost.EffectiveStrength > 0 {
+		biased = applyDepositSurplusBoost(biased, floors, boost.EffectiveStrength)
 	}
 	return biased, floors
 }

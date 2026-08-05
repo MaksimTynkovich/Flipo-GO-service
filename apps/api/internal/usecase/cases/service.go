@@ -467,48 +467,52 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		promoClaimed = true
 	}
 
+	var adminFunded int64
+	organicPrice := price
+	refundOpenDebit := func() {
+		if price <= 0 {
+			return
+		}
+		_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
+		_ = s.balance.RestoreAdminCredit(ctx, userID, adminFunded)
+		if pool.Enabled && organicPrice > 0 {
+			_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -organicPrice)
+		}
+	}
+
 	if price > 0 {
-		if _, err := s.balance.Debit(ctx, userID, price, domain.LedgerCaseOpen, "case_open", openID); err != nil {
+		if _, funded, err := s.balance.DebitDetailed(ctx, userID, price, domain.LedgerCaseOpen, "case_open", openID); err != nil {
 			releasePromo()
 			releaseCooldown()
 			return nil, err
+		} else {
+			adminFunded = funded
+			if adminFunded > price {
+				adminFunded = price
+			}
+			organicPrice = price - adminFunded
 		}
-		if pool.Enabled {
-			if refreshed, err := s.cases.ApplyCasePoolDelta(ctx, poolKind, price); err == nil && refreshed != nil {
+		// Only live (non-admin) spend tops up the paid/daily/promo pool.
+		if pool.Enabled && organicPrice > 0 {
+			if refreshed, err := s.cases.ApplyCasePoolDelta(ctx, poolKind, organicPrice); err == nil && refreshed != nil {
 				pool = refreshed.PoolSnapshot(poolKind)
 			}
 		}
 	}
 
-	depositBoost := 0
+	boostDecision := depositBoostDecision{}
 	if price > 0 && s.deposits != nil {
-		enabled := true
-		minDep := int64(10_000_000_000)
-		strength := 40
 		if catalogSettings != nil {
 			domain.NormalizeDepositBoost(catalogSettings)
-			enabled = catalogSettings.DepositBoostEnabled
-			minDep = catalogSettings.DepositBoostMinNanoton
-			strength = catalogSettings.DepositBoostBiasWeight
-			if !catalogSettings.DepositBoostEnabled && catalogSettings.DepositBoostMinNanoton == 0 && catalogSettings.DepositBoostBiasWeight == 0 {
-				enabled, minDep, strength = true, 10_000_000_000, 40
-			}
 		}
 		deposits, _ := s.deposits.SumDeposits(ctx, userID)
-		if depositBoostEligible(pool, price, deposits, enabled, minDep, strength) {
-			depositBoost = strength
-		}
+		boostDecision = resolveDepositBoost(catalogSettings, pool, price, deposits)
 	}
 
-	effectiveLoot, _ := s.prepareLootForOpen(ctx, loot, pool, price, depositBoost)
+	effectiveLoot, _ := s.prepareLootForOpen(ctx, loot, pool, price, boostDecision)
 	entry, roll, err := pickWeighted(effectiveLoot)
 	if err != nil {
-		if price > 0 {
-			_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
-			if pool.Enabled {
-				_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
-			}
-		}
+		refundOpenDebit()
 		releasePromo()
 		releaseCooldown()
 		return nil, err
@@ -524,23 +528,13 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	if prizeType == domain.CasePrizeTypeTon {
 		prizeNanoton = domain.CaseLootPrizeValueNanoton(entry)
 		if prizeNanoton <= 0 {
-			if price > 0 {
-				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
-				if pool.Enabled {
-					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
-				}
-			}
+			refundOpenDebit()
 			releasePromo()
 			releaseCooldown()
 			return nil, domain.ErrInvalidAmount
 		}
 		if _, err := s.balance.Credit(ctx, userID, prizeNanoton, domain.LedgerCasePrize, "case_open", openID); err != nil {
-			if price > 0 {
-				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
-				if pool.Enabled {
-					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
-				}
-			}
+			refundOpenDebit()
 			releasePromo()
 			releaseCooldown()
 			return nil, err
@@ -552,12 +546,7 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		}
 		granted, isBacked, err := s.grantPrize(ctx, userID, openID, *c, entry, guaranteedCashoutNanoton)
 		if err != nil {
-			if price > 0 {
-				_, _ = s.balance.Credit(ctx, userID, price, domain.LedgerRefund, "case_open", openID)
-				if pool.Enabled {
-					_, _ = s.cases.ApplyCasePoolDelta(ctx, poolKind, -price)
-				}
-			}
+			refundOpenDebit()
 			releasePromo()
 			releaseCooldown()
 			return nil, err
@@ -580,17 +569,18 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	}
 
 	open := &domain.CaseOpen{
-		ID:               openID,
-		UserID:           userID,
-		CaseID:           c.ID,
-		PricePaidNanoton: price,
-		Source:           source,
-		RngRoll:          roll,
-		LootEntryID:      entry.ID,
-		PrizeType:        prizeType,
-		PrizeNanoton:     prizeNanoton,
-		IdempotencyKey:   idempotencyKey,
-		CreatedAt:        time.Now().UTC(),
+		ID:                 openID,
+		UserID:             userID,
+		CaseID:             c.ID,
+		PricePaidNanoton:   price,
+		AdminFundedNanoton: adminFunded,
+		Source:             source,
+		RngRoll:            roll,
+		LootEntryID:        entry.ID,
+		PrizeType:          prizeType,
+		PrizeNanoton:       prizeNanoton,
+		IdempotencyKey:     idempotencyKey,
+		CreatedAt:          time.Now().UTC(),
 	}
 	if item != nil {
 		id := item.ID
@@ -990,6 +980,16 @@ type CatalogSettingsPatch struct {
 	DepositBoostEnabled    *bool
 	DepositBoostMinNanoton *int64
 	DepositBoostBiasWeight *int
+	DepositBoostTier1MinNanoton *int64
+	DepositBoostTier2MinNanoton *int64
+	DepositBoostTier3MinNanoton *int64
+	DepositBoostTier4MinNanoton *int64
+	DepositBoostTier1BiasWeight *int
+	DepositBoostTier2BiasWeight *int
+	DepositBoostTier3BiasWeight *int
+	DepositBoostTier4BiasWeight *int
+	DepositBoostSurplusShareBps *int
+	DepositBoostRampNanoton     *int64
 }
 
 func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogSettingsPatch) (*domain.CaseCatalogSettings, error) {
@@ -1080,6 +1080,36 @@ func (s *Service) AdminUpdateCatalogSettings(ctx context.Context, patch CatalogS
 	}
 	if patch.DepositBoostBiasWeight != nil {
 		settings.DepositBoostBiasWeight = *patch.DepositBoostBiasWeight
+	}
+	if patch.DepositBoostTier1MinNanoton != nil {
+		settings.DepositBoostTier1MinNanoton = *patch.DepositBoostTier1MinNanoton
+	}
+	if patch.DepositBoostTier2MinNanoton != nil {
+		settings.DepositBoostTier2MinNanoton = *patch.DepositBoostTier2MinNanoton
+	}
+	if patch.DepositBoostTier3MinNanoton != nil {
+		settings.DepositBoostTier3MinNanoton = *patch.DepositBoostTier3MinNanoton
+	}
+	if patch.DepositBoostTier4MinNanoton != nil {
+		settings.DepositBoostTier4MinNanoton = *patch.DepositBoostTier4MinNanoton
+	}
+	if patch.DepositBoostTier1BiasWeight != nil {
+		settings.DepositBoostTier1BiasWeight = *patch.DepositBoostTier1BiasWeight
+	}
+	if patch.DepositBoostTier2BiasWeight != nil {
+		settings.DepositBoostTier2BiasWeight = *patch.DepositBoostTier2BiasWeight
+	}
+	if patch.DepositBoostTier3BiasWeight != nil {
+		settings.DepositBoostTier3BiasWeight = *patch.DepositBoostTier3BiasWeight
+	}
+	if patch.DepositBoostTier4BiasWeight != nil {
+		settings.DepositBoostTier4BiasWeight = *patch.DepositBoostTier4BiasWeight
+	}
+	if patch.DepositBoostSurplusShareBps != nil {
+		settings.DepositBoostSurplusShareBps = *patch.DepositBoostSurplusShareBps
+	}
+	if patch.DepositBoostRampNanoton != nil {
+		settings.DepositBoostRampNanoton = *patch.DepositBoostRampNanoton
 	}
 	if err := s.cases.UpdateCatalogSettings(ctx, settings); err != nil {
 		return nil, err

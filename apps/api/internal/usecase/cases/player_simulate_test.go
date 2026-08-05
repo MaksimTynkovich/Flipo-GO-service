@@ -28,16 +28,30 @@ func TestRunCasePlayerSimulateBoostVsNoBoost(t *testing.T) {
 	pool := domain.CasePoolSnapshot{
 		Kind:           domain.CasePoolPaid,
 		Enabled:        true,
-		Balance:        500e9,
+		Balance:        140e9,
 		RecoveryTarget: 0,
 		LossThreshold:  -50e9,
 		BiasWeight:     0,
-		TargetBalance:  50e9,
+		TargetBalance:  100e9,
 		MaxPrizeBps:    10000,
 	}
+	settings := &domain.CaseCatalogSettings{
+		DepositBoostEnabled:         true,
+		BankTargetNanoton:           100e9,
+		DepositBoostTier1MinNanoton: 1e9,
+		DepositBoostTier2MinNanoton: 2e9,
+		DepositBoostTier3MinNanoton: 5e9,
+		DepositBoostTier4MinNanoton: 10e9,
+		DepositBoostTier1BiasWeight: 0,
+		DepositBoostTier2BiasWeight: 5,
+		DepositBoostTier3BiasWeight: 10,
+		DepositBoostTier4BiasWeight: 15,
+		DepositBoostSurplusShareBps: 2500,
+		DepositBoostRampNanoton:     10e9,
+	}
 
-	low := runCasePlayerSimulate(c, loot, floors, 200, 40, 1e9, true, 10e9, 40, true, pool, nil, nil)
-	high := runCasePlayerSimulate(c, loot, floors, 200, 40, 10e9, true, 10e9, 40, true, pool, nil, nil)
+	low := runCasePlayerSimulate(c, loot, floors, 200, 40, 1e9, settings, true, pool, nil, nil)
+	high := runCasePlayerSimulate(c, loot, floors, 200, 40, 10e9, settings, true, pool, nil, nil)
 
 	if low.BoostEligible {
 		t.Fatal("1 TON depositor should not be boost eligible")

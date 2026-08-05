@@ -25,25 +25,36 @@ func (s *Service) SetNotifier(notifier BalanceNotifier) {
 }
 
 func (s *Service) Debit(ctx context.Context, userID uuid.UUID, amount int64, ledgerType domain.LedgerType, refType string, refID uuid.UUID) (int64, error) {
-	if amount <= 0 {
-		return 0, domain.ErrInvalidAmount
-	}
-	balanceAfter, err := s.users.UpdateBalance(ctx, userID, -amount, ledgerType, refType, refID)
-	if err == nil {
-		s.notifyBalance(ctx, userID, balanceAfter, -amount, ledgerType)
-	}
+	balanceAfter, _, err := s.DebitDetailed(ctx, userID, amount, ledgerType, refType, refID)
 	return balanceAfter, err
+}
+
+// DebitDetailed debits balance and reports how much of the spend came from admin_adjust credit.
+func (s *Service) DebitDetailed(ctx context.Context, userID uuid.UUID, amount int64, ledgerType domain.LedgerType, refType string, refID uuid.UUID) (balanceAfter, adminFunded int64, err error) {
+	if amount <= 0 {
+		return 0, 0, domain.ErrInvalidAmount
+	}
+	balanceAfter, adminFunded, err = s.users.UpdateBalance(ctx, userID, -amount, ledgerType, refType, refID)
+	if err != nil {
+		return 0, 0, err
+	}
+	s.notifyBalance(ctx, userID, balanceAfter, -amount, ledgerType)
+	return balanceAfter, adminFunded, nil
 }
 
 func (s *Service) Credit(ctx context.Context, userID uuid.UUID, amount int64, ledgerType domain.LedgerType, refType string, refID uuid.UUID) (int64, error) {
 	if amount <= 0 {
 		return 0, domain.ErrInvalidAmount
 	}
-	balanceAfter, err := s.users.UpdateBalance(ctx, userID, amount, ledgerType, refType, refID)
+	balanceAfter, _, err := s.users.UpdateBalance(ctx, userID, amount, ledgerType, refType, refID)
 	if err == nil {
 		s.notifyBalance(ctx, userID, balanceAfter, amount, ledgerType)
 	}
 	return balanceAfter, err
+}
+
+func (s *Service) RestoreAdminCredit(ctx context.Context, userID uuid.UUID, amount int64) error {
+	return s.users.RestoreAdminCredit(ctx, userID, amount)
 }
 
 func (s *Service) notifyBalance(_ context.Context, userID uuid.UUID, balanceNanoton, deltaNanoton int64, ledgerType domain.LedgerType) {

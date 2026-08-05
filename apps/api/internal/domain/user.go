@@ -23,7 +23,10 @@ type User struct {
 	PhotoURL       string         `gorm:"size:512" json:"photo_url"`
 	TonWallet      string         `gorm:"size:66;index" json:"ton_wallet"`
 	BettingBalance int64          `gorm:"not null;default:0" json:"betting_balance"`
-	ReferrerID     *uuid.UUID     `gorm:"type:uuid;index" json:"referrer_id,omitempty"`
+	// AdminCreditNanoton — remaining balance that came from admin_adjust (not live deposits).
+	// Spent first on debits so case bank / P&L can treat that spend as non-organic.
+	AdminCreditNanoton int64 `gorm:"not null;default:0" json:"admin_credit_nanoton"`
+	ReferrerID         *uuid.UUID `gorm:"type:uuid;index" json:"referrer_id,omitempty"`
 	StakingTier    StakingTier    `gorm:"type:varchar(16);not null;default:'base'" json:"staking_tier"`
 	IsBanned             bool           `gorm:"not null;default:false" json:"is_banned"`
 	WithdrawalsDisabled  bool           `gorm:"not null;default:false" json:"withdrawals_disabled"`

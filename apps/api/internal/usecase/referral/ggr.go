@@ -51,7 +51,7 @@ func (s *Service) AccrueDailyGGRShare(ctx context.Context, dayStart time.Time) e
 				continue
 			}
 		}
-		if _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, refTypeGGR, payoutRefID); err != nil {
+		if _, _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, refTypeGGR, payoutRefID); err != nil {
 			slog.Warn("referral ggr payout failed", "referrer_id", referrerID, "error", err)
 			continue
 		}

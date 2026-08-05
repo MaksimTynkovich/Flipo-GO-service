@@ -132,8 +132,9 @@ func (r *UserRepo) GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (i
 	return user.BettingBalance, nil
 }
 
-func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledgerType domain.LedgerType, refType string, refID uuid.UUID) (int64, error) {
+func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledgerType domain.LedgerType, refType string, refID uuid.UUID) (int64, int64, error) {
 	var balanceAfter int64
+	var adminFundedConsumed int64
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var user domain.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
@@ -144,8 +145,36 @@ func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta in
 			return domain.ErrInsufficientFunds
 		}
 
+		newAdminCredit := user.AdminCreditNanoton
+		switch {
+		case ledgerType == domain.LedgerAdminAdjust && delta > 0:
+			newAdminCredit = user.AdminCreditNanoton + delta
+		case delta < 0 && ledgerType != domain.LedgerRefund:
+			spend := -delta
+			if user.AdminCreditNanoton > spend {
+				adminFundedConsumed = spend
+				newAdminCredit = user.AdminCreditNanoton - spend
+			} else {
+				adminFundedConsumed = user.AdminCreditNanoton
+				newAdminCredit = 0
+			}
+		case ledgerType == domain.LedgerAdminAdjust && delta < 0:
+			if newAdminCredit > -delta {
+				newAdminCredit += delta
+			} else {
+				newAdminCredit = 0
+			}
+		}
+		if newAdminCredit < 0 {
+			newAdminCredit = 0
+		}
+		if newAdminCredit > newBalance {
+			newAdminCredit = newBalance
+		}
+
 		updates := map[string]interface{}{
-			"betting_balance": newBalance,
+			"betting_balance":      newBalance,
+			"admin_credit_nanoton": newAdminCredit,
 		}
 
 		if err := tx.Model(&user).Updates(updates).Error; err != nil {
@@ -166,7 +195,24 @@ func (r *UserRepo) UpdateBalance(ctx context.Context, userID uuid.UUID, delta in
 		balanceAfter = newBalance
 		return nil
 	})
-	return balanceAfter, err
+	return balanceAfter, adminFundedConsumed, err
+}
+
+func (r *UserRepo) RestoreAdminCredit(ctx context.Context, userID uuid.UUID, amount int64) error {
+	if amount <= 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user domain.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
+			return err
+		}
+		newCredit := user.AdminCreditNanoton + amount
+		if newCredit > user.BettingBalance {
+			newCredit = user.BettingBalance
+		}
+		return tx.Model(&user).Update("admin_credit_nanoton", newCredit).Error
+	})
 }
 
 func (r *UserRepo) UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier domain.StakingTier) error {

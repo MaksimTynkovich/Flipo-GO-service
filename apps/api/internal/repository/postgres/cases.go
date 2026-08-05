@@ -384,6 +384,16 @@ func (r *CaseRepo) GetCatalogSettings(ctx context.Context) (*domain.CaseCatalogS
 		DepositBoostEnabled:           true,
 		DepositBoostMinNanoton:        10_000_000_000,
 		DepositBoostBiasWeight:        40,
+		DepositBoostTier1MinNanoton:   1_000_000_000,
+		DepositBoostTier2MinNanoton:   2_000_000_000,
+		DepositBoostTier3MinNanoton:   5_000_000_000,
+		DepositBoostTier4MinNanoton:   10_000_000_000,
+		DepositBoostTier1BiasWeight:   0,
+		DepositBoostTier2BiasWeight:   5,
+		DepositBoostTier3BiasWeight:   10,
+		DepositBoostTier4BiasWeight:   15,
+		DepositBoostSurplusShareBps:   2500,
+		DepositBoostRampNanoton:       10_000_000_000,
 		UpdatedAt:                     time.Now().UTC(),
 	}
 	if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
@@ -438,6 +448,16 @@ func catalogSettingsUpdateMap(s *domain.CaseCatalogSettings) map[string]any {
 		"deposit_boost_enabled":               s.DepositBoostEnabled,
 		"deposit_boost_min_nanoton":           s.DepositBoostMinNanoton,
 		"deposit_boost_bias_weight":           s.DepositBoostBiasWeight,
+		"deposit_boost_tier1_min_nanoton":     s.DepositBoostTier1MinNanoton,
+		"deposit_boost_tier2_min_nanoton":     s.DepositBoostTier2MinNanoton,
+		"deposit_boost_tier3_min_nanoton":     s.DepositBoostTier3MinNanoton,
+		"deposit_boost_tier4_min_nanoton":     s.DepositBoostTier4MinNanoton,
+		"deposit_boost_tier1_bias_weight":     s.DepositBoostTier1BiasWeight,
+		"deposit_boost_tier2_bias_weight":     s.DepositBoostTier2BiasWeight,
+		"deposit_boost_tier3_bias_weight":     s.DepositBoostTier3BiasWeight,
+		"deposit_boost_tier4_bias_weight":     s.DepositBoostTier4BiasWeight,
+		"deposit_boost_surplus_share_bps":     s.DepositBoostSurplusShareBps,
+		"deposit_boost_ramp_nanoton":          s.DepositBoostRampNanoton,
 		"updated_at":                          s.UpdatedAt,
 	}
 }
@@ -463,6 +483,16 @@ func (r *CaseRepo) ApplyCasePoolDelta(ctx context.Context, kind domain.CasePoolK
 					DepositBoostEnabled:           true,
 					DepositBoostMinNanoton:        10_000_000_000,
 					DepositBoostBiasWeight:        40,
+					DepositBoostTier1MinNanoton:   1_000_000_000,
+					DepositBoostTier2MinNanoton:   2_000_000_000,
+					DepositBoostTier3MinNanoton:   5_000_000_000,
+					DepositBoostTier4MinNanoton:   10_000_000_000,
+					DepositBoostTier1BiasWeight:   0,
+					DepositBoostTier2BiasWeight:   5,
+					DepositBoostTier3BiasWeight:   10,
+					DepositBoostTier4BiasWeight:   15,
+					DepositBoostSurplusShareBps:   2500,
+					DepositBoostRampNanoton:       10_000_000_000,
 					UpdatedAt:                     time.Now().UTC(),
 				}
 				if createErr := tx.Create(&settings).Error; createErr != nil {
@@ -545,13 +575,37 @@ func (r *CaseRepo) applyDailyRefillsLocked(settings *domain.CaseCatalogSettings,
 
 func (r *CaseRepo) CaseOpenStats(ctx context.Context, since *time.Time) (*domain.CaseOpenStats, error) {
 	type row struct {
-		OpensCount        int64
-		SpentNanoton      int64
-		PrizeTotalNanoton int64
+		OpensCount              int64
+		SpentNanoton            int64
+		PrizeTotalNanoton       int64
+		OrganicOpensCount       int64
+		OrganicSpentNanoton     int64
+		OrganicPrizeNanoton     int64
+		AdminFundedOpensCount   int64
+		AdminFundedSpentNanoton int64
+		AdminFundedPrizeNanoton int64
 	}
 	var agg row
 	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
-		Select("COUNT(*) AS opens_count, COALESCE(SUM(price_paid_nanoton),0) AS spent_nanoton, COALESCE(SUM(prize_nanoton),0) AS prize_total_nanoton")
+		Select(`COUNT(*) AS opens_count,
+			COALESCE(SUM(price_paid_nanoton),0) AS spent_nanoton,
+			COALESCE(SUM(prize_nanoton),0) AS prize_total_nanoton,
+			COUNT(*) FILTER (WHERE COALESCE(admin_funded_nanoton,0) = 0 AND price_paid_nanoton > 0) AS organic_opens_count,
+			COALESCE(SUM(GREATEST(price_paid_nanoton - COALESCE(admin_funded_nanoton,0), 0)),0) AS organic_spent_nanoton,
+			COALESCE(SUM(
+				CASE
+					WHEN price_paid_nanoton > 0 THEN prize_nanoton * GREATEST(price_paid_nanoton - COALESCE(admin_funded_nanoton,0), 0) / price_paid_nanoton
+					ELSE 0
+				END
+			),0) AS organic_prize_nanoton,
+			COUNT(*) FILTER (WHERE COALESCE(admin_funded_nanoton,0) > 0) AS admin_funded_opens_count,
+			COALESCE(SUM(COALESCE(admin_funded_nanoton,0)),0) AS admin_funded_spent_nanoton,
+			COALESCE(SUM(
+				CASE
+					WHEN price_paid_nanoton > 0 THEN prize_nanoton * COALESCE(admin_funded_nanoton,0) / price_paid_nanoton
+					ELSE 0
+				END
+			),0) AS admin_funded_prize_nanoton`)
 	if since != nil {
 		q = q.Where("created_at >= ?", *since)
 	}
@@ -559,13 +613,24 @@ func (r *CaseRepo) CaseOpenStats(ctx context.Context, since *time.Time) (*domain
 		return nil, err
 	}
 	stats := &domain.CaseOpenStats{
-		OpensCount:        agg.OpensCount,
-		SpentNanoton:      agg.SpentNanoton,
-		PrizeTotalNanoton: agg.PrizeTotalNanoton,
-		HouseEdgeNanoton:  agg.SpentNanoton - agg.PrizeTotalNanoton,
+		OpensCount:              agg.OpensCount,
+		SpentNanoton:            agg.SpentNanoton,
+		PrizeTotalNanoton:       agg.PrizeTotalNanoton,
+		HouseEdgeNanoton:        agg.SpentNanoton - agg.PrizeTotalNanoton,
+		OrganicOpensCount:       agg.OrganicOpensCount,
+		OrganicSpentNanoton:     agg.OrganicSpentNanoton,
+		OrganicPrizeNanoton:     agg.OrganicPrizeNanoton,
+		OrganicEdgeNanoton:      agg.OrganicSpentNanoton - agg.OrganicPrizeNanoton,
+		AdminFundedOpensCount:   agg.AdminFundedOpensCount,
+		AdminFundedSpentNanoton: agg.AdminFundedSpentNanoton,
+		AdminFundedPrizeNanoton: agg.AdminFundedPrizeNanoton,
+		AdminFundedEdgeNanoton:  agg.AdminFundedSpentNanoton - agg.AdminFundedPrizeNanoton,
 	}
 	if agg.SpentNanoton > 0 {
 		stats.ActualRTPBPS = int((agg.PrizeTotalNanoton * 10000) / agg.SpentNanoton)
+	}
+	if agg.OrganicSpentNanoton > 0 {
+		stats.OrganicRTPBPS = int((agg.OrganicPrizeNanoton * 10000) / agg.OrganicSpentNanoton)
 	}
 	return stats, nil
 }

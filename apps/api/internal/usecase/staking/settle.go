@@ -108,7 +108,7 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 			if yield <= 0 {
 				continue
 			}
-			if _, err := s.users.UpdateBalance(ctx, userID, yield, domain.LedgerStakeYield, "staking_daily", payoutRefID); err != nil {
+			if _, _, err := s.users.UpdateBalance(ctx, userID, yield, domain.LedgerStakeYield, "staking_daily", payoutRefID); err != nil {
 				slog.Warn("daily staking payout failed", "user_id", userID, "error", err)
 				continue
 			}
@@ -147,7 +147,7 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 			}
 		}
 		for referrerID, bonus := range referrerBonuses {
-			if _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, "referral_daily", payoutRefID); err != nil {
+			if _, _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, "referral_daily", payoutRefID); err != nil {
 				slog.Warn("daily referral payout failed", "referrer_id", referrerID, "error", err)
 				continue
 			}

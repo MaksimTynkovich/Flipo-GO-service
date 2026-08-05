@@ -89,14 +89,16 @@ type CaseOpen struct {
 	UserID           uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
 	CaseID           uuid.UUID  `gorm:"type:uuid;not null;index" json:"case_id"`
 	PricePaidNanoton int64      `gorm:"not null" json:"price_paid_nanoton"`
-	Source           string     `gorm:"size:16;not null" json:"source"`
-	RngRoll          int        `gorm:"not null" json:"rng_roll"`
-	LootEntryID      uuid.UUID  `gorm:"type:uuid;not null" json:"loot_entry_id"`
-	InventoryItemID  *uuid.UUID `gorm:"type:uuid" json:"inventory_item_id,omitempty"`
-	PrizeType        string     `gorm:"size:16;not null;default:gift" json:"prize_type"`
-	PrizeNanoton     int64      `gorm:"not null;default:0" json:"prize_nanoton"`
-	IdempotencyKey   string     `gorm:"size:128;not null;uniqueIndex" json:"idempotency_key"`
-	CreatedAt        time.Time  `gorm:"index" json:"created_at"`
+	// AdminFundedNanoton — part of PricePaidNanoton covered by remaining admin_adjust credit.
+	AdminFundedNanoton int64      `gorm:"not null;default:0" json:"admin_funded_nanoton"`
+	Source             string     `gorm:"size:16;not null" json:"source"`
+	RngRoll            int        `gorm:"not null" json:"rng_roll"`
+	LootEntryID        uuid.UUID  `gorm:"type:uuid;not null" json:"loot_entry_id"`
+	InventoryItemID    *uuid.UUID `gorm:"type:uuid" json:"inventory_item_id,omitempty"`
+	PrizeType          string     `gorm:"size:16;not null;default:gift" json:"prize_type"`
+	PrizeNanoton       int64      `gorm:"not null;default:0" json:"prize_nanoton"`
+	IdempotencyKey     string     `gorm:"size:128;not null;uniqueIndex" json:"idempotency_key"`
+	CreatedAt          time.Time  `gorm:"index" json:"created_at"`
 }
 
 func (CaseOpen) TableName() string { return "case_opens" }
@@ -172,6 +174,18 @@ type CaseCatalogSettings struct {
 	DepositBoostEnabled    bool  `gorm:"not null;default:true" json:"deposit_boost_enabled"`
 	DepositBoostMinNanoton int64 `gorm:"not null;default:10000000000" json:"deposit_boost_min_nanoton"` // 10 TON
 	DepositBoostBiasWeight int   `gorm:"not null;default:40" json:"deposit_boost_bias_weight"`          // +40% on >= median
+
+	// Adaptive deposit tiers + reserve-first surplus gating.
+	DepositBoostTier1MinNanoton int64 `gorm:"not null;default:1000000000" json:"deposit_boost_tier1_min_nanoton"`
+	DepositBoostTier2MinNanoton int64 `gorm:"not null;default:2000000000" json:"deposit_boost_tier2_min_nanoton"`
+	DepositBoostTier3MinNanoton int64 `gorm:"not null;default:5000000000" json:"deposit_boost_tier3_min_nanoton"`
+	DepositBoostTier4MinNanoton int64 `gorm:"not null;default:10000000000" json:"deposit_boost_tier4_min_nanoton"`
+	DepositBoostTier1BiasWeight int   `gorm:"not null;default:0" json:"deposit_boost_tier1_bias_weight"`
+	DepositBoostTier2BiasWeight int   `gorm:"not null;default:5" json:"deposit_boost_tier2_bias_weight"`
+	DepositBoostTier3BiasWeight int   `gorm:"not null;default:10" json:"deposit_boost_tier3_bias_weight"`
+	DepositBoostTier4BiasWeight int   `gorm:"not null;default:15" json:"deposit_boost_tier4_bias_weight"`
+	DepositBoostSurplusShareBps int   `gorm:"not null;default:2500" json:"deposit_boost_surplus_share_bps"` // 25% of surplus may fuel boost
+	DepositBoostRampNanoton     int64 `gorm:"not null;default:10000000000" json:"deposit_boost_ramp_nanoton"` // full boost after 10 TON allocatable surplus
 }
 
 func (CaseCatalogSettings) TableName() string { return "case_catalog_settings" }
@@ -183,6 +197,17 @@ type CaseOpenStats struct {
 	PrizeTotalNanoton int64 `json:"prize_total_nanoton"`
 	HouseEdgeNanoton  int64 `json:"house_edge_nanoton"`
 	ActualRTPBPS      int   `json:"actual_rtp_bps"`
+
+	// Organic* excludes admin_adjust-funded spend so Live P&L reflects live money.
+	OrganicOpensCount        int64 `json:"organic_opens_count"`
+	OrganicSpentNanoton      int64 `json:"organic_spent_nanoton"`
+	OrganicPrizeNanoton      int64 `json:"organic_prize_nanoton"`
+	OrganicEdgeNanoton       int64 `json:"organic_edge_nanoton"`
+	OrganicRTPBPS            int   `json:"organic_rtp_bps"`
+	AdminFundedOpensCount    int64 `json:"admin_funded_opens_count"`
+	AdminFundedSpentNanoton  int64 `json:"admin_funded_spent_nanoton"`
+	AdminFundedPrizeNanoton  int64 `json:"admin_funded_prize_nanoton"`
+	AdminFundedEdgeNanoton   int64 `json:"admin_funded_edge_nanoton"`
 }
 
 // CaseOpenPeriodStats — opens P&L for a time window (nil/zero since = all time).
@@ -351,6 +376,39 @@ func NormalizeDepositBoost(s *CaseCatalogSettings) {
 	}
 	if s.DepositBoostBiasWeight > 100 {
 		s.DepositBoostBiasWeight = 100
+	}
+	if s.DepositBoostTier1MinNanoton < 0 {
+		s.DepositBoostTier1MinNanoton = 0
+	}
+	if s.DepositBoostTier2MinNanoton < s.DepositBoostTier1MinNanoton {
+		s.DepositBoostTier2MinNanoton = s.DepositBoostTier1MinNanoton
+	}
+	if s.DepositBoostTier3MinNanoton < s.DepositBoostTier2MinNanoton {
+		s.DepositBoostTier3MinNanoton = s.DepositBoostTier2MinNanoton
+	}
+	if s.DepositBoostTier4MinNanoton < s.DepositBoostTier3MinNanoton {
+		s.DepositBoostTier4MinNanoton = s.DepositBoostTier3MinNanoton
+	}
+	clampWeight := func(v *int) {
+		if *v < 0 {
+			*v = 0
+		}
+		if *v > 100 {
+			*v = 100
+		}
+	}
+	clampWeight(&s.DepositBoostTier1BiasWeight)
+	clampWeight(&s.DepositBoostTier2BiasWeight)
+	clampWeight(&s.DepositBoostTier3BiasWeight)
+	clampWeight(&s.DepositBoostTier4BiasWeight)
+	if s.DepositBoostSurplusShareBps < 0 {
+		s.DepositBoostSurplusShareBps = 0
+	}
+	if s.DepositBoostSurplusShareBps > 10000 {
+		s.DepositBoostSurplusShareBps = 10000
+	}
+	if s.DepositBoostRampNanoton < 0 {
+		s.DepositBoostRampNanoton = 0
 	}
 }
 

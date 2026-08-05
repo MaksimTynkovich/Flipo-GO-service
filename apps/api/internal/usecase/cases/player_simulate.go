@@ -21,6 +21,8 @@ type CasePlayerSimulateOpen struct {
 	DisplayName  string    `json:"display_name"`
 	PrizeNanoton int64     `json:"prize_nanoton"`
 	BoostApplied bool      `json:"boost_applied"`
+	BoostTier    string    `json:"boost_tier,omitempty"`
+	BoostStrength int      `json:"boost_strength,omitempty"`
 	BankBefore   int64     `json:"bank_before_nanoton"`
 	BankAfter    int64     `json:"bank_after_nanoton"`
 	Recovery     bool      `json:"recovery"`
@@ -37,7 +39,9 @@ type CasePlayerSimulateResult struct {
 	PriceNanoton      int64                     `json:"price_nanoton"`
 	DepositsNanoton   int64                     `json:"deposits_nanoton"`
 	BoostEligible     bool                      `json:"boost_eligible"`
+	BoostTier         string                    `json:"boost_tier,omitempty"`
 	BoostStrength     int                       `json:"boost_strength"`
+	BoostScaleBps     int                       `json:"boost_scale_bps"`
 	BoostAppliedOpens int                       `json:"boost_applied_opens"`
 	SpentNanoton      int64                     `json:"spent_nanoton"`
 	PrizeTotalNanoton int64                     `json:"prize_total_nanoton"`
@@ -125,13 +129,6 @@ func (s *Service) AdminPlayerSimulateCase(
 	}
 	domain.NormalizeDepositBoost(settings)
 
-	boostEnabled := settings.DepositBoostEnabled
-	minDep := settings.DepositBoostMinNanoton
-	boostStrength := settings.DepositBoostBiasWeight
-	if !boostEnabled && minDep == 0 && boostStrength == 0 {
-		boostEnabled, minDep, boostStrength = true, 10_000_000_000, 40
-	}
-
 	poolKind := domain.CasePoolForKind(c.Kind)
 	pool := settings.PoolSnapshot(poolKind)
 	useBank := withBank && pool.Enabled
@@ -144,7 +141,7 @@ func (s *Service) AdminPlayerSimulateCase(
 		stockOK = s.stockChecker(ctx)
 	}
 
-	return runCasePlayerSimulate(*c, loot, floors, iterations, sampleLimit, depositsNanoton, boostEnabled, minDep, boostStrength, useBank, pool, warnings, stockOK), nil
+	return runCasePlayerSimulate(*c, loot, floors, iterations, sampleLimit, depositsNanoton, settings, useBank, pool, warnings, stockOK), nil
 }
 
 // AdminPlayerSimulateAll runs player sim for every active paid catalog/featured case.
@@ -195,9 +192,7 @@ func runCasePlayerSimulate(
 	floors map[uuid.UUID]int64,
 	iterations, sampleLimit int,
 	depositsNanoton int64,
-	boostEnabled bool,
-	minDep int64,
-	boostStrength int,
+	settings *domain.CaseCatalogSettings,
 	withBank bool,
 	pool domain.CasePoolSnapshot,
 	warnings []string,
@@ -230,7 +225,7 @@ func runCasePlayerSimulate(
 	}
 	cycle := drainOpens + reliefOpens
 
-	previewEligible := depositBoostEligible(pool, price, depositsNanoton, boostEnabled, minDep, boostStrength)
+	previewBoost := resolveDepositBoost(settings, pool, price, depositsNanoton)
 
 	for i := 0; i < iterations; i++ {
 		bankBefore := balance
@@ -273,9 +268,9 @@ func runCasePlayerSimulate(
 		}
 		biased := biasLootWeights(filtered, floors, snap)
 
-		boostNow := depositBoostEligible(snap, price, depositsNanoton, boostEnabled, minDep, boostStrength)
-		if boostNow {
-			biased = applyDepositSurplusBoost(biased, floors, boostStrength)
+		boostNow := resolveDepositBoost(settings, snap, price, depositsNanoton)
+		if boostNow.EffectiveStrength > 0 {
+			biased = applyDepositSurplusBoost(biased, floors, boostNow.EffectiveStrength)
 			boostAppliedOpens++
 		}
 		if snap.Recovery {
@@ -321,7 +316,9 @@ func runCasePlayerSimulate(
 				LootEntryID:  entry.ID,
 				DisplayName:  name,
 				PrizeNanoton: floor,
-				BoostApplied: boostNow,
+				BoostApplied: boostNow.EffectiveStrength > 0,
+				BoostTier:    boostNow.TierLabel,
+				BoostStrength: boostNow.EffectiveStrength,
 				BankBefore:   bankBefore,
 				BankAfter:    bankAfter,
 				Recovery:     snap.Recovery,
@@ -363,8 +360,10 @@ func runCasePlayerSimulate(
 		Iterations:        iterations,
 		PriceNanoton:      price,
 		DepositsNanoton:   depositsNanoton,
-		BoostEligible:     previewEligible,
-		BoostStrength:     boostStrength,
+		BoostEligible:     previewBoost.Eligible,
+		BoostTier:         previewBoost.TierLabel,
+		BoostStrength:     previewBoost.EffectiveStrength,
+		BoostScaleBps:     previewBoost.SurplusScaleBps,
 		BoostAppliedOpens: boostAppliedOpens,
 		SpentNanoton:      spent,
 		PrizeTotalNanoton: prizeTotal,

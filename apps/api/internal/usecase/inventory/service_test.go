@@ -107,8 +107,11 @@ func (s *userRepoStub) EnsureSocialBotUser(context.Context, uuid.UUID, int64, st
 func (s *userRepoStub) UpdateWallet(context.Context, uuid.UUID, string) error            { return nil }
 func (s *userRepoStub) UpdateBanned(context.Context, uuid.UUID, bool) error              { return nil }
 func (s *userRepoStub) UpdateWithdrawalsDisabled(context.Context, uuid.UUID, bool) error { return nil }
-func (s *userRepoStub) UpdateBalance(context.Context, uuid.UUID, int64, domain.LedgerType, string, uuid.UUID) (int64, error) {
-	return 0, nil
+func (s *userRepoStub) UpdateBalance(context.Context, uuid.UUID, int64, domain.LedgerType, string, uuid.UUID) (int64, int64, error) {
+	return 0, 0, nil
+}
+func (s *userRepoStub) RestoreAdminCredit(context.Context, uuid.UUID, int64) error {
+	return nil
 }
 func (s *userRepoStub) GetBalanceForUpdate(context.Context, uuid.UUID) (int64, error) { return 0, nil }
 func (s *userRepoStub) UpdateStakingTier(context.Context, uuid.UUID, domain.StakingTier) error {

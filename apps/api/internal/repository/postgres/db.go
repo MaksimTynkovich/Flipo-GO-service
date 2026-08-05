@@ -137,6 +137,40 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateStakingPositionItemIndex(db); err != nil {
 		return err
 	}
+	if err := migrateAdminCreditCaseEconomy(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func migrateAdminCreditCaseEconomy(db *gorm.DB) error {
+	statements := []string{
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_credit_nanoton BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE case_opens ADD COLUMN IF NOT EXISTS admin_funded_nanoton BIGINT NOT NULL DEFAULT 0`,
+		`UPDATE users u
+SET admin_credit_nanoton = LEAST(
+    u.betting_balance,
+    GREATEST(
+        COALESCE((
+            SELECT SUM(bl.amount_nanoton)
+            FROM balance_ledgers bl
+            WHERE bl.user_id = u.id
+              AND bl.type = 'admin_adjust'
+        ), 0),
+        0
+    )
+)
+WHERE EXISTS (
+    SELECT 1 FROM balance_ledgers bl
+    WHERE bl.user_id = u.id AND bl.type = 'admin_adjust'
+)
+AND COALESCE(u.admin_credit_nanoton, 0) = 0`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("migrate admin credit case economy: %w", err)
+		}
+	}
 	return nil
 }
 

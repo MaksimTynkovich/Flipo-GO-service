@@ -18,6 +18,12 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	cryptoBotSyncBatch   = 25
+	cryptoBotStaleAfter  = 24 * time.Hour
+	cryptoBotSyncTimeout = 5 * time.Second
+)
+
 type Config struct {
 	MinDepositNanoton int64
 	DepositTTL        time.Duration
@@ -298,6 +304,18 @@ func (s *Service) GetIntent(ctx context.Context, userID, intentID uuid.UUID) (*I
 	if err != nil {
 		return nil, err
 	}
+	if intent.Provider == domain.PaymentProviderCryptoBot && intent.Status == domain.PaymentStatusAwaiting {
+		syncCtx, cancel := context.WithTimeout(ctx, cryptoBotSyncTimeout)
+		changed, err := s.SyncCryptoBotIntent(syncCtx, intent)
+		cancel()
+		if err != nil {
+			slog.Warn("cryptobot intent sync failed", "intent", intent.ID, "error", err)
+		} else if changed {
+			if fresh, err := s.intents.FindByIDForUser(ctx, intentID, userID); err == nil {
+				intent = fresh
+			}
+		}
+	}
 	view := toIntentView(intent)
 	if intent.Provider == domain.PaymentProviderStars {
 		if n, err := strconv.ParseInt(intent.ProviderAmount, 10, 64); err == nil {
@@ -344,7 +362,121 @@ func (s *Service) completeCryptoBotInvoice(ctx context.Context, inv *cryptopay.I
 	if err != nil {
 		return err
 	}
+	if intent == nil {
+		slog.Warn("cryptobot invoice without intent", "invoice_id", inv.InvoiceID, "payload", inv.Payload)
+		return nil
+	}
 	return s.creditIntent(ctx, intent.ID)
+}
+
+// SyncPendingCryptoBotIntents reconciles awaiting Crypto Bot deposits against the provider.
+// Webhooks are best-effort (they can be disabled in the Crypto Pay app or lost), so polling
+// is what actually guarantees a paid invoice ends up credited.
+func (s *Service) SyncPendingCryptoBotIntents(ctx context.Context) error {
+	if !s.CryptoBotEnabled() {
+		return nil
+	}
+	intents, err := s.intents.ListAwaiting(ctx, domain.PaymentProviderCryptoBot, 0, cryptoBotSyncBatch)
+	if err != nil {
+		return err
+	}
+	if len(intents) == 0 {
+		return nil
+	}
+	byInvoiceID := make(map[string]*domain.PaymentIntent, len(intents))
+	ids := make([]string, 0, len(intents))
+	for i := range intents {
+		invoiceID := strings.TrimSpace(intents[i].ProviderInvoiceID)
+		if invoiceID == "" {
+			continue
+		}
+		byInvoiceID[invoiceID] = &intents[i]
+		ids = append(ids, invoiceID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	invoices, err := s.crypto.GetInvoices(ctx, strings.Join(ids, ","))
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(invoices))
+	for i := range invoices {
+		inv := invoices[i]
+		invoiceID := strconv.FormatInt(inv.InvoiceID, 10)
+		seen[invoiceID] = struct{}{}
+		intent, ok := byInvoiceID[invoiceID]
+		if !ok {
+			continue
+		}
+		if _, err := s.settleCryptoBotIntent(ctx, intent, &inv); err != nil {
+			slog.Warn("cryptobot intent settle failed", "intent", intent.ID, "invoice_id", invoiceID, "error", err)
+		}
+	}
+	for invoiceID, intent := range byInvoiceID {
+		if _, ok := seen[invoiceID]; ok {
+			continue
+		}
+		s.expireStaleIntent(ctx, intent)
+	}
+	return nil
+}
+
+// SyncCryptoBotIntent settles a single intent against the provider. Returns true when the
+// intent state changed.
+func (s *Service) SyncCryptoBotIntent(ctx context.Context, intent *domain.PaymentIntent) (bool, error) {
+	if intent == nil || !s.CryptoBotEnabled() {
+		return false, nil
+	}
+	if intent.Provider != domain.PaymentProviderCryptoBot || intent.Status != domain.PaymentStatusAwaiting {
+		return false, nil
+	}
+	invoiceID := strings.TrimSpace(intent.ProviderInvoiceID)
+	if invoiceID == "" {
+		return false, nil
+	}
+	invoices, err := s.crypto.GetInvoices(ctx, invoiceID)
+	if err != nil {
+		return false, err
+	}
+	for i := range invoices {
+		if strconv.FormatInt(invoices[i].InvoiceID, 10) != invoiceID {
+			continue
+		}
+		return s.settleCryptoBotIntent(ctx, intent, &invoices[i])
+	}
+	s.expireStaleIntent(ctx, intent)
+	return false, nil
+}
+
+func (s *Service) settleCryptoBotIntent(ctx context.Context, intent *domain.PaymentIntent, inv *cryptopay.Invoice) (bool, error) {
+	if intent == nil || inv == nil {
+		return false, nil
+	}
+	switch {
+	case strings.EqualFold(inv.Status, "paid"):
+		if err := s.creditIntent(ctx, intent.ID); err != nil {
+			return false, err
+		}
+		return true, nil
+	case strings.EqualFold(inv.Status, "expired"):
+		if err := s.intents.MarkExpired(ctx, intent.ID); err != nil {
+			return false, err
+		}
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+// expireStaleIntent closes intents the provider no longer knows about, so they stop being polled.
+func (s *Service) expireStaleIntent(ctx context.Context, intent *domain.PaymentIntent) {
+	if intent == nil || time.Since(intent.CreatedAt) < cryptoBotStaleAfter {
+		return
+	}
+	if err := s.intents.MarkExpired(ctx, intent.ID); err != nil {
+		slog.Warn("cryptobot stale intent expire failed", "intent", intent.ID, "error", err)
+	}
 }
 
 func (s *Service) HandlePreCheckout(ctx context.Context, queryID, payload string) error {

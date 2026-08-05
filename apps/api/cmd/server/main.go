@@ -54,6 +54,7 @@ import (
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	casesworker "github.com/flipo/flipo/apps/api/internal/worker/cases"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
+	paymentsworker "github.com/flipo/flipo/apps/api/internal/worker/payments"
 	pvpworker "github.com/flipo/flipo/apps/api/internal/worker/pvp"
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
@@ -351,6 +352,10 @@ func main() {
 	walletWorker := walletworker.NewWorker(walletSvc)
 	walletWorker.Start(ctx)
 	defer walletWorker.Stop()
+
+	paymentsWorker := paymentsworker.NewWorker(paymentsSvc)
+	paymentsWorker.Start(ctx)
+	defer paymentsWorker.Stop()
 
 	treasuryWorker := treasuryworker.NewWorker(treasurySvc, telegramAdminSvc)
 	treasuryWorker.Start(ctx)

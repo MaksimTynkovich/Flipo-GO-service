@@ -15,7 +15,9 @@ type UserRepository interface {
 	UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error
 	UpdateBanned(ctx context.Context, userID uuid.UUID, banned bool) error
 	UpdateWithdrawalsDisabled(ctx context.Context, userID uuid.UUID, disabled bool) error
-	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (int64, error)
+	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (balanceAfter int64, adminFundedConsumed int64, err error)
+	// RestoreAdminCredit puts back admin-funded balance after a failed/refunded debit.
+	RestoreAdminCredit(ctx context.Context, userID uuid.UUID, amount int64) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
@@ -411,6 +413,8 @@ type PaymentIntentRepository interface {
 	FindByIDForUser(ctx context.Context, id, userID uuid.UUID) (*PaymentIntent, error)
 	FindByPayload(ctx context.Context, payload string) (*PaymentIntent, error)
 	FindByProviderInvoiceID(ctx context.Context, provider, invoiceID string) (*PaymentIntent, error)
+	ListAwaiting(ctx context.Context, provider string, olderThan time.Duration, limit int) ([]PaymentIntent, error)
+	MarkExpired(ctx context.Context, intentID uuid.UUID) error
 	CompleteAtomic(ctx context.Context, intentID uuid.UUID) (balanceAfter int64, credited bool, err error)
 }
 

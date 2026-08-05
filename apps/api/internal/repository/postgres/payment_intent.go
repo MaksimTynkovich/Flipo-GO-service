@@ -70,6 +70,35 @@ func (r *PaymentIntentRepo) FindByProviderInvoiceID(ctx context.Context, provide
 	return &row, err
 }
 
+// ListAwaiting returns intents still waiting for provider confirmation, oldest first.
+// olderThan skips intents created too recently to be worth polling.
+func (r *PaymentIntentRepo) ListAwaiting(ctx context.Context, provider string, olderThan time.Duration, limit int) ([]domain.PaymentIntent, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	cutoff := time.Now().UTC().Add(-olderThan)
+	var rows []domain.PaymentIntent
+	err := r.db.WithContext(ctx).
+		Where("provider = ? AND status = ? AND created_at <= ?", provider, domain.PaymentStatusAwaiting, cutoff).
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *PaymentIntentRepo) MarkExpired(ctx context.Context, intentID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.PaymentIntent{}).
+		Where("id = ? AND status = ?", intentID, domain.PaymentStatusAwaiting).
+		Updates(map[string]any{
+			"status":     domain.PaymentStatusExpired,
+			"updated_at": time.Now().UTC(),
+		}).Error
+}
+
 // CompleteAtomic marks intent paid and credits balance once.
 func (r *PaymentIntentRepo) CompleteAtomic(ctx context.Context, intentID uuid.UUID) (balanceAfter int64, credited bool, err error) {
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

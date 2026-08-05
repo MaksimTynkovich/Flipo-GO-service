@@ -578,7 +578,7 @@ func (s *Service) SetUserBalance(ctx context.Context, adminID, userID uuid.UUID,
 		}, nil
 	}
 
-	after, err := s.users.UpdateBalance(ctx, userID, delta, domain.LedgerAdminAdjust, "admin_balance", adminID)
+	after, _, err := s.users.UpdateBalance(ctx, userID, delta, domain.LedgerAdminAdjust, "admin_balance", adminID)
 	if err != nil {
 		return nil, err
 	}

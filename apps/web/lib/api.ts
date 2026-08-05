@@ -2761,6 +2761,16 @@ export type AdminCaseCatalogSettings = {
   deposit_boost_enabled?: boolean;
   deposit_boost_min_nanoton?: number;
   deposit_boost_bias_weight?: number;
+  deposit_boost_tier1_min_nanoton?: number;
+  deposit_boost_tier2_min_nanoton?: number;
+  deposit_boost_tier3_min_nanoton?: number;
+  deposit_boost_tier4_min_nanoton?: number;
+  deposit_boost_tier1_bias_weight?: number;
+  deposit_boost_tier2_bias_weight?: number;
+  deposit_boost_tier3_bias_weight?: number;
+  deposit_boost_tier4_bias_weight?: number;
+  deposit_boost_surplus_share_bps?: number;
+  deposit_boost_ramp_nanoton?: number;
 };
 
 export type AdminCaseCatalogSettingsPatch = {
@@ -2792,6 +2802,16 @@ export type AdminCaseCatalogSettingsPatch = {
   deposit_boost_enabled?: boolean;
   deposit_boost_min_nanoton?: number;
   deposit_boost_bias_weight?: number;
+  deposit_boost_tier1_min_nanoton?: number;
+  deposit_boost_tier2_min_nanoton?: number;
+  deposit_boost_tier3_min_nanoton?: number;
+  deposit_boost_tier4_min_nanoton?: number;
+  deposit_boost_tier1_bias_weight?: number;
+  deposit_boost_tier2_bias_weight?: number;
+  deposit_boost_tier3_bias_weight?: number;
+  deposit_boost_tier4_bias_weight?: number;
+  deposit_boost_surplus_share_bps?: number;
+  deposit_boost_ramp_nanoton?: number;
 };
 
 export async function getAdminCaseCatalogSettings() {
@@ -2811,6 +2831,15 @@ export type AdminCaseEconomyStats = {
   prize_total_nanoton: number;
   house_edge_nanoton: number;
   actual_rtp_bps: number;
+  organic_opens_count?: number;
+  organic_spent_nanoton?: number;
+  organic_prize_nanoton?: number;
+  organic_edge_nanoton?: number;
+  organic_rtp_bps?: number;
+  admin_funded_opens_count?: number;
+  admin_funded_spent_nanoton?: number;
+  admin_funded_prize_nanoton?: number;
+  admin_funded_edge_nanoton?: number;
 };
 
 export async function getAdminCaseEconomyStats(since?: string) {
@@ -3009,6 +3038,8 @@ export type AdminCasePlayerSimulateOpen = {
   display_name: string;
   prize_nanoton: number;
   boost_applied: boolean;
+  boost_tier?: string;
+  boost_strength?: number;
   bank_before_nanoton: number;
   bank_after_nanoton: number;
   recovery: boolean;
@@ -3024,7 +3055,9 @@ export type AdminCasePlayerSimulateResult = {
   price_nanoton: number;
   deposits_nanoton: number;
   boost_eligible: boolean;
+  boost_tier?: string;
   boost_strength: number;
+  boost_scale_bps?: number;
   boost_applied_opens: number;
   spent_nanoton: number;
   prize_total_nanoton: number;

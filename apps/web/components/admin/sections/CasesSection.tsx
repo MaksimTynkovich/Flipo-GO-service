@@ -107,6 +107,19 @@ const DEFAULT_CATALOG_ECONOMY: AdminCaseCatalogSettings = {
   promo_pool_nanoton: 0,
   promo_pool_max_prize_bps: 5000,
   promo_pool_daily_refill_nanoton: 0,
+  deposit_boost_enabled: true,
+  deposit_boost_min_nanoton: 10_000_000_000,
+  deposit_boost_bias_weight: 40,
+  deposit_boost_tier1_min_nanoton: 1_000_000_000,
+  deposit_boost_tier2_min_nanoton: 2_000_000_000,
+  deposit_boost_tier3_min_nanoton: 5_000_000_000,
+  deposit_boost_tier4_min_nanoton: 10_000_000_000,
+  deposit_boost_tier1_bias_weight: 0,
+  deposit_boost_tier2_bias_weight: 5,
+  deposit_boost_tier3_bias_weight: 10,
+  deposit_boost_tier4_bias_weight: 15,
+  deposit_boost_surplus_share_bps: 2500,
+  deposit_boost_ramp_nanoton: 10_000_000_000,
 };
 
 function bpsPct(bps: number): string {
@@ -618,6 +631,19 @@ export default function CasesSection() {
         promo_pool_enabled: economy.promo_pool_enabled,
         promo_pool_max_prize_bps: economy.promo_pool_max_prize_bps,
         promo_pool_daily_refill_nanoton: economy.promo_pool_daily_refill_nanoton,
+        deposit_boost_enabled: economy.deposit_boost_enabled,
+        deposit_boost_min_nanoton: economy.deposit_boost_min_nanoton,
+        deposit_boost_bias_weight: economy.deposit_boost_bias_weight,
+        deposit_boost_tier1_min_nanoton: economy.deposit_boost_tier1_min_nanoton,
+        deposit_boost_tier2_min_nanoton: economy.deposit_boost_tier2_min_nanoton,
+        deposit_boost_tier3_min_nanoton: economy.deposit_boost_tier3_min_nanoton,
+        deposit_boost_tier4_min_nanoton: economy.deposit_boost_tier4_min_nanoton,
+        deposit_boost_tier1_bias_weight: economy.deposit_boost_tier1_bias_weight,
+        deposit_boost_tier2_bias_weight: economy.deposit_boost_tier2_bias_weight,
+        deposit_boost_tier3_bias_weight: economy.deposit_boost_tier3_bias_weight,
+        deposit_boost_tier4_bias_weight: economy.deposit_boost_tier4_bias_weight,
+        deposit_boost_surplus_share_bps: economy.deposit_boost_surplus_share_bps,
+        deposit_boost_ramp_nanoton: economy.deposit_boost_ramp_nanoton,
       });
       setEconomy({ ...DEFAULT_CATALOG_ECONOMY, ...saved });
       setBankAdjustTon("0");
@@ -1124,13 +1150,32 @@ export default function CasesSection() {
           выдавать более дорогие призы. Бесплатные daily/promo живут на отдельном лимите.
         </p>
         {economyStats ? (
-          <p className="mb-3 text-xs text-muted">
-            Live P&amp;L: opens {economyStats.opens_count} · spent{" "}
-            {formatTON(economyStats.spent_nanoton)} · prize{" "}
-            {formatTON(economyStats.prize_total_nanoton)} · edge{" "}
-            {formatTON(economyStats.house_edge_nanoton)} · RTP{" "}
-            {economyStats.spent_nanoton > 0 ? bpsPct(economyStats.actual_rtp_bps) : "—"}
-          </p>
+          <div className="mb-3 space-y-1 text-xs text-muted">
+            <p>
+              Live P&amp;L (organic / живые деньги): opens{" "}
+              {economyStats.organic_opens_count ?? economyStats.opens_count} · spent{" "}
+              {formatTON(economyStats.organic_spent_nanoton ?? economyStats.spent_nanoton)} · prize{" "}
+              {formatTON(economyStats.organic_prize_nanoton ?? economyStats.prize_total_nanoton)} · edge{" "}
+              {formatTON(economyStats.organic_edge_nanoton ?? economyStats.house_edge_nanoton)} · RTP{" "}
+              {(economyStats.organic_spent_nanoton ?? economyStats.spent_nanoton) > 0
+                ? bpsPct(economyStats.organic_rtp_bps ?? economyStats.actual_rtp_bps)
+                : "—"}
+            </p>
+            {(economyStats.admin_funded_spent_nanoton ?? 0) > 0 ? (
+              <p>
+                Admin-funded (не депозиты): opens {economyStats.admin_funded_opens_count ?? 0} · spent{" "}
+                {formatTON(economyStats.admin_funded_spent_nanoton ?? 0)} · prize{" "}
+                {formatTON(economyStats.admin_funded_prize_nanoton ?? 0)} · edge{" "}
+                {formatTON(economyStats.admin_funded_edge_nanoton ?? 0)}
+              </p>
+            ) : null}
+            <p className="text-[11px]">
+              All opens: {economyStats.opens_count} · spent {formatTON(economyStats.spent_nanoton)} · prize{" "}
+              {formatTON(economyStats.prize_total_nanoton)} · edge{" "}
+              {formatTON(economyStats.house_edge_nanoton)} · RTP{" "}
+              {economyStats.spent_nanoton > 0 ? bpsPct(economyStats.actual_rtp_bps) : "—"}
+            </p>
+          </div>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex items-center gap-2 text-sm text-muted">
@@ -1335,6 +1380,92 @@ export default function CasesSection() {
             onChangeBps={(v) => setEconomy((s) => ({ ...s, promo_pool_max_prize_bps: v }))}
             hint="Максимальный размер одного промо-приза от текущего promo-запаса. Для новичка: 30–50%."
           />
+          <label className="flex items-center gap-2 text-sm text-muted sm:col-span-2 lg:col-span-3">
+            <input
+              type="checkbox"
+              checked={Boolean(economy.deposit_boost_enabled)}
+              onChange={(e) => setEconomy((s) => ({ ...s, deposit_boost_enabled: e.target.checked }))}
+            />
+            <span className="inline-flex items-center gap-1.5">
+              Adaptive deposit boost
+              <AdminInfoHint
+                label="Adaptive deposit boost"
+                hint="Улучшает шансы на хорошие призы для активных игроков только после того, как paid bank накопил reserve. До `Target банка` буст не работает. Сверху буст масштабируется только частью surplus, а не всем балансом."
+              />
+            </span>
+          </label>
+          <AdminPercentField
+            label="Boost surplus share %"
+            valueBps={economy.deposit_boost_surplus_share_bps ?? 2500}
+            onChangeBps={(v) => setEconomy((s) => ({ ...s, deposit_boost_surplus_share_bps: v }))}
+            hint="Какая доля surplus выше reserve target может подпитывать adaptive boost. Например 25%: банк 140 TON при target 100 TON даёт только 10 TON allocatable surplus для буста."
+          />
+          <AdminTonField
+            label="Boost ramp"
+            valueNanoton={economy.deposit_boost_ramp_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, deposit_boost_ramp_nanoton: v }))}
+            hint="Сколько allocatable surplus нужно набрать, чтобы tier boost включился на полную. До этого буст растёт плавно. Для старта: 10 TON."
+          />
+          <p className="text-xs text-muted sm:col-span-2 lg:col-span-1">
+            Reserve-first: до{" "}
+            <span className="font-medium text-foreground/90">
+              {formatTON(economy.bank_target_nanoton || 0)} TON
+            </span>{" "}
+            adaptive boost не расходует surplus. После накопления reserve активным игрокам открывается только
+            часть запаса сверху.
+          </p>
+          <AdminTonField
+            label="Tier 1 min deposit"
+            valueNanoton={economy.deposit_boost_tier1_min_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier1_min_nanoton: v }))}
+            hint="Первый порог общей суммы депозитов игрока. Обычно 1 TON."
+          />
+          <AdminIntField
+            label="Tier 1 boost %"
+            value={economy.deposit_boost_tier1_bias_weight ?? 0}
+            onChange={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier1_bias_weight: v }))}
+            min={0}
+            hint="Мягкий буст веса на хорошие призы для Tier 1. Для старта можно оставить 0."
+          />
+          <AdminTonField
+            label="Tier 2 min deposit"
+            valueNanoton={economy.deposit_boost_tier2_min_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier2_min_nanoton: v }))}
+            hint="Второй порог общей суммы депозитов игрока. Обычно 2 TON."
+          />
+          <AdminIntField
+            label="Tier 2 boost %"
+            value={economy.deposit_boost_tier2_bias_weight ?? 5}
+            onChange={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier2_bias_weight: v }))}
+            min={0}
+            hint="Tier 2: сколько прибавить к весу средних и жирных призов при healthy reserve."
+          />
+          <AdminTonField
+            label="Tier 3 min deposit"
+            valueNanoton={economy.deposit_boost_tier3_min_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier3_min_nanoton: v }))}
+            hint="Третий порог общей суммы депозитов игрока. Обычно 5 TON."
+          />
+          <AdminIntField
+            label="Tier 3 boost %"
+            value={economy.deposit_boost_tier3_bias_weight ?? 10}
+            onChange={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier3_bias_weight: v }))}
+            min={0}
+            hint="Tier 3: более заметный буст, но всё ещё в пределах общего edge проекта."
+          />
+          <AdminTonField
+            label="Tier 4 min deposit"
+            valueNanoton={economy.deposit_boost_tier4_min_nanoton || 0}
+            onChangeNanoton={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier4_min_nanoton: v }))}
+            hint="Четвёртый порог общей суммы депозитов игрока. Обычно 10 TON."
+          />
+          <AdminIntField
+            label="Tier 4 boost %"
+            value={economy.deposit_boost_tier4_bias_weight ?? 15}
+            onChange={(v) => setEconomy((s) => ({ ...s, deposit_boost_tier4_bias_weight: v }))}
+            min={0}
+            hint="Максимальный boost для самого активного сегмента, пока reserve уже накоплен и surplus позволяет."
+          />
         </div>
         <div className="mt-3 rounded-xl border border-white/[0.06] bg-surface-raised/40 px-3 py-2.5">
           <p className="text-xs font-medium text-foreground/90">Простая стартовая настройка для новичка</p>
@@ -1357,12 +1488,24 @@ daily_pool_max_prize_bps: 3000                    # один daily приз не
 promo_pool_enabled: true
 promo_pool_daily_refill_nanoton: 5_000_000_000   # promo бюджет 5 TON в день
 promo_pool_max_prize_bps: 3000                   # один promo приз не дороже 30%
+deposit_boost_enabled: true
+deposit_boost_surplus_share_bps: 2500            # только 25% surplus можно тратить на boost
+deposit_boost_ramp_nanoton: 10_000_000_000       # полный boost после 10 TON allocatable surplus
+deposit_boost_tier1_min_nanoton: 1_000_000_000
+deposit_boost_tier1_bias_weight: 0
+deposit_boost_tier2_min_nanoton: 2_000_000_000
+deposit_boost_tier2_bias_weight: 5
+deposit_boost_tier3_min_nanoton: 5_000_000_000
+deposit_boost_tier3_bias_weight: 10
+deposit_boost_tier4_min_nanoton: 10_000_000_000
+deposit_boost_tier4_bias_weight: 15
           </pre>
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
-            Как это работает простыми словами: платные кейсы сначала собирают запас денег. Пока запас маленький,
-            система осторожничает и не даёт слишком дорогим призам выпадать слишком часто. Когда запас вырос,
-            дорогие призы снова начинают выпадать свободнее. Daily и promo живут отдельно, чтобы бесплатные раздачи
-            не мешали платным кейсам зарабатывать.
+            Как это работает простыми словами: платные кейсы сначала копят reserve до `Target банка`.
+            Пока reserve не накоплен, adaptive boost для депозитных игроков не тратит surplus и система
+            осторожничает. После накопления reserve только часть surplus идёт на более приятную выдачу
+            активным игрокам. Daily и promo живут отдельно, чтобы бесплатные раздачи не мешали платным кейсам
+            зарабатывать.
           </p>
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
             Если вы только запускаете систему, начните именно с таких умеренных значений. Потом смотрите на `Live P&L`:
@@ -2057,7 +2200,7 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                   </span>
                   <span className="text-xs font-normal text-muted">
                     {playerSimResult.boost_eligible
-                      ? `boost +${playerSimResult.boost_strength}% · применён ${playerSimResult.boost_applied_opens}/${playerSimResult.iterations}`
+                      ? `${playerSimResult.boost_tier || "tier"} boost +${playerSimResult.boost_strength}% · scale ${bpsPct(playerSimResult.boost_scale_bps ?? 10000)} · применён ${playerSimResult.boost_applied_opens}/${playerSimResult.iterations}`
                       : "deposit boost выкл (мало депов / recovery / банк off)"}
                   </span>
                 </div>
@@ -2134,7 +2277,9 @@ promo_pool_max_prize_bps: 3000                   # один promo приз не 
                                 {op.display_name}
                               </td>
                               <td className="px-2 py-0.5 tabular-nums">{formatTON(op.prize_nanoton)}</td>
-                              <td className="px-2 py-0.5">{op.boost_applied ? "да" : "—"}</td>
+                              <td className="px-2 py-0.5">
+                                {op.boost_applied ? `${op.boost_tier || "tier"} +${op.boost_strength || 0}%` : "—"}
+                              </td>
                               <td className="px-2 py-0.5">{op.recovery ? "да" : "—"}</td>
                               <td className="px-2 py-0.5 tabular-nums text-muted">
                                 {formatTON(op.bank_before_nanoton)} → {formatTON(op.bank_after_nanoton)}
