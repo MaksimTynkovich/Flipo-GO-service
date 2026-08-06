@@ -7,10 +7,6 @@ on:
       - master
   workflow_dispatch:
 
-concurrency:
-  group: deploy-production
-  cancel-in-progress: true
-
 permissions:
   contents: read
 

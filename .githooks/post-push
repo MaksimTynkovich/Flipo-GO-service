@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Temporary workaround: GitHub is not creating Actions runs from push events
+# for this repo (workflow_dispatch still works). After a successful push to
+# master, trigger Deploy production manually.
+set -euo pipefail
+
+# Only for master pushes to origin
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/master)
+      if command -v gh >/dev/null 2>&1; then
+        echo "post-push: triggering Deploy production via workflow_dispatch..."
+        gh workflow run "Deploy production" --ref master \
+          || echo "post-push: gh workflow run failed (non-fatal)"
+      else
+        echo "post-push: gh not installed; run: gh workflow run \"Deploy production\""
+      fi
+      ;;
+  esac
+done
