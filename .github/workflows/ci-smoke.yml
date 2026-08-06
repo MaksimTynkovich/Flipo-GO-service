@@ -1,0 +1,11 @@
+name: CI smoke
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "actions push ok" && git --version || true
