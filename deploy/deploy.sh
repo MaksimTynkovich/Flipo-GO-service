@@ -46,3 +46,4 @@ done
 curl -fsS -o /dev/null http://127.0.0.1:3000/
 
 echo "deploy ok"
+# ci-smoke-20260806230445
