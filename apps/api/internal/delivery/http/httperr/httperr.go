@@ -68,6 +68,7 @@ func isExpectedClientError(err error, status int) bool {
 	expected := []error{
 		domain.ErrInvalidAmount,
 		domain.ErrInsufficientFunds,
+		domain.ErrWagerIncomplete,
 		domain.ErrRoundNotOpen,
 		domain.ErrRoomFull,
 		domain.ErrNotFound,

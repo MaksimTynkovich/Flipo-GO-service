@@ -1240,10 +1240,33 @@ func (h *AdminHandler) GetWithdrawalSettings(c *gin.Context) {
 
 func (h *AdminHandler) UpdateWithdrawalSettings(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
-	var settings domain.PlatformWithdrawalSettings
-	if err := c.ShouldBindJSON(&settings); err != nil {
+	var body struct {
+		Enabled             *bool    `json:"enabled"`
+		GiftsManual         *bool    `json:"gifts_manual"`
+		DepositWagerEnabled *bool    `json:"deposit_wager_enabled"`
+		CrashWagerTarget    *float64 `json:"crash_wager_target"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	current, err := h.admin.GetWithdrawalSettings(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	settings := *current
+	if body.Enabled != nil {
+		settings.Enabled = *body.Enabled
+	}
+	if body.GiftsManual != nil {
+		settings.GiftsManual = *body.GiftsManual
+	}
+	if body.DepositWagerEnabled != nil {
+		settings.DepositWagerEnabled = *body.DepositWagerEnabled
+	}
+	if body.CrashWagerTarget != nil {
+		settings.CrashWagerTarget = *body.CrashWagerTarget
 	}
 	if err := h.admin.UpdateWithdrawalSettings(c.Request.Context(), adminID, settings); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

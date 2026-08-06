@@ -173,6 +173,9 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, 
 		s.funding.Rollback(ctx, userID, betID, resolved, "game_bet")
 		return nil, err
 	}
+	if resolved.BalanceNanoton > 0 && s.users != nil {
+		_ = s.users.AddWagerProgress(ctx, userID, resolved.BalanceNanoton)
+	}
 	if s.betHook != nil {
 		s.betHook(ctx, userID, resolved.AmountNanoton)
 	}

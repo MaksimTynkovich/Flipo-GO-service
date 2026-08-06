@@ -181,7 +181,13 @@ func (r *PlatformRepo) GetWithdrawalSettings(ctx context.Context) (*domain.Platf
 	var settings domain.PlatformWithdrawalSettings
 	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		defaults := domain.PlatformWithdrawalSettings{ID: 1, Enabled: false, UpdatedAt: time.Now().UTC()}
+		defaults := domain.PlatformWithdrawalSettings{
+			ID:                  1,
+			Enabled:             false,
+			DepositWagerEnabled: true,
+			CrashWagerTarget:    domain.DefaultCrashWagerTarget,
+			UpdatedAt:           time.Now().UTC(),
+		}
 		if createErr := r.db.WithContext(ctx).Create(&defaults).Error; createErr != nil {
 			return nil, createErr
 		}
@@ -193,6 +199,7 @@ func (r *PlatformRepo) GetWithdrawalSettings(ctx context.Context) (*domain.Platf
 func (r *PlatformRepo) UpdateWithdrawalSettings(ctx context.Context, settings *domain.PlatformWithdrawalSettings) error {
 	settings.ID = 1
 	settings.UpdatedAt = time.Now().UTC()
+	settings.CrashWagerTarget = domain.NormalizeCrashWagerTarget(settings.CrashWagerTarget)
 	return r.db.WithContext(ctx).Save(settings).Error
 }
 
@@ -304,9 +311,11 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	var withdrawalHold domain.PlatformWithdrawalSettings
 	if err := r.db.WithContext(ctx).First(&withdrawalHold, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		if err := r.db.WithContext(ctx).Create(&domain.PlatformWithdrawalSettings{
-			ID:        1,
-			Enabled:   false,
-			UpdatedAt: time.Now().UTC(),
+			ID:                  1,
+			Enabled:             false,
+			DepositWagerEnabled: true,
+			CrashWagerTarget:    domain.DefaultCrashWagerTarget,
+			UpdatedAt:           time.Now().UTC(),
 		}).Error; err != nil {
 			return err
 		}

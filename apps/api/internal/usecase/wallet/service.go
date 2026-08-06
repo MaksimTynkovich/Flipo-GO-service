@@ -41,6 +41,7 @@ type AdminWalletNotifier interface {
 type Service struct {
 	users     domain.UserRepository
 	transfers domain.TonTransferRepository
+	platform  domain.PlatformRepository
 	chain     *ton.Client
 	cfg       Config
 	risk      WithdrawalRiskEvaluator
@@ -56,6 +57,10 @@ func NewService(users domain.UserRepository, transfers domain.TonTransferReposit
 		chain:     chain,
 		cfg:       cfg,
 	}
+}
+
+func (s *Service) SetPlatform(platform domain.PlatformRepository) {
+	s.platform = platform
 }
 
 func (s *Service) SetRiskEvaluator(r WithdrawalRiskEvaluator) {
@@ -262,6 +267,9 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 	if user.BettingBalance < debitNanoton {
 		return nil, 0, domain.ErrInsufficientFunds
 	}
+	if err := s.checkDepositWager(ctx, user, debitNanoton); err != nil {
+		return nil, 0, err
+	}
 
 	initialStatus := domain.TonStatusQueued
 	riskScore := 0
@@ -338,6 +346,21 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 		})
 	}
 	return toView(transfer), balanceAfter, nil
+}
+
+func (s *Service) checkDepositWager(ctx context.Context, user *domain.User, debitNanoton int64) error {
+	if user == nil || s.platform == nil {
+		return nil
+	}
+	settings, err := s.platform.GetWithdrawalSettings(ctx)
+	if err != nil || settings == nil || !settings.DepositWagerEnabled {
+		return nil
+	}
+	cap := domain.WithdrawableDebitCap(user.BettingBalance, user.WagerRequiredNanoton, user.WagerProgressNanoton)
+	if debitNanoton > cap {
+		return domain.ErrWagerIncomplete
+	}
+	return nil
 }
 
 func (s *Service) onDepositCredited(ctx context.Context, transfer *domain.TonTransfer) {

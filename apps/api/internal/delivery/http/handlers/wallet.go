@@ -130,6 +130,11 @@ func writeWalletError(c *gin.Context, err error) {
 			"error": "Недостаточно средств на балансе.",
 			"code":  "insufficient_funds",
 		})
+	case errors.Is(err, domain.ErrWagerIncomplete):
+		httperr.Respond(c, http.StatusUnprocessableEntity, err, gin.H{
+			"error": "Сначала отыграй депозит в играх или кейсах — потом можно вывести.",
+			"code":  "wager_incomplete",
+		})
 	case errors.Is(err, domain.ErrWalletNotLinked):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Сначала подключи TON-кошелёк.",

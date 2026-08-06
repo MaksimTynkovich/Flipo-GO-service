@@ -492,6 +492,9 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 			}
 			organicPrice = price - adminFunded
 		}
+		if s.users != nil {
+			_ = s.users.AddWagerProgress(ctx, userID, price)
+		}
 		// Only live (non-admin) spend tops up the paid/daily/promo pool.
 		if pool.Enabled && organicPrice > 0 {
 			if refreshed, err := s.cases.ApplyCasePoolDelta(ctx, poolKind, organicPrice); err == nil && refreshed != nil {

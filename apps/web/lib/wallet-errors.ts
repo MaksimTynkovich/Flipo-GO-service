@@ -30,6 +30,14 @@ export function formatWalletError(
         : "Недостаточно средств на балансе.";
     }
 
+    if (
+      lower.includes("wager") ||
+      lower.includes("отыграй депозит") ||
+      lower.includes("отыграть депозит")
+    ) {
+      return "Сначала отыграй депозит в играх или кейсах — потом можно вывести.";
+    }
+
     if (lower.includes("wallet not linked") || lower.includes("подключи ton-кошелёк")) {
       return "Сначала подключи TON-кошелёк.";
     }

@@ -182,6 +182,9 @@ func (s *Service) CreateRoom(ctx context.Context, creatorID uuid.UUID, stake bet
 		s.funding.Rollback(ctx, creatorID, holdID, resolved, "pvp_hold")
 		return nil, err
 	}
+	if resolved.BalanceNanoton > 0 && s.users != nil {
+		_ = s.users.AddWagerProgress(ctx, creatorID, resolved.BalanceNanoton)
+	}
 
 	view, err := s.roomView(ctx, room)
 	if err != nil {
@@ -259,6 +262,9 @@ func (s *Service) JoinRoom(ctx context.Context, userID, roomID uuid.UUID, stake 
 	if err := s.persistPlayerGifts(ctx, roomID, userID, resolved); err != nil {
 		s.funding.Rollback(ctx, userID, holdID, resolved, "pvp_hold")
 		return nil, err
+	}
+	if resolved.BalanceNanoton > 0 && s.users != nil {
+		_ = s.users.AddWagerProgress(ctx, userID, resolved.BalanceNanoton)
 	}
 	if s.betHook != nil {
 		s.betHook(ctx, userID, resolved.AmountNanoton)

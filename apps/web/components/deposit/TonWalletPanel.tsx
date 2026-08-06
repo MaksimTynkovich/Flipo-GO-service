@@ -327,6 +327,27 @@ export function TonWalletPanel() {
       });
       return;
     }
+    const withdrawable =
+      user?.withdrawable_nanoton ??
+      Math.max(
+        0,
+        (user?.betting_balance ?? 0) -
+          Math.max(0, (user?.wager_required_nanoton ?? 0) - (user?.wager_progress_nanoton ?? 0)),
+      );
+    if (user && debitNanoton > withdrawable) {
+      const remaining = Math.max(
+        0,
+        (user.wager_required_nanoton ?? 0) - (user.wager_progress_nanoton ?? 0),
+      );
+      setMessage({
+        type: "error",
+        text:
+          remaining > 0
+            ? `Нужно отыграть ещё ${formatTON(remaining)} TON. Сейчас можно вывести до ${formatTON(Math.max(0, withdrawable - WITHDRAW_FEE_NANOTON))} (с учётом комиссии).`
+            : "Сначала отыграй депозит — потом можно вывести.",
+      });
+      return;
+    }
 
     withdrawInput.complete();
     setLoading(true);
@@ -380,7 +401,7 @@ export function TonWalletPanel() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-2">
+            <div className="mt-5 grid grid-cols-2 gap-2">
             <div className="rounded-2xl bg-surface-raised/80 p-3">
               <p className="text-[11px] text-muted">Баланс</p>
               <div className="mt-1 text-xl font-bold tabular-nums text-foreground">
@@ -390,6 +411,12 @@ export function TonWalletPanel() {
                   iconClassName="h-5 w-5"
                 />
               </div>
+              {user && (user.wager_remaining_nanoton ?? 0) > 0 ? (
+                <p className="mt-1 text-[11px] leading-snug text-muted">
+                  К выводу: {formatTON(Math.max(0, (user.withdrawable_nanoton ?? 0) - WITHDRAW_FEE_NANOTON))} · отыграть{" "}
+                  {formatTON(user.wager_remaining_nanoton ?? 0)}
+                </p>
+              ) : null}
             </div>
             <div className="rounded-2xl bg-surface-raised/80 p-3">
               <p className="text-[11px] text-muted">Кошелёк</p>

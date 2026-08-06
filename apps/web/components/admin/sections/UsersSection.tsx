@@ -661,6 +661,20 @@ export default function UsersSection() {
                   accent
                 />
                 <AdminMetric
+                  label="Отыгрыш депозита"
+                  value={`${formatTON(
+                    Math.max(
+                      0,
+                      (selected.wager_required_nanoton ?? 0) - (selected.wager_progress_nanoton ?? 0),
+                    ),
+                  )} TON`}
+                  hint={
+                    (selected.wager_required_nanoton ?? 0) > 0
+                      ? `${formatTON(selected.wager_progress_nanoton ?? 0)} / ${formatTON(selected.wager_required_nanoton ?? 0)}`
+                      : "нет lock"
+                  }
+                />
+                <AdminMetric
                   label="В стейкинге"
                   value={`${formatTON(selected.staking_principal_nanoton || 0)} TON`}
                   hint={

@@ -18,15 +18,19 @@ type AuthHandler struct {
 }
 
 type userView struct {
-	ID             string             `json:"id"`
-	TelegramID     int64              `json:"telegram_id"`
-	Username       string             `json:"username"`
-	FirstName      string             `json:"first_name"`
-	PhotoURL       string             `json:"photo_url,omitempty"`
-	BettingBalance int64              `json:"betting_balance"`
-	StakingTier    domain.StakingTier `json:"staking_tier"`
-	TonWallet      string             `json:"ton_wallet,omitempty"`
-	IsAdmin        bool               `json:"is_admin"`
+	ID                   string             `json:"id"`
+	TelegramID           int64              `json:"telegram_id"`
+	Username             string             `json:"username"`
+	FirstName            string             `json:"first_name"`
+	PhotoURL             string             `json:"photo_url,omitempty"`
+	BettingBalance       int64              `json:"betting_balance"`
+	WagerRequiredNanoton int64              `json:"wager_required_nanoton"`
+	WagerProgressNanoton int64              `json:"wager_progress_nanoton"`
+	WagerRemainingNanoton int64             `json:"wager_remaining_nanoton"`
+	WithdrawableNanoton  int64              `json:"withdrawable_nanoton"`
+	StakingTier          domain.StakingTier `json:"staking_tier"`
+	TonWallet            string             `json:"ton_wallet,omitempty"`
+	IsAdmin              bool               `json:"is_admin"`
 }
 
 func NewAuthHandler(authSvc *auth.Service, analyticsSvc *analyticsuc.Service) *AuthHandler {
@@ -251,15 +255,20 @@ func (h *AuthHandler) ClearWallet(c *gin.Context) {
 }
 
 func toUserView(authSvc *auth.Service, user *domain.User) userView {
+	remaining := domain.WagerRemaining(user.WagerRequiredNanoton, user.WagerProgressNanoton)
 	return userView{
-		ID:             user.ID.String(),
-		TelegramID:     user.TelegramID,
-		Username:       user.Username,
-		FirstName:      user.FirstName,
-		PhotoURL:       user.PhotoURL,
-		BettingBalance: user.BettingBalance,
-		StakingTier:    user.StakingTier,
-		TonWallet:      user.TonWallet,
-		IsAdmin:        authSvc.IsAdmin(user.TelegramID),
+		ID:                    user.ID.String(),
+		TelegramID:            user.TelegramID,
+		Username:              user.Username,
+		FirstName:             user.FirstName,
+		PhotoURL:              user.PhotoURL,
+		BettingBalance:        user.BettingBalance,
+		WagerRequiredNanoton:  user.WagerRequiredNanoton,
+		WagerProgressNanoton:  user.WagerProgressNanoton,
+		WagerRemainingNanoton: remaining,
+		WithdrawableNanoton:   domain.WithdrawableDebitCap(user.BettingBalance, user.WagerRequiredNanoton, user.WagerProgressNanoton),
+		StakingTier:           user.StakingTier,
+		TonWallet:             user.TonWallet,
+		IsAdmin:               authSvc.IsAdmin(user.TelegramID),
 	}
 }

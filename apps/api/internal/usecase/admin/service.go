@@ -698,8 +698,10 @@ func (s *Service) UpdateWithdrawalSettings(ctx context.Context, adminID uuid.UUI
 		return err
 	}
 	return s.audit(ctx, adminID, "withdrawal_settings_updated", "platform_withdrawal_settings", "1", map[string]any{
-		"enabled":      settings.Enabled,
-		"gifts_manual": settings.GiftsManual,
+		"enabled":               settings.Enabled,
+		"gifts_manual":          settings.GiftsManual,
+		"deposit_wager_enabled": settings.DepositWagerEnabled,
+		"crash_wager_target":    settings.CrashWagerTarget,
 	})
 }
 

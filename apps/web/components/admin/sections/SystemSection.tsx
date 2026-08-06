@@ -25,6 +25,8 @@ const DEFAULT_SETTINGS: AdminMaintenanceSettings = {
 const DEFAULT_WITHDRAWAL: AdminWithdrawalSettings = {
   enabled: false,
   gifts_manual: false,
+  deposit_wager_enabled: true,
+  crash_wager_target: 2,
 };
 
 const DEFAULT_DEPOSIT: AdminDepositSettings = {
@@ -33,7 +35,7 @@ const DEFAULT_DEPOSIT: AdminDepositSettings = {
 
 type SystemCache = [AdminMaintenanceSettings, AdminWithdrawalSettings, AdminDepositSettings];
 
-const CACHE_KEY = "admin:system:v3";
+const CACHE_KEY = "admin:system:v4";
 
 export default function SystemSection() {
   const { showToast } = useToast();
@@ -65,6 +67,11 @@ export default function SystemSection() {
         ...withdrawals,
         gifts_manual: Boolean(withdrawals.gifts_manual),
         enabled: Boolean(withdrawals.enabled),
+        deposit_wager_enabled: withdrawals.deposit_wager_enabled !== false,
+        crash_wager_target:
+          typeof withdrawals.crash_wager_target === "number" && withdrawals.crash_wager_target >= 1.01
+            ? withdrawals.crash_wager_target
+            : DEFAULT_WITHDRAWAL.crash_wager_target,
       };
       const nextDeposit = {
         ...DEFAULT_DEPOSIT,
@@ -103,6 +110,12 @@ export default function SystemSection() {
     ...(withdrawalSettings ?? {}),
     gifts_manual: Boolean(withdrawalSettings?.gifts_manual),
     enabled: Boolean(withdrawalSettings?.enabled),
+    deposit_wager_enabled: withdrawalSettings?.deposit_wager_enabled !== false,
+    crash_wager_target:
+      typeof withdrawalSettings?.crash_wager_target === "number" &&
+      withdrawalSettings.crash_wager_target >= 1.01
+        ? withdrawalSettings.crash_wager_target
+        : DEFAULT_WITHDRAWAL.crash_wager_target,
   };
   const depositForm: AdminDepositSettings = {
     ...DEFAULT_DEPOSIT,
@@ -374,6 +387,45 @@ export default function SystemSection() {
               Новые выводы TON уходят на ручную проверку. Подарки тоже ставятся в очередь.
             </p>
 
+            <label className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(withdrawalForm.deposit_wager_enabled)}
+                onChange={(e) =>
+                  setWithdrawalSettings({
+                    ...withdrawalForm,
+                    deposit_wager_enabled: e.target.checked,
+                  })
+                }
+              />
+              <span>Отыгрыш депозита 1×</span>
+            </label>
+            <p className="text-xs text-muted -mt-2 ml-7">
+              После депозита (TON / Stars / CryptoBot) можно вывести только сумму сверх
+              неотъигранного остатка. Засчитываются ставки roulette/PvP, оплата кейсов и crash
+              (проигрыш 100%, cashout пропорционально до порога).
+            </p>
+
+            <AdminField label="Crash: порог полного зачёта (×)">
+              <input
+                type="number"
+                min={1.01}
+                max={100}
+                step={0.01}
+                className="input-field tabular-nums"
+                value={withdrawalForm.crash_wager_target ?? 2}
+                onChange={(e) =>
+                  setWithdrawalSettings({
+                    ...withdrawalForm,
+                    crash_wager_target: Number(e.target.value) || 2,
+                  })
+                }
+              />
+            </AdminField>
+            <p className="text-xs text-muted -mt-2">
+              При cashout ниже порога зачёт = (M−1)/(T−1). По умолчанию T=2 → 1.01 даёт 1% ставки.
+            </p>
+
             <AdminToolbar>
               <AdminButton
                 variant={withdrawalForm.enabled || withdrawalForm.gifts_manual ? "danger" : "primary"}
@@ -384,6 +436,8 @@ export default function SystemSection() {
                     await updateAdminWithdrawalSettings({
                       enabled: withdrawalForm.enabled,
                       gifts_manual: withdrawalForm.gifts_manual,
+                      deposit_wager_enabled: Boolean(withdrawalForm.deposit_wager_enabled),
+                      crash_wager_target: Number(withdrawalForm.crash_wager_target) || 2,
                     });
                     cacheSnapshot(form, withdrawalForm);
                     showToast({

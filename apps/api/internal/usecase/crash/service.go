@@ -60,6 +60,7 @@ type BetOverlay interface {
 
 type betSelection struct {
 	AutoCashoutMultiplier *float64 `json:"auto_cashout_multiplier,omitempty"`
+	BalanceNanoton        int64    `json:"balance_nanoton,omitempty"`
 }
 
 type RoundBetsState struct {
@@ -74,6 +75,7 @@ type TickNotifier interface {
 type Service struct {
 	games     domain.GameRepository
 	users     domain.UserRepository
+	platform  domain.PlatformRepository
 	balance   *balance.Service
 	funding   *betfunding.Service
 	inventory domain.InventoryRepository
@@ -101,6 +103,10 @@ func (s *Service) SetAdminNotifier(notifier AdminGameNotifier) {
 
 func (s *Service) SetUsers(users domain.UserRepository) {
 	s.users = users
+}
+
+func (s *Service) SetPlatform(platform domain.PlatformRepository) {
+	s.platform = platform
 }
 
 func NewService(
@@ -218,7 +224,10 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, stake betfundi
 		return nil, err
 	}
 
-	selection, _ := jsonMarshal(betSelection{AutoCashoutMultiplier: autoCashout})
+	selection, _ := jsonMarshal(betSelection{
+		AutoCashoutMultiplier: autoCashout,
+		BalanceNanoton:        resolved.BalanceNanoton,
+	})
 	bet := &domain.GameBet{
 		ID:              betID,
 		RoundID:         state.RoundID,
@@ -316,6 +325,7 @@ func (s *Service) settleCashout(ctx context.Context, bet domain.GameBet, multipl
 		}
 	}
 	_ = s.funding.ReleaseOnWin(ctx, bet)
+	s.applyCrashWagerProgress(ctx, bet, &multiplier)
 	_ = s.PublishBets(ctx, bet.RoundID)
 	return credit, nil
 }
@@ -343,9 +353,62 @@ func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID, crashPoi
 	for _, bet := range bets {
 		_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
 		_ = s.funding.SettleLoss(ctx, bet)
+		s.applyCrashWagerProgress(ctx, bet, nil)
 	}
 	s.notifyCrashRoundAggregated(ctx, roundID, crashPoint)
 	return s.PublishBets(ctx, roundID)
+}
+
+func (s *Service) applyCrashWagerProgress(ctx context.Context, bet domain.GameBet, cashoutMult *float64) {
+	if s.users == nil {
+		return
+	}
+	stakeTON := crashBalanceStake(bet)
+	if stakeTON <= 0 {
+		return
+	}
+	target := domain.DefaultCrashWagerTarget
+	if s.platform != nil {
+		if settings, err := s.platform.GetWithdrawalSettings(ctx); err == nil && settings != nil {
+			target = domain.NormalizeCrashWagerTarget(settings.CrashWagerTarget)
+		}
+	}
+	credit := domain.CrashWagerCredit(stakeTON, cashoutMult, target)
+	if credit <= 0 {
+		return
+	}
+	_ = s.users.AddWagerProgress(ctx, bet.UserID, credit)
+}
+
+func crashBalanceStake(bet domain.GameBet) int64 {
+	switch bet.FundingType {
+	case domain.BetFundingGift:
+		return 0
+	case domain.BetFundingCombined:
+		if bal := balanceFromSelection(bet.Selection); bal > 0 {
+			return bal
+		}
+		return 0
+	default:
+		if bal := balanceFromSelection(bet.Selection); bal > 0 {
+			return bal
+		}
+		return bet.AmountNanoton
+	}
+}
+
+func balanceFromSelection(raw datatypes.JSON) int64 {
+	if len(raw) == 0 {
+		return 0
+	}
+	var sel betSelection
+	if err := jsonUnmarshal(raw, &sel); err != nil {
+		return 0
+	}
+	if sel.BalanceNanoton > 0 {
+		return sel.BalanceNanoton
+	}
+	return 0
 }
 
 // notifyCrashRoundAggregated sends one admin notification per user for the round,

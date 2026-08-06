@@ -18,6 +18,8 @@ type UserRepository interface {
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (balanceAfter int64, adminFundedConsumed int64, err error)
 	// RestoreAdminCredit puts back admin-funded balance after a failed/refunded debit.
 	RestoreAdminCredit(ctx context.Context, userID uuid.UUID, amount int64) error
+	AddWagerRequired(ctx context.Context, userID uuid.UUID, amount int64) error
+	AddWagerProgress(ctx context.Context, userID uuid.UUID, amount int64) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)

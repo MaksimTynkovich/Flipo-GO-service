@@ -5,6 +5,7 @@ import "errors"
 var (
 	ErrInvalidAmount          = errors.New("некорректная сумма")
 	ErrInsufficientFunds      = errors.New("недостаточно средств")
+	ErrWagerIncomplete        = errors.New("нужно отыграть депозит перед выводом")
 	ErrRoundNotOpen           = errors.New("ставки больше не принимаются")
 	ErrRoomFull               = errors.New("комната уже заполнена")
 	ErrNotFound               = errors.New("не найдено")

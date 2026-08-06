@@ -62,6 +62,10 @@ export type User = {
   first_name: string;
   photo_url?: string;
   betting_balance: number;
+  wager_required_nanoton?: number;
+  wager_progress_nanoton?: number;
+  wager_remaining_nanoton?: number;
+  withdrawable_nanoton?: number;
   staking_tier: "base" | "boost";
   ton_wallet?: string;
   is_admin?: boolean;
@@ -1296,6 +1300,8 @@ export type AdminWithdrawalSettings = {
   id?: number;
   enabled: boolean;
   gifts_manual: boolean;
+  deposit_wager_enabled?: boolean;
+  crash_wager_target?: number;
   updated_at?: string;
 };
 
@@ -1327,6 +1333,8 @@ export type AdminUser = {
   first_name: string;
   last_name?: string;
   betting_balance: number;
+  wager_required_nanoton?: number;
+  wager_progress_nanoton?: number;
   staking_tier?: string;
   ton_wallet?: string;
   is_banned: boolean;
@@ -2321,7 +2329,10 @@ export async function getAdminWithdrawalSettings() {
 }
 
 export async function updateAdminWithdrawalSettings(
-  settings: Pick<AdminWithdrawalSettings, "enabled" | "gifts_manual">,
+  settings: Pick<
+    AdminWithdrawalSettings,
+    "enabled" | "gifts_manual" | "deposit_wager_enabled" | "crash_wager_target"
+  >,
 ) {
   return api<{ ok: boolean }>("/api/v1/admin/withdrawals/settings", {
     method: "PATCH",
