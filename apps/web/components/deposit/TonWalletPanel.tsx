@@ -343,8 +343,8 @@ export function TonWalletPanel() {
         type: "error",
         text:
           remaining > 0
-            ? `Нужно отыграть ещё ${formatTON(remaining)} TON. Сейчас можно вывести до ${formatTON(Math.max(0, withdrawable - WITHDRAW_FEE_NANOTON))} (с учётом комиссии).`
-            : "Сначала отыграй депозит — потом можно вывести.",
+            ? `Нужно отыграть ещё ${formatTON(remaining)} TON. Сейчас можно вывести до ${formatTON(Math.max(0, withdrawable - WITHDRAW_FEE_NANOTON))}`
+            : "Сначала отыграйте депозит.",
       });
       return;
     }

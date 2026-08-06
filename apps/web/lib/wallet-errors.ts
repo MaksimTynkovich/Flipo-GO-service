@@ -32,10 +32,10 @@ export function formatWalletError(
 
     if (
       lower.includes("wager") ||
-      lower.includes("отыграй депозит") ||
+      lower.includes("отыграйте депозит") ||
       lower.includes("отыграть депозит")
     ) {
-      return "Сначала отыграй депозит в играх или кейсах — потом можно вывести.";
+      return "Сначала отыграйте депозит.";
     }
 
     if (lower.includes("wallet not linked") || lower.includes("подключи ton-кошелёк")) {
