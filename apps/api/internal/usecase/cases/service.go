@@ -1,5 +1,6 @@
 package cases
 
+// 111
 import (
 	"context"
 	"crypto/rand"
@@ -980,9 +981,9 @@ type CatalogSettingsPatch struct {
 	PromoPoolDailyRefillNanoton *int64
 	PromoPoolAdjustNanoton      *int64
 
-	DepositBoostEnabled    *bool
-	DepositBoostMinNanoton *int64
-	DepositBoostBiasWeight *int
+	DepositBoostEnabled         *bool
+	DepositBoostMinNanoton      *int64
+	DepositBoostBiasWeight      *int
 	DepositBoostTier1MinNanoton *int64
 	DepositBoostTier2MinNanoton *int64
 	DepositBoostTier3MinNanoton *int64
@@ -1894,16 +1895,16 @@ func (s *Service) PrepareShare(ctx context.Context, userID uuid.UUID, telegramID
 	if photoURL != "" {
 		// Photo result embeds the promo art in the shared message.
 		inlineResult = map[string]any{
-			"type":           "photo",
-			"id":             resultID,
-			"photo_url":      photoURL,
-			"thumbnail_url":  photoURL,
-			"photo_width":    1024,
-			"photo_height":   1024,
-			"title":          title,
-			"description":    description,
-			"caption":        caption,
-			"reply_markup":   replyMarkup,
+			"type":          "photo",
+			"id":            resultID,
+			"photo_url":     photoURL,
+			"thumbnail_url": photoURL,
+			"photo_width":   1024,
+			"photo_height":  1024,
+			"title":         title,
+			"description":   description,
+			"caption":       caption,
+			"reply_markup":  replyMarkup,
 		}
 	} else {
 		inlineResult = map[string]any{
