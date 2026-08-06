@@ -1,13 +1,18 @@
+# Deploy to production (flipo.rest) on every push to master.
 name: Deploy production
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
   workflow_dispatch:
 
 concurrency:
   group: deploy-production
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
