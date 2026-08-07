@@ -9,7 +9,6 @@ import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGu
 import { InventoryGiftDetailSheet } from "@/components/inventory/InventoryGiftDetailSheet";
 import {
   cancelMarketListing,
-  formatTON,
   getInventory,
   getMe,
   getMyMarketListings,
@@ -27,7 +26,7 @@ import { Gift, ArrowUpRight } from "lucide-react";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { giftWagerValueNanoton } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
-import { formatWagerIncompleteError } from "@/lib/wallet-errors";
+import { formatWagerBlockedMessage, formatWagerIncompleteError } from "@/lib/wager-messages";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Button } from "@/components/ui/button";
 import { GIFT_DEPOSIT_ENABLED, MARKET_ENABLED } from "@/src/shared/config/features";
@@ -118,10 +117,9 @@ export function InventorySection() {
       if (remaining > 0) {
         const giftValue = giftWagerValueNanoton(selected);
         const progress = user?.wager_progress_nanoton ?? 0;
-        const required = user?.wager_required_nanoton ?? 0;
         if (progress < giftValue) {
           setListError(
-            `Отыграно ${formatTON(progress)} из ${formatTON(required)} TON. Для вывода подарка нужно ${formatTON(giftValue)} TON отыгрыша (доступно ${formatTON(progress)}).`,
+            formatWagerBlockedMessage(user ?? {}, { giftValueNanoton: giftValue }),
           );
           return;
         }
@@ -144,7 +142,10 @@ export function InventorySection() {
         load();
       }
     } catch (e) {
-      setListError(formatWagerIncompleteError(e) || formatUserError(e, "Не удалось вывести подарок"));
+      setListError(
+        formatWagerIncompleteError(e, user, { giftValueNanoton: giftWagerValueNanoton(selected) }) ||
+          formatUserError(e, "Не удалось вывести подарок"),
+      );
     } finally {
       setWithdrawing(false);
     }

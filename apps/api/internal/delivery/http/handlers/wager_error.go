@@ -11,7 +11,7 @@ import (
 
 func respondWagerIncomplete(c *gin.Context, err error) {
 	body := gin.H{
-		"error": "Сначала отыграйте депозит",
+		"error": "Доступно к выводу: 0 TON · нужно отыграть депозит.",
 		"code":  "wager_incomplete",
 	}
 	var w *domain.WagerIncompleteError

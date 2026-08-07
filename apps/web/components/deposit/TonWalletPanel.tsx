@@ -25,6 +25,7 @@ import {
   walletStatusLabel,
   type WalletMessage,
 } from "@/lib/wallet-errors";
+import { formatWagerBlockedMessage } from "@/lib/wager-messages";
 import {
   encodeTonCommentPayload,
   formatTonWalletAddress,
@@ -335,16 +336,9 @@ export function TonWalletPanel() {
           Math.max(0, (user?.wager_required_nanoton ?? 0) - (user?.wager_progress_nanoton ?? 0)),
       );
     if (user && debitNanoton > withdrawable) {
-      const remaining = Math.max(
-        0,
-        (user.wager_required_nanoton ?? 0) - (user.wager_progress_nanoton ?? 0),
-      );
       setMessage({
         type: "error",
-        text:
-          remaining > 0
-            ? `Нужно отыграть ещё ${formatTON(remaining)} TON. Сейчас можно вывести до ${formatTON(Math.max(0, withdrawable - WITHDRAW_FEE_NANOTON))}`
-            : "Сначала отыграйте депозит.",
+        text: formatWagerBlockedMessage(user, { withdrawFeeNanoton: WITHDRAW_FEE_NANOTON }),
       });
       return;
     }
@@ -372,7 +366,7 @@ export function TonWalletPanel() {
       }
       await refreshTransfers();
     } catch (e) {
-      setMessage({ type: "error", text: formatWalletError(e, "withdraw") });
+      setMessage({ type: "error", text: formatWalletError(e, "withdraw", user) });
     } finally {
       setLoading(false);
     }

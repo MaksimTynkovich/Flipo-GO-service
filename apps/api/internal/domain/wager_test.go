@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -67,5 +68,8 @@ func TestWagerIncompleteErrorUnwrap(t *testing.T) {
 	msg := FormatWagerIncompleteMessage(err)
 	if msg == "" || msg == ErrWagerIncomplete.Error() {
 		t.Fatalf("expected detailed message, got %q", msg)
+	}
+	if !strings.Contains(msg, "Доступно к выводу") && !strings.Contains(msg, "Для вывода подарка") {
+		t.Fatalf("expected available amount in message, got %q", msg)
 	}
 }

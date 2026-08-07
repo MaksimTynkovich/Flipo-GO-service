@@ -10,6 +10,7 @@ import { formatCollectionSlug, giftBuyPriceNanoton, giftImageUrl, giftWagerValue
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { formatWagerBlockedMessage } from "@/lib/wager-messages";
 
 type Props = {
   item: InventoryItem;
@@ -54,7 +55,6 @@ export function InventoryGiftDetailSheet({
   const giftValue = giftWagerValueNanoton(item);
   const wagerRemaining = Math.max(0, user?.wager_remaining_nanoton ?? 0);
   const wagerProgress = user?.wager_progress_nanoton ?? 0;
-  const wagerRequired = user?.wager_required_nanoton ?? 0;
   const giftWithdrawLocked = item.status === "available" && wagerRemaining > 0 && wagerProgress < giftValue;
 
   useEffect(() => {
@@ -143,10 +143,9 @@ export function InventoryGiftDetailSheet({
         <div className="relative shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
           {listError && <p className="mb-3 text-center text-sm text-danger">{listError}</p>}
 
-          {!listError && giftWithdrawLocked && (
+          {!listError && giftWithdrawLocked && user && (
             <p className="mb-3 text-center text-xs leading-relaxed text-muted">
-              Отыграно {formatTON(wagerProgress)} из {formatTON(wagerRequired)} TON. Для вывода нужно{" "}
-              {formatTON(giftValue)} TON отыгрыша.
+              {formatWagerBlockedMessage(user, { giftValueNanoton: giftValue })}
             </p>
           )}
 
