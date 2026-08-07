@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { formatTON, InventoryItem, MarketListing } from "@/lib/api";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { formatCollectionSlug, giftBuyPriceNanoton, giftImageUrl, traitValue } from "@/lib/gifts";
+import { formatCollectionSlug, giftBuyPriceNanoton, giftImageUrl, giftWagerValueNanoton, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
+import { useAuth } from "@/components/providers/AuthProvider";
+import { formatWagerBlockedMessage } from "@/lib/wager-messages";
 
 type Props = {
   item: InventoryItem;
@@ -42,6 +44,7 @@ export function InventoryGiftDetailSheet({
   onWithdraw,
   onCancelListing,
 }: Props) {
+  const { user } = useAuth();
   const [imgError, setImgError] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showWithdrawHint, setShowWithdrawHint] = useState(false);
@@ -49,6 +52,11 @@ export function InventoryGiftDetailSheet({
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
   const buyPrice = giftBuyPriceNanoton(item);
   const displayPrice = marketListing?.price_nanoton ?? buyPrice;
+  const giftValue = giftWagerValueNanoton(item);
+  const wagerRemaining = Math.max(0, user?.wager_remaining_nanoton ?? 0);
+  const wagerProgress = user?.wager_progress_nanoton ?? 0;
+  const giftWithdrawLocked =
+    item.status === "available" && wagerRemaining > 0 && wagerProgress < giftValue;
 
   useEffect(() => {
     setImgError(false);
@@ -135,6 +143,12 @@ export function InventoryGiftDetailSheet({
 
         <div className="relative shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
           {listError && <p className="mb-3 text-center text-sm text-danger">{listError}</p>}
+
+          {!listError && giftWithdrawLocked && user && (
+            <p className="mb-3 text-center text-xs leading-relaxed text-muted">
+              {formatWagerBlockedMessage(user, { giftValueNanoton: giftValue })}
+            </p>
+          )}
 
           {item.status === "available" && (
             <div className="relative mb-3">

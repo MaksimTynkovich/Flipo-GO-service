@@ -86,8 +86,11 @@ func TestWithdrawableDebitCap(t *testing.T) {
 }
 
 func TestGiftWagerValueNanoton(t *testing.T) {
-	if got := GiftWagerValueNanoton(100, 200); got != 0 {
-		t.Fatalf("gifts exempt: %d", got)
+	if got := GiftWagerValueNanoton(100, 200); got != 200 {
+		t.Fatalf("max valuation: %d", got)
+	}
+	if got := GiftWagerValueNanoton(300, 100); got != 300 {
+		t.Fatalf("max floor: %d", got)
 	}
 }
 
@@ -113,5 +116,14 @@ func TestWagerIncompleteErrorUnwrap(t *testing.T) {
 	lockedMsg := FormatWagerIncompleteMessage(locked)
 	if !strings.Contains(lockedMsg, "отыграйте депозит") || !strings.Contains(lockedMsg, "доступно к выводу 0") {
 		t.Fatalf("expected explicit playthrough lock message, got %q", lockedMsg)
+	}
+
+	giftMsg := FormatWagerIncompleteMessage(NewWagerIncomplete(&User{
+		WagerRequiredNanoton: 3e9,
+		WagerProgressNanoton: 0,
+		BettingBalance:       3e9,
+	}, 5e8))
+	if !strings.Contains(giftMsg, "подарка") || !strings.Contains(giftMsg, "отыгрыша") {
+		t.Fatalf("expected gift withdraw message, got %q", giftMsg)
 	}
 }

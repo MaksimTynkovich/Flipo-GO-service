@@ -9,6 +9,7 @@ export type WagerSnapshot = {
 };
 
 export type WagerBlockContext = {
+  giftValueNanoton?: number;
   withdrawFeeNanoton?: number;
 };
 
@@ -56,6 +57,11 @@ export function formatWagerBlockedMessage(
   const withdrawable = withdrawableFromSnapshot(snapshot);
   const fee = Math.max(0, context.withdrawFeeNanoton ?? 0);
   const receiveCap = Math.max(0, withdrawable - fee);
+  const giftValue = Math.max(0, context.giftValueNanoton ?? 0);
+
+  if (giftValue > 0 && remaining > 0) {
+    return `Вывод подарка недоступен — сначала отыграйте депозит. Для вывода нужно ${formatTON(giftValue)} TON отыгрыша · отыграно ${formatTON(progress)} из ${formatTON(required)} TON.`;
+  }
 
   if (remaining > 0) {
     if (receiveCap <= 0) {
@@ -129,6 +135,7 @@ export function formatWagerIncompleteError(
           payload.withdrawable_nanoton ?? fallbackUser?.withdrawable_nanoton,
       },
       {
+        giftValueNanoton: payload.gift_value_nanoton ?? context.giftValueNanoton,
         withdrawFeeNanoton: context.withdrawFeeNanoton,
       },
     );

@@ -28,6 +28,7 @@ type ItemView struct {
 type Service struct {
 	inventory       domain.InventoryRepository
 	users           domain.UserRepository
+	platform        depositWagerSettings
 	deposit         *telegram.DepositService
 	giftTransfer    *telegram.GiftTransferService
 	valuator        *gifts.Valuator
@@ -42,6 +43,11 @@ var fetchGiftTraits = telegram.FetchNFTPageTraits
 // WithdrawHoldChecker reports silent gift withdrawal holds (global, gifts_manual, or per-user).
 type WithdrawHoldChecker interface {
 	IsUserGiftWithdrawHeld(ctx context.Context, userID uuid.UUID) (held bool, reason string, err error)
+}
+
+// depositWagerSettings is the subset of platform settings needed for gift withdraw playthrough.
+type depositWagerSettings interface {
+	GetWithdrawalSettings(ctx context.Context) (*domain.PlatformWithdrawalSettings, error)
 }
 
 func NewService(
@@ -64,6 +70,10 @@ func NewService(
 
 func (s *Service) SetWithdrawHoldChecker(checker WithdrawHoldChecker) {
 	s.withdrawHold = checker
+}
+
+func (s *Service) SetPlatform(platform depositWagerSettings) {
+	s.platform = platform
 }
 
 func (s *Service) SetAdminNotifier(notifier *telegram.AdminNotifier) {
@@ -243,9 +253,25 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 		return false, "", err
 	}
 
+	giftValue := s.giftWagerValue(ctx, *item)
+	if err := s.checkGiftDepositWager(ctx, user, giftValue); err != nil {
+		return false, "", err
+	}
+
+	beginPending := func() error {
+		if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
+			return err
+		}
+		if err := s.consumeGiftWagerProgress(ctx, userID, giftValue); err != nil {
+			_ = s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvAvailable)
+			return err
+		}
+		return nil
+	}
+
 	// Unbacked case claim — queue for manual purchase/fulfillment.
 	if domain.IsUnbackedCaseClaim(*item) {
-		if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
+		if err := beginPending(); err != nil {
 			return false, "", err
 		}
 		if s.admin != nil {
@@ -269,7 +295,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 			return false, "", holdErr
 		}
 		if held {
-			if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
+			if err := beginPending(); err != nil {
 				return false, "", err
 			}
 			if s.admin != nil {
@@ -294,12 +320,15 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 	}
 
 	// Claim item before irreversible Telegram send — blocks parallel withdraw races.
-	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvAvailable, domain.InvWithdrawPending); err != nil {
+	if err := beginPending(); err != nil {
 		return false, "", err
 	}
 
 	if err := s.giftTransfer.SendGift(ctx, item.TelegramGiftID, recipient); err != nil {
 		_ = s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvAvailable)
+		if giftValue > 0 {
+			_ = s.users.AddWagerProgress(ctx, userID, giftValue)
+		}
 		if errors.Is(err, telegram.ErrMTProtoNotConfigured) {
 			return false, "", fmt.Errorf("вывод подарков временно недоступен")
 		}
@@ -326,6 +355,48 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 		}, item.Name, item.CollectionSlug, "sent", item.FloorPriceNanoton)
 	}
 	return false, "", nil
+}
+
+func (s *Service) giftWagerValue(ctx context.Context, item domain.InventoryItem) int64 {
+	view := s.toItemView(ctx, item)
+	return domain.GiftWagerValueNanoton(item.FloorPriceNanoton, view.ValuationNanoton)
+}
+
+func (s *Service) checkGiftDepositWager(ctx context.Context, user *domain.User, giftValueNanoton int64) error {
+	if user == nil || s.platform == nil {
+		return nil
+	}
+	settings, err := s.platform.GetWithdrawalSettings(ctx)
+	if err != nil || settings == nil || !settings.DepositWagerEnabled {
+		return nil
+	}
+	if domain.WagerRemaining(user.WagerRequiredNanoton, user.WagerProgressNanoton) == 0 {
+		return nil
+	}
+	if user.WagerProgressNanoton >= giftValueNanoton {
+		return nil
+	}
+	return domain.NewWagerIncomplete(user, giftValueNanoton)
+}
+
+func (s *Service) consumeGiftWagerProgress(ctx context.Context, userID uuid.UUID, giftValueNanoton int64) error {
+	if giftValueNanoton <= 0 || s.users == nil {
+		return nil
+	}
+	if s.platform != nil {
+		settings, err := s.platform.GetWithdrawalSettings(ctx)
+		if err != nil || settings == nil || !settings.DepositWagerEnabled {
+			return nil
+		}
+	}
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if domain.WagerRemaining(user.WagerRequiredNanoton, user.WagerProgressNanoton) == 0 {
+		return nil
+	}
+	return s.users.ConsumeWagerProgress(ctx, userID, giftValueNanoton)
 }
 
 func (s *Service) ListPendingWithdrawals(ctx context.Context, limit int) ([]domain.AdminPendingGiftWithdraw, error) {

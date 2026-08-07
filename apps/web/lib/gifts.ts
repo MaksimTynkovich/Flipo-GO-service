@@ -80,6 +80,16 @@ export function giftBuyPriceNanoton(item: {
   return item.floor_price_nanoton;
 }
 
+/** Gift withdraw unlock value V = max(floor, valuation). */
+export function giftWagerValueNanoton(item: {
+  floor_price_nanoton: number;
+  valuation_nanoton?: number;
+}): number {
+  const floor = Math.max(0, item.floor_price_nanoton || 0);
+  const valuation = Math.max(0, item.valuation_nanoton || 0);
+  return Math.max(floor, valuation);
+}
+
 export function formatCollectionSlug(slug: string): string {
   return slug.replace(/-/g, " ");
 }

@@ -39,9 +39,18 @@ func NewWagerIncomplete(user *User, giftValueNanoton int64) *WagerIncompleteErro
 	}
 }
 
-// GiftWagerValueNanoton is deprecated — gift withdraw no longer requires playthrough.
+// GiftWagerValueNanoton is V = max(floor, valuation) for gift withdraw playthrough.
 func GiftWagerValueNanoton(floorNanoton, valuationNanoton int64) int64 {
-	return 0
+	if floorNanoton < 0 {
+		floorNanoton = 0
+	}
+	if valuationNanoton < 0 {
+		valuationNanoton = 0
+	}
+	if valuationNanoton > floorNanoton {
+		return valuationNanoton
+	}
+	return floorNanoton
 }
 
 // FormatWagerIncompleteMessage is the user-facing Russian text for wager_incomplete.
@@ -52,6 +61,13 @@ func FormatWagerIncompleteMessage(e *WagerIncompleteError) string {
 	progress := formatNanotonTON(e.ProgressNanoton)
 	required := formatNanotonTON(e.RequiredNanoton)
 	available := formatNanotonTON(e.WithdrawableNanoton)
+	if e.GiftValueNanoton > 0 {
+		need := formatNanotonTON(e.GiftValueNanoton)
+		return fmt.Sprintf(
+			"Вывод подарка недоступен — сначала отыграйте депозит. Для вывода нужно %s TON отыгрыша · отыграно %s из %s TON.",
+			need, progress, required,
+		)
+	}
 	if e.RemainingNanoton > 0 && e.WithdrawableNanoton <= 0 {
 		return fmt.Sprintf(
 			"Вывод недоступен — сначала отыграйте депозит. Отыграно %s из %s TON · доступно к выводу 0 TON.",
