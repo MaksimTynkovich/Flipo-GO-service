@@ -60,7 +60,7 @@ export function formatWagerBlockedMessage(
   const giftValue = Math.max(0, context.giftValueNanoton ?? 0);
 
   if (giftValue > 0 && remaining > 0) {
-    return `Вывод подарка недоступен — сначала отыграйте депозит. Для вывода нужно ${formatTON(giftValue)} TON отыгрыша · отыграно ${formatTON(progress)} из ${formatTON(required)} TON.`;
+    return `Для вывода нужно ${formatTON(giftValue)} TON отыгрыша · отыграно ${formatTON(progress)} из ${formatTON(required)} TON.`;
   }
 
   if (remaining > 0) {

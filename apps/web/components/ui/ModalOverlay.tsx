@@ -127,7 +127,10 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
         onClick={handleClose}
       />
       <div
-        className={cn("overlay-sheet-host relative z-[1] w-full", open && "overlay-sheet-host-open")}
+        className={cn(
+          "overlay-sheet-host relative z-[1] w-full max-h-full",
+          open && "overlay-sheet-host-open",
+        )}
       >
         {children(handleClose)}
       </div>

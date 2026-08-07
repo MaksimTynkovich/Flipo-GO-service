@@ -81,7 +81,7 @@ export function InventoryGiftDetailSheet({
         role="dialog"
         aria-modal="true"
         aria-label="Подарок в инвентаре"
-        className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(92dvh,100%)] flex-col"
+        className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-full min-h-0 flex-col overflow-hidden"
       >
         <div className="shrink-0 px-4 pt-2">
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
@@ -139,16 +139,16 @@ export function InventoryGiftDetailSheet({
             <TraitRow label="Узор" value={traitValue(item.backdrop)} />
             <TraitRow label="Символ" value={traitValue(item.symbol)} />
           </div>
-        </div>
-
-        <div className="relative shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
-          {listError && <p className="mb-3 text-center text-sm text-danger">{listError}</p>}
 
           {!listError && giftWithdrawLocked && user && (
             <p className="mb-3 text-center text-xs leading-relaxed text-muted">
               {formatWagerBlockedMessage(user, { giftValueNanoton: giftValue })}
             </p>
           )}
+        </div>
+
+        <div className="relative shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+          {listError && <p className="mb-3 text-center text-sm text-danger">{listError}</p>}
 
           {item.status === "available" && (
             <div className="relative mb-3">
