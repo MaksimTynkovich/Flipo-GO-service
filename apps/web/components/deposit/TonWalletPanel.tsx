@@ -231,7 +231,7 @@ export function TonWalletPanel() {
       } else if (completedWithdraw) {
         setMessage({
           type: "success",
-          text: `Вывод завершён. На кошелёк ушло ${formatTON(completedWithdraw.net_nanoton)}.`,
+          text: `Вывод завершён. На кошелёк ушло ${formatTON(completedWithdraw.net_nanoton)} TON.`,
         });
       }
     } catch {
@@ -351,7 +351,7 @@ export function TonWalletPanel() {
       if (result.transfer.status === "pending_review") {
         setMessage({
           type: "info",
-          text: `Вывод создан и находится в ожидании. На кошелёк придёт ${formatTON(receiveNanoton)}.`,
+          text: `Вывод создан и находится в ожидании. На кошелёк придёт ${formatTON(receiveNanoton)} TON.`,
         });
       } else if (result.transfer.status === "failed") {
         setMessage({
@@ -361,7 +361,7 @@ export function TonWalletPanel() {
       } else {
         setMessage({
           type: "info",
-          text: `Вывод создан. На кошелёк придёт ${formatTON(receiveNanoton)}. Статус обновится в истории.`,
+          text: `Вывод создан. На кошелёк придёт ${formatTON(receiveNanoton)} TON. Статус обновится в истории.`,
         });
       }
       await refreshTransfers();
