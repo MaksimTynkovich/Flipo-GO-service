@@ -886,7 +886,13 @@ export async function cancelMarketListing(id: string) {
 
 export async function buyMarketListing(id: string) {
   try {
-    const result = await api<{ balance: number }>(`/api/v1/market/listings/${id}/buy`, {
+    const result = await api<{
+      balance: number;
+      wager_required_nanoton?: number;
+      wager_progress_nanoton?: number;
+      wager_remaining_nanoton?: number;
+      withdrawable_nanoton?: number;
+    }>(`/api/v1/market/listings/${id}/buy`, {
       method: "POST",
     });
     trackEvent({

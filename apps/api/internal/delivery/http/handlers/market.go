@@ -192,6 +192,10 @@ func (h *MarketHandler) Buy(c *gin.Context) {
 		"balance_after": balance.BettingBalance,
 	})
 	c.JSON(http.StatusOK, gin.H{
-		"balance": balance.BettingBalance,
+		"balance":                  balance.BettingBalance,
+		"wager_required_nanoton":   balance.WagerRequiredNanoton,
+		"wager_progress_nanoton":   balance.WagerProgressNanoton,
+		"wager_remaining_nanoton":  domain.WagerRemaining(balance.WagerRequiredNanoton, balance.WagerProgressNanoton),
+		"withdrawable_nanoton":     domain.WithdrawableDebitCap(balance.BettingBalance, balance.WagerRequiredNanoton, balance.WagerProgressNanoton),
 	})
 }

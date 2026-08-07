@@ -269,6 +269,7 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 		if err := tx.Model(&buyer).Update("betting_balance", buyerBalance).Error; err != nil {
 			return err
 		}
+		buyer.BettingBalance = buyerBalance
 		if err := tx.Create(&domain.BalanceLedger{
 			UserID:        buyerID,
 			Type:          domain.LedgerMarketBuy,
@@ -278,6 +279,10 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 			ReferenceID:   listingID,
 			CreatedAt:     time.Now().UTC(),
 		}).Error; err != nil {
+			return err
+		}
+		// Market gift buy counts toward deposit playthrough (1×), same as case opens.
+		if err := applyWagerProgressTx(tx, &buyer, price); err != nil {
 			return err
 		}
 

@@ -6,7 +6,7 @@ import { MarketGiftDetailSheet } from "@/components/market/MarketGiftDetailSheet
 import { MarketToolbar, type MarketSort } from "@/components/market/MarketToolbar";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { buyMarketListing, getMarketListings, MarketListing } from "@/lib/api";
-import { patchUserBalance } from "@/lib/apply-balance";
+import { patchUserBalance, patchUserSession } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
 import { formatCollectionSlug } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
@@ -214,11 +214,26 @@ export function MarketSection({ onPurchased }: Props) {
     setBuying(true);
     setError(null);
     try {
-      const { balance } = await buyMarketListing(selected.id);
+      const result = await buyMarketListing(selected.id);
       markModalCompleted("market_gift_detail");
-      setUser((prev) =>
-        prev ? patchUserBalance(prev, { betting_balance: balance }) : prev,
-      );
+      setUser((prev) => {
+        if (!prev) return prev;
+        if (
+          result.wager_required_nanoton != null ||
+          result.wager_progress_nanoton != null ||
+          result.withdrawable_nanoton != null
+        ) {
+          return patchUserSession(prev, {
+            ...prev,
+            betting_balance: result.balance,
+            wager_required_nanoton: result.wager_required_nanoton ?? prev.wager_required_nanoton,
+            wager_progress_nanoton: result.wager_progress_nanoton ?? prev.wager_progress_nanoton,
+            wager_remaining_nanoton: result.wager_remaining_nanoton ?? prev.wager_remaining_nanoton,
+            withdrawable_nanoton: result.withdrawable_nanoton ?? prev.withdrawable_nanoton,
+          });
+        }
+        return patchUserBalance(prev, { betting_balance: result.balance });
+      });
       setSelected(null);
       await load();
       onPurchased?.();
