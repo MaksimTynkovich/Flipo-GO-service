@@ -46,12 +46,33 @@ function isAuthPath(path: string): boolean {
 export class ApiRequestError extends Error {
   code?: string;
   channel?: string;
+  wager_required_nanoton?: number;
+  wager_progress_nanoton?: number;
+  wager_remaining_nanoton?: number;
+  withdrawable_nanoton?: number;
+  gift_value_nanoton?: number;
 
-  constructor(message: string, opts?: { code?: string; channel?: string }) {
+  constructor(
+    message: string,
+    opts?: {
+      code?: string;
+      channel?: string;
+      wager_required_nanoton?: number;
+      wager_progress_nanoton?: number;
+      wager_remaining_nanoton?: number;
+      withdrawable_nanoton?: number;
+      gift_value_nanoton?: number;
+    },
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.code = opts?.code;
     this.channel = opts?.channel;
+    this.wager_required_nanoton = opts?.wager_required_nanoton;
+    this.wager_progress_nanoton = opts?.wager_progress_nanoton;
+    this.wager_remaining_nanoton = opts?.wager_remaining_nanoton;
+    this.withdrawable_nanoton = opts?.withdrawable_nanoton;
+    this.gift_value_nanoton = opts?.gift_value_nanoton;
   }
 }
 
@@ -223,6 +244,16 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
     throw new ApiRequestError(message, {
       code: typeof err.code === "string" ? err.code : undefined,
       channel: typeof err.channel === "string" ? err.channel : undefined,
+      wager_required_nanoton:
+        typeof err.wager_required_nanoton === "number" ? err.wager_required_nanoton : undefined,
+      wager_progress_nanoton:
+        typeof err.wager_progress_nanoton === "number" ? err.wager_progress_nanoton : undefined,
+      wager_remaining_nanoton:
+        typeof err.wager_remaining_nanoton === "number" ? err.wager_remaining_nanoton : undefined,
+      withdrawable_nanoton:
+        typeof err.withdrawable_nanoton === "number" ? err.withdrawable_nanoton : undefined,
+      gift_value_nanoton:
+        typeof err.gift_value_nanoton === "number" ? err.gift_value_nanoton : undefined,
     });
   }
   return res.json();

@@ -9,7 +9,9 @@ import { InventoryDepositGuide } from "@/components/inventory/InventoryDepositGu
 import { InventoryGiftDetailSheet } from "@/components/inventory/InventoryGiftDetailSheet";
 import {
   cancelMarketListing,
+  formatTON,
   getInventory,
+  getMe,
   getMyMarketListings,
   InventoryItem,
   liquidateCaseClaimItem,
@@ -23,13 +25,15 @@ import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimePr
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Gift, ArrowUpRight } from "lucide-react";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
+import { giftWagerValueNanoton } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
+import { formatWagerIncompleteError } from "@/lib/wallet-errors";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Button } from "@/components/ui/button";
 import { GIFT_DEPOSIT_ENABLED, MARKET_ENABLED } from "@/src/shared/config/features";
 
 export function InventorySection() {
-  const { setUser } = useAuth();
+  const { user, setUser } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [myListings, setMyListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +114,24 @@ export function InventorySection() {
     setWithdrawing(true);
     setListError(null);
     try {
+      const remaining = Math.max(0, user?.wager_remaining_nanoton ?? 0);
+      if (remaining > 0) {
+        const giftValue = giftWagerValueNanoton(selected);
+        const progress = user?.wager_progress_nanoton ?? 0;
+        const required = user?.wager_required_nanoton ?? 0;
+        if (progress < giftValue) {
+          setListError(
+            `Отыграно ${formatTON(progress)} из ${formatTON(required)} TON. Для вывода подарка нужно ${formatTON(giftValue)} TON отыгрыша (доступно ${formatTON(progress)}).`,
+          );
+          return;
+        }
+      }
       const result = await withdrawGiftItem(selected.id);
+      try {
+        setUser(await getMe());
+      } catch {
+        // best-effort wager refresh
+      }
       markModalCompleted("inventory_gift_detail");
       if (result.pending) {
         setSelected({ ...selected, status: "withdraw_pending" });
@@ -123,7 +144,7 @@ export function InventorySection() {
         load();
       }
     } catch (e) {
-      setListError(formatUserError(e, "Не удалось вывести подарок"));
+      setListError(formatWagerIncompleteError(e) || formatUserError(e, "Не удалось вывести подарок"));
     } finally {
       setWithdrawing(false);
     }

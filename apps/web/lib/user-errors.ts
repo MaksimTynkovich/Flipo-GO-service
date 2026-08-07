@@ -1,8 +1,13 @@
 /** Map API/client errors to concise Russian copy for UI surfaces. */
+import { formatWagerIncompleteError } from "@/lib/wallet-errors";
+
 export function formatUserError(
   error: unknown,
   fallback = "Что-то пошло не так. Попробуйте ещё раз.",
 ): string {
+  const wagerMsg = formatWagerIncompleteError(error);
+  if (wagerMsg) return wagerMsg;
+
   const code =
     error && typeof error === "object" && "code" in error && typeof (error as { code?: unknown }).code === "string"
       ? (error as { code: string }).code

@@ -118,6 +118,10 @@ func (h *InventoryHandler) Withdraw(c *gin.Context) {
 	pending, message, err := h.inventory.Withdraw(c.Request.Context(), userID, itemID)
 	if err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "error", "withdraw_failed", err.Error(), map[string]any{"item_id": itemID.String()})
+		if errors.Is(err, domain.ErrWagerIncomplete) {
+			respondWagerIncomplete(c, err)
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

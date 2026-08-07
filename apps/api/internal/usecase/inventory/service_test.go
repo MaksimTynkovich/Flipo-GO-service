@@ -87,7 +87,8 @@ func (s *inventoryRepoStub) GetFloorPrice(context.Context, string) (int64, error
 func (s *inventoryRepoStub) SetFloorPrice(context.Context, string, int64) error   { return nil }
 
 type userRepoStub struct {
-	user *domain.User
+	user           *domain.User
+	consumedWager  int64
 }
 
 func (s *userRepoStub) FindByID(context.Context, uuid.UUID) (*domain.User, error) {
@@ -114,6 +115,27 @@ func (s *userRepoStub) RestoreAdminCredit(context.Context, uuid.UUID, int64) err
 	return nil
 }
 func (s *userRepoStub) GetBalanceForUpdate(context.Context, uuid.UUID) (int64, error) { return 0, nil }
+func (s *userRepoStub) AddWagerRequired(context.Context, uuid.UUID, int64) error     { return nil }
+func (s *userRepoStub) AddWagerProgress(_ context.Context, _ uuid.UUID, amount int64) error {
+	if s.user != nil && amount > 0 {
+		s.user.WagerProgressNanoton += amount
+	}
+	return nil
+}
+func (s *userRepoStub) ConsumeWagerProgress(_ context.Context, _ uuid.UUID, amount int64) error {
+	if s.user == nil {
+		return nil
+	}
+	if amount <= 0 {
+		return nil
+	}
+	if s.user.WagerProgressNanoton < amount {
+		return domain.NewWagerIncomplete(s.user, amount)
+	}
+	s.user.WagerProgressNanoton -= amount
+	s.consumedWager += amount
+	return nil
+}
 func (s *userRepoStub) UpdateStakingTier(context.Context, uuid.UUID, domain.StakingTier) error {
 	return nil
 }
@@ -357,5 +379,147 @@ func TestFulfillPendingWithdrawalRejectsMismatchedPromisedTraits(t *testing.T) {
 	}
 	if len(repo.boundMeta) != 0 {
 		t.Fatal("bind should not be called on trait mismatch")
+	}
+}
+
+type platformWagerStub struct {
+	enabled bool
+}
+
+func (s *platformWagerStub) GetWithdrawalSettings(context.Context) (*domain.PlatformWithdrawalSettings, error) {
+	return &domain.PlatformWithdrawalSettings{DepositWagerEnabled: s.enabled}, nil
+}
+
+func TestWithdrawBlockedWhenWagerProgressBelowGiftValue(t *testing.T) {
+	userID := uuid.New()
+	itemID := uuid.New()
+	repo := &inventoryRepoStub{
+		item: &domain.InventoryItem{
+			ID:                 itemID,
+			UserID:             userID,
+			Name:               "Pepe",
+			CollectionSlug:     "plush-pepe",
+			Status:             domain.InvAvailable,
+			Source:             domain.NFTSourceTelegramGift,
+			TelegramGiftID:     "gift-1",
+			FloorPriceNanoton:  400_000_000,
+		},
+	}
+	users := &userRepoStub{
+		user: &domain.User{
+			ID:                   userID,
+			TelegramID:           1,
+			WagerRequiredNanoton: 1_000_000_000,
+			WagerProgressNanoton: 200_000_000,
+			BettingBalance:       2_000_000_000,
+		},
+	}
+	svc := &Service{
+		inventory: repo,
+		users:     users,
+		platform:  &platformWagerStub{enabled: true},
+	}
+
+	_, _, err := svc.Withdraw(context.Background(), userID, itemID)
+	if !errors.Is(err, domain.ErrWagerIncomplete) {
+		t.Fatalf("want ErrWagerIncomplete, got %v", err)
+	}
+	if repo.item.Status != domain.InvAvailable {
+		t.Fatalf("status should stay available, got %s", repo.item.Status)
+	}
+	if users.consumedWager != 0 {
+		t.Fatalf("should not consume progress on block")
+	}
+}
+
+func TestWithdrawConsumesWagerProgressWhenUnlocked(t *testing.T) {
+	userID := uuid.New()
+	itemID := uuid.New()
+	repo := &inventoryRepoStub{
+		item: &domain.InventoryItem{
+			ID:                 itemID,
+			UserID:             userID,
+			Name:               "Pepe",
+			CollectionSlug:     "plush-pepe",
+			Status:             domain.InvAvailable,
+			Source:             domain.NFTSourceTelegramGift,
+			TelegramGiftID:     "gift-1",
+			FloorPriceNanoton:  300_000_000,
+			TelegramTxRef:      domain.CaseClaimTxRefPrefix + uuid.NewString(),
+			Metadata:           []byte(`{"fulfillment":"unbacked","collection":"plush-pepe"}`),
+		},
+	}
+	users := &userRepoStub{
+		user: &domain.User{
+			ID:                   userID,
+			TelegramID:           1,
+			WagerRequiredNanoton: 1_000_000_000,
+			WagerProgressNanoton: 500_000_000,
+		},
+	}
+	svc := &Service{
+		inventory: repo,
+		users:     users,
+		platform:  &platformWagerStub{enabled: true},
+	}
+
+	pending, _, err := svc.Withdraw(context.Background(), userID, itemID)
+	if err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if !pending {
+		t.Fatal("expected pending unbacked withdraw")
+	}
+	if users.consumedWager != 300_000_000 {
+		t.Fatalf("consumed=%d want 300m", users.consumedWager)
+	}
+	if users.user.WagerProgressNanoton != 200_000_000 {
+		t.Fatalf("progress=%d want 200m", users.user.WagerProgressNanoton)
+	}
+	if repo.item.Status != domain.InvWithdrawPending {
+		t.Fatalf("status=%s", repo.item.Status)
+	}
+}
+
+func TestWithdrawUnrestrictedWhenWagerCleared(t *testing.T) {
+	userID := uuid.New()
+	itemID := uuid.New()
+	repo := &inventoryRepoStub{
+		item: &domain.InventoryItem{
+			ID:                 itemID,
+			UserID:             userID,
+			Name:               "Pepe",
+			CollectionSlug:     "plush-pepe",
+			Status:             domain.InvAvailable,
+			Source:             domain.NFTSourceTelegramGift,
+			TelegramGiftID:     "gift-1",
+			FloorPriceNanoton:  500_000_000,
+			TelegramTxRef:      domain.CaseClaimTxRefPrefix + uuid.NewString(),
+			Metadata:           []byte(`{"fulfillment":"unbacked","collection":"plush-pepe"}`),
+		},
+	}
+	users := &userRepoStub{
+		user: &domain.User{
+			ID:                   userID,
+			TelegramID:           1,
+			WagerRequiredNanoton: 0,
+			WagerProgressNanoton: 0,
+		},
+	}
+	svc := &Service{
+		inventory: repo,
+		users:     users,
+		platform:  &platformWagerStub{enabled: true},
+	}
+
+	pending, _, err := svc.Withdraw(context.Background(), userID, itemID)
+	if err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if !pending {
+		t.Fatal("expected pending")
+	}
+	if users.consumedWager != 0 {
+		t.Fatalf("should not consume when cleared, got %d", users.consumedWager)
 	}
 }

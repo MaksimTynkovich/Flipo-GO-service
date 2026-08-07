@@ -7,10 +7,51 @@ export type WalletMessage = {
 
 const MIN_TON_LABEL = "0.1 TON";
 
+function formatTonLabel(nanoton: number): string {
+  const ton = nanoton / 1_000_000_000;
+  const fixed3 = ton.toFixed(3);
+  if (fixed3.endsWith("0")) return ton.toFixed(2);
+  return fixed3;
+}
+
+/** Prefer API wager_incomplete payload for withdraw copy. */
+export function formatWagerIncompleteError(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const err = error as {
+    code?: string;
+    message?: string;
+    wager_required_nanoton?: number;
+    wager_progress_nanoton?: number;
+    withdrawable_nanoton?: number;
+    gift_value_nanoton?: number;
+  };
+  if (err.code !== "wager_incomplete") return null;
+
+  const progress = typeof err.wager_progress_nanoton === "number" ? err.wager_progress_nanoton : null;
+  const required = typeof err.wager_required_nanoton === "number" ? err.wager_required_nanoton : null;
+  const giftValue = typeof err.gift_value_nanoton === "number" ? err.gift_value_nanoton : null;
+  const withdrawable =
+    typeof err.withdrawable_nanoton === "number" ? err.withdrawable_nanoton : null;
+
+  if (progress != null && required != null && giftValue != null && giftValue > 0) {
+    return `Отыграно ${formatTonLabel(progress)} из ${formatTonLabel(required)} TON. Для вывода подарка нужно ${formatTonLabel(giftValue)} TON отыгрыша (доступно ${formatTonLabel(progress)}).`;
+  }
+  if (progress != null && required != null && withdrawable != null) {
+    return `Отыграно ${formatTonLabel(progress)} из ${formatTonLabel(required)} TON. Можно вывести до ${formatTonLabel(withdrawable)} TON.`;
+  }
+  if (typeof err.message === "string" && err.message.trim()) {
+    return err.message.trim();
+  }
+  return "Сначала отыграйте депозит.";
+}
+
 export function formatWalletError(
   error: unknown,
   context: "deposit" | "withdraw",
 ): string {
+  const wagerMsg = formatWagerIncompleteError(error);
+  if (wagerMsg) return wagerMsg;
+
   if (error instanceof Error) {
     const raw = error.message.trim();
     const lower = raw.toLowerCase();
@@ -33,9 +74,10 @@ export function formatWalletError(
     if (
       lower.includes("wager") ||
       lower.includes("отыграйте депозит") ||
-      lower.includes("отыграть депозит")
+      lower.includes("отыграть депозит") ||
+      lower.includes("отыграно")
     ) {
-      return "Сначала отыграйте депозит.";
+      return raw && /[а-яё]/i.test(raw) ? raw : "Сначала отыграйте депозит.";
     }
 
     if (lower.includes("wallet not linked") || lower.includes("подключи ton-кошелёк")) {

@@ -1,8 +1,96 @@
 package domain
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 const DefaultCrashWagerTarget = 2.0
+
+// WagerIncompleteError carries playthrough state for 422 wager_incomplete responses.
+type WagerIncompleteError struct {
+	RequiredNanoton     int64
+	ProgressNanoton     int64
+	RemainingNanoton    int64
+	WithdrawableNanoton int64
+	GiftValueNanoton    int64 // >0 when blocking gift withdraw
+}
+
+func (e *WagerIncompleteError) Error() string {
+	return ErrWagerIncomplete.Error()
+}
+
+func (e *WagerIncompleteError) Unwrap() error {
+	return ErrWagerIncomplete
+}
+
+// NewWagerIncomplete builds a typed playthrough error from the user row.
+func NewWagerIncomplete(user *User, giftValueNanoton int64) *WagerIncompleteError {
+	if user == nil {
+		return &WagerIncompleteError{GiftValueNanoton: giftValueNanoton}
+	}
+	return &WagerIncompleteError{
+		RequiredNanoton:     user.WagerRequiredNanoton,
+		ProgressNanoton:     user.WagerProgressNanoton,
+		RemainingNanoton:    WagerRemaining(user.WagerRequiredNanoton, user.WagerProgressNanoton),
+		WithdrawableNanoton: WithdrawableDebitCap(user.BettingBalance, user.WagerRequiredNanoton, user.WagerProgressNanoton),
+		GiftValueNanoton:    giftValueNanoton,
+	}
+}
+
+// GiftWagerValueNanoton is V = max(floor, valuation) for partial gift unlock.
+func GiftWagerValueNanoton(floorNanoton, valuationNanoton int64) int64 {
+	if floorNanoton < 0 {
+		floorNanoton = 0
+	}
+	if valuationNanoton < 0 {
+		valuationNanoton = 0
+	}
+	if valuationNanoton > floorNanoton {
+		return valuationNanoton
+	}
+	return floorNanoton
+}
+
+// FormatWagerIncompleteMessage is the user-facing Russian text for wager_incomplete.
+func FormatWagerIncompleteMessage(e *WagerIncompleteError) string {
+	if e == nil {
+		return ErrWagerIncomplete.Error()
+	}
+	progress := formatNanotonTON(e.ProgressNanoton)
+	required := formatNanotonTON(e.RequiredNanoton)
+	if e.GiftValueNanoton > 0 {
+		need := formatNanotonTON(e.GiftValueNanoton)
+		return fmt.Sprintf(
+			"Отыграно %s из %s TON. Для вывода подарка нужно %s TON отыгрыша (доступно %s).",
+			progress, required, need, progress,
+		)
+	}
+	available := formatNanotonTON(e.WithdrawableNanoton)
+	return fmt.Sprintf(
+		"Отыграно %s из %s TON. Можно вывести до %s TON.",
+		progress, required, available,
+	)
+}
+
+func formatNanotonTON(n int64) string {
+	if n < 0 {
+		n = 0
+	}
+	ton := float64(n) / 1_000_000_000
+	s := fmt.Sprintf("%.3f", ton)
+	// Trim trailing zeros: 1.200 -> 1.2, 1.000 -> 1
+	for len(s) > 0 && s[len(s)-1] == '0' {
+		s = s[:len(s)-1]
+	}
+	if len(s) > 0 && s[len(s)-1] == '.' {
+		s = s[:len(s)-1]
+	}
+	if s == "" {
+		return "0"
+	}
+	return s
+}
 
 // WagerRemaining is the deposit lock still requiring playthrough.
 func WagerRemaining(required, progress int64) int64 {

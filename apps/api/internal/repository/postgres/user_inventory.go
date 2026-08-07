@@ -241,6 +241,19 @@ func (r *UserRepo) AddWagerProgress(ctx context.Context, userID uuid.UUID, amoun
 	})
 }
 
+func (r *UserRepo) ConsumeWagerProgress(ctx context.Context, userID uuid.UUID, amount int64) error {
+	if amount <= 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user domain.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
+			return err
+		}
+		return applyConsumeWagerProgressTx(tx, &user, amount)
+	})
+}
+
 // applyWagerRequiredTx bumps deposit playthrough requirement (user row must be locked).
 func applyWagerRequiredTx(tx *gorm.DB, user *domain.User, amount int64) error {
 	if amount <= 0 || user == nil {
@@ -273,6 +286,21 @@ func applyWagerProgressTx(tx *gorm.DB, user *domain.User, amount int64) error {
 	user.WagerProgressNanoton = progress
 	return tx.Model(user).Updates(map[string]any{
 		"wager_required_nanoton": required,
+		"wager_progress_nanoton": progress,
+	}).Error
+}
+
+// applyConsumeWagerProgressTx spends playthrough credit on a gift withdraw (user row locked).
+func applyConsumeWagerProgressTx(tx *gorm.DB, user *domain.User, amount int64) error {
+	if amount <= 0 || user == nil {
+		return nil
+	}
+	if user.WagerProgressNanoton < amount {
+		return domain.NewWagerIncomplete(user, amount)
+	}
+	progress := user.WagerProgressNanoton - amount
+	user.WagerProgressNanoton = progress
+	return tx.Model(user).Updates(map[string]any{
 		"wager_progress_nanoton": progress,
 	}).Error
 }

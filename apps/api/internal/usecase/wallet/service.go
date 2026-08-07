@@ -358,7 +358,7 @@ func (s *Service) checkDepositWager(ctx context.Context, user *domain.User, debi
 	}
 	cap := domain.WithdrawableDebitCap(user.BettingBalance, user.WagerRequiredNanoton, user.WagerProgressNanoton)
 	if debitNanoton > cap {
-		return domain.ErrWagerIncomplete
+		return domain.NewWagerIncomplete(user, 0)
 	}
 	return nil
 }

@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestCrashWagerCredit(t *testing.T) {
 	stake := int64(1_000_000_000) // 1 TON
@@ -43,5 +46,26 @@ func TestWithdrawableDebitCap(t *testing.T) {
 	}
 	if WithdrawableDebitCap(100, 50, 50) != 100 {
 		t.Fatal("cleared lock")
+	}
+}
+
+func TestGiftWagerValueNanoton(t *testing.T) {
+	if got := GiftWagerValueNanoton(100, 200); got != 200 {
+		t.Fatalf("max valuation: %d", got)
+	}
+	if got := GiftWagerValueNanoton(300, 100); got != 300 {
+		t.Fatalf("max floor: %d", got)
+	}
+}
+
+func TestWagerIncompleteErrorUnwrap(t *testing.T) {
+	user := &User{WagerRequiredNanoton: 1e9, WagerProgressNanoton: 2e8, BettingBalance: 5e8}
+	err := NewWagerIncomplete(user, 4e8)
+	if !errors.Is(err, ErrWagerIncomplete) {
+		t.Fatal("unwrap")
+	}
+	msg := FormatWagerIncompleteMessage(err)
+	if msg == "" || msg == ErrWagerIncomplete.Error() {
+		t.Fatalf("expected detailed message, got %q", msg)
 	}
 }

@@ -20,6 +20,8 @@ type UserRepository interface {
 	RestoreAdminCredit(ctx context.Context, userID uuid.UUID, amount int64) error
 	AddWagerRequired(ctx context.Context, userID uuid.UUID, amount int64) error
 	AddWagerProgress(ctx context.Context, userID uuid.UUID, amount int64) error
+	// ConsumeWagerProgress subtracts playthrough credit (gift withdraw unlock). Fails if progress < amount.
+	ConsumeWagerProgress(ctx context.Context, userID uuid.UUID, amount int64) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)

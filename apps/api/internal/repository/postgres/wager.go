@@ -43,7 +43,7 @@ func enforceDepositWagerTx(tx *gorm.DB, user *domain.User, debitNanoton int64) e
 	}
 	cap := domain.WithdrawableDebitCap(user.BettingBalance, user.WagerRequiredNanoton, user.WagerProgressNanoton)
 	if debitNanoton > cap {
-		return domain.ErrWagerIncomplete
+		return domain.NewWagerIncomplete(user, 0)
 	}
 	return nil
 }
