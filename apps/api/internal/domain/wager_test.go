@@ -60,11 +60,8 @@ func TestWithdrawableDebitCap(t *testing.T) {
 }
 
 func TestGiftWagerValueNanoton(t *testing.T) {
-	if got := GiftWagerValueNanoton(100, 200); got != 200 {
-		t.Fatalf("max valuation: %d", got)
-	}
-	if got := GiftWagerValueNanoton(300, 100); got != 300 {
-		t.Fatalf("max floor: %d", got)
+	if got := GiftWagerValueNanoton(100, 200); got != 0 {
+		t.Fatalf("gifts exempt: %d", got)
 	}
 }
 
@@ -78,7 +75,7 @@ func TestWagerIncompleteErrorUnwrap(t *testing.T) {
 	if msg == "" || msg == ErrWagerIncomplete.Error() {
 		t.Fatalf("expected detailed message, got %q", msg)
 	}
-	if !strings.Contains(msg, "Доступно к выводу") && !strings.Contains(msg, "Для вывода подарка") {
+	if !strings.Contains(msg, "Доступно к выводу") {
 		t.Fatalf("expected available amount in message, got %q", msg)
 	}
 }

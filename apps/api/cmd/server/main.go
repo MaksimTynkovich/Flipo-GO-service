@@ -230,7 +230,6 @@ func main() {
 	marketSvc.SetValuator(giftValuator)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftTransfer, giftValuator, marketSvc)
 	invSvc.SetWithdrawHoldChecker(riskSvc)
-	invSvc.SetPlatform(platformRepo)
 	caseRepo := postgres.NewCaseRepo(db)
 	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
 	caseSvc.SetPreparedShareBot(botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
