@@ -11,6 +11,7 @@ import { formatCollectionSlug, giftImageUrl, traitValue } from "@/lib/gifts";
 type Props = {
   listing: MarketListing;
   buying: boolean;
+  priceRefreshing?: boolean;
   error: string | null;
   canBuy: boolean;
   isOwnListing: boolean;
@@ -40,6 +41,7 @@ function TraitRow({ label, value }: { label: string; value: string }) {
 export function MarketGiftDetailSheet({
   listing,
   buying,
+  priceRefreshing = false,
   error,
   canBuy,
   isOwnListing,
@@ -122,7 +124,11 @@ export function MarketGiftDetailSheet({
                 <Copy className="h-4 w-4" />
               </button>
             </div>
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-surface-raised px-2.5 py-1 text-[15px] font-semibold tabular-nums text-foreground">
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-surface-raised px-2.5 py-1 text-[15px] font-semibold tabular-nums text-foreground ${
+                priceRefreshing ? "opacity-60" : ""
+              }`}
+            >
               {formatTON(listing.price_nanoton)}
               <TonIcon variant="brand" className="h-4 w-4 shrink-0" />
             </span>
@@ -147,21 +153,23 @@ export function MarketGiftDetailSheet({
           ) : (
             <Button
               className="h-12 w-full rounded-2xl text-[15px] font-semibold"
-              disabled={!canBuy || buying}
+              disabled={!canBuy || buying || priceRefreshing}
               onClick={onBuy}
             >
               {buying
                 ? "Покупка…"
-                : promoRestricted
-                  ? "Бонус нельзя тратить"
-                  : insufficientFunds
-                    ? "Недостаточно средств"
-                    : (
-                      <span className="inline-flex items-center justify-center gap-1">
-                        Купить · {formatTON(listing.price_nanoton)}
-                        <TonIcon variant="brand" className="h-5 w-5" />
-                      </span>
-                    )}
+                : priceRefreshing
+                  ? "Обновление цены…"
+                  : promoRestricted
+                    ? "Бонус нельзя тратить"
+                    : insufficientFunds
+                      ? "Недостаточно средств"
+                      : (
+                        <span className="inline-flex items-center justify-center gap-1">
+                          Купить · {formatTON(listing.price_nanoton)}
+                          <TonIcon variant="brand" className="h-5 w-5" />
+                        </span>
+                      )}
             </Button>
           )}
         </div>

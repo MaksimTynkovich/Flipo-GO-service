@@ -153,6 +153,16 @@ func (v *Valuator) QuoteValuation(ctx context.Context, gift telegram.ScannedGift
 	return v.quote(ctx, gift, QuoteValuation)
 }
 
+// QuoteValuationCached returns valuation from memory/DB/floors only — never Portals/MRKT/GiftAsset HTTP.
+func (v *Valuator) QuoteValuationCached(ctx context.Context, gift telegram.ScannedGift) (int64, string) {
+	raw, source := v.rawQuoteCached(ctx, gift)
+	if raw <= 0 {
+		return 0, source
+	}
+	_, valPct := v.cachedAdjust(ctx)
+	return ApplyPercentAdjust(raw, valPct), source
+}
+
 func (v *Valuator) QuoteInventoryBuyback(ctx context.Context, item domain.InventoryItem) (int64, string) {
 	return v.QuoteBuyback(ctx, ScannedGiftFromItem(item))
 }

@@ -5,7 +5,7 @@ import { MarketGiftCard, MarketGiftCardSkeleton } from "@/components/market/Mark
 import { MarketGiftDetailSheet } from "@/components/market/MarketGiftDetailSheet";
 import { MarketToolbar, type MarketSort } from "@/components/market/MarketToolbar";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { buyMarketListing, getMarketListings, MarketListing } from "@/lib/api";
+import { buyMarketListing, getMarketListing, getMarketListings, MarketListing } from "@/lib/api";
 import { patchUserBalance, patchUserSession } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
 import { formatCollectionSlug } from "@/lib/gifts";
@@ -69,6 +69,7 @@ export function MarketSection({ onPurchased }: Props) {
   const [hasMore, setHasMore] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MarketListing | null>(null);
+  const [priceRefreshing, setPriceRefreshing] = useState(false);
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -166,6 +167,34 @@ export function MarketSection({ onPurchased }: Props) {
   }, [ready, sort, load]);
 
   useEffect(() => {
+    if (!selected) {
+      setPriceRefreshing(false);
+      return;
+    }
+    const listingId = selected.id;
+    let cancelled = false;
+    setPriceRefreshing(true);
+    setError(null);
+    void (async () => {
+      try {
+        const fresh = await getMarketListing(listingId);
+        if (cancelled) return;
+        setSelected((prev) => (prev?.id === listingId ? fresh : prev));
+        setListings((prev) =>
+          prev.map((item) => (item.id === listingId ? fresh : item)),
+        );
+      } catch {
+        // Keep list price if live refresh fails.
+      } finally {
+        if (!cancelled) setPriceRefreshing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id]);
+
+  useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel || loading || !hasMore) return;
 
@@ -248,12 +277,15 @@ export function MarketSection({ onPurchased }: Props) {
   const canBuy =
     !!user &&
     !!selected &&
+    !priceRefreshing &&
     availableBalance >= selected.price_nanoton &&
     selected.seller.id !== user.id;
-  const insufficientFunds = !!user && availableBalance < (selected?.price_nanoton ?? 0);
+  const insufficientFunds =
+    !!user && !priceRefreshing && availableBalance < (selected?.price_nanoton ?? 0);
   const promoRestricted =
     !!user &&
     !!selected &&
+    !priceRefreshing &&
     user.betting_balance >= selected.price_nanoton &&
     availableBalance < selected.price_nanoton;
 
@@ -342,6 +374,7 @@ export function MarketSection({ onPurchased }: Props) {
         <MarketGiftDetailSheet
           listing={selected}
           buying={buying}
+          priceRefreshing={priceRefreshing}
           error={error}
           canBuy={canBuy}
           isOwnListing={!!user && selected.seller.id === user.id}

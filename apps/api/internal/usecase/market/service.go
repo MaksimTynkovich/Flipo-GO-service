@@ -72,9 +72,8 @@ func (s *Service) List(ctx context.Context, limit, offset int, sort string) ([]L
 	}
 	out := make([]ListingView, 0, len(listings))
 	for _, l := range listings {
-		// Do not live-reprice on list: QuoteValuation hits Portals/MRKT per row and makes
-		// the storefront multi-second. Prices are refreshed on Get/Purchase and via admin reprice.
-		out = append(out, toListingView(l))
+		// Soft-reprice from cache/DB only — no Portals/MRKT HTTP. Live refresh stays on Get/Purchase.
+		out = append(out, toListingView(s.refreshBotListingCached(ctx, l)))
 	}
 	return out, nil
 }
@@ -347,6 +346,20 @@ func (s *Service) refreshBotListing(ctx context.Context, listing domain.MarketLi
 	}
 	gift := gifts.ScannedGiftFromItem(listing.Item)
 	price, _ := s.valuator.QuoteValuation(ctx, gift)
+	return s.applyBotListingPrice(ctx, listing, price)
+}
+
+// refreshBotListingCached syncs listing price from trait cache/DB without live market HTTP.
+func (s *Service) refreshBotListingCached(ctx context.Context, listing domain.MarketListing) domain.MarketListing {
+	if s.valuator == nil || listing.Source != domain.ListingSourceBot {
+		return listing
+	}
+	gift := gifts.ScannedGiftFromItem(listing.Item)
+	price, _ := s.valuator.QuoteValuationCached(ctx, gift)
+	return s.applyBotListingPrice(ctx, listing, price)
+}
+
+func (s *Service) applyBotListingPrice(ctx context.Context, listing domain.MarketListing, price int64) domain.MarketListing {
 	if price <= 0 || price == listing.PriceNanoton {
 		return listing
 	}
