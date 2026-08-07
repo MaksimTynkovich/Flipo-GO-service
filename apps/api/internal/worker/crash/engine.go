@@ -136,8 +136,10 @@ func (e *Engine) runRound(ctx context.Context) {
 		e.chainIx = 0
 	}
 
-	adminInfluenced := false
 	hash := ""
+	adminInfluenced := false
+	deferredSeed := false
+
 	if e.outcome != nil {
 		if override, ok, oerr := e.outcome.TakePending(ctx, domain.GameCrash); oerr == nil && ok {
 			if t, terr := e.outcome.DecodeCrashTarget(override); terr == nil {
@@ -155,11 +157,24 @@ func (e *Engine) runRound(ctx context.Context) {
 			}
 		}
 	}
+
 	if hash == "" {
-		hash = e.chain[e.chainIx]
+		recoveryActive, _, rerr := e.svc.RecoverySnapshot(ctx)
+		if rerr != nil {
+			slog.Warn("crash recovery snapshot", "error", rerr)
+		}
+		if recoveryActive {
+			deferredSeed = true
+		} else {
+			hash = e.chain[e.chainIx]
+			e.chainIx++
+		}
 	}
-	e.chainIx++
-	crashPoint := provablyfair.CrashPoint(hash)
+
+	serverSeedHash := ""
+	if hash != "" {
+		serverSeedHash = provablyfair.HashSHA256(hash)
+	}
 
 	roundNum, err := e.games.GetNextRoundNumber(ctx, domain.GameCrash)
 	if err != nil {
@@ -169,43 +184,56 @@ func (e *Engine) runRound(ctx context.Context) {
 
 	roundID := uuid.New()
 	now := time.Now().UTC()
-	serverSeedHash := provablyfair.HashSHA256(hash)
-	round := &domain.GameRound{
-		ID:             roundID,
-		GameType:       domain.GameCrash,
-		RoundNumber:    roundNum,
-		Status:         "betting",
-		StartedAt:      now,
-		ServerSeedHash: serverSeedHash,
-		ServerSeed:     hash,
-		Nonce:          roundNum,
-		CreatedAt:      now,
-	}
-	if err := e.games.CreateRound(ctx, round); err != nil {
+	betEnds := now.Add(time.Duration(e.betS) * time.Second)
+
+	round, err := e.svc.CreateRound(ctx, roundID, roundNum, hash, serverSeedHash, betEnds)
+	if err != nil {
 		slog.Error("crash create round failed", "error", err)
 		time.Sleep(time.Second)
 		return
 	}
 
 	if adminInfluenced {
-		round.AdminInfluenced = true
-		if uerr := e.games.UpdateRound(ctx, round); uerr != nil {
+		if uerr := e.svc.MarkAdminInfluenced(ctx, round.ID); uerr != nil {
 			slog.Warn("mark crash round admin-influenced", "error", uerr)
 		}
 	}
 
-	betEnds := now.Add(time.Duration(e.betS) * time.Second)
-	betState := &crashuc.RoundState{
-		RoundID:        roundID,
-		RoundNumber:    roundNum,
-		Phase:          "betting",
-		Multiplier:     1.0,
-		EndsAt:         &betEnds,
-		ServerSeedHash: serverSeedHash,
-	}
-	_ = e.svc.PublishState(ctx, betState)
-	_ = e.svc.PublishBets(ctx, roundID)
 	time.Sleep(time.Duration(e.betS) * time.Second)
+
+	crashPoint := float64(0)
+	if deferredSeed {
+		recoveryActive, biasWeight, _ := e.svc.RecoverySnapshot(ctx)
+		hash = ""
+		adminInfluenced = false
+		if recoveryActive && outcomeuc.ShouldApply(outcomeuc.ModeBias, biasWeight) {
+			bets, berr := e.games.ListPendingBetsByRound(ctx, round.ID)
+			if berr != nil {
+				slog.Warn("crash recovery list bets", "error", berr)
+			} else {
+				target := crashuc.PickBestCrashPoint(bets)
+				if found, foundOk := provablyfair.FindCrashHash(0, 0, target, 500000); foundOk {
+					hash = found
+					adminInfluenced = true
+					slog.Info("crash recovery seed", "point", target, "round", roundNum)
+				}
+			}
+		}
+		if hash == "" {
+			hash = e.chain[e.chainIx]
+			e.chainIx++
+		}
+		var aerr error
+		serverSeedHash, aerr = e.svc.AttachRoundSeed(ctx, round.ID, hash, adminInfluenced)
+		if aerr != nil {
+			slog.Error("attach crash seed", "error", aerr)
+			time.Sleep(time.Second)
+			return
+		}
+		crashPoint = provablyfair.CrashPoint(hash)
+	} else {
+		crashPoint = provablyfair.CrashPoint(hash)
+	}
 
 	runStarted := time.Now().UTC()
 	multiplier := 1.0

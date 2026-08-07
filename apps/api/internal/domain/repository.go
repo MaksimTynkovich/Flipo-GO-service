@@ -273,6 +273,8 @@ type PlatformRepository interface {
 	UpdateRiskSettings(ctx context.Context, settings *PlatformRiskSettings) error
 	// ApplyRouletteBankDelta adds delta to the roulette house bank and syncs recovery hysteresis.
 	ApplyRouletteBankDelta(ctx context.Context, delta int64) (*PlatformRiskSettings, error)
+	// ApplyCrashBankDelta adds delta to the crash house bank and syncs recovery hysteresis.
+	ApplyCrashBankDelta(ctx context.Context, delta int64) (*PlatformRiskSettings, error)
 	GetActiveSeed(ctx context.Context, gameType GameType) (*ProvablyFairSeedSession, error)
 	CreateSeedSession(ctx context.Context, session *ProvablyFairSeedSession) error
 	DeactivateSeeds(ctx context.Context, gameType GameType) error

@@ -197,19 +197,9 @@ export function CaseDetailView() {
       }
       haptics.impactOccurred("heavy");
 
-      const isTonPrize = res.prize_type === "ton" && (res.prize_nanoton ?? 0) > 0;
-      if (isTonPrize) {
-        // Keep TON prize off the header until reveal ends; apply open debit locally.
-        if (fresh.price_nanoton > 0) {
-          setUser((prev) =>
-            prev
-              ? patchUserBalance(prev, {
-                  betting_balance: Math.max(0, (prev.betting_balance ?? 0) - fresh.price_nanoton),
-                })
-              : prev,
-          );
-        }
-      } else {
+      // TON prize: debit comes via WS `case_open`; prize credit is held until reveal.
+      // Do not subtract price locally — that double-counts the realtime debit.
+      if (!(res.prize_type === "ton" && (res.prize_nanoton ?? 0) > 0)) {
         try {
           setUser(await getMe());
         } catch {

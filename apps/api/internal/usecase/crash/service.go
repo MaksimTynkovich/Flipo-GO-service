@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
@@ -355,8 +356,100 @@ func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID, crashPoi
 		_ = s.funding.SettleLoss(ctx, bet)
 		s.applyCrashWagerProgress(ctx, bet, nil)
 	}
+	s.applyCrashBankDelta(ctx, roundID)
 	s.notifyCrashRoundAggregated(ctx, roundID, crashPoint)
 	return s.PublishBets(ctx, roundID)
+}
+
+func (s *Service) applyCrashBankDelta(ctx context.Context, roundID uuid.UUID) {
+	if s.platform == nil {
+		return
+	}
+	bets, err := s.games.ListBetsByRound(ctx, roundID)
+	if err != nil {
+		return
+	}
+	var stakes, payouts int64
+	for _, bet := range bets {
+		stakes += bet.AmountNanoton
+		payouts += bet.PayoutNanoton
+	}
+	_, _ = s.platform.ApplyCrashBankDelta(ctx, stakes-payouts)
+}
+
+// CreateRound opens a crash betting phase. serverSeed may be empty when seed is deferred (recovery).
+func (s *Service) CreateRound(ctx context.Context, roundID uuid.UUID, roundNum int64, serverSeed, serverSeedHash string, betEnds time.Time) (*domain.GameRound, error) {
+	now := time.Now().UTC()
+	round := &domain.GameRound{
+		ID:             roundID,
+		GameType:       domain.GameCrash,
+		RoundNumber:    roundNum,
+		Status:         "betting",
+		StartedAt:      now,
+		ServerSeedHash: serverSeedHash,
+		ServerSeed:     serverSeed,
+		Nonce:          roundNum,
+		CreatedAt:      now,
+	}
+	if err := s.games.CreateRound(ctx, round); err != nil {
+		return nil, err
+	}
+
+	betState := &RoundState{
+		RoundID:        roundID,
+		RoundNumber:    roundNum,
+		Phase:          "betting",
+		Multiplier:     1.0,
+		EndsAt:         &betEnds,
+		ServerSeedHash: serverSeedHash,
+	}
+	if err := s.PublishState(ctx, betState); err != nil {
+		return nil, err
+	}
+	_ = s.PublishBets(ctx, roundID)
+	return round, nil
+}
+
+// AttachRoundSeed stores the crash hash after deferred commitment (recovery mode).
+func (s *Service) AttachRoundSeed(ctx context.Context, roundID uuid.UUID, serverSeed string, adminInfluenced bool) (string, error) {
+	round, err := s.games.GetRoundByID(ctx, roundID)
+	if err != nil {
+		return "", err
+	}
+	hash := provablyfair.HashSHA256(serverSeed)
+	round.ServerSeed = serverSeed
+	round.ServerSeedHash = hash
+	if adminInfluenced {
+		round.AdminInfluenced = true
+	}
+	if err := s.games.UpdateRound(ctx, round); err != nil {
+		return "", err
+	}
+	return hash, nil
+}
+
+func (s *Service) MarkAdminInfluenced(ctx context.Context, roundID uuid.UUID) error {
+	round, err := s.games.GetRoundByID(ctx, roundID)
+	if err != nil {
+		return err
+	}
+	round.AdminInfluenced = true
+	return s.games.UpdateRound(ctx, round)
+}
+
+// RecoverySnapshot reads whether auto-recovery should defer seed selection this round.
+func (s *Service) RecoverySnapshot(ctx context.Context) (active bool, biasWeight int, err error) {
+	if s.platform == nil {
+		return false, 0, nil
+	}
+	settings, err := s.platform.GetRiskSettings(ctx)
+	if err != nil || settings == nil {
+		return false, 0, err
+	}
+	if !settings.CrashRecoveryEnabled {
+		return false, 0, nil
+	}
+	return settings.CrashRecoveryActive, settings.CrashRecoveryBiasWeight, nil
 }
 
 func (s *Service) applyCrashWagerProgress(ctx context.Context, bet domain.GameBet, cashoutMult *float64) {

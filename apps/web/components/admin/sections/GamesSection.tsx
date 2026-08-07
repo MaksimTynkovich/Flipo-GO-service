@@ -505,6 +505,91 @@ export default function GamesSection() {
           </AdminToolbar>
         </AdminPanel>
       ) : null}
+
+      {risk ? (
+        <AdminPanel
+          title="Crash — отыгрыш дома"
+          description="Накопительный банк crash. При убытке ниже порога включается recovery: часть раундов после ставок смещается против экспозиции, пока банк не достигнет цели."
+        >
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-[var(--admin-muted,#8b98a8)]">
+            <label className="inline-flex items-center gap-2 text-[var(--admin-fg,#e8eef7)]">
+              <input
+                type="checkbox"
+                checked={Boolean(risk.crash_recovery_enabled)}
+                onChange={(e) =>
+                  setRisk({ ...risk, crash_recovery_enabled: e.target.checked })
+                }
+              />
+              Включить auto-recovery
+            </label>
+            <span>
+              Статус:{" "}
+              <strong className="text-[var(--admin-fg,#e8eef7)]">
+                {risk.crash_recovery_active ? "recovery активен" : "обычный режим"}
+              </strong>
+            </span>
+            <AdminInfoHint
+              label="Как это работает"
+              hint="Банк += ставки − выплаты после каждого раунда. В recovery seed выбирается после ставок: crash point подбирается против auto-cashout экспозиции. Смягчение — % раундов с подкруткой в recovery."
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <AdminTonField
+              label="Текущий банк (TON)"
+              valueNanoton={risk.crash_bank_nanoton ?? 0}
+              onChangeNanoton={(v) => setRisk({ ...risk, crash_bank_nanoton: v })}
+              allowNegative
+              hint="Можно скорректировать вручную. Обновляется автоматически после раундов."
+            />
+            <AdminTonField
+              label="Порог входа (TON)"
+              valueNanoton={risk.crash_loss_threshold_nanoton ?? -50_000_000_000}
+              onChangeNanoton={(v) => setRisk({ ...risk, crash_loss_threshold_nanoton: v })}
+              allowNegative
+              hint="Обычно отрицательный, напр. -50. Recovery включается при банке ≤ этого значения."
+            />
+            <AdminTonField
+              label="Цель выхода (TON)"
+              valueNanoton={risk.crash_recovery_target_nanoton ?? 0}
+              onChangeNanoton={(v) => setRisk({ ...risk, crash_recovery_target_nanoton: v })}
+              allowNegative
+              hint="Recovery выключается, когда банк снова ≥ цели (часто 0)."
+            />
+            <AdminIntField
+              label="Смягчение bias (%)"
+              value={risk.crash_recovery_bias_weight ?? 50}
+              onChange={(v) =>
+                setRisk({
+                  ...risk,
+                  crash_recovery_bias_weight: Math.max(0, Math.min(100, v)),
+                })
+              }
+              hint="0 = в recovery без подкрутки, 100 = каждый recovery-раунд против экспозиции."
+            />
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--admin-muted,#8b98a8)]">
+            Сейчас банк: {formatTON(risk.crash_bank_nanoton ?? 0)} TON
+          </p>
+          <AdminToolbar>
+            <AdminButton
+              variant="secondary"
+              onClick={() => setRisk({ ...risk, crash_bank_nanoton: 0 })}
+            >
+              Обнулить банк
+            </AdminButton>
+            <AdminButton
+              onClick={async () => {
+                await updateAdminRiskSettings(risk);
+                showToast({ variant: "success", title: "Crash recovery settings сохранены" });
+                const fresh = await getAdminRiskSettings();
+                setRisk(fresh);
+              }}
+            >
+              Сохранить recovery
+            </AdminButton>
+          </AdminToolbar>
+        </AdminPanel>
+      ) : null}
     </AdminPage>
   );
 }

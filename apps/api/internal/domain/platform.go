@@ -39,7 +39,14 @@ type PlatformRiskSettings struct {
 	RouletteLossThresholdNanoton  int64     `gorm:"not null;default:-50000000000" json:"roulette_loss_threshold_nanoton"`
 	RouletteRecoveryTargetNanoton int64     `gorm:"not null;default:0" json:"roulette_recovery_target_nanoton"`
 	RouletteRecoveryBiasWeight    int       `gorm:"not null;default:50" json:"roulette_recovery_bias_weight"`
-	UpdatedAt                     time.Time `json:"updated_at"`
+	// Crash house bank / auto-recovery (admin-tunable).
+	CrashRecoveryEnabled       bool  `gorm:"not null;default:false" json:"crash_recovery_enabled"`
+	CrashRecoveryActive        bool  `gorm:"not null;default:false" json:"crash_recovery_active"`
+	CrashBankNanoton           int64 `gorm:"not null;default:0" json:"crash_bank_nanoton"`
+	CrashLossThresholdNanoton  int64 `gorm:"not null;default:-50000000000" json:"crash_loss_threshold_nanoton"`
+	CrashRecoveryTargetNanoton int64 `gorm:"not null;default:0" json:"crash_recovery_target_nanoton"`
+	CrashRecoveryBiasWeight    int   `gorm:"not null;default:50" json:"crash_recovery_bias_weight"`
+	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
 func (PlatformRiskSettings) TableName() string { return "platform_risk_settings" }
@@ -67,6 +74,37 @@ func SyncRouletteRecoveryHysteresis(s *PlatformRiskSettings) {
 	} else if s.RouletteBankNanoton <= s.RouletteLossThresholdNanoton {
 		s.RouletteRecoveryActive = true
 	}
+}
+
+// SyncCrashRecoveryHysteresis updates CrashRecoveryActive from bank vs thresholds.
+// Enter when bank <= loss threshold; exit when bank >= recovery target.
+func SyncCrashRecoveryHysteresis(s *PlatformRiskSettings) {
+	if s == nil {
+		return
+	}
+	if s.CrashRecoveryBiasWeight < 0 {
+		s.CrashRecoveryBiasWeight = 0
+	}
+	if s.CrashRecoveryBiasWeight > 100 {
+		s.CrashRecoveryBiasWeight = 100
+	}
+	if !s.CrashRecoveryEnabled {
+		s.CrashRecoveryActive = false
+		return
+	}
+	if s.CrashRecoveryActive {
+		if s.CrashBankNanoton >= s.CrashRecoveryTargetNanoton {
+			s.CrashRecoveryActive = false
+		}
+	} else if s.CrashBankNanoton <= s.CrashLossThresholdNanoton {
+		s.CrashRecoveryActive = true
+	}
+}
+
+// SyncGameRecoveryHysteresis updates all game recovery flags from bank thresholds.
+func SyncGameRecoveryHysteresis(s *PlatformRiskSettings) {
+	SyncRouletteRecoveryHysteresis(s)
+	SyncCrashRecoveryHysteresis(s)
 }
 
 // ProvablyFairSeedSession — active/revealed server seed chain per game.

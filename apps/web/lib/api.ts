@@ -1283,6 +1283,12 @@ export type AdminRiskSettings = {
   roulette_loss_threshold_nanoton?: number;
   roulette_recovery_target_nanoton?: number;
   roulette_recovery_bias_weight?: number;
+  crash_recovery_enabled?: boolean;
+  crash_recovery_active?: boolean;
+  crash_bank_nanoton?: number;
+  crash_loss_threshold_nanoton?: number;
+  crash_recovery_target_nanoton?: number;
+  crash_recovery_bias_weight?: number;
 };
 
 export type AdminTreasuryStatus = {
