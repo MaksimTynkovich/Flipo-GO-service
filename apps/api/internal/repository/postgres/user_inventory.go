@@ -272,6 +272,20 @@ func applyWagerRequiredTx(tx *gorm.DB, user *domain.User, amount int64) error {
 	}).Error
 }
 
+// applyReduceWagerRequiredTx writes off deposit playthrough when balance is spent on a market gift.
+func applyReduceWagerRequiredTx(tx *gorm.DB, user *domain.User, amount int64) error {
+	if amount <= 0 || user == nil {
+		return nil
+	}
+	required, progress := domain.ReduceWagerRequired(user.WagerRequiredNanoton, user.WagerProgressNanoton, amount)
+	user.WagerRequiredNanoton = required
+	user.WagerProgressNanoton = progress
+	return tx.Model(user).Updates(map[string]any{
+		"wager_required_nanoton": required,
+		"wager_progress_nanoton": progress,
+	}).Error
+}
+
 // applyWagerProgressTx bumps playthrough progress (user row must be locked).
 func applyWagerProgressTx(tx *gorm.DB, user *domain.User, amount int64) error {
 	if amount <= 0 || user == nil {

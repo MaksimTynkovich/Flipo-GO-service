@@ -35,6 +35,32 @@ func TestCrashWagerCredit(t *testing.T) {
 	}
 }
 
+func TestReduceWagerRequired(t *testing.T) {
+	req, prog := ReduceWagerRequired(1_000_000_000, 0, 400_000_000)
+	if req != 600_000_000 || prog != 0 {
+		t.Fatalf("partial write-off: req=%d prog=%d", req, prog)
+	}
+	req, prog = ReduceWagerRequired(1_000_000_000, 0, 1_000_000_000)
+	if req != 0 || prog != 0 {
+		t.Fatalf("full write-off: req=%d prog=%d", req, prog)
+	}
+	req, prog = ReduceWagerRequired(1_000_000_000, 500_000_000, 600_000_000)
+	if req != 0 || prog != 0 {
+		t.Fatalf("progress clears when remaining gone: req=%d prog=%d", req, prog)
+	}
+}
+
+func TestDepositWagerWriteoffMeta(t *testing.T) {
+	meta := WithDepositWagerWriteoff(nil, 123)
+	if got := DepositWagerWriteoffNanoton(meta); got != 123 {
+		t.Fatalf("got %d", got)
+	}
+	cleared := WithDepositWagerWriteoff(meta, 0)
+	if got := DepositWagerWriteoffNanoton(cleared); got != 0 {
+		t.Fatalf("cleared %d", got)
+	}
+}
+
 func TestWithdrawableDebitCap(t *testing.T) {
 	// No progress yet — fully locked.
 	if WithdrawableDebitCap(1_000_000_000, 1_000_000_000, 0) != 0 {

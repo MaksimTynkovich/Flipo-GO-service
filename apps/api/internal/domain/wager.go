@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 )
@@ -101,6 +102,84 @@ func WithdrawableDebitCap(balance, required, progress int64) int64 {
 		return progress
 	}
 	return balance
+}
+
+// ReduceWagerRequired lowers deposit playthrough obligation (e.g. market gift buy).
+// Progress is clamped; both clear when remaining hits 0.
+func ReduceWagerRequired(required, progress, amount int64) (newRequired, newProgress int64) {
+	if amount <= 0 || required <= 0 {
+		return required, progress
+	}
+	newRequired = required - amount
+	if newRequired < 0 {
+		newRequired = 0
+	}
+	newProgress = progress
+	if newProgress < 0 {
+		newProgress = 0
+	}
+	if newRequired == 0 || newProgress >= newRequired {
+		return 0, 0
+	}
+	return newRequired, newProgress
+}
+
+const DepositWagerWriteoffMetaKey = "deposit_wager_writeoff_nanoton"
+
+// DepositWagerWriteoffNanoton reads how much deposit wager was written off when buying this gift.
+func DepositWagerWriteoffNanoton(meta []byte) int64 {
+	if len(meta) == 0 {
+		return 0
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(meta, &raw); err != nil {
+		return 0
+	}
+	return int64FromMetaNumber(raw[DepositWagerWriteoffMetaKey])
+}
+
+// WithDepositWagerWriteoff sets/clears the write-off marker on gift metadata (amount<=0 clears).
+func WithDepositWagerWriteoff(meta []byte, amount int64) []byte {
+	var raw map[string]any
+	if len(meta) > 0 {
+		_ = json.Unmarshal(meta, &raw)
+	}
+	if raw == nil {
+		raw = map[string]any{}
+	}
+	if amount <= 0 {
+		delete(raw, DepositWagerWriteoffMetaKey)
+	} else {
+		raw[DepositWagerWriteoffMetaKey] = amount
+	}
+	out, err := json.Marshal(raw)
+	if err != nil {
+		return meta
+	}
+	return out
+}
+
+func int64FromMetaNumber(v any) int64 {
+	switch n := v.(type) {
+	case float64:
+		if n <= 0 {
+			return 0
+		}
+		return int64(n)
+	case int64:
+		if n <= 0 {
+			return 0
+		}
+		return n
+	case json.Number:
+		i, err := n.Int64()
+		if err != nil || i <= 0 {
+			return 0
+		}
+		return i
+	default:
+		return 0
+	}
 }
 
 // CrashWagerCredit returns how much of a crash TON stake counts toward deposit playthrough.

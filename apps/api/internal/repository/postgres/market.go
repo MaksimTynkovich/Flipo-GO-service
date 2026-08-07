@@ -281,9 +281,14 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 		}).Error; err != nil {
 			return err
 		}
-		// Market gift buy counts toward deposit playthrough (1×), same as case opens.
-		if err := applyWagerProgressTx(tx, &buyer, price); err != nil {
+		// Write off deposit wager for gift purchase (does not unlock TON via progress).
+		if err := applyReduceWagerRequiredTx(tx, &buyer, price); err != nil {
 			return err
+		}
+
+		sellerWriteoff := int64(0)
+		if listing.Item.ID != uuid.Nil {
+			sellerWriteoff = domain.DepositWagerWriteoffNanoton(listing.Item.Metadata)
 		}
 
 		if sellerProceeds > 0 {
@@ -291,6 +296,7 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 			if err := tx.Model(&seller).Update("betting_balance", sellerBalance).Error; err != nil {
 				return err
 			}
+			seller.BettingBalance = sellerBalance
 			if err := tx.Create(&domain.BalanceLedger{
 				UserID:        listing.SellerID,
 				Type:          domain.LedgerMarketSell,
@@ -300,6 +306,12 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 				ReferenceID:   listingID,
 				CreatedAt:     time.Now().UTC(),
 			}).Error; err != nil {
+				return err
+			}
+		}
+		// Cash back from a previously bought gift restores deposit wager lock.
+		if sellerWriteoff > 0 {
+			if err := applyWagerRequiredTx(tx, &seller, sellerWriteoff); err != nil {
 				return err
 			}
 		}
@@ -314,11 +326,13 @@ func (r *MarketRepo) Purchase(ctx context.Context, listingID, buyerID uuid.UUID,
 			return err
 		}
 
+		buyerMeta := domain.WithDepositWagerWriteoff(listing.Item.Metadata, price)
 		res := tx.Model(&domain.InventoryItem{}).
 			Where("id = ? AND status = ?", listing.InventoryItemID, domain.InvLocked).
 			Updates(map[string]interface{}{
 				"user_id":    buyerID,
 				"status":     domain.InvAvailable,
+				"metadata":   buyerMeta,
 				"updated_at": now,
 			})
 		if res.Error != nil {
@@ -372,6 +386,7 @@ func (r *MarketRepo) SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, 
 		if err := tx.Model(&seller).Update("betting_balance", sellerBalance).Error; err != nil {
 			return err
 		}
+		seller.BettingBalance = sellerBalance
 		if err := tx.Create(&domain.BalanceLedger{
 			UserID:        sellerID,
 			Type:          domain.LedgerLiquidate,
@@ -383,11 +398,18 @@ func (r *MarketRepo) SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, 
 		}).Error; err != nil {
 			return err
 		}
+		if writeoff := domain.DepositWagerWriteoffNanoton(item.Metadata); writeoff > 0 {
+			if err := applyWagerRequiredTx(tx, &seller, writeoff); err != nil {
+				return err
+			}
+		}
 
 		now := time.Now().UTC()
+		clearedMeta := domain.WithDepositWagerWriteoff(item.Metadata, 0)
 		if err := tx.Model(&item).Updates(map[string]interface{}{
 			"user_id":    botUser.ID,
 			"status":     domain.InvLocked,
+			"metadata":   clearedMeta,
 			"updated_at": now,
 		}).Error; err != nil {
 			return err
