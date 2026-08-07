@@ -203,15 +203,14 @@ func (e *Engine) runRound(ctx context.Context) {
 
 	crashPoint := float64(0)
 	if deferredSeed {
-		recoveryActive, biasWeight, _ := e.svc.RecoverySnapshot(ctx)
+		recoveryParams, _ := e.svc.RecoveryBiasParams(ctx)
 		hash = ""
 		adminInfluenced = false
-		if recoveryActive && outcomeuc.ShouldApply(outcomeuc.ModeBias, biasWeight) {
+		if recoveryParams.Active && outcomeuc.ShouldApply(outcomeuc.ModeBias, recoveryParams.BiasWeight) {
 			bets, berr := e.games.ListPendingBetsByRound(ctx, round.ID)
 			if berr != nil {
 				slog.Warn("crash recovery list bets", "error", berr)
-			} else {
-				target := crashuc.PickBestCrashPoint(bets)
+			} else if target, hasExposure := crashuc.PickRecoveryCrashPoint(bets, recoveryParams.ManualExposureThresholdNanoton); hasExposure {
 				if found, foundOk := provablyfair.FindCrashHash(0, 0, target, 500000); foundOk {
 					hash = found
 					adminInfluenced = true

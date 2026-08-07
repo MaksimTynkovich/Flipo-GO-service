@@ -67,7 +67,7 @@ export function formatWagerBlockedMessage(
   }
 
   if (remaining > 0) {
-    return `Доступно к выводу: ${formatTON(receiveCap)} TON · отыграно ${formatTON(progress)} из ${formatTON(required)} TON · осталось отыграть ${formatTON(remaining)}.`;
+    return `Доступно к выводу: ${formatTON(receiveCap)} TON · отыграно ${formatTON(progress)} из ${formatTON(required)} TON.`;
   }
 
   return `Доступно к выводу: ${formatTON(receiveCap)} TON.`;

@@ -437,19 +437,36 @@ func (s *Service) MarkAdminInfluenced(ctx context.Context, roundID uuid.UUID) er
 	return s.games.UpdateRound(ctx, round)
 }
 
+// RecoveryBiasParams holds per-round crash recovery knobs from platform settings.
+type RecoveryBiasParams struct {
+	Active                          bool
+	BiasWeight                      int
+	ManualExposureThresholdNanoton  int64
+}
+
 // RecoverySnapshot reads whether auto-recovery should defer seed selection this round.
 func (s *Service) RecoverySnapshot(ctx context.Context) (active bool, biasWeight int, err error) {
+	params, err := s.RecoveryBiasParams(ctx)
+	return params.Active, params.BiasWeight, err
+}
+
+// RecoveryBiasParams loads crash recovery settings for seed bias decisions.
+func (s *Service) RecoveryBiasParams(ctx context.Context) (RecoveryBiasParams, error) {
 	if s.platform == nil {
-		return false, 0, nil
+		return RecoveryBiasParams{}, nil
 	}
 	settings, err := s.platform.GetRiskSettings(ctx)
 	if err != nil || settings == nil {
-		return false, 0, err
+		return RecoveryBiasParams{}, err
 	}
 	if !settings.CrashRecoveryEnabled {
-		return false, 0, nil
+		return RecoveryBiasParams{}, nil
 	}
-	return settings.CrashRecoveryActive, settings.CrashRecoveryBiasWeight, nil
+	return RecoveryBiasParams{
+		Active:                         settings.CrashRecoveryActive,
+		BiasWeight:                     settings.CrashRecoveryBiasWeight,
+		ManualExposureThresholdNanoton: settings.WhaleBetThresholdNanoton,
+	}, nil
 }
 
 func (s *Service) applyCrashWagerProgress(ctx context.Context, bet domain.GameBet, cashoutMult *float64) {

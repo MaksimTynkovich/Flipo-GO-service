@@ -530,7 +530,7 @@ export default function GamesSection() {
             </span>
             <AdminInfoHint
               label="Как это работает"
-              hint="Банк += ставки − выплаты после каждого раунда. В recovery seed выбирается после ставок: crash point подбирается против auto-cashout экспозиции. Смягчение — % раундов с подкруткой в recovery."
+              hint="Банк += ставки − выплаты после каждого раунда. Auto-cashout: crash чуть ниже цели. Крупные manual-ставки (≥ порога кита из Anti-whale): мягкий crash 1.25×. Смягчение — % раундов с подкруткой в recovery."
             />
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

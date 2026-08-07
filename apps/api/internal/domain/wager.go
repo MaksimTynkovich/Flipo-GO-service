@@ -59,7 +59,6 @@ func FormatWagerIncompleteMessage(e *WagerIncompleteError) string {
 	}
 	progress := formatNanotonTON(e.ProgressNanoton)
 	required := formatNanotonTON(e.RequiredNanoton)
-	remaining := formatNanotonTON(e.RemainingNanoton)
 	if e.GiftValueNanoton > 0 {
 		need := formatNanotonTON(e.GiftValueNanoton)
 		return fmt.Sprintf(
@@ -69,8 +68,8 @@ func FormatWagerIncompleteMessage(e *WagerIncompleteError) string {
 	}
 	available := formatNanotonTON(e.WithdrawableNanoton)
 	return fmt.Sprintf(
-		"Доступно к выводу: %s TON · отыграно %s из %s TON · осталось отыграть %s.",
-		available, progress, required, remaining,
+		"Доступно к выводу: %s TON · отыграно %s из %s TON",
+		available, progress, required,
 	)
 }
 
