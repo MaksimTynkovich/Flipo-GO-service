@@ -93,7 +93,7 @@ func TestGiftWagerValueNanoton(t *testing.T) {
 
 func TestWagerIncompleteErrorUnwrap(t *testing.T) {
 	user := &User{WagerRequiredNanoton: 1e9, WagerProgressNanoton: 2e8, BettingBalance: 5e8}
-	err := NewWagerIncomplete(user, 4e8)
+	err := NewWagerIncomplete(user, 0)
 	if !errors.Is(err, ErrWagerIncomplete) {
 		t.Fatal("unwrap")
 	}
@@ -101,7 +101,17 @@ func TestWagerIncompleteErrorUnwrap(t *testing.T) {
 	if msg == "" || msg == ErrWagerIncomplete.Error() {
 		t.Fatalf("expected detailed message, got %q", msg)
 	}
-	if !strings.Contains(msg, "Доступно к выводу") {
-		t.Fatalf("expected available amount in message, got %q", msg)
+	if !strings.Contains(msg, "отыграно") {
+		t.Fatalf("expected wager progress in message, got %q", msg)
+	}
+
+	locked := NewWagerIncomplete(&User{
+		WagerRequiredNanoton: 3e9,
+		WagerProgressNanoton: 0,
+		BettingBalance:       3e9,
+	}, 0)
+	lockedMsg := FormatWagerIncompleteMessage(locked)
+	if !strings.Contains(lockedMsg, "отыграйте депозит") || !strings.Contains(lockedMsg, "доступно к выводу 0") {
+		t.Fatalf("expected explicit playthrough lock message, got %q", lockedMsg)
 	}
 }

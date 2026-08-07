@@ -52,8 +52,14 @@ func FormatWagerIncompleteMessage(e *WagerIncompleteError) string {
 	progress := formatNanotonTON(e.ProgressNanoton)
 	required := formatNanotonTON(e.RequiredNanoton)
 	available := formatNanotonTON(e.WithdrawableNanoton)
+	if e.RemainingNanoton > 0 && e.WithdrawableNanoton <= 0 {
+		return fmt.Sprintf(
+			"Вывод недоступен — сначала отыграйте депозит. Отыграно %s из %s TON · доступно к выводу 0 TON.",
+			progress, required,
+		)
+	}
 	return fmt.Sprintf(
-		"Доступно к выводу: %s TON · отыграно %s из %s TON",
+		"Доступно к выводу: %s TON · отыграно %s из %s TON.",
 		available, progress, required,
 	)
 }

@@ -58,6 +58,9 @@ export function formatWagerBlockedMessage(
   const receiveCap = Math.max(0, withdrawable - fee);
 
   if (remaining > 0) {
+    if (receiveCap <= 0) {
+      return `Вывод недоступен — сначала отыграйте депозит. Отыграно ${formatTON(progress)} из ${formatTON(required)} TON · доступно к выводу 0 TON.`;
+    }
     return `Доступно к выводу: ${formatTON(receiveCap)} TON · отыграно ${formatTON(progress)} из ${formatTON(required)} TON.`;
   }
 
@@ -140,5 +143,5 @@ export function formatWagerIncompleteError(
     return formatWagerBlockedMessage(fallbackUser, context);
   }
 
-  return "Доступно к выводу: 0 TON · нужно отыграть депозит.";
+  return "Вывод недоступен — сначала отыграйте депозит.";
 }
