@@ -26,8 +26,8 @@ type User struct {
 	// AdminCreditNanoton — remaining balance that came from admin_adjust (not live deposits).
 	// Spent first on debits so case bank / P&L can treat that spend as non-organic.
 	AdminCreditNanoton int64 `gorm:"not null;default:0" json:"admin_credit_nanoton"`
-	// WagerRequiredNanoton / WagerProgressNanoton — deposit playthrough (1×). Remaining lock =
-	// max(0, required-progress); TON withdraw debit cannot exceed balance-remaining.
+	// WagerRequiredNanoton / WagerProgressNanoton — deposit playthrough (1×).
+	// While remaining > 0, TON withdraw debit ≤ min(balance, progress); else full balance.
 	WagerRequiredNanoton int64 `gorm:"not null;default:0" json:"wager_required_nanoton"`
 	WagerProgressNanoton int64 `gorm:"not null;default:0" json:"wager_progress_nanoton"`
 	ReferrerID           *uuid.UUID     `gorm:"type:uuid;index" json:"referrer_id,omitempty"`

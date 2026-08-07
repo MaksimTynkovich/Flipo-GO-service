@@ -36,17 +36,26 @@ func TestCrashWagerCredit(t *testing.T) {
 }
 
 func TestWithdrawableDebitCap(t *testing.T) {
-	// balance 0.437, remaining 0.106 → free 0.331
-	cap := WithdrawableDebitCap(436_986_532, 106_444_872, 0)
-	want := int64(436_986_532 - 106_444_872)
-	if cap != want {
-		t.Fatalf("got %d want %d", cap, want)
+	// No progress yet — fully locked.
+	if WithdrawableDebitCap(1_000_000_000, 1_000_000_000, 0) != 0 {
+		t.Fatal("no progress")
+	}
+	// Deposit 1, lost/spent 0.5 → unlock 0.5 of remaining balance.
+	if got := WithdrawableDebitCap(500_000_000, 1_000_000_000, 500_000_000); got != 500_000_000 {
+		t.Fatalf("after half loss: got %d", got)
+	}
+	// Mid-wager win: only progress unlocks, not full balance.
+	if got := WithdrawableDebitCap(2_000_000_000, 1_000_000_000, 500_000_000); got != 500_000_000 {
+		t.Fatalf("mid-wager win: got %d", got)
 	}
 	if WithdrawableDebitCap(100, 100, 0) != 0 {
 		t.Fatal("fully locked")
 	}
 	if WithdrawableDebitCap(100, 50, 50) != 100 {
 		t.Fatal("cleared lock")
+	}
+	if WithdrawableDebitCap(100, 0, 0) != 100 {
+		t.Fatal("no requirement")
 	}
 }
 

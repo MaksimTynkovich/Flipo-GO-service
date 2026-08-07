@@ -102,12 +102,22 @@ func WagerRemaining(required, progress int64) int64 {
 }
 
 // WithdrawableDebitCap is max (receive+fee) allowed while deposit wager is enforced.
+// While playthrough remains: min(balance, progress) — losses/spends unlock that much for withdraw.
+// When remaining is 0: full balance.
 func WithdrawableDebitCap(balance, required, progress int64) int64 {
-	remaining := WagerRemaining(required, progress)
-	if balance <= remaining {
+	if balance <= 0 {
 		return 0
 	}
-	return balance - remaining
+	if WagerRemaining(required, progress) == 0 {
+		return balance
+	}
+	if progress <= 0 {
+		return 0
+	}
+	if progress < balance {
+		return progress
+	}
+	return balance
 }
 
 // CrashWagerCredit returns how much of a crash TON stake counts toward deposit playthrough.

@@ -25,7 +25,7 @@ import {
   walletStatusLabel,
   type WalletMessage,
 } from "@/lib/wallet-errors";
-import { formatWagerBlockedMessage } from "@/lib/wager-messages";
+import { formatWagerBlockedMessage, withdrawableDebitCap } from "@/lib/wager-messages";
 import {
   encodeTonCommentPayload,
   formatTonWalletAddress,
@@ -330,10 +330,10 @@ export function TonWalletPanel() {
     }
     const withdrawable =
       user?.withdrawable_nanoton ??
-      Math.max(
-        0,
-        (user?.betting_balance ?? 0) -
-          Math.max(0, (user?.wager_required_nanoton ?? 0) - (user?.wager_progress_nanoton ?? 0)),
+      withdrawableDebitCap(
+        user?.betting_balance ?? 0,
+        user?.wager_required_nanoton ?? 0,
+        user?.wager_progress_nanoton ?? 0,
       );
     if (user && debitNanoton > withdrawable) {
       setMessage({

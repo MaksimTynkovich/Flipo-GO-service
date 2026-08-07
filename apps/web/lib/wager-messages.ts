@@ -22,12 +22,28 @@ function remainingFromSnapshot(snapshot: WagerSnapshot): number {
   return Math.max(0, required - progress);
 }
 
+/** Mirror of domain.WithdrawableDebitCap: min(balance, progress) while remaining > 0. */
+export function withdrawableDebitCap(
+  balance: number,
+  required: number,
+  progress: number,
+): number {
+  if (balance <= 0) return 0;
+  const remaining = Math.max(0, required - progress);
+  if (remaining <= 0) return Math.max(0, balance);
+  if (progress <= 0) return 0;
+  return Math.min(balance, progress);
+}
+
 function withdrawableFromSnapshot(snapshot: WagerSnapshot): number {
   if (typeof snapshot.withdrawable_nanoton === "number") {
     return Math.max(0, snapshot.withdrawable_nanoton);
   }
-  const balance = snapshot.betting_balance ?? 0;
-  return Math.max(0, balance - remainingFromSnapshot(snapshot));
+  return withdrawableDebitCap(
+    snapshot.betting_balance ?? 0,
+    snapshot.wager_required_nanoton ?? 0,
+    snapshot.wager_progress_nanoton ?? 0,
+  );
 }
 
 /** User-facing copy when deposit playthrough blocks a withdraw. */
