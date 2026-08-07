@@ -1,6 +1,7 @@
 package provablyfair
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -31,13 +32,19 @@ func TestFindCrashHash(t *testing.T) {
 }
 
 func TestFindCrashHashExact(t *testing.T) {
-	const exact = 2.0
-	hash, ok := FindCrashHash(0, 0, exact, 200000)
-	if !ok {
-		t.Fatalf("no crash hash found for exact %v", exact)
-	}
-	if CrashPoint(hash) != exact {
-		t.Fatalf("crash point %v != exact %v", CrashPoint(hash), exact)
+	targets := []float64{1.25, 1.99, 2.0, 5.5}
+	for _, exact := range targets {
+		hash, ok := FindCrashHash(0, 0, exact, 200000)
+		if !ok {
+			t.Fatalf("no crash hash found for exact %v", exact)
+		}
+		if CrashPoint(hash) != exact {
+			t.Fatalf("crash point %v != exact %v", CrashPoint(hash), exact)
+		}
+		payload, _ := json.Marshal(map[string]float64{"crash_point": exact})
+		if !VerifyRound("crash", HashSHA256(hash), hash, 1, payload) {
+			t.Fatalf("VerifyRound failed for exact %v", exact)
+		}
 	}
 }
 

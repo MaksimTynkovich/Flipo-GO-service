@@ -128,7 +128,7 @@ func (e *Engine) recoverOrphans(ctx context.Context) {
 		ServerSeedHash: state.ServerSeedHash,
 	})
 
-	go e.finishRound(context.Background(), round, crashPoint, state.RoundID)
+	go e.finishRound(context.Background(), state.RoundID, crashPoint)
 }
 
 func (e *Engine) runRound(ctx context.Context) {
@@ -210,11 +210,11 @@ func (e *Engine) runRound(ctx context.Context) {
 			bets, berr := e.games.ListPendingBetsByRound(ctx, round.ID)
 			if berr != nil {
 				slog.Warn("crash recovery list bets", "error", berr)
-			} else if target, hasExposure := crashuc.PickRecoveryCrashPoint(bets, recoveryParams.ManualExposureThresholdNanoton); hasExposure {
-				if found, foundOk := provablyfair.FindCrashHash(0, 0, target, 500000); foundOk {
+			} else if target, hasExposure := crashuc.PickRecoveryCrashRange(bets, recoveryParams.ManualExposureThresholdNanoton); hasExposure {
+				if found, foundOk := provablyfair.FindCrashHash(target.MinPoint, target.MaxPoint, 0, 500000); foundOk {
 					hash = found
 					adminInfluenced = true
-					slog.Info("crash recovery seed", "point", target, "round", roundNum)
+					slog.Info("crash recovery seed", "min", target.MinPoint, "max", target.MaxPoint, "round", roundNum)
 				}
 			}
 		}
@@ -286,17 +286,23 @@ func (e *Engine) runRound(ctx context.Context) {
 	}
 	_ = e.svc.PublishState(ctx, crashState)
 
-	go e.finishRound(context.Background(), round, crashPoint, roundID)
+	go e.finishRound(context.Background(), roundID, crashPoint)
 
 	time.Sleep(3 * time.Second)
 }
 
-func (e *Engine) finishRound(ctx context.Context, round *domain.GameRound, crashPoint float64, roundID uuid.UUID) {
+func (e *Engine) finishRound(ctx context.Context, roundID uuid.UUID, crashPoint float64) {
 	finishCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	if err := e.svc.SettleCrashed(finishCtx, roundID, crashPoint); err != nil {
 		slog.Error("crash settle failed", "error", err, "round_id", roundID)
+	}
+
+	round, err := e.games.GetRoundByID(finishCtx, roundID)
+	if err != nil || round == nil {
+		slog.Error("crash load round for finish failed", "error", err, "round_id", roundID)
+		return
 	}
 
 	end := time.Now().UTC()

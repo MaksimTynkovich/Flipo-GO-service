@@ -530,7 +530,7 @@ export default function GamesSection() {
             </span>
             <AdminInfoHint
               label="Как это работает"
-              hint="Банк += ставки − выплаты после каждого раунда. Auto-cashout: crash чуть ниже цели. Крупные manual-ставки (≥ порога кита из Anti-whale): мягкий crash 1.25×. Смягчение — % раундов с подкруткой в recovery."
+              hint="Банк += ставки − выплаты. Auto-cashout: случайный crash в окне ниже цели (не вплотную). Крупные manual (≥ порога кита): окно 1.05–1.25×. Смягчение — % раундов с подкруткой."
             />
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

@@ -21,75 +21,101 @@ func crashBet(amount int64, auto *float64) domain.GameBet {
 	}
 }
 
-func TestPickRecoveryCrashPoint_NoBets(t *testing.T) {
-	if _, ok := PickRecoveryCrashPoint(nil, testWhaleThreshold); ok {
+func TestPickRecoveryCrashRange_NoBets(t *testing.T) {
+	if _, ok := PickRecoveryCrashRange(nil, testWhaleThreshold); ok {
 		t.Fatal("empty book should not trigger recovery bias")
 	}
 }
 
-func TestPickRecoveryCrashPoint_SmallManualNoBias(t *testing.T) {
+func TestPickRecoveryCrashRange_SmallManualNoBias(t *testing.T) {
 	bets := []domain.GameBet{crashBet(1_000_000_000, nil)}
-	if _, ok := PickRecoveryCrashPoint(bets, testWhaleThreshold); ok {
+	if _, ok := PickRecoveryCrashRange(bets, testWhaleThreshold); ok {
 		t.Fatal("small manual book should not trigger recovery bias")
 	}
 }
 
-func TestPickRecoveryCrashPoint_LargeManualSoftBias(t *testing.T) {
+func TestPickRecoveryCrashRange_LargeManualSoftBias(t *testing.T) {
 	bets := []domain.GameBet{crashBet(15_000_000_000, nil)}
-	got, ok := PickRecoveryCrashPoint(bets, testWhaleThreshold)
+	got, ok := PickRecoveryCrashRange(bets, testWhaleThreshold)
 	if !ok {
 		t.Fatal("large manual book should trigger soft recovery bias")
 	}
-	if got != ManualSoftCrashPoint {
-		t.Fatalf("got %.2f, want soft point %.2f", got, ManualSoftCrashPoint)
+	if got.MinPoint != ManualSoftCrashMin || got.MaxPoint != ManualSoftCrashPoint {
+		t.Fatalf("got [%.2f, %.2f], want [%.2f, %.2f]", got.MinPoint, got.MaxPoint, ManualSoftCrashMin, ManualSoftCrashPoint)
 	}
 }
 
-func TestPickRecoveryCrashPoint_AvoidsAutoPayout(t *testing.T) {
-	auto := 2.0
-	bets := []domain.GameBet{
-		crashBet(1_000_000_000, &auto),
-	}
-	got, ok := PickRecoveryCrashPoint(bets, testWhaleThreshold)
+func TestPickRecoveryCrashRange_AutoHasSpread(t *testing.T) {
+	auto := 1.2
+	bets := []domain.GameBet{crashBet(1_000_000_000, &auto)}
+	got, ok := PickRecoveryCrashRange(bets, testWhaleThreshold)
 	if !ok {
 		t.Fatal("expected ok with auto-cashout exposure")
 	}
-	if got >= 2.0 {
-		t.Fatalf("got %.2f, should stay below auto target 2.00", got)
+	if got.MaxPoint >= 1.2 {
+		t.Fatalf("max %.2f should stay below auto 1.20", got.MaxPoint)
 	}
-	if got != 1.99 {
-		t.Fatalf("got %.2f, want softest optimal 1.99", got)
+	if got.MaxPoint-got.MinPoint < 0.05 {
+		t.Fatalf("spread too tight: [%.2f, %.2f]", got.MinPoint, got.MaxPoint)
+	}
+	if got.MaxPoint > 1.19 || got.MinPoint < 1.01 {
+		t.Fatalf("unexpected window [%.2f, %.2f] for auto 1.20", got.MinPoint, got.MaxPoint)
 	}
 }
 
-func TestPickRecoveryCrashPoint_HeavyAutoPrefersBelowHighest(t *testing.T) {
+func TestPickRecoveryCrashRange_AvoidsAutoPayout(t *testing.T) {
+	auto := 2.0
+	bets := []domain.GameBet{crashBet(1_000_000_000, &auto)}
+	got, ok := PickRecoveryCrashRange(bets, testWhaleThreshold)
+	if !ok {
+		t.Fatal("expected ok with auto-cashout exposure")
+	}
+	if got.MaxPoint >= 2.0 {
+		t.Fatalf("max %.2f should stay below auto target 2.00", got.MaxPoint)
+	}
+	if got.MaxPoint != 1.99 {
+		t.Fatalf("max %.2f, want 1.99", got.MaxPoint)
+	}
+	if got.MinPoint >= got.MaxPoint {
+		t.Fatalf("invalid range [%.2f, %.2f]", got.MinPoint, got.MaxPoint)
+	}
+}
+
+func TestPickRecoveryCrashRange_HeavyAutoPrefersBelowHighest(t *testing.T) {
 	autoLow := 1.5
 	autoHigh := 10.0
 	bets := []domain.GameBet{
 		crashBet(100_000_000, &autoLow),
 		crashBet(1_000_000_000, &autoHigh),
 	}
-	got, ok := PickRecoveryCrashPoint(bets, testWhaleThreshold)
+	got, ok := PickRecoveryCrashRange(bets, testWhaleThreshold)
 	if !ok {
 		t.Fatal("expected ok")
 	}
-	if got >= 1.5 {
-		t.Fatalf("got %.2f, want below low auto 1.50", got)
+	if got.MaxPoint >= 1.5 {
+		t.Fatalf("max %.2f, want below low auto 1.50", got.MaxPoint)
 	}
 }
 
-func TestPickRecoveryCrashPoint_AutoBeatsLargeManual(t *testing.T) {
+func TestPickRecoveryCrashRange_AutoBeatsLargeManual(t *testing.T) {
 	auto := 3.0
 	bets := []domain.GameBet{
 		crashBet(50_000_000_000, nil),
 		crashBet(1_000_000_000, &auto),
 	}
-	got, ok := PickRecoveryCrashPoint(bets, testWhaleThreshold)
+	got, ok := PickRecoveryCrashRange(bets, testWhaleThreshold)
 	if !ok {
 		t.Fatal("expected ok")
 	}
-	if got != 2.99 {
-		t.Fatalf("auto exposure should win, got %.2f", got)
+	if got.MaxPoint != 2.99 {
+		t.Fatalf("auto exposure should win, max %.2f", got.MaxPoint)
+	}
+}
+
+func TestAutoRecoverySpreadRange(t *testing.T) {
+	r := autoRecoverySpreadRange(1.19)
+	if r.MaxPoint != 1.19 || r.MinPoint >= r.MaxPoint {
+		t.Fatalf("bad range for 1.19 anchor: %+v", r)
 	}
 }
 
