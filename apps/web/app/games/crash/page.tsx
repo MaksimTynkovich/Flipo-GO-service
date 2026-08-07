@@ -21,11 +21,13 @@ import {
   getCrashBets,
   getCrashHistory,
   getCrashState,
+  getMe,
   placeCrashBet,
   CrashHistoryEntry,
   CrashRoundBets as CrashRoundBetsData,
   CrashActiveBet,
 } from "@/lib/api";
+import { patchUserSession } from "@/lib/apply-balance";
 import { CrashRoundState } from "@/lib/crash";
 import {
   crashCashoutMessage,
@@ -67,7 +69,7 @@ export default function CrashPage() {
 }
 
 function CrashPageContent() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const acceptBets = useAcceptBets();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
@@ -89,7 +91,17 @@ function CrashPageContent() {
   const autoFiredRef = useRef<Set<string>>(new Set());
   const hadStakeRef = useRef(false);
   const fxTimerRef = useRef<number | null>(null);
+  const wagerRefreshRoundRef = useRef<string | null>(null);
   const betAmountInput = useAnalyticsInput("crash_bet_amount", "crash");
+
+  const refreshUserSession = useCallback(async () => {
+    try {
+      const me = await getMe();
+      setUser((prev) => (prev ? patchUserSession(prev, me) : me));
+    } catch {
+      // ignore — stale wager display is acceptable until next refresh
+    }
+  }, [setUser]);
 
   function triggerStageFx(next: NonNullable<CrashStageFx>, ms = 1600) {
     if (fxTimerRef.current != null) window.clearTimeout(fxTimerRef.current);
@@ -291,6 +303,27 @@ function CrashPageContent() {
     }
   }, [roundActiveBets.length]);
 
+  // Refresh deposit wager counters when TON crash bets settle (cashout, auto-cashout, or loss).
+  useEffect(() => {
+    if (!user?.id || !state?.round_id || !roundBets) return;
+    if (roundBets.round_id !== state.round_id) return;
+
+    const myBets = roundBets.bets.filter((bet) => bet.user_id === user.id);
+    if (myBets.length === 0) return;
+
+    const hasTonStake = myBets.some(
+      (bet) => bet.funding_type === "balance" || bet.funding_type === "combined",
+    );
+    if (!hasTonStake) return;
+
+    const allSettled = myBets.every((bet) => bet.status !== "pending");
+    if (!allSettled) return;
+    if (wagerRefreshRoundRef.current === state.round_id) return;
+
+    wagerRefreshRoundRef.current = state.round_id;
+    void refreshUserSession();
+  }, [roundBets, state?.round_id, user?.id, refreshUserSession]);
+
   useEffect(() => {
     if (state?.phase === "crashed" && lastPhase.current !== "crashed") {
       loadHistory();
@@ -485,6 +518,7 @@ function CrashPageContent() {
       setActiveBets([]);
       loadRoundBets();
       notifyBettableGiftsChanged();
+      void refreshUserSession();
     } catch (e) {
       showToast({
         variant: "error",
@@ -577,6 +611,7 @@ function CrashPageContent() {
           haptics.notificationOccurred("success");
           hadStakeRef.current = false;
           notifyBettableGiftsChanged();
+          void refreshUserSession();
         }
 
         await loadActiveBets();
@@ -587,7 +622,7 @@ function CrashPageContent() {
         await loadRoundBets();
       }
     },
-    [showToast, haptics, loadActiveBets, loadRoundBets],
+    [haptics, loadActiveBets, loadRoundBets, refreshUserSession],
   );
 
   const onLiveMultiplier = useCallback(
