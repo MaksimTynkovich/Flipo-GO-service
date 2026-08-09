@@ -49,9 +49,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.StakingQuestCompletion{},
 		&domain.GameRound{},
 		&domain.GameBet{},
-		&domain.PvPRoom{},
-		&domain.PvPRoomPlayer{},
-		&domain.PvPRoomPlayerGift{},
 		&domain.BalanceLedger{},
 		&domain.MarketListing{},
 		&domain.TonTransfer{},
@@ -96,12 +93,6 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := migrateStakingEpochs(db); err != nil {
-		return err
-	}
-	if err := migratePvPPlayerStake(db); err != nil {
-		return err
-	}
-	if err := migratePvPCombinedStakes(db); err != nil {
 		return err
 	}
 	if err := migrateGiftAdminPrices(db); err != nil {

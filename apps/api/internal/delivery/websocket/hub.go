@@ -49,7 +49,7 @@ func NewHub() *Hub {
 		clients:   make(map[string]map[*Client]bool),
 		broadcast: make(map[string]chan []byte),
 	}
-	for _, game := range []string{"roulette", "crash", "pvp", "cases"} {
+	for _, game := range []string{"roulette", "crash", "cases"} {
 		h.clients[game] = make(map[*Client]bool)
 		h.broadcast[game] = make(chan []byte, 256)
 		go h.runBroadcast(game)

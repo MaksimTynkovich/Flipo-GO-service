@@ -23,7 +23,8 @@ export const RESULT_PAUSE_MS = 0;
 export const RESULT_DISPLAY_MS = 3_000;
 export const SEGMENT_JITTER_RATIO = 0.38;
 
-export const POINTER_ANGLE_DEG = -90;
+/** Fixed pointer sits inside the wheel at the bottom (6 o'clock), tip pointing down. */
+export const POINTER_ANGLE_DEG = 90;
 
 export function jitterForRound(roundId: string): number {
   let hash = 0;
@@ -43,9 +44,19 @@ export function rotationForIndex(index: number, fullSpins = 0, jitterDeg = 0): n
 
 export function indexAtPointer(rotationDeg: number): number {
   const r = ((rotationDeg % 360) + 360) % 360;
-  const localCenter = POINTER_ANGLE_DEG - r;
-  const raw = (localCenter + 90 - SEGMENT_ANGLE / 2) / SEGMENT_ANGLE;
-  return ((Math.round(raw) % ROULETTE_SEGMENTS) + ROULETTE_SEGMENTS) % ROULETTE_SEGMENTS;
+  // Local SVG angle currently under the fixed pointer.
+  // Segment i occupies [i*SEG - 90, (i+1)*SEG - 90); 0 starts at the top.
+  const fromSeg0 = (((POINTER_ANGLE_DEG - r + 90) % 360) + 360) % 360;
+  return Math.floor(fromSeg0 / SEGMENT_ANGLE) % ROULETTE_SEGMENTS;
+}
+
+/** Fractional segment under the pointer: index + progress into that segment [0, 1). */
+export function pointerSampleAtRotation(rotationDeg: number): { index: number; t: number } {
+  const r = ((rotationDeg % 360) + 360) % 360;
+  const fromSeg0 = (((POINTER_ANGLE_DEG - r + 90) % 360) + 360) % 360;
+  const exact = fromSeg0 / SEGMENT_ANGLE;
+  const index = Math.floor(exact) % ROULETTE_SEGMENTS;
+  return { index, t: exact - Math.floor(exact) };
 }
 
 export function wheelIndexForNumber(n: number): number {
@@ -86,7 +97,9 @@ export function spinTargetRotation(
   const targetMod = rotationForIndex(index, 0, jitterDeg);
   let delta = targetMod - currentMod;
   if (delta <= 0) delta += 360;
-  return currentMod + delta + minFullSpins * 360;
+  // Continue forward from the live angle — using currentMod alone resets to the
+  // first-spin range and makes the 2nd+ spin go backwards / crawl.
+  return currentRotation + delta + minFullSpins * 360;
 }
 
 export function isLandingPause(state: RouletteRoundState): boolean {
@@ -172,6 +185,20 @@ export function rouletteMultiplier(color: string): number {
     default:
       return 0;
   }
+}
+
+/** TON credited to balance on win — matches API betfunding.WinTONCredit. */
+export function rouletteWinCreditNanoton(
+  amountNanoton: number,
+  color: string,
+  fundingType?: string,
+): number {
+  const gross = Math.floor(amountNanoton * rouletteMultiplier(color));
+  if (gross <= 0) return 0;
+  if (fundingType === "gift" || fundingType === "mixed") {
+    return Math.max(0, gross - amountNanoton);
+  }
+  return gross;
 }
 
 export function payoutLabel(color: string): string {

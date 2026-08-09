@@ -56,33 +56,6 @@ type GhostRouletteBet struct {
 	Simulated     bool
 }
 
-type GhostPvPPlayer struct {
-	UserID       uuid.UUID
-	FirstName    string
-	Username     string
-	PhotoURL     string
-	StakeNanoton int64
-	FundingType  string
-	IsWinner     bool
-}
-
-type GhostPvPRoom struct {
-	ID                uuid.UUID
-	CreatorID         uuid.UUID
-	BetAmountNanoton  int64
-	StakeToleranceBps int
-	MaxPlayers        int
-	Status            string
-	PlayerCount       int
-	Players           []GhostPvPPlayer
-	WinnerID          *uuid.UUID
-	PayoutNanoton     *int64
-	SpinAt            *time.Time
-	SpinEndsAt        *time.Time
-	FinishedAt        *time.Time
-	CreatedAt         time.Time
-	Simulated         bool
-}
 
 type PresencePublisher func(ctx context.Context, snap domain.PresenceSnapshot)
 
@@ -133,29 +106,12 @@ type Simulator struct {
 	roulettePlaced  int
 	rouletteDirty   bool
 
-	pvpRooms []ghostRoomInternal
-
-	// Pending bot joins into real human-created open rooms.
-	humanJoins map[uuid.UUID]pendingHumanJoin
-
 	recentPersonas map[uuid.UUID]time.Time
 
-	// When false, stop placing new ghost bets / PvP rooms (cashouts of in-flight continue).
+	// When false, stop placing new ghost bets (cashouts of in-flight continue).
 	acceptBets bool
 }
 
-type ghostRoomInternal struct {
-	GhostPvPRoom
-	expireAt   time.Time
-	joinAt     time.Time
-	winnerPick uuid.UUID
-	botMatch   bool // second bot joined visually — not claimable by humans
-}
-
-type pendingHumanJoin struct {
-	joinAt time.Time
-	bot    Persona
-}
 
 func NewSimulator(store ConfigStore, limits GameLimits, publish PresencePublisher, opts ...SimulatorOption) *Simulator {
 	s := &Simulator{
@@ -164,17 +120,16 @@ func NewSimulator(store ConfigStore, limits GameLimits, publish PresencePublishe
 		publish:        publish,
 		personas:       buildPersonas(120),
 		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
-		byGame:         map[string]float64{"crash": 0, "roulette": 0, "pvp": 0},
+		byGame:         map[string]float64{"crash": 0, "roulette": 0},
 		minBet:         map[domain.GameType]int64{},
 		maxBet:         map[domain.GameType]int64{},
 		recentPersonas: make(map[uuid.UUID]time.Time),
-		humanJoins:     make(map[uuid.UUID]pendingHumanJoin),
 		cfg:            DefaultSettings(),
 		acceptBets:     true,
 	}
 	s.presence = domain.PresenceSnapshot{
 		Online:    0,
-		ByGame:    map[string]int{"crash": 0, "roulette": 0, "pvp": 0},
+		ByGame:    map[string]int{"crash": 0, "roulette": 0},
 		UpdatedAt: time.Now().UTC(),
 	}
 	for _, opt := range opts {
@@ -220,7 +175,6 @@ func (s *Simulator) loop(ctx context.Context) {
 			s.tickPresence(ctx)
 		case <-simTick.C:
 			s.tickBets(ctx)
-			s.tickPvP(ctx)
 		}
 	}
 }
@@ -239,15 +193,13 @@ func (s *Simulator) reloadConfig(ctx context.Context) {
 	minBet := map[domain.GameType]int64{
 		domain.GameCrash:    100_000_000,
 		domain.GameRoulette: 100_000_000,
-		domain.GamePvP:      100_000_000,
 	}
 	maxBet := map[domain.GameType]int64{
 		domain.GameCrash:    10_000_000_000,
 		domain.GameRoulette: 10_000_000_000,
-		domain.GamePvP:      5_000_000_000,
 	}
 	if s.limits != nil {
-		for _, gt := range []domain.GameType{domain.GameCrash, domain.GameRoulette, domain.GamePvP} {
+		for _, gt := range []domain.GameType{domain.GameCrash, domain.GameRoulette} {
 			if gc, err := s.limits.GetGameConfig(ctx, gt); err == nil && gc != nil {
 				minBet[gt] = gc.MinBetNanoton
 				maxBet[gt] = gc.MaxBetNanoton
@@ -269,13 +221,11 @@ func (s *Simulator) reloadConfig(ctx context.Context) {
 func (s *Simulator) clearAllLocked() {
 	s.crashBets = nil
 	s.rouletteBets = nil
-	s.pvpRooms = nil
-	s.humanJoins = make(map[uuid.UUID]pendingHumanJoin)
 	s.online = 0
-	s.byGame = map[string]float64{"crash": 0, "roulette": 0, "pvp": 0}
+	s.byGame = map[string]float64{"crash": 0, "roulette": 0}
 	s.presence = domain.PresenceSnapshot{
 		Online:    0,
-		ByGame:    map[string]int{"crash": 0, "roulette": 0, "pvp": 0},
+		ByGame:    map[string]int{"crash": 0, "roulette": 0},
 		UpdatedAt: time.Now().UTC(),
 	}
 }
@@ -339,25 +289,17 @@ func (s *Simulator) tickPresence(ctx context.Context) {
 	alpha := 0.18 + cfg.Chaos*0.12
 	s.online += (target - s.online) * alpha
 
-	shareCrash := 0.38 + (s.rng.Float64()-0.5)*0.08
-	shareRoulette := 0.34 + (s.rng.Float64()-0.5)*0.08
-	sharePvP := 1 - shareCrash - shareRoulette
-	if sharePvP < 0.15 {
-		sharePvP = 0.15
-		shareCrash = (1 - sharePvP) * 0.55
-		shareRoulette = 1 - sharePvP - shareCrash
-	}
+	shareCrash := 0.52 + (s.rng.Float64()-0.5)*0.08
+	shareRoulette := 1 - shareCrash
 	total := s.online
 	s.byGame["crash"] += (total*shareCrash - s.byGame["crash"]) * alpha
 	s.byGame["roulette"] += (total*shareRoulette - s.byGame["roulette"]) * alpha
-	s.byGame["pvp"] += (total*sharePvP - s.byGame["pvp"]) * alpha
 
 	snap := domain.PresenceSnapshot{
 		Online: int(math.Round(s.online)),
 		ByGame: map[string]int{
 			"crash":    int(math.Round(s.byGame["crash"])),
 			"roulette": int(math.Round(s.byGame["roulette"])),
-			"pvp":      int(math.Round(s.byGame["pvp"])),
 		},
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -366,9 +308,6 @@ func (s *Simulator) tickPresence(ctx context.Context) {
 	}
 	if !cfg.RouletteEnabled {
 		snap.ByGame["roulette"] = 0
-	}
-	if !cfg.PvPEnabled {
-		snap.ByGame["pvp"] = 0
 	}
 	s.presence = snap
 	s.mu.Unlock()
@@ -459,148 +398,6 @@ func (s *Simulator) RouletteBets(roundID uuid.UUID) []GhostRouletteBet {
 	out := make([]GhostRouletteBet, len(s.rouletteBets))
 	copy(out, s.rouletteBets)
 	return out
-}
-
-func (s *Simulator) PvPGhostRooms() []GhostPvPRoom {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if !s.cfg.Enabled || !s.cfg.PvPEnabled {
-		return nil
-	}
-	out := make([]GhostPvPRoom, 0, len(s.pvpRooms))
-	for _, r := range s.pvpRooms {
-		out = append(out, r.GhostPvPRoom)
-	}
-	return out
-}
-
-// ClaimOpenGhostRoom removes an open 1-player ghost room so a real player can materialize it.
-func (s *Simulator) ClaimOpenGhostRoom(roomID uuid.UUID) (*GhostPvPRoom, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.cfg.Enabled || !s.cfg.PvPEnabled {
-		return nil, false
-	}
-	for i, room := range s.pvpRooms {
-		if room.ID != roomID {
-			continue
-		}
-		// Only human-joinable while still waiting alone (not a bot-vs-bot showmatch).
-		if room.Status != "open" || room.PlayerCount != 1 || len(room.Players) == 0 || room.botMatch {
-			return nil, false
-		}
-		claimed := room.GhostPvPRoom
-		s.pvpRooms = append(s.pvpRooms[:i], s.pvpRooms[i+1:]...)
-		return &claimed, true
-	}
-	return nil, false
-}
-
-// PersonaByID returns a static persona profile for house-bot materialization.
-func (s *Simulator) PersonaByID(id uuid.UUID) (Persona, bool) {
-	for _, p := range s.personas {
-		if p.ID == id {
-			return p, true
-		}
-	}
-	return Persona{}, false
-}
-
-func (s *Simulator) BotJoinsEnabled() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.cfg.Enabled && s.cfg.PvPEnabled
-}
-
-type HumanOpenRoom struct {
-	ID               uuid.UUID
-	CreatorID        uuid.UUID
-	BetAmountNanoton int64
-	CreatedAt        time.Time
-	PlayerIDs        []uuid.UUID
-}
-
-type PlannedHumanJoin struct {
-	RoomID       uuid.UUID
-	Bot          Persona
-	StakeNanoton int64
-}
-
-// PlanBotJoins schedules / releases bot opponents for open human rooms.
-func (s *Simulator) PlanBotJoins(rooms []HumanOpenRoom) []PlannedHumanJoin {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.cfg.Enabled || !s.cfg.PvPEnabled {
-		s.humanJoins = make(map[uuid.UUID]pendingHumanJoin)
-		return nil
-	}
-
-	now := time.Now().UTC()
-	alive := make(map[uuid.UUID]HumanOpenRoom, len(rooms))
-	for _, room := range rooms {
-		alive[room.ID] = room
-	}
-	for id := range s.humanJoins {
-		if _, ok := alive[id]; !ok {
-			delete(s.humanJoins, id)
-		}
-	}
-
-	out := make([]PlannedHumanJoin, 0)
-	for _, room := range rooms {
-		pending, ok := s.humanJoins[room.ID]
-		if !ok {
-			// ~80% of human rooms get a bot; rest wait for real opponents / TTL.
-			if s.rng.Float64() > 0.82 {
-				continue
-			}
-			delaySec := 3 + s.rng.Intn(12)
-			if s.cfg.Chaos > 0 {
-				delaySec += s.rng.Intn(1 + int(s.cfg.Chaos*8))
-			}
-			exclude := map[uuid.UUID]struct{}{room.CreatorID: {}}
-			for _, id := range room.PlayerIDs {
-				exclude[id] = struct{}{}
-			}
-			bot := s.pickPersonaExcludingLocked(now, exclude)
-			s.humanJoins[room.ID] = pendingHumanJoin{
-				joinAt: now.Add(time.Duration(delaySec) * time.Second),
-				bot:    bot,
-			}
-			continue
-		}
-		if now.Before(pending.joinAt) {
-			continue
-		}
-		stake := room.BetAmountNanoton
-		// Match human rooms with a slightly varied stake (±~8%), then humanize decimals.
-		if s.rng.Float64() < 0.55 {
-			delta := int64(float64(stake) * (0.02 + s.rng.Float64()*0.06) * (s.rng.Float64()*2 - 1))
-			stake += delta
-		}
-		stake = humanizeStakeNanoton(stake, room.BetAmountNanoton*9/10, room.BetAmountNanoton*11/10, s.rng, s.cfg.Chaos)
-		if stake < room.BetAmountNanoton*9/10 {
-			stake = room.BetAmountNanoton * 9 / 10
-		}
-		out = append(out, PlannedHumanJoin{
-			RoomID:       room.ID,
-			Bot:          pending.bot,
-			StakeNanoton: stake,
-		})
-		delete(s.humanJoins, room.ID)
-	}
-	return out
-}
-
-func (s *Simulator) pickPersonaExcludingLocked(now time.Time, exclude map[uuid.UUID]struct{}) Persona {
-	for tries := 0; tries < 30; tries++ {
-		p := s.pickPersonaLocked(now)
-		if _, skip := exclude[p.ID]; skip {
-			continue
-		}
-		return p
-	}
-	return s.pickPersonaLocked(now)
 }
 
 func (s *Simulator) tickBets(ctx context.Context) {
@@ -813,14 +610,6 @@ func (s *Simulator) sampleStakeLocked(_ context.Context, gameType domain.GameTyp
 	return sampleHumanStake(s.rng, minBet, maxBet, s.cfg.StakeP50, s.cfg.StakeP90, s.cfg.Chaos)
 }
 
-func (s *Simulator) samplePvPStakeLocked(_ context.Context) int64 {
-	minBet := s.minBet[domain.GamePvP]
-	maxBet := s.maxBet[domain.GamePvP]
-	// Map PvP frac knobs into the same humanized sampler.
-	p50 := (s.cfg.PvPStakeMinFrac + s.cfg.PvPStakeMaxFrac) / 2
-	p90 := s.cfg.PvPStakeMaxFrac
-	return sampleHumanStake(s.rng, minBet, maxBet, p50, p90, s.cfg.Chaos)
-}
 
 // sampleHumanStake draws a realistic-looking bet: skewed toward smaller stakes,
 // with mixed decimal precision so amounts are rarely identical round numbers.
@@ -931,157 +720,6 @@ func (s *Simulator) pickPersonaLocked(now time.Time) Persona {
 	return p
 }
 
-func (s *Simulator) tickPvP(ctx context.Context) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.cfg.Enabled || !s.cfg.PvPEnabled {
-		s.pvpRooms = nil
-		return
-	}
-	now := time.Now().UTC()
-	alive := s.pvpRooms[:0]
-	for i := range s.pvpRooms {
-		room := s.pvpRooms[i]
-		s.advanceGhostRoomLocked(&room, now)
-		if room.Status == "finished" && room.FinishedAt != nil && now.Sub(*room.FinishedAt) > 12*time.Second {
-			continue
-		}
-		if room.Status == "open" && now.After(room.expireAt) && !room.botMatch {
-			continue
-		}
-		alive = append(alive, room)
-	}
-	s.pvpRooms = alive
-
-	if !s.acceptBets {
-		return
-	}
-
-	openCount := 0
-	for _, r := range s.pvpRooms {
-		if r.Status == "open" {
-			openCount++
-		}
-	}
-	for openCount < s.cfg.PvPMaxGhostRooms && s.rng.Float64() < 0.08*(1+s.cfg.Chaos) {
-		room := s.spawnGhostRoomLocked(ctx, now)
-		s.pvpRooms = append(s.pvpRooms, room)
-		openCount++
-	}
-}
-
-func (s *Simulator) spawnGhostRoomLocked(ctx context.Context, now time.Time) ghostRoomInternal {
-	creator := s.pickPersonaLocked(now)
-	stake := s.samplePvPStakeLocked(ctx)
-	ttlMin := s.cfg.PvPRoomTTLSecMin
-	ttlMax := s.cfg.PvPRoomTTLSecMax
-	ttl := ttlMin + s.rng.Intn(ttlMax-ttlMin+1)
-	joinWindow := max(1, ttl-6)
-	joinDelay := 4 + s.rng.Intn(joinWindow)
-	roomID := uuid.New()
-	return ghostRoomInternal{
-		GhostPvPRoom: GhostPvPRoom{
-			ID:                roomID,
-			CreatorID:         creator.ID,
-			BetAmountNanoton:  stake,
-			StakeToleranceBps: 500,
-			MaxPlayers:        2,
-			Status:            "open",
-			PlayerCount:       1,
-			Players: []GhostPvPPlayer{{
-				UserID:       creator.ID,
-				FirstName:    creator.FirstName,
-				Username:     creator.Username,
-				PhotoURL:     creator.PhotoURL,
-				StakeNanoton: stake,
-				FundingType:  "balance",
-			}},
-			CreatedAt: now,
-			Simulated: true,
-		},
-		expireAt: now.Add(time.Duration(ttl) * time.Second),
-		joinAt:   now.Add(time.Duration(joinDelay) * time.Second),
-	}
-}
-
-func (s *Simulator) advanceGhostRoomLocked(room *ghostRoomInternal, now time.Time) {
-	switch room.Status {
-	case "open":
-		// ~70% of open rooms get a second bot; rest wait for a real player until TTL.
-		if room.botMatch || now.Before(room.joinAt) {
-			return
-		}
-		if s.rng.Float64() > 0.72 {
-			// Skip this tick; maybe a human will claim. Retry shortly.
-			room.joinAt = now.Add(time.Duration(2+s.rng.Intn(5)) * time.Second)
-			return
-		}
-		opp := s.pickPersonaLocked(now)
-		for tries := 0; tries < 8 && opp.ID == room.CreatorID; tries++ {
-			opp = s.pickPersonaLocked(now)
-		}
-		stake := room.BetAmountNanoton
-		if s.rng.Float64() < 0.4 {
-			delta := int64(float64(stake) * 0.03 * (s.rng.Float64()*2 - 1))
-			stake += delta
-			if stake < room.BetAmountNanoton/2 {
-				stake = room.BetAmountNanoton
-			}
-		}
-		room.Players = append(room.Players, GhostPvPPlayer{
-			UserID:       opp.ID,
-			FirstName:    opp.FirstName,
-			Username:     opp.Username,
-			PhotoURL:     opp.PhotoURL,
-			StakeNanoton: stake,
-			FundingType:  "balance",
-		})
-		room.PlayerCount = 2
-		room.botMatch = true
-		spinAt := now.Add(3 * time.Second)
-		spinEnds := spinAt.Add(8 * time.Second)
-		room.Status = "countdown"
-		room.SpinAt = &spinAt
-		room.SpinEndsAt = &spinEnds
-		if s.rng.Float64() < 0.5 {
-			room.winnerPick = room.Players[0].UserID
-		} else {
-			room.winnerPick = room.Players[1].UserID
-		}
-		// Strip animation needs winner during countdown/spin (same as real scheduleSpin).
-		wid := room.winnerPick
-		room.WinnerID = &wid
-	case "countdown":
-		if room.SpinAt != nil && now.After(*room.SpinAt) {
-			room.Status = "spinning"
-		}
-	case "spinning":
-		if room.SpinEndsAt != nil && now.After(*room.SpinEndsAt) {
-			room.Status = "finished"
-			fin := now
-			room.FinishedAt = &fin
-			wid := room.winnerPick
-			if room.WinnerID == nil {
-				room.WinnerID = &wid
-			}
-			var pot int64
-			for i := range room.Players {
-				pot += room.Players[i].StakeNanoton
-				room.Players[i].IsWinner = room.Players[i].UserID == wid
-			}
-			fee := pot / 20
-			payout := pot - fee
-			room.PayoutNanoton = &payout
-		}
-	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // PreviewOnline estimates current online for admin UI.
 func PreviewOnline(cfg domain.SocialSimSettings) int {

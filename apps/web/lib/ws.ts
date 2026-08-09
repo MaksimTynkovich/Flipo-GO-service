@@ -25,7 +25,7 @@ function trackWSIssue(
 }
 
 export function connectGameWS(
-  game: "roulette" | "crash" | "pvp" | "cases",
+  game: "roulette" | "crash" | "cases",
   onMessage: (msg: WSMessage) => void,
   options?: { onOpen?: () => void },
 ): () => void {

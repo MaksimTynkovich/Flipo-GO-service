@@ -25,10 +25,9 @@ import {
 const MODE_LABELS: Record<string, string> = {
   crash: "Crash",
   roulette: "Рулетка",
-  pvp: "Комнаты",
 };
 
-const GAME_TYPES = ["crash", "roulette", "pvp"] as const;
+const GAME_TYPES = ["crash", "roulette"] as const;
 
 function previewOnline(sim: AdminSocialSimSettings | null): number {
   if (!sim?.enabled || !sim.lobby_enabled) return 0;

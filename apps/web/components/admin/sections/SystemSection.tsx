@@ -124,7 +124,7 @@ export default function SystemSection() {
     >
       <AdminPanel
         title="Приём ставок"
-        description="Когда выключено, новые ставки crash / roulette / pvp не принимаются. Cashout и доигрыш текущих раундов работают. Кейсы, маркет и стейкинг не затрагиваются."
+        description="Когда выключено, новые ставки crash / roulette не принимаются. Cashout и доигрыш текущих раундов работают. Кейсы, маркет и стейкинг не затрагиваются."
       >
         {loading && !settings ? (
           <div className="h-4 w-56 animate-pulse rounded bg-surface-raised" />

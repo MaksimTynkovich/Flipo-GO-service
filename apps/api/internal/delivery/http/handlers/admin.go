@@ -912,7 +912,7 @@ func (h *AdminHandler) CreateOutcomeOverride(c *gin.Context) {
 	}
 	gameType := domain.GameType(req.GameType)
 	switch gameType {
-	case domain.GameRoulette, domain.GameCrash, domain.GamePvP:
+	case domain.GameRoulette, domain.GameCrash:
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Неизвестный тип игры"})
 		return
@@ -2046,5 +2046,32 @@ func (h *AdminHandler) UpdateDailyQuestBoard(c *gin.Context) {
 	}
 	_ = h.admin.RecordAudit(c.Request.Context(), middleware.GetUserID(c), "daily_quest_board_updated", "daily_quest_board", "1", req)
 	c.JSON(http.StatusOK, req)
+}
+
+func (h *AdminHandler) ResetDailyQuestClaims(c *gin.Context) {
+	if h.quests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quests unavailable"})
+		return
+	}
+	var req questsuc.AdminResetClaimsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	result, err := h.quests.AdminResetClaims(c.Request.Context(), req)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidAmount) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid day_msk"})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), middleware.GetUserID(c), "daily_quest_claims_reset", "daily_quest_claims", result.DayMSK, result)
+	c.JSON(http.StatusOK, result)
 }
 

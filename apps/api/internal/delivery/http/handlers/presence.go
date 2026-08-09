@@ -24,7 +24,7 @@ func (h *PresenceHandler) Get(c *gin.Context) {
 	if h == nil || h.source == nil {
 		c.JSON(http.StatusOK, domain.PresenceSnapshot{
 			Online:    0,
-			ByGame:    map[string]int{"crash": 0, "roulette": 0, "pvp": 0},
+			ByGame:    map[string]int{"crash": 0, "roulette": 0},
 			UpdatedAt: time.Now().UTC(),
 		})
 		return

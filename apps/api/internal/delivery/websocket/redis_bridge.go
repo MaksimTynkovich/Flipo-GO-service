@@ -53,7 +53,7 @@ func (b *RedisBridge) subscribePresence(ctx context.Context) {
 				return
 			}
 			payload := JSONMessage("presence", json.RawMessage(msg))
-			for _, game := range []string{"roulette", "crash", "pvp"} {
+			for _, game := range []string{"roulette", "crash"} {
 				b.hub.Broadcast(game, payload)
 			}
 		}

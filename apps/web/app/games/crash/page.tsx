@@ -28,6 +28,7 @@ import {
   CrashActiveBet,
 } from "@/lib/api";
 import { patchUserSession } from "@/lib/apply-balance";
+import { emitBalanceWin } from "@/lib/balance-win";
 import { CrashRoundState } from "@/lib/crash";
 import {
   crashCashoutMessage,
@@ -484,6 +485,9 @@ function CrashPageContent() {
         const res = (await cashoutCrash(bet.id, mult)) as { payout_nanoton: number };
         totalPayout += res.payout_nanoton;
       }
+      if (totalPayout > 0) {
+        emitBalanceWin(totalPayout, { source: "local" });
+      }
       triggerStageFx(
         {
           kind: "win",
@@ -579,6 +583,9 @@ function CrashPageContent() {
                   return sum + (isGift ? Math.max(0, gross - bet.amount_nanoton) : gross);
                 }, 0);
 
+          if (payoutTon > 0) {
+            emitBalanceWin(payoutTon, { source: "local" });
+          }
           triggerStageFx(
             {
               kind: "win",

@@ -4,10 +4,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { TonAmount } from "@/components/icons/TonIcon";
+import { useToast } from "@/components/providers/ToastProvider";
 import {
   formatTON,
   getReferralInviteeStatus,
   getReferralStats,
+  prepareReferralShare,
   reportReferralShare,
   ReferralInviteeStatus,
   ReferralStats,
@@ -19,21 +21,26 @@ import {
   REFERRAL_INVITEE_LIMIT_BONUS_TON,
   REFERRAL_MONTHLY_SHARE_PERCENT,
 } from "@/lib/referral";
-import { openTelegramShare } from "@/src/shared/lib/twa";
+import { formatUserError } from "@/lib/user-errors";
+import { getTelegramWebApp, openTelegramShare, sharePreparedMessage } from "@/src/shared/lib/twa";
+import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Copy, Gamepad2, Gift, Link2, Send } from "lucide-react";
 
 export default function ProfileReferralsPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const haptics = useTelegramHaptics();
   const [copied, setCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [stats, setStats] = useState<ReferralStats | null>(null);
   const [invitee, setInvitee] = useState<ReferralInviteeStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   const referralLink = user ? referralTelegramUrl(user.telegram_id) : "";
   const shareText = [
-    "🚀 Присоединяйтесь ко мне в Flipo!",
-    "💎 Стейкайте подарки напрямую без передачи боту — ваши активы остаются только у вас! По моей ссылке вы получите повышенный доход от стейкинга! ☘️",
+    "🎁 Присоединяйся ко мне в Flipo!",
+    "Открой бесплатный кейс и забирай подарки.",
   ].join("\n");
 
   useEffect(() => {
@@ -56,7 +63,7 @@ export default function ProfileReferralsPage() {
     reportReferralShare("copy").catch(() => {});
   }
 
-  async function handleShare() {
+  async function fallbackShare() {
     if (!referralLink) return;
     if (openTelegramShare({ url: referralLink, text: shareText })) {
       reportReferralShare("share").catch(() => {});
@@ -66,6 +73,39 @@ export default function ProfileReferralsPage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     reportReferralShare("share").catch(() => {});
+    showToast({ variant: "success", title: "Текст скопирован — отправьте другу" });
+  }
+
+  async function handleShare() {
+    if (!referralLink || sharing) return;
+    setSharing(true);
+    try {
+      // Older clients without Bot API 8.0 shareMessage — classic t.me/share fallback.
+      if (!getTelegramWebApp()?.shareMessage) {
+        await fallbackShare();
+        return;
+      }
+      const prepared = await prepareReferralShare();
+      const sent = await sharePreparedMessage(prepared.prepared_message_id);
+      if (!sent) {
+        // User closed the chat picker — same as free-case share cancel.
+        return;
+      }
+      reportReferralShare("share").catch(() => {});
+      haptics.notificationOccurred("success");
+      showToast({ variant: "success", title: "Приглашение отправлено" });
+    } catch (e) {
+      try {
+        await fallbackShare();
+      } catch {
+        showToast({
+          variant: "error",
+          title: formatUserError(e, "Не удалось поделиться"),
+        });
+      }
+    } finally {
+      setSharing(false);
+    }
   }
 
   const sharePercent = stats?.share_percent ?? REFERRAL_MONTHLY_SHARE_PERCENT;
@@ -141,11 +181,11 @@ export default function ProfileReferralsPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Button className="h-11 w-full rounded-xl" onClick={handleShare}>
+          <Button className="h-11 w-full rounded-xl" disabled={sharing || !referralLink} onClick={() => void handleShare()}>
             <Send className="mr-2 h-4 w-4" />
-            Поделиться
+            {sharing ? "…" : "Поделиться"}
           </Button>
-          <Button className="h-11 w-full rounded-xl" variant="outline" onClick={handleCopy}>
+          <Button className="h-11 w-full rounded-xl" variant="outline" onClick={() => void handleCopy()}>
             <Copy className="mr-2 h-4 w-4" />
             {copied ? "Скопировано" : "Копировать"}
           </Button>

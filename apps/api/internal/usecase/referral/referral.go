@@ -64,3 +64,11 @@ func ParseReferrerTelegramID(code string) (int64, bool) {
 	}
 	return telegramID, true
 }
+
+// StartPayloadForTelegramID builds startapp payload ref_<base36 telegram id>.
+func StartPayloadForTelegramID(telegramID int64) string {
+	if telegramID <= 0 {
+		return "ref"
+	}
+	return "ref_" + strings.ToLower(strconv.FormatInt(telegramID, 36))
+}

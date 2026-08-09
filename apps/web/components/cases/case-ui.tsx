@@ -181,6 +181,19 @@ export function formatCasePrice(nanoton: number): string {
   return ton.toFixed(1).replace(/\.0$/, "");
 }
 
+/** Compact TON for tiny loot/live badges on narrow screens. */
+export function formatCompactTON(nanoton: number): string {
+  const ton = nanoton / 1e9;
+  if (!Number.isFinite(ton) || ton <= 0) return "0";
+  if (ton >= 100) return String(Math.round(ton));
+  if (ton >= 10) {
+    const s = ton.toFixed(1);
+    return s.endsWith(".0") ? s.slice(0, -2) : s;
+  }
+  const s = ton.toFixed(2);
+  return s.replace(/\.?0+$/, "") || "0";
+}
+
 function accentFromHex(hex: string): CatalogAccent {
   const color = hex.trim() || "#334155";
   return {

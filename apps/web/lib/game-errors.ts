@@ -20,13 +20,7 @@ export function formatGameBetError(error: unknown): string {
     return "Подарок недоступен для ставки.";
   }
   if (lower.includes("gift value") || lower.includes("стоимость подарка") || lower.includes("±10%")) {
-    return "Сумма подарка не подходит для ставки в этой комнате.";
-  }
-  if (lower.includes("room is full") || lower.includes("комната уже заполнена")) {
-    return "Комната уже заполнена.";
-  }
-  if (lower.includes("already joined") || lower.includes("уже в этой комнате")) {
-    return "Вы уже в этой комнате.";
+    return "Сумма подарка не подходит для ставки.";
   }
   if (lower.includes("failed to fetch") || lower.includes("network")) {
     return "Нет связи с сервером. Проверьте интернет и попробуйте снова.";

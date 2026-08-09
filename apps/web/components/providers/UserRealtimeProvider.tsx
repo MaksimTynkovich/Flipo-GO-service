@@ -68,13 +68,18 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
           "stake_yield",
           "referral_bonus",
           "refund",
+          "admin_adjust",
+          "promo_bonus",
+          "quest_reward",
+          "case_prize",
+          "case_cashout",
         ]);
         if (
           payload.delta_nanoton &&
           payload.delta_nanoton > 0 &&
           creditTypes.has(payload.ledger_type ?? "")
         ) {
-          emitBalanceWin(payload.delta_nanoton);
+          emitBalanceWin(payload.delta_nanoton, { source: "ws" });
           if (payload.ledger_type === "win") {
             haptics.notificationOccurred("success");
             trackEvent({

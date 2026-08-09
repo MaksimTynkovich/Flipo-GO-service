@@ -9,15 +9,6 @@ import (
 )
 
 func parseStakeInput(funding string, amountNanoton int64, inventoryItemID string, inventoryItemIDs []string) (betfunding.StakeInput, error) {
-	return parseStakeInputOpts(funding, amountNanoton, inventoryItemID, inventoryItemIDs, false)
-}
-
-// parseStakeInputAllowZeroBalance is for PvP join: room stake is applied server-side for TON-only joins.
-func parseStakeInputAllowZeroBalance(funding string, amountNanoton int64, inventoryItemID string, inventoryItemIDs []string) (betfunding.StakeInput, error) {
-	return parseStakeInputOpts(funding, amountNanoton, inventoryItemID, inventoryItemIDs, true)
-}
-
-func parseStakeInputOpts(funding string, amountNanoton int64, inventoryItemID string, inventoryItemIDs []string, allowZeroBalance bool) (betfunding.StakeInput, error) {
 	ids, err := parseInventoryItemIDs(inventoryItemID, inventoryItemIDs)
 	if err != nil {
 		return betfunding.StakeInput{}, err
@@ -45,7 +36,7 @@ func parseStakeInputOpts(funding string, amountNanoton int64, inventoryItemID st
 	if len(ids) > 0 {
 		return in, nil
 	}
-	if amountNanoton <= 0 && !allowZeroBalance {
+	if amountNanoton <= 0 {
 		return betfunding.StakeInput{}, domain.ErrInvalidAmount
 	}
 	return in, nil

@@ -12,11 +12,10 @@ type GameType string
 const (
 	GameRoulette GameType = "roulette"
 	GameCrash    GameType = "crash"
-	GamePvP      GameType = "pvp"
 )
 
 // AllGameModes is the ordered list of user-facing game modes.
-var AllGameModes = []GameType{GameCrash, GameRoulette, GamePvP}
+var AllGameModes = []GameType{GameCrash, GameRoulette}
 
 type GameRound struct {
 	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
@@ -89,41 +88,6 @@ type GameBet struct {
 
 	Round GameRound `gorm:"foreignKey:RoundID" json:"-"`
 	User  User      `gorm:"foreignKey:UserID" json:"-"`
-}
-
-type PvPRoom struct {
-	ID               uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	CreatorID        uuid.UUID  `gorm:"type:uuid;not null;index" json:"creator_id"`
-	BetAmountNanoton int64      `gorm:"not null" json:"bet_amount_nanoton"`
-	MaxPlayers       int        `gorm:"not null;default:2" json:"max_players"`
-	Status           string     `gorm:"type:varchar(32);not null;index" json:"status"`
-	WinnerID         *uuid.UUID `gorm:"type:uuid" json:"winner_id,omitempty"`
-	PlatformFeeBps   int        `gorm:"not null;default:500" json:"platform_fee_bps"`
-	GameRoundID      *uuid.UUID `gorm:"type:uuid" json:"game_round_id,omitempty"`
-	SpinAt           *time.Time `json:"spin_at,omitempty"`
-	SpinEndsAt       *time.Time `json:"spin_ends_at,omitempty"`
-	PayoutNanoton    *int64     `json:"payout_nanoton,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	FinishedAt       *time.Time `json:"finished_at,omitempty"`
-}
-
-type PvPRoomPlayer struct {
-	RoomID          uuid.UUID      `gorm:"type:uuid;primaryKey" json:"room_id"`
-	UserID          uuid.UUID      `gorm:"type:uuid;primaryKey" json:"user_id"`
-	StakeNanoton    int64          `gorm:"not null" json:"stake_nanoton"`
-	BalanceNanoton  int64          `gorm:"not null;default:0" json:"balance_nanoton"`
-	FundingType     BetFundingType `gorm:"type:varchar(16);not null;default:balance" json:"funding_type"`
-	InventoryItemID *uuid.UUID     `gorm:"type:uuid" json:"inventory_item_id,omitempty"`
-	JoinedAt        time.Time      `json:"joined_at"`
-	IsWinner        bool           `gorm:"default:false" json:"is_winner"`
-}
-
-// PvPRoomPlayerGift stores each gift locked into a player's PvP stake.
-type PvPRoomPlayerGift struct {
-	RoomID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"room_id"`
-	UserID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
-	InventoryItemID uuid.UUID `gorm:"type:uuid;primaryKey" json:"inventory_item_id"`
-	ValueNanoton    int64     `gorm:"not null;default:0" json:"value_nanoton"`
 }
 
 type LedgerType string

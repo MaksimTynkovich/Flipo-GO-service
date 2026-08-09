@@ -21,11 +21,13 @@ import {
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
+import { emitBalanceWin } from "@/lib/balance-win";
 import {
   numberColor,
   RESULT_DISPLAY_MS,
   RouletteColor,
   RouletteRoundState,
+  rouletteWinCreditNanoton,
 } from "@/lib/roulette";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
@@ -196,8 +198,19 @@ function RoulettePageContent() {
       const resultNum = state?.result_number;
       if (resultNum != null && myBets.length > 0) {
         const winColor = numberColor(resultNum);
-        const won = myBets.some((bet) => bet.color === winColor);
-        haptics.notificationOccurred(won ? "success" : "error");
+        let creditNanoton = 0;
+        for (const bet of myBets) {
+          if (bet.color !== winColor) continue;
+          creditNanoton += rouletteWinCreditNanoton(
+            bet.amount_nanoton,
+            bet.color,
+            bet.funding_type,
+          );
+        }
+        if (creditNanoton > 0) {
+          emitBalanceWin(creditNanoton, { source: "local" });
+        }
+        haptics.notificationOccurred(creditNanoton > 0 ? "success" : "error");
       }
     }
 

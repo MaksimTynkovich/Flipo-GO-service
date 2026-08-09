@@ -30,6 +30,7 @@ const CATEGORIES: { id: AdminNotificationCategory; label: string }[] = [
   { id: "game", label: "Игры" },
   { id: "referral", label: "Рефералы" },
   { id: "promo", label: "Промо" },
+  { id: "quests", label: "Задания" },
   { id: "system", label: "Система" },
 ];
 
@@ -40,6 +41,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   game: "Игры",
   referral: "Рефералы",
   promo: "Промо",
+  quests: "Задания",
   system: "Система",
 };
 
@@ -311,7 +313,7 @@ export default function NotificationsSection() {
         : null;
 
   return (
-    <AdminPage description="Лента событий: финансы, подарки, ставки и исходы игр (crash / roulette / pvp), промо и активность пользователей.">
+    <AdminPage description="Лента событий: финансы, подарки, ставки и исходы игр (crash / roulette), промо и активность пользователей.">
       <AdminToolbar className="justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {CATEGORIES.map((item) => (

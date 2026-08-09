@@ -41,6 +41,17 @@ func (h *ReferralHandler) InviteeStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, status)
 }
 
+func (h *ReferralHandler) PrepareShare(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	telegramID := middleware.GetTelegramID(c)
+	out, err := h.referrals.PrepareShare(c.Request.Context(), userID, telegramID)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 type referralShareRequest struct {
 	Action string `json:"action"`
 	Source string `json:"source"`

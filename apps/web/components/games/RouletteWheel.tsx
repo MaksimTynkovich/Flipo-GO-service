@@ -4,16 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   alignRotationToIndex,
   easeSpinRoulette,
-  indexAtPointer,
   isLandingPause,
   jitterForRound,
   numberColor,
+  pointerSampleAtRotation,
   ROULETTE_SEGMENTS,
   RouletteColor,
   RouletteRoundState,
   resolveWheelIndex,
   ROULETTE_WHEEL_COLORS,
-  rouletteMultiplier,
   SEGMENT_ANGLE,
   SPIN_DURATION_MS,
   spinTargetRotation,
@@ -24,9 +23,39 @@ import { cn } from "@/lib/utils";
 const CATCHUP_MS = 250;
 const RESULT_HOLD_MS = 2500;
 
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [
+    Number.parseInt(h.slice(0, 2), 16),
+    Number.parseInt(h.slice(2, 4), 16),
+    Number.parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const tt = Math.min(1, Math.max(0, t));
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  const r = Math.round(ar + (br - ar) * tt);
+  const g = Math.round(ag + (bg - ag) * tt);
+  const bl = Math.round(ab + (bb - ab) * tt);
+  return `#${[r, g, bl].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Color under the top pointer — solid in segment center, soft blend near edges. */
 function pointerColorForRotation(rotationDeg: number): string {
-  const idx = indexAtPointer(rotationDeg);
-  return ROULETTE_WHEEL_COLORS[WHEEL_COLORS[idx]];
+  const { index, t } = pointerSampleAtRotation(rotationDeg);
+  const cur = ROULETTE_WHEEL_COLORS[WHEEL_COLORS[index]];
+  const edge = 0.18;
+  if (t < edge) {
+    const prev = (index - 1 + ROULETTE_SEGMENTS) % ROULETTE_SEGMENTS;
+    return mixHex(ROULETTE_WHEEL_COLORS[WHEEL_COLORS[prev]], cur, 0.5 + t / (2 * edge));
+  }
+  if (t > 1 - edge) {
+    const next = (index + 1) % ROULETTE_SEGMENTS;
+    return mixHex(cur, ROULETTE_WHEEL_COLORS[WHEEL_COLORS[next]], (t - (1 - edge)) / (2 * edge));
+  }
+  return cur;
 }
 
 function animateSpin(
@@ -93,11 +122,11 @@ type Props = {
 
 export function RouletteWheel({ state }: Props) {
   const wheelRef = useRef<HTMLDivElement>(null);
-  const pointerRef = useRef<HTMLSpanElement>(null);
+  const pointerRef = useRef<SVGPathElement>(null);
   const lastSpinRound = useRef<string | null>(null);
   const roundJitter = useRef(0);
   const rotationRef = useRef(0);
-  const pointerColorRef = useRef(ROULETTE_WHEEL_COLORS.yellow);
+  const pointerColorRef = useRef(pointerColorForRotation(0));
   const cancelSpin = useRef<(() => void) | null>(null);
   const resultHoldTimer = useRef<number | null>(null);
   const landTimer = useRef<number | null>(null);
@@ -116,21 +145,16 @@ export function RouletteWheel({ state }: Props) {
     spinLanded ||
     (!!state && phase === "spinning" && isLandingPause(state) && state.result_number != null);
   const showHeldResult = heldResult != null && phase !== "betting" && phase !== "spinning";
-  const showResultHub = phase === "result" || showHeldResult || landingDone;
   const highlightWin =
     !!state &&
     winIndex !== undefined &&
     (phase === "result" || landingDone || isLandingPause(state) || showHeldResult);
-  const resultColor = heldResult?.color
-    ?? (state?.result_number != null ? numberColor(state.result_number) : null);
-  const displayMult =
-    resultColor != null ? rouletteMultiplier(resultColor) : null;
 
   const applyPointerColor = useCallback((hex: string) => {
     if (pointerColorRef.current === hex) return;
     pointerColorRef.current = hex;
     const pin = pointerRef.current;
-    if (pin) pin.style.borderTopColor = hex;
+    if (pin) pin.setAttribute("fill", hex);
   }, []);
 
   const applyRotation = useCallback(
@@ -172,6 +196,10 @@ export function RouletteWheel({ state }: Props) {
     },
     [applyRotation],
   );
+
+  useEffect(() => {
+    applyRotation(rotationRef.current);
+  }, [applyRotation]);
 
   useEffect(() => {
     return () => {
@@ -281,11 +309,20 @@ export function RouletteWheel({ state }: Props) {
     >
       <div className="roulette-wheel relative mx-auto aspect-square w-[min(86%,360px)]">
         <div className="roulette-pointer roulette-pointer--x50" aria-hidden>
-          <span
-            ref={pointerRef}
-            className="roulette-pointer__pin"
-            style={{ borderTopColor: pointerColorRef.current }}
-          />
+          <svg
+            className="roulette-pointer__svg"
+            width="26"
+            height="30"
+            viewBox="0 0 32 36"
+            overflow="visible"
+          >
+            <path
+              ref={pointerRef}
+              className="roulette-pointer__pin"
+              d="M1.5 1.5 L16 12 L30.5 1.5 L16 34.5 Z"
+              fill={pointerColorRef.current}
+            />
+          </svg>
         </div>
 
         <div
@@ -335,8 +372,6 @@ export function RouletteWheel({ state }: Props) {
           className={cn(
             "roulette-hub roulette-hub--minimal pointer-events-none absolute left-1/2 top-1/2 z-20 flex w-[56%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center",
             phase === "betting" && countdown <= 3 && countdown > 0 && "roulette-hub--urgent",
-            ((phase === "spinning" && !landingDone) || awaitingStart) && "roulette-hub--spinning",
-            showResultHub && resultColor && `roulette-hub--${resultColor}`,
           )}
         >
           {phase === "betting" && !awaitingStart ? (
@@ -351,15 +386,6 @@ export function RouletteWheel({ state }: Props) {
                 {countdown.toString().padStart(2, "0")}
               </span>
             </div>
-          ) : null}
-          {(phase === "spinning" && !landingDone) || awaitingStart ? (
-            <span className="roulette-hub__spin">Крутим</span>
-          ) : null}
-          {showResultHub && displayMult != null ? (
-            <span className="roulette-hub__value tabular-nums">
-              <span className="roulette-hub__x">×</span>
-              {displayMult}
-            </span>
           ) : null}
           {phase === "waiting" && !showHeldResult && !awaitingStart ? (
             <span className="roulette-hub__idle">Скоро</span>

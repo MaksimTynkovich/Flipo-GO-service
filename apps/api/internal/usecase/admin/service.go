@@ -221,8 +221,6 @@ func betSelectionLabel(bet domain.GameBet) string {
 			return "auto ×" + formatMult(auto)
 		}
 		return "crash"
-	case domain.GamePvP:
-		return "pvp"
 	default:
 		return string(bet.GameType)
 	}

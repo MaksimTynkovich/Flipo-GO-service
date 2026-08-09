@@ -37,12 +37,6 @@ type CrashTarget struct {
 	Weight     int      `json:"weight"`
 }
 
-// PvPTarget describes a desired PvP winner by user id.
-type PvPTarget struct {
-	WinnerID string `json:"winner_id"`
-	Mode     string `json:"mode"`
-	Weight   int    `json:"weight"`
-}
 
 type Service struct {
 	repo domain.OutcomeOverrideRepository
@@ -103,11 +97,6 @@ func (s *Service) DecodeCrashTarget(o *domain.GameOutcomeOverride) (CrashTarget,
 	return t, err
 }
 
-func (s *Service) DecodePvPTarget(o *domain.GameOutcomeOverride) (PvPTarget, error) {
-	var t PvPTarget
-	err := json.Unmarshal(o.Target, &t)
-	return t, err
-}
 
 // ShouldApply decides, based on mode/weight, whether this covered round is
 // actually forced. Force => always. Bias => with Weight% probability.
@@ -144,13 +133,9 @@ func crashMode(t CrashTarget) (string, int) {
 	return orMode(t.Mode), resolveWeight(t.Weight)
 }
 
-func pvpMode(t PvPTarget) (string, int) {
-	return orMode(t.Mode), resolveWeight(t.Weight)
-}
 
 func (s *Service) RouletteMode(t RouletteTarget) (string, int) { return rouletteMode(t) }
 func (s *Service) CrashMode(t CrashTarget) (string, int)       { return crashMode(t) }
-func (s *Service) PvPMode(t PvPTarget) (string, int)           { return pvpMode(t) }
 
 func orMode(m string) string {
 	if m == ModeBias {

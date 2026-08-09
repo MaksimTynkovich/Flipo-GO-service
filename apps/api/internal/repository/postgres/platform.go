@@ -277,7 +277,6 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	defaults := []domain.GameConfig{
 		{GameType: domain.GameRoulette, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 50_000_000_000, MaxPayoutNanoton: 2_500_000_000_000, HouseEdgeBps: 400, RTPBps: 9600},
 		{GameType: domain.GameCrash, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 30_000_000_000, MaxPayoutNanoton: 500_000_000_000, HouseEdgeBps: 100, RTPBps: 9900},
-		{GameType: domain.GamePvP, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 20_000_000_000, MaxPayoutNanoton: 400_000_000_000, HouseEdgeBps: 0, RTPBps: 9500, PlatformFeeBps: 500},
 	}
 	for i := range defaults {
 		var existing domain.GameConfig
@@ -385,7 +384,6 @@ func defaultSocialSimSettings() domain.SocialSimSettings {
 		Enabled:               false,
 		CrashEnabled:          true,
 		RouletteEnabled:       true,
-		PvPEnabled:            true,
 		LobbyEnabled:          true,
 		OnlineBaseMin:         18,
 		OnlineBaseMax:         42,
@@ -403,11 +401,6 @@ func defaultSocialSimSettings() domain.SocialSimSettings {
 		RouletteRedWeight:     0.46,
 		RouletteBlackWeight:   0.46,
 		RouletteGreenWeight:   0.08,
-		PvPMaxGhostRooms:      4,
-		PvPRoomTTLSecMin:      25,
-		PvPRoomTTLSecMax:      90,
-		PvPStakeMinFrac:       0.12,
-		PvPStakeMaxFrac:       0.7,
 		Chaos:                 0.35,
 	}
 }

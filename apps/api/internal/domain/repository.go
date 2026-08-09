@@ -321,24 +321,6 @@ type AnalyticsRepository interface {
 	GetUserDrilldown(ctx context.Context, userID uuid.UUID, limit int, sessionID string) (*AnalyticsUserDrilldown, error)
 }
 
-type PvPRepository interface {
-	CreateRoom(ctx context.Context, room *PvPRoom) error
-	GetRoom(ctx context.Context, id uuid.UUID) (*PvPRoom, error)
-	UpdateRoom(ctx context.Context, room *PvPRoom) error
-	ListOpenRooms(ctx context.Context) ([]PvPRoom, error)
-	ListOpenExpired(ctx context.Context, olderThan time.Time) ([]PvPRoom, error)
-	ListActiveRooms(ctx context.Context) ([]PvPRoom, error)
-	ListRecentFinishedRooms(ctx context.Context, since time.Time, limit int) ([]PvPRoom, error)
-	ListCountdownDue(ctx context.Context, now time.Time) ([]PvPRoom, error)
-	ListSpinningDue(ctx context.Context, now time.Time) ([]PvPRoom, error)
-	HasPlayer(ctx context.Context, roomID, userID uuid.UUID) (bool, error)
-	AddPlayer(ctx context.Context, player *PvPRoomPlayer) error
-	ReplacePlayerGifts(ctx context.Context, roomID, userID uuid.UUID, gifts []PvPRoomPlayerGift) error
-	ListRoomPlayerGifts(ctx context.Context, roomID uuid.UUID) ([]PvPRoomPlayerGift, error)
-	ListPlayers(ctx context.Context, roomID uuid.UUID) ([]PvPRoomPlayer, error)
-	CountPlayers(ctx context.Context, roomID uuid.UUID) (int, error)
-}
-
 type GameStateCache interface {
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	Get(ctx context.Context, key string) ([]byte, error)
@@ -448,6 +430,9 @@ type DailyQuestRepository interface {
 	FindBonusClaim(ctx context.Context, userID uuid.UUID, dayMSK time.Time) (*DailyQuestClaim, error)
 	CreateClaim(ctx context.Context, claim *DailyQuestClaim) error
 	DeleteClaim(ctx context.Context, id uuid.UUID) error
+	// ResetClaimsForDay deletes claims for the MSK day (optionally one user) and unused free-case
+	// entitlements granted by those claims. Returns deleted claim count.
+	ResetClaimsForDay(ctx context.Context, dayMSK time.Time, userID *uuid.UUID) (int64, error)
 	UpdateClaimEntitlement(ctx context.Context, claimID, entitlementID uuid.UUID) error
 
 	CreateEntitlement(ctx context.Context, e *UserCaseEntitlement) error

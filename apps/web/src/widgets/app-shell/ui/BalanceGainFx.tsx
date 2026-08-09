@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { RefObject, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { formatTON } from "@/lib/api";
 import { BALANCE_WIN_EVENT, BalanceWinDetail } from "@/lib/balance-win";
@@ -14,16 +15,48 @@ type Gain = {
   nanoton: number;
 };
 
-export function BalanceGainFx() {
+type Pos = {
+  top: number;
+  left: number;
+};
+
+function readAnchorPos(anchor: HTMLElement | null): Pos | null {
+  if (!anchor) return null;
+  const rect = anchor.getBoundingClientRect();
+  if (rect.width <= 0 && rect.height <= 0) return null;
+  return {
+    top: rect.top,
+    left: rect.left + rect.width / 2,
+  };
+}
+
+export function BalanceGainFx({
+  anchorRef,
+}: {
+  anchorRef: RefObject<HTMLElement | null>;
+}) {
   const [gain, setGain] = useState<Gain | null>(null);
+  const [pos, setPos] = useState<Pos | null>(null);
+  const [mounted, setMounted] = useState(false);
   const hideTimer = useRef<number | null>(null);
   const batchUntil = useRef(0);
   const batchId = useRef(0);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const syncPos = () => {
+      const next = readAnchorPos(anchorRef.current);
+      if (next) setPos(next);
+    };
+
     const onWin = (event: Event) => {
       const deltaNanoton = (event as CustomEvent<BalanceWinDetail>).detail?.deltaNanoton;
       if (!deltaNanoton || deltaNanoton <= 0) return;
+
+      syncPos();
 
       const now = Date.now();
       setGain((current) => {
@@ -46,18 +79,33 @@ export function BalanceGainFx() {
     };
 
     window.addEventListener(BALANCE_WIN_EVENT, onWin);
+    window.addEventListener("resize", syncPos);
+    window.addEventListener("scroll", syncPos, true);
     return () => {
       window.removeEventListener(BALANCE_WIN_EVENT, onWin);
+      window.removeEventListener("resize", syncPos);
+      window.removeEventListener("scroll", syncPos, true);
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
     };
-  }, []);
+  }, [anchorRef]);
 
-  if (!gain) return null;
+  if (!mounted || !gain) return null;
 
-  return (
-    <span key={gain.id} className="balance-gain-fx pointer-events-none">
-      <span>+{formatTON(gain.nanoton)}</span>
-      <TonIcon variant="brand" className="h-3.5 w-3.5" />
-    </span>
+  const anchorPos = pos ?? readAnchorPos(anchorRef.current);
+  if (!anchorPos) return null;
+
+  return createPortal(
+    <span
+      key={gain.id}
+      className="balance-gain-fx-anchor pointer-events-none"
+      style={{ top: anchorPos.top, left: anchorPos.left }}
+      aria-live="polite"
+    >
+      <span className="balance-gain-fx">
+        <span>+{formatTON(gain.nanoton)}</span>
+        <TonIcon variant="brand" className="h-3.5 w-3.5" />
+      </span>
+    </span>,
+    document.body,
   );
 }

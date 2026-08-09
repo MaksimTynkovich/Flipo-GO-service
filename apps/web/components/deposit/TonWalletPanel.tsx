@@ -16,6 +16,7 @@ import {
   WalletTransfer,
 } from "@/lib/api";
 import { patchUserBalance } from "@/lib/apply-balance";
+import { emitBalanceWin } from "@/lib/balance-win";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { Button } from "@/components/ui/button";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
@@ -282,6 +283,9 @@ export function TonWalletPanel() {
 
       if (confirm.transfer.status === "completed") {
         setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: confirm.balance }) : prev));
+        if (confirm.transfer.amount_nanoton > 0) {
+          emitBalanceWin(confirm.transfer.amount_nanoton, { source: "local" });
+        }
         setMessage({ type: "success", text: "Пополнение зачислено на баланс." });
       } else if (confirm.transfer.status === "awaiting_payment") {
         setMessage({

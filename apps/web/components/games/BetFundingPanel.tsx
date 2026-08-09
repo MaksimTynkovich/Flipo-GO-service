@@ -25,7 +25,7 @@ type Props = {
   disabled?: boolean;
   quickAmounts?: string[];
   fixedStakeNanoton?: number;
-  /** Lock amount field without filtering gifts by exact value (e.g. PvP join). */
+  /** Lock amount field without filtering gifts by exact value. */
   amountLocked?: boolean;
   excludedGiftIds?: string[];
   multiple?: boolean;
@@ -34,7 +34,7 @@ type Props = {
   layout?: "inline" | "sheet";
   /**
    * Crash / Roulette: prepare TON and gifts together (no exclusive toggle).
-   * PvP keeps exclusive TON | gift segments when false.
+   * When false, exclusive TON | gift segments.
    */
   combined?: boolean;
 };

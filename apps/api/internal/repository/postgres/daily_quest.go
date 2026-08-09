@@ -130,6 +130,43 @@ func (r *DailyQuestRepo) DeleteClaim(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&domain.DailyQuestClaim{}, "id = ?", id).Error
 }
 
+func (r *DailyQuestRepo) ResetClaimsForDay(ctx context.Context, dayMSK time.Time, userID *uuid.UUID) (int64, error) {
+	day := dayMSK.Format("2006-01-02")
+	var deleted int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		q := tx.Model(&domain.DailyQuestClaim{}).Where("day_msk = ?::date", day)
+		if userID != nil {
+			q = q.Where("user_id = ?", *userID)
+		}
+
+		var claimIDs []uuid.UUID
+		if err := q.Pluck("id", &claimIDs).Error; err != nil {
+			return err
+		}
+		if len(claimIDs) == 0 {
+			deleted = 0
+			return nil
+		}
+
+		if err := tx.
+			Where("source = ? AND status = ? AND source_ref IN ?",
+				domain.CaseEntitlementSourceDailyQuest,
+				domain.CaseEntitlementAvailable,
+				claimIDs).
+			Delete(&domain.UserCaseEntitlement{}).Error; err != nil {
+			return err
+		}
+
+		res := tx.Where("id IN ?", claimIDs).Delete(&domain.DailyQuestClaim{})
+		if res.Error != nil {
+			return res.Error
+		}
+		deleted = res.RowsAffected
+		return nil
+	})
+	return deleted, err
+}
+
 func (r *DailyQuestRepo) UpdateClaimEntitlement(ctx context.Context, claimID, entitlementID uuid.UUID) error {
 	return r.db.WithContext(ctx).Model(&domain.DailyQuestClaim{}).
 		Where("id = ?", claimID).

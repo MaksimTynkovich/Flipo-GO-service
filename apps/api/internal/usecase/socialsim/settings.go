@@ -22,7 +22,6 @@ func DefaultSettings() domain.SocialSimSettings {
 		Enabled:               false,
 		CrashEnabled:          true,
 		RouletteEnabled:       true,
-		PvPEnabled:            true,
 		LobbyEnabled:          true,
 		OnlineBaseMin:         18,
 		OnlineBaseMax:         42,
@@ -41,11 +40,6 @@ func DefaultSettings() domain.SocialSimSettings {
 		RouletteRedWeight:     0.46,
 		RouletteBlackWeight:   0.46,
 		RouletteGreenWeight:   0.08,
-		PvPMaxGhostRooms:      4,
-		PvPRoomTTLSecMin:      25,
-		PvPRoomTTLSecMax:      90,
-		PvPStakeMinFrac:       0.12,
-		PvPStakeMaxFrac:       0.7,
 		Chaos:                 0.35,
 	}
 }
@@ -77,20 +71,6 @@ func Normalize(cfg *domain.SocialSimSettings) {
 		cfg.CrashCashoutMax = cfg.CrashCashoutMin
 	}
 	cfg.Chaos = clamp(cfg.Chaos, 0, 1)
-	if cfg.PvPMaxGhostRooms < 0 {
-		cfg.PvPMaxGhostRooms = 0
-	}
-	if cfg.PvPMaxGhostRooms > 20 {
-		cfg.PvPMaxGhostRooms = 20
-	}
-	if cfg.PvPRoomTTLSecMin < 5 {
-		cfg.PvPRoomTTLSecMin = 5
-	}
-	if cfg.PvPRoomTTLSecMax < cfg.PvPRoomTTLSecMin {
-		cfg.PvPRoomTTLSecMax = cfg.PvPRoomTTLSecMin
-	}
-	cfg.PvPStakeMinFrac = clamp(cfg.PvPStakeMinFrac, 0.01, 1)
-	cfg.PvPStakeMaxFrac = clamp(cfg.PvPStakeMaxFrac, cfg.PvPStakeMinFrac, 1)
 
 	tod := ParseTOD(cfg.TODMultipliers)
 	if len(tod) != 24 {

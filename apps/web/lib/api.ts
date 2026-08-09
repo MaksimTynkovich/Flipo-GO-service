@@ -917,6 +917,17 @@ export async function getReferralInviteeStatus() {
   return api<ReferralInviteeStatus>("/api/v1/referrals/invitee");
 }
 
+export async function prepareReferralShare() {
+  return api<{
+    prepared_message_id: string;
+    result_id: string;
+    expiration_date?: number;
+  }>("/api/v1/referrals/share/prepare", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export async function reportReferralShare(action: "copy" | "share") {
   return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
     method: "POST",
@@ -1197,7 +1208,6 @@ export type AdminSocialSimSettings = {
   enabled: boolean;
   crash_enabled: boolean;
   roulette_enabled: boolean;
-  pvp_enabled: boolean;
   lobby_enabled: boolean;
   online_base_min: number;
   online_base_max: number;
@@ -1216,11 +1226,6 @@ export type AdminSocialSimSettings = {
   roulette_red_weight: number;
   roulette_black_weight: number;
   roulette_green_weight: number;
-  pvp_max_ghost_rooms: number;
-  pvp_room_ttl_sec_min: number;
-  pvp_room_ttl_sec_max: number;
-  pvp_stake_min_frac: number;
-  pvp_stake_max_frac: number;
   chaos: number;
   updated_at?: string;
 };
@@ -1230,7 +1235,6 @@ export type PresenceSnapshot = {
   by_game: {
     crash?: number;
     roulette?: number;
-    pvp?: number;
   };
   updated_at: string;
 };
@@ -1555,6 +1559,7 @@ export type AdminNotificationCategory =
   | "referral"
   | "game"
   | "promo"
+  | "quests"
   | "system";
 
 export type AdminNotification = {
@@ -1617,7 +1622,7 @@ export async function markAllAdminNotificationsRead(category?: string) {
   });
 }
 
-export type GameModeKey = "crash" | "roulette" | "pvp";
+export type GameModeKey = "crash" | "roulette";
 
 export type GameModeAccess = {
   enabled: boolean;
@@ -2445,6 +2450,9 @@ export type DailyQuestTask = {
   progress: number;
   status: "active" | "ready" | "claimed" | string;
   action: "cases" | "referrals" | "claim" | "none" | string;
+  objective_case_id?: string;
+  objective_case_slug?: string;
+  objective_case_title?: string;
   reward: DailyQuestReward;
 };
 
@@ -2550,6 +2558,23 @@ export async function updateAdminDailyQuestBoard(board: AdminDailyQuestBoard) {
   });
 }
 
+export type AdminDailyQuestResetResult = {
+  day_msk: string;
+  user_id?: string;
+  deleted_claims: number;
+};
+
+export async function resetAdminDailyQuestClaims(params?: {
+  user_id?: string;
+  telegram_id?: number;
+  day_msk?: string;
+}) {
+  return api<AdminDailyQuestResetResult>("/api/v1/admin/quests/reset", {
+    method: "POST",
+    body: JSON.stringify(params ?? {}),
+  });
+}
+
 export type CaseLootPreview = {
   id: string;
   prize_type?: "gift" | "ton" | string;
@@ -2600,6 +2625,8 @@ export type CaseView = {
   loot?: CaseLootPreview[];
   daily_available?: boolean;
   next_available_at?: string;
+  /** Unused free open from a daily quest reward for this case. */
+  free_open_available?: boolean;
 };
 
 export type CasesCatalog = {
@@ -3308,11 +3335,6 @@ export type AdminOutcomeCrashTarget = {
   weight: number;
 };
 
-export type AdminOutcomePvPTarget = {
-  winner_id: string;
-  mode: "force" | "bias";
-  weight: number;
-};
 
 export async function listOutcomeOverrides() {
   return api<AdminOutcomeOverride[]>("/api/v1/admin/outcome/overrides");
@@ -3320,7 +3342,7 @@ export async function listOutcomeOverrides() {
 
 export async function createOutcomeOverride(
   gameType: string,
-  target: AdminOutcomeRouletteTarget | AdminOutcomeCrashTarget | AdminOutcomePvPTarget,
+  target: AdminOutcomeRouletteTarget | AdminOutcomeCrashTarget,
   roundsRemaining: number,
   durationMinutes: number,
   note: string,

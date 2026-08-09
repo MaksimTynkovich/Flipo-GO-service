@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { TonIcon } from "@/components/icons/TonIcon";
+import { CaseTonPrizeArt } from "@/components/cases/CaseTonPrizeArt";
 import type { CaseOpenResult } from "@/lib/api";
 import { formatTON } from "@/lib/api";
 import { giftBuyPriceNanoton, giftImageUrl } from "@/lib/gifts";
@@ -107,7 +108,7 @@ export function CaseWinModal({
           <span className="case-win-modal__aura" />
           {isTon ? (
             <span className="case-win-modal__ton">
-              <TonIcon variant="brand" className="case-win-modal__ton-icon" title="TON" />
+              <CaseTonPrizeArt />
             </span>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element

@@ -42,7 +42,6 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/payments"
 	"github.com/flipo/flipo/apps/api/internal/usecase/promo"
-	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/flipo/flipo/apps/api/internal/usecase/risk"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
@@ -55,7 +54,6 @@ import (
 	casesworker "github.com/flipo/flipo/apps/api/internal/worker/cases"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
 	paymentsworker "github.com/flipo/flipo/apps/api/internal/worker/payments"
-	pvpworker "github.com/flipo/flipo/apps/api/internal/worker/pvp"
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
 	stakingworker "github.com/flipo/flipo/apps/api/internal/worker/staking"
 	treasuryworker "github.com/flipo/flipo/apps/api/internal/worker/treasury"
@@ -113,7 +111,6 @@ func main() {
 	paymentIntentRepo := postgres.NewPaymentIntentRepo(db)
 	gameRepo := postgres.NewGameRepo(db)
 	gameRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
-	pvpRepo := postgres.NewPvPRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
 	adminRepo := postgres.NewAdminRepo(db)
 	adminRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
@@ -189,6 +186,7 @@ func main() {
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 	promoSvc.SetAdminNotifier(adminNotifier)
 	referralSvc.SetPromoActivator(promoSvc)
+	referralSvc.SetPreparedShareBot(botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
 	walletSvc.SetAdminNotifier(adminNotifier)
 	paymentsSvc.SetAdminNotifier(adminNotifier)
 	paymentsSvc.SetAnalytics(analyticsSvc)
@@ -223,6 +221,7 @@ func main() {
 	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
 	dailyQuestRepo := postgres.NewDailyQuestRepo(db)
 	questSvc := quests.NewService(dailyQuestRepo, caseRepo, userRepo, invRepo, balanceSvc)
+	questSvc.SetAdminNotifier(adminNotifier)
 	caseSvc.SetEntitlements(dailyQuestRepo)
 	caseSvc.SetPreparedShareBot(botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
 	caseSvc.SetAdminChecker(authSvc.IsAdmin)
@@ -284,28 +283,22 @@ func main() {
 	rouletteSvc.SetTickNotifier(hub)
 	crashSvc := crash.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
-	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, betFundingSvc, invRepo, cfg.PlatformFeeBps)
-	pvpSvc.SetValuator(giftValuator)
-	pvpSvc.SetOutcome(outcomeSvc)
-	pvpSvc.SetTickNotifier(hub)
 	crashSvc.SetUsers(userRepo)
 	crashSvc.SetPlatform(platformRepo)
 	rouletteSvc.SetUsers(userRepo)
 	crashSvc.SetAdminNotifier(adminNotifier)
 	rouletteSvc.SetAdminNotifier(adminNotifier)
-	pvpSvc.SetAdminNotifier(adminNotifier)
 	betHook := func(ctx context.Context, userID uuid.UUID, amount int64) {
 		referralSvc.OnQualifyingBet(ctx, userID, amount)
 	}
 	rouletteSvc.SetQualifyingBetHook(betHook)
 	crashSvc.SetQualifyingBetHook(betHook)
-	pvpSvc.SetQualifyingBetHook(betHook)
 
 	socialSim := socialsim.NewSimulator(platformRepo, platformRepo, func(ctx context.Context, snap domain.PresenceSnapshot) {
 		data := socialsim.MarshalPresence(snap)
 		_ = cacheIface.Publish(ctx, "pubsub:game:presence", data)
 		msg := websocket.JSONMessage("presence", data)
-		for _, game := range []string{"crash", "roulette", "pvp"} {
+		for _, game := range []string{"crash", "roulette"} {
 			hub.Broadcast(game, msg)
 		}
 	}, socialsim.WithBotData(cfg.BotsDataDir, cfg.BotsAssetsBaseURL))
@@ -317,10 +310,6 @@ func main() {
 	})
 	crashSvc.SetBetOverlay(socialsim.CrashBridge{Sim: socialSim})
 	rouletteSvc.SetBetOverlay(socialsim.RouletteBridge{Sim: socialSim})
-	pvpBridge := socialsim.PvPBridge{Sim: socialSim}
-	pvpSvc.SetRoomOverlay(pvpBridge)
-	pvpSvc.SetGhostClaimer(pvpBridge)
-	pvpSvc.SetBotMatchmaker(pvpBridge)
 	socialSim.Start(ctx)
 
 	if cache != nil {
@@ -330,7 +319,6 @@ func main() {
 
 	go rouletteworker.NewEngine(rouletteSvc, gameRepo, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds, cfg.RouletteResultPauseSeconds, cfg.RouletteResultDisplaySeconds, outcomeSvc).Run(ctx)
 	go crashworker.NewEngine(crashSvc, gameRepo, cfg.CrashTickMs, cfg.CrashBettingSeconds, cfg.CrashGrowthPerMs, outcomeSvc).Run(ctx)
-	go pvpworker.NewWorker(pvpSvc, 500*time.Millisecond).Run(ctx)
 
 	stakeWorker := stakingworker.NewWorker(stakeSvc)
 	stakeWorker.Start(ctx)
@@ -437,7 +425,7 @@ func main() {
 		AuthHandler:        handlers.NewAuthHandler(authSvc, analyticsSvc),
 		InventoryHandler:   handlers.NewInventoryHandler(invSvc, stakeSvc, analyticsSvc),
 		StakingHandler:     handlers.NewStakingHandler(stakeSvc, analyticsSvc),
-		GameHandler:        handlers.NewGameHandler(rouletteSvc, crashSvc, pvpSvc, riskSvc, fairnessSvc, analyticsSvc, betFundingSvc),
+		GameHandler:        handlers.NewGameHandler(rouletteSvc, crashSvc, riskSvc, fairnessSvc, analyticsSvc, betFundingSvc),
 		MarketHandler:      handlers.NewMarketHandler(marketSvc, analyticsSvc),
 		ReferralHandler:    handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:       handlers.NewPromoHandler(promoSvc, analyticsSvc),

@@ -16,7 +16,6 @@ export const APP_ROUTES = {
   games: "/games",
   crash: "/games/crash",
   roulette: "/games/roulette",
-  pvp: "/games/pvp",
   admin: "/admin",
   market: "/market",
   inventory: "/inventory",
@@ -73,12 +72,7 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
     backLabel: "Игры",
   },
   [APP_ROUTES.roulette]: {
-    title: "Рулетка",
-    backHref: APP_ROUTES.games,
-    backLabel: "Игры",
-  },
-  [APP_ROUTES.pvp]: {
-    title: "Комнаты",
+    title: "Колесо фортуны",
     backHref: APP_ROUTES.games,
     backLabel: "Игры",
   },
@@ -113,7 +107,7 @@ export const APP_SCREENS: AppScreenItem[] = [
     href: APP_ROUTES.games,
     label: "Игры",
     level: "tab",
-    description: "Лобби с Crash, Рулетка и Комнаты.",
+    description: "Лобби с Crash и Рулеткой.",
   },
   {
     id: "quests",
@@ -241,7 +235,7 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   },
   {
     href: APP_ROUTES.roulette,
-    title: "Рулетка",
+    title: "Колесо фортуны",
     description: "Выберите цвет и ждите.",
     badge: "Онлайн",
     icon: CircleDot,

@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { TonIcon } from "@/components/icons/TonIcon";
+import { CaseTonPrizeArt } from "@/components/cases/CaseTonPrizeArt";
+import { QuestClaimModal } from "@/components/quests/QuestClaimModal";
 import {
   claimDailyQuest,
   claimDailyQuestBonus,
@@ -14,14 +17,21 @@ import {
   resolveAsset,
   type DailyQuestBoard,
   type DailyQuestBonus,
+  type DailyQuestClaimResult,
   type DailyQuestReward,
   type DailyQuestTask,
 } from "@/lib/api";
 import { patchUserBalance } from "@/lib/apply-balance";
+import { giftGradient, giftImageUrl } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { cn } from "@/lib/utils";
+
+type ClaimCelebration = {
+  reward: DailyQuestReward;
+  isBonus: boolean;
+};
 
 type TaskTone = "teal" | "blue" | "green" | "cyan";
 
@@ -38,14 +48,19 @@ function progressPct(progress: number, target: number): number {
   return Math.max(0, Math.min(100, Math.round((progress / target) * 100)));
 }
 
+function giftTitle(reward: DailyQuestReward): string {
+  return reward.gift_name?.trim() || reward.model_name?.trim() || "Подарок";
+}
+
 function rewardLabel(reward: DailyQuestReward): string {
   if (reward.type === "free_case_open") {
-    return reward.case_title?.trim() || "Кейс";
+    const title = reward.case_title?.trim();
+    return title ? `Кейс «${title}»` : "Бесплатный кейс";
   }
   if (reward.type === "gift") {
-    return reward.gift_name?.trim() || reward.model_name?.trim() || "Подарок";
+    return giftTitle(reward);
   }
-  if (reward.nanoton) return formatTON(reward.nanoton);
+  if (reward.nanoton) return `${formatTON(reward.nanoton)} TON`;
   return "—";
 }
 
@@ -55,8 +70,7 @@ function bonusRewardHeadline(reward: DailyQuestReward): string {
     return title ? `Кейс «${title}»` : "Бесплатный кейс";
   }
   if (reward.type === "gift") {
-    const title = reward.gift_name?.trim() || reward.model_name?.trim();
-    return title ? `Подарок «${title}»` : "Подарок в инвентарь";
+    return giftTitle(reward);
   }
   if (reward.nanoton) return `+${formatTON(reward.nanoton)} TON на баланс`;
   return "Награда за все задания";
@@ -67,9 +81,22 @@ function claimSuccessTitle(reward: DailyQuestReward, isBonus: boolean): string {
     return isBonus ? "Бонусный кейс получен" : "Бесплатный кейс получен";
   }
   if (reward.type === "gift") {
-    return isBonus ? "Бонусный подарок получен" : "Подарок добавлен в инвентарь";
+    return `${giftTitle(reward)} в инвентаре`;
   }
   return isBonus ? "Бонус зачислен" : "Награда зачислена";
+}
+
+function notifyInventoryIfGift(result: DailyQuestClaimResult) {
+  if (result.reward.type !== "gift" || !result.inventory_item_id) return;
+  window.dispatchEvent(new CustomEvent(INVENTORY_DEPOSITED_EVENT));
+}
+
+function shouldCelebrateClaim(reward: DailyQuestReward): boolean {
+  return (
+    reward.type === "gift" ||
+    reward.type === "free_case_open" ||
+    reward.type === "balance_nanoton"
+  );
 }
 
 export function QuestsView() {
@@ -79,6 +106,7 @@ export function QuestsView() {
   const [board, setBoard] = useState<DailyQuestBoard | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [claimCelebration, setClaimCelebration] = useState<ClaimCelebration | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +125,18 @@ export function QuestsView() {
     void load();
   }, [load]);
 
+  function celebrateClaim(result: DailyQuestClaimResult, isBonus: boolean) {
+    notifyInventoryIfGift(result);
+    if (shouldCelebrateClaim(result.reward)) {
+      setClaimCelebration({ reward: result.reward, isBonus });
+      return;
+    }
+    showToast({
+      variant: "success",
+      title: claimSuccessTitle(result.reward, isBonus),
+    });
+  }
+
   async function onClaimTask(task: DailyQuestTask) {
     setBusy(task.id);
     try {
@@ -105,10 +145,7 @@ export function QuestsView() {
       if (result.balance_after != null) {
         setUser((u) => (u ? patchUserBalance(u, { betting_balance: result.balance_after }) : u));
       }
-      showToast({
-        variant: "success",
-        title: claimSuccessTitle(result.reward, false),
-      });
+      celebrateClaim(result, false);
       await load();
     } catch (e) {
       showToast({
@@ -128,10 +165,7 @@ export function QuestsView() {
       if (result.balance_after != null) {
         setUser((u) => (u ? patchUserBalance(u, { betting_balance: result.balance_after }) : u));
       }
-      showToast({
-        variant: "success",
-        title: claimSuccessTitle(result.reward, true),
-      });
+      celebrateClaim(result, true);
       await load();
     } catch (e) {
       showToast({
@@ -190,28 +224,47 @@ export function QuestsView() {
           </div>
         ) : null}
       </section>
+
+      {claimCelebration ? (
+        <QuestClaimModal
+          reward={claimCelebration.reward}
+          isBonus={claimCelebration.isBonus}
+          onClose={() => setClaimCelebration(null)}
+        />
+      ) : null}
     </PageShell>
   );
 }
 
+function bonusGiftImage(reward: DailyQuestReward): string | undefined {
+  if (reward.type !== "gift") return undefined;
+  const raw = reward.gift_image_url?.trim();
+  if (!raw && !reward.collection_slug?.trim()) return undefined;
+  return giftImageUrl(reward.collection_slug?.trim() || "", raw) || undefined;
+}
+
+function rewardCaseImage(reward: DailyQuestReward): string | undefined {
+  if (reward.type !== "free_case_open") return undefined;
+  return resolveAsset(reward.case_image_url?.trim());
+}
+
 function BonusWash({ reward }: { reward: DailyQuestReward }) {
-  const coverImage =
-    reward.type === "free_case_open"
-      ? resolveAsset(reward.case_image_url?.trim())
-      : reward.type === "gift"
-        ? resolveAsset(reward.gift_image_url?.trim())
-        : undefined;
+  const caseCover =
+    reward.type === "free_case_open" ? resolveAsset(reward.case_image_url?.trim()) : undefined;
+  const giftSrc = bonusGiftImage(reward);
+  const showAmbient = !caseCover;
 
   return (
     <div className="quests-bonus-card__art" aria-hidden>
       <div className="quests-bonus-card__glow" />
-      {coverImage ? (
+      {caseCover ? (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="quests-bonus-card__cover" src={coverImage} alt="" draggable={false} />
+          <img className="quests-bonus-card__cover" src={caseCover} alt="" draggable={false} />
           <div className="quests-bonus-card__cover-tint" />
         </>
-      ) : (
+      ) : null}
+      {showAmbient ? (
         <svg className="quests-bonus-card__arcs" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice">
           <defs>
             <radialGradient id="questsBonusOrb" cx="50%" cy="50%" r="50%">
@@ -227,10 +280,29 @@ function BonusWash({ reward }: { reward: DailyQuestReward }) {
           <circle cx="128" cy="96" r="28" fill="none" stroke="rgba(255,220,140,0.55)" strokeWidth="6" />
           <circle cx="128" cy="96" r="12" fill="rgba(255,236,180,0.75)" />
         </svg>
-      )}
+      ) : null}
       {reward.type === "balance_nanoton" ? (
         <div className="quests-bonus-card__ton-badge">
           <TonIcon variant="brand" className="quests-bonus-card__ton-icon" title="TON" />
+        </div>
+      ) : null}
+      {giftSrc ? (
+        <div className="quests-bonus-card__gift-stage">
+          <div
+            className="quests-bonus-card__gift-plate"
+            style={{
+              background: giftGradient(reward.collection_slug?.trim() || reward.gift_name || "gift"),
+            }}
+          >
+            {reward.nanoton && reward.nanoton > 0 ? (
+              <span className="quests-bonus-card__gift-price">
+                <TonIcon variant="brand" className="quests-bonus-card__gift-price-ton" aria-hidden />
+                {formatTON(reward.nanoton)}
+              </span>
+            ) : null}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="quests-bonus-card__gift-img" src={giftSrc} alt="" draggable={false} />
+          </div>
         </div>
       ) : null}
       <div className="quests-bonus-card__fade" />
@@ -251,24 +323,48 @@ function BonusCard({
   const claimed = bonus.status === "claimed";
   const pct = progressPct(bonus.completed_count, bonus.total_count);
   const hasCaseCover =
-    (bonus.reward.type === "free_case_open" &&
-      Boolean(resolveAsset(bonus.reward.case_image_url?.trim()))) ||
-    (bonus.reward.type === "gift" && Boolean(resolveAsset(bonus.reward.gift_image_url?.trim())));
+    bonus.reward.type === "free_case_open" &&
+    Boolean(resolveAsset(bonus.reward.case_image_url?.trim()));
+  const giftSrc = bonusGiftImage(bonus.reward);
+  const giftPrice =
+    bonus.reward.type === "gift" && bonus.reward.nanoton && bonus.reward.nanoton > 0
+      ? bonus.reward.nanoton
+      : 0;
 
   return (
     <article
       className={cn(
         "quests-bonus-card",
         hasCaseCover && "quests-bonus-card--case",
+        Boolean(giftSrc) && "quests-bonus-card--gift",
         claimed && "quests-bonus-card--claimed",
         ready && "quests-bonus-card--ready",
       )}
     >
       <BonusWash reward={bonus.reward} />
       <div className="quests-bonus-card__copy">
-        <p className="quests-bonus-card__eyebrow">Бонус</p>
         <h2 className="quests-bonus-card__title">{bonus.title}</h2>
-        <p className="quests-bonus-card__reward">{bonusRewardHeadline(bonus.reward)}</p>
+        <p className="quests-bonus-card__reward">
+          {giftSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="quests-bonus-card__reward-thumb" src={giftSrc} alt="" draggable={false} />
+          ) : null}
+          <span className="quests-bonus-card__reward-text">{bonusRewardHeadline(bonus.reward)}</span>
+          {giftPrice > 0 ? (
+            <span className="quests-bonus-card__reward-price" title={`${formatTON(giftPrice)} TON`}>
+              <span className="quests-bonus-card__reward-sep" aria-hidden>
+                ·
+              </span>
+              <TonIcon
+                variant="brand"
+                size="sm"
+                className="quests-bonus-card__reward-ton"
+                aria-hidden
+              />
+              <span className="tabular-nums">{formatTON(giftPrice)}</span>
+            </span>
+          ) : null}
+        </p>
         {bonus.description ? (
           <p className="quests-bonus-card__desc">{bonus.description}</p>
         ) : null}
@@ -320,15 +416,55 @@ function TaskRow({
   const claimed = task.status === "claimed";
   const ready = task.status === "ready";
   const pct = progressPct(task.progress, task.target);
+  const caseHref =
+    task.objective_case_slug?.trim() || task.objective_case_id?.trim()
+      ? `${APP_ROUTES.cases}/${encodeURIComponent(
+          task.objective_case_slug?.trim() || task.objective_case_id!.trim(),
+        )}`
+      : APP_ROUTES.cases;
   const href =
     task.action === "referrals"
       ? APP_ROUTES.profileReferrals
       : task.action === "cases"
-        ? APP_ROUTES.cases
+        ? caseHref
         : null;
   const isTon = task.reward.type === "balance_nanoton";
   const giftThumb =
-    task.reward.type === "gift" ? resolveAsset(task.reward.gift_image_url?.trim()) : undefined;
+    task.reward.type === "gift" ? bonusGiftImage(task.reward) : undefined;
+  const caseThumb = rewardCaseImage(task.reward);
+  const giftPrice =
+    task.reward.type === "gift" && task.reward.nanoton && task.reward.nanoton > 0
+      ? task.reward.nanoton
+      : 0;
+  const rewardText = rewardLabel(task.reward);
+  const giftPlateBg =
+    task.reward.type === "gift"
+      ? giftGradient(task.reward.collection_slug?.trim() || task.reward.gift_name || "gift")
+      : undefined;
+
+  let action: ReactNode;
+  if (claimed) {
+    action = <span className="quests-pill quests-pill--done">Получено</span>;
+  } else if (ready) {
+    action = (
+      <button
+        type="button"
+        className="quests-pill quests-pill--primary"
+        disabled={busy}
+        onClick={onClaim}
+      >
+        {busy ? "…" : "Забрать"}
+      </button>
+    );
+  } else if (href) {
+    action = (
+      <Link href={href} className="quests-pill quests-pill--primary" onClick={onNavigate}>
+        Выполнить
+      </Link>
+    );
+  } else {
+    action = <span className="quests-pill quests-pill--muted">Выполнить</span>;
+  }
 
   return (
     <article
@@ -336,11 +472,30 @@ function TaskRow({
         "quests-task-row",
         `quests-task-row--${tone}`,
         claimed && "quests-task-row--claimed",
+        ready && "quests-task-row--ready",
+        isTon && "quests-task-row--ton",
+        Boolean(giftThumb) && "quests-task-row--gift",
+        Boolean(caseThumb) && "quests-task-row--case",
       )}
     >
       <span className="quests-task-row__accent" aria-hidden />
-      <div className="quests-task-row__main">
+
+      <div className="quests-task-row__copy">
         <p className="quests-task-row__title">{task.title}</p>
+        {task.objective_case_title?.trim() ? (
+          <p className="quests-task-row__hint">{task.objective_case_title.trim()}</p>
+        ) : null}
+        <p className="quests-task-row__reward" title={rewardText}>
+          <span className="quests-task-row__reward-label">Награда:</span>
+          {isTon ? (
+            <span className="quests-task-row__reward-value">
+              <TonIcon variant="brand" size="sm" className="quests-task-row__reward-ton" title="TON" />
+              <span className="tabular-nums">{formatTON(task.reward.nanoton ?? 0)} TON</span>
+            </span>
+          ) : (
+            <span className="quests-task-row__reward-value">{rewardText}</span>
+          )}
+        </p>
         <div className="quests-progress quests-progress--row">
           <div className="quests-progress__track">
             <div
@@ -352,39 +507,42 @@ function TaskRow({
             {task.progress}/{task.target}
           </span>
         </div>
+        {action}
       </div>
 
-      <div className="quests-task-row__side">
-        <span className={cn("quests-reward-chip", `quests-reward-chip--${tone}`)}>
+      <div className="quests-task-row__art" aria-hidden>
+        <div
+          className={cn(
+            "quests-task-row__plate",
+            isTon && "quests-task-row__plate--ton",
+            Boolean(giftThumb) && "quests-task-row__plate--gift",
+            Boolean(caseThumb) && "quests-task-row__plate--case",
+          )}
+          style={giftPlateBg ? { background: giftPlateBg } : undefined}
+        >
           {isTon ? (
-            <TonIcon variant="brand" size="sm" className="quests-reward-chip__ton" title="TON" />
+            <CaseTonPrizeArt className="quests-task-row__ton" />
           ) : giftThumb ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img className="quests-reward-chip__gift" src={giftThumb} alt="" draggable={false} />
+            <img className="quests-task-row__img" src={giftThumb} alt="" draggable={false} />
+          ) : caseThumb ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="quests-task-row__img" src={caseThumb} alt="" draggable={false} />
           ) : (
-            <span className="quests-reward-chip__dot" aria-hidden />
+            <span className="quests-task-row__dot" />
           )}
-          <span className="quests-reward-chip__value">{rewardLabel(task.reward)}</span>
-        </span>
-
-        {claimed ? (
-          <span className="quests-pill quests-pill--done">Получено</span>
-        ) : ready ? (
-          <button
-            type="button"
-            className="quests-pill quests-pill--primary"
-            disabled={busy}
-            onClick={onClaim}
-          >
-            {busy ? "…" : "Забрать"}
-          </button>
-        ) : href ? (
-          <Link href={href} className="quests-pill quests-pill--primary" onClick={onNavigate}>
-            Выполнить
-          </Link>
-        ) : (
-          <span className="quests-pill quests-pill--muted">Выполнить</span>
-        )}
+          {isTon && (task.reward.nanoton ?? 0) > 0 ? (
+            <span className="quests-task-row__price">
+              <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
+              <span className="tabular-nums">{formatTON(task.reward.nanoton ?? 0)}</span>
+            </span>
+          ) : giftPrice > 0 ? (
+            <span className="quests-task-row__price">
+              <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
+              <span className="tabular-nums">{formatTON(giftPrice)}</span>
+            </span>
+          ) : null}
+        </div>
       </div>
     </article>
   );

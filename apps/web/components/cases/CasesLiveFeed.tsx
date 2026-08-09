@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { candyTileBackgroundForLoot } from "@/components/cases/case-ui";
-import { TonIcon } from "@/components/icons/TonIcon";
+import { CaseTonPrizeArt, CaseMiniTonPrice, CASE_TON_TILE_BACKGROUND } from "@/components/cases/CaseTonPrizeArt";
 import {
   changesGiftCollectionImageUrl,
   isChangesGiftImageUrl,
 } from "@/lib/changes-gifts";
-import { formatTON, resolveAsset, type CaseLiveDrop } from "@/lib/api";
+import { resolveAsset, type CaseLiveDrop } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 
@@ -63,15 +63,14 @@ function LiveTile({ drop, fresh }: { drop: CaseLiveDrop; fresh?: boolean }) {
     >
       <div
         className="cases-live__frame"
-        style={{ background: candyTileBackgroundForLoot(drop) }}
+        style={{
+          background: isTon ? CASE_TON_TILE_BACKGROUND : candyTileBackgroundForLoot(drop),
+        }}
       >
         <span className="cases-live__shine" aria-hidden />
 
         {price > 0 ? (
-          <span className="cases-live__price">
-            {formatTON(price)}
-            <TonIcon variant="brand" className="cases-live__price-icon" title="" />
-          </span>
+          <CaseMiniTonPrice nanoton={price} className="cases-live__price" />
         ) : null}
 
         {drop.backdrop ? (
@@ -82,7 +81,7 @@ function LiveTile({ drop, fresh }: { drop: CaseLiveDrop; fresh?: boolean }) {
 
         {isTon ? (
           <span className="cases-live__ton">
-            <TonIcon variant="brand" className="cases-live__ton-icon" title="TON" />
+            <CaseTonPrizeArt />
           </span>
         ) : src ? (
           // eslint-disable-next-line @next/next/no-img-element

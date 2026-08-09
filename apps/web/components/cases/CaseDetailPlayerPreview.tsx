@@ -5,6 +5,7 @@ import { useId, type ReactNode } from "react";
 import { Gift, Package } from "lucide-react";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { CaseOpenReveal } from "@/components/cases/CaseOpenReveal";
+import { CaseTonPrizeArt, CASE_TON_TILE_BACKGROUND } from "@/components/cases/CaseTonPrizeArt";
 import {
   FeaturedPattern,
   candyTileBackgroundForLoot,
@@ -63,7 +64,9 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
     <article className="case-loot-card">
       <div
         className="case-loot-card__frame"
-        style={{ background: candyTileBackgroundForLoot(entry) }}
+        style={{
+          background: isTon ? CASE_TON_TILE_BACKGROUND : candyTileBackgroundForLoot(entry),
+        }}
       >
         {floor > 0 ? (
           <span className="case-loot-card__price">
@@ -78,7 +81,7 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
         ) : null}
         {isTon ? (
           <span className="case-loot-card__ton">
-            <TonIcon variant="brand" className="case-loot-card__ton-icon" title="TON" />
+            <CaseTonPrizeArt />
           </span>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
@@ -220,15 +223,6 @@ export function CaseDetailPlayerPreview({
           </div>
         )}
       </section>
-
-      {showCatalogLink ? (
-        <Link
-          href={APP_ROUTES.cases}
-          className="block pb-1 text-center text-xs text-white/40 transition-colors hover:text-white/70"
-        >
-          К каталогу
-        </Link>
-      ) : null}
     </div>
   );
 

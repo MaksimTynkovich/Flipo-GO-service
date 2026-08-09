@@ -28,18 +28,14 @@ func TestWeeklyBonusFromMonthlyYield(t *testing.T) {
 	}
 }
 
-func TestParseReferrerID(t *testing.T) {
-	id := "550e8400-e29b-41d4-a716-446655440000"
-	parsed, ok := ParseReferrerID("ref_" + id)
-	if !ok || parsed.String() != id {
-		t.Fatalf("parse ref_ prefix failed")
+func TestParseReferrerTelegramID(t *testing.T) {
+	const id int64 = 123456789
+	payload := StartPayloadForTelegramID(id)
+	parsed, ok := ParseReferrerTelegramID(payload)
+	if !ok || parsed != id {
+		t.Fatalf("round-trip StartPayload/Parse failed: payload=%q got=%d ok=%v", payload, parsed, ok)
 	}
-	parsed, ok = ParseReferrerID(id)
-	if !ok || parsed.String() != id {
-		t.Fatalf("parse bare uuid failed")
-	}
-	_, ok = ParseReferrerID("invalid")
-	if ok {
-		t.Fatal("expected invalid code to fail")
+	if StartPayloadForTelegramID(0) != "ref" {
+		t.Fatalf("expected empty payload for zero id")
 	}
 }

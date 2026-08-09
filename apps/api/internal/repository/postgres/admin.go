@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/google/uuid"
@@ -93,10 +95,20 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 	}
 
 	var pvpFees int64
-	pvpQ := r.db.WithContext(ctx).Model(&domain.PvPRoom{}).
-		Where("status = ? AND payout_nanoton IS NOT NULL", "finished")
-	pvpQ = applyExcludeAdminUsers(pvpQ, "creator_id", r.excludeAdminTelegramIDs)
-	pvpQ.Select("COALESCE(SUM(bet_amount_nanoton * max_players * platform_fee_bps / 10000), 0)").Scan(&pvpFees)
+	// Historical PvP rooms (mode removed); keep fee contribution in revenue summary.
+	pvpSQL := `
+		SELECT COALESCE(SUM(bet_amount_nanoton * max_players * platform_fee_bps / 10000), 0)
+		FROM pvp_rooms
+		WHERE status = 'finished' AND payout_nanoton IS NOT NULL
+	`
+	if len(r.excludeAdminTelegramIDs) > 0 {
+		pvpSQL += ` AND creator_id NOT IN (
+			SELECT id FROM users WHERE telegram_id IN (?)
+		)`
+		r.db.WithContext(ctx).Raw(pvpSQL, r.excludeAdminTelegramIDs).Scan(&pvpFees)
+	} else {
+		r.db.WithContext(ctx).Raw(pvpSQL).Scan(&pvpFees)
+	}
 	summary.PvPFeesNanoton = pvpFees
 
 	summary.GGRNanoton = summary.GameBetsNanoton - summary.GameWinsNanoton
@@ -358,6 +370,9 @@ func (r *AdminRepo) ListUsers(ctx context.Context, query, sort string, minReferr
 	if limit <= 0 {
 		limit = 50
 	}
+	if strings.TrimSpace(query) != "" && limit < 100 {
+		limit = 100
+	}
 	if minReferrals < 0 {
 		minReferrals = 0
 	}
@@ -383,13 +398,88 @@ func (r *AdminRepo) ListUsers(ctx context.Context, query, sort string, minReferr
 	return r.enrichAdminUserRows(ctx, users)
 }
 
+func normalizeAdminUserQuery(raw string) string {
+	q := strings.TrimSpace(raw)
+	q = strings.TrimPrefix(q, "@")
+	return strings.TrimSpace(q)
+}
+
+// applyAdminUserSearch filters users by telegram id, UUID, username, name, or wallet.
+func applyAdminUserSearch(q *gorm.DB, raw string) *gorm.DB {
+	query := normalizeAdminUserQuery(raw)
+	if query == "" {
+		return q
+	}
+
+	if id, err := uuid.Parse(query); err == nil {
+		return q.Where("id = ?", id)
+	}
+
+	digitsOnly := true
+	for _, r := range query {
+		if !unicode.IsDigit(r) {
+			digitsOnly = false
+			break
+		}
+	}
+	if digitsOnly {
+		if tgID, err := strconv.ParseInt(query, 10, 64); err == nil {
+			return q.Where(
+				"telegram_id = ? OR CAST(telegram_id AS TEXT) LIKE ?",
+				tgID, query+"%",
+			)
+		}
+	}
+
+	like := "%" + query + "%"
+	return q.Where(
+		`username ILIKE ? OR first_name ILIKE ? OR last_name ILIKE ?
+		 OR CONCAT_WS(' ', first_name, last_name) ILIKE ?
+		 OR CAST(telegram_id AS TEXT) LIKE ?
+		 OR ton_wallet ILIKE ?`,
+		like, like, like, like, like, like,
+	)
+}
+
+func adminUserSearchSQL(alias string) (string, int) {
+	// Returns SQL fragment with N placeholders for non-numeric / non-uuid fuzzy search.
+	a := alias
+	if a != "" && !strings.HasSuffix(a, ".") {
+		a += "."
+	}
+	return `(` + a + `username ILIKE ? OR ` + a + `first_name ILIKE ? OR ` + a + `last_name ILIKE ?
+		 OR CONCAT_WS(' ', ` + a + `first_name, ` + a + `last_name) ILIKE ?
+		 OR CAST(` + a + `telegram_id AS TEXT) LIKE ?
+		 OR ` + a + `ton_wallet ILIKE ?)`, 6
+}
+
+func adminUserSearchArgs(raw string) (exactSQL string, exactArgs []any, fuzzy bool, fuzzyArgs []any) {
+	query := normalizeAdminUserQuery(raw)
+	if query == "" {
+		return "", nil, false, nil
+	}
+	if id, err := uuid.Parse(query); err == nil {
+		return "u.id = ?", []any{id}, false, nil
+	}
+	digitsOnly := true
+	for _, r := range query {
+		if !unicode.IsDigit(r) {
+			digitsOnly = false
+			break
+		}
+	}
+	if digitsOnly {
+		if tgID, err := strconv.ParseInt(query, 10, 64); err == nil {
+			return "u.telegram_id = ? OR CAST(u.telegram_id AS TEXT) LIKE ?", []any{tgID, query + "%"}, false, nil
+		}
+	}
+	like := "%" + query + "%"
+	return "", nil, true, []any{like, like, like, like, like, like}
+}
+
 func (r *AdminRepo) listUsersOrdered(ctx context.Context, query, sort string, minReferrals, limit int) ([]domain.User, error) {
 	q := r.db.WithContext(ctx).Model(&domain.User{})
-	if query != "" {
-		like := "%" + query + "%"
-		q = q.Where("username ILIKE ? OR first_name ILIKE ? OR CAST(telegram_id AS TEXT) LIKE ?",
-			like, like, like)
-	}
+	q = applyAdminUserSearch(q, query)
 	if minReferrals > 0 {
 		q = q.Where(`id IN (
 			SELECT referrer_id FROM users
@@ -415,7 +505,7 @@ func (r *AdminRepo) listUsersByStake(ctx context.Context, query string, minRefer
 	var ids []idRow
 	var err error
 	refFilter := ""
-	args := make([]any, 0, 6)
+	args := make([]any, 0, 10)
 	if minReferrals > 0 {
 		refFilter = `
 			AND sp.user_id IN (
@@ -426,22 +516,32 @@ func (r *AdminRepo) listUsersByStake(ctx context.Context, query string, minRefer
 			)`
 		args = append(args, minReferrals)
 	}
-	if query != "" {
-		like := "%" + query + "%"
+	exactSQL, exactArgs, fuzzy, fuzzyArgs := adminUserSearchArgs(query)
+	if exactSQL != "" || fuzzy {
+		userFilter := ""
+		searchArgs := make([]any, 0, 8)
+		if exactSQL != "" {
+			userFilter = "AND (" + exactSQL + ")"
+			searchArgs = append(searchArgs, exactArgs...)
+		} else {
+			frag, _ := adminUserSearchSQL("u")
+			userFilter = "AND " + frag
+			searchArgs = append(searchArgs, fuzzyArgs...)
+		}
 		sql := `
 			SELECT sp.user_id, SUM(sp.principal_nanoton) AS principal
 			FROM staking_positions sp
 			JOIN users u ON u.id = sp.user_id
 			WHERE sp.is_active = TRUE
-			  AND (u.username ILIKE ? OR u.first_name ILIKE ? OR CAST(u.telegram_id AS TEXT) LIKE ?)
+			  ` + userFilter + `
 			` + refFilter + `
 			GROUP BY sp.user_id
 			HAVING SUM(sp.principal_nanoton) > 0
 			ORDER BY principal DESC
 			LIMIT ?`
-		args = append([]any{like, like, like}, args...)
-		args = append(args, limit)
-		err = r.db.WithContext(ctx).Raw(sql, args...).Scan(&ids).Error
+		allArgs := append(searchArgs, args...)
+		allArgs = append(allArgs, limit)
+		err = r.db.WithContext(ctx).Raw(sql, allArgs...).Scan(&ids).Error
 	} else {
 		sql := `
 			SELECT user_id, SUM(principal_nanoton) AS principal
@@ -465,7 +565,7 @@ func (r *AdminRepo) listUsersByBets(ctx context.Context, query string, minReferr
 	var ids []idRow
 	var err error
 	refFilter := ""
-	args := make([]any, 0, 6)
+	args := make([]any, 0, 10)
 	if minReferrals > 0 {
 		refFilter = `
 			AND gb.user_id IN (
@@ -476,20 +576,31 @@ func (r *AdminRepo) listUsersByBets(ctx context.Context, query string, minReferr
 			)`
 		args = append(args, minReferrals)
 	}
-	if query != "" {
-		like := "%" + query + "%"
+	exactSQL, exactArgs, fuzzy, fuzzyArgs := adminUserSearchArgs(query)
+	if exactSQL != "" || fuzzy {
+		userFilter := ""
+		searchArgs := make([]any, 0, 8)
+		if exactSQL != "" {
+			userFilter = "AND (" + exactSQL + ")"
+			searchArgs = append(searchArgs, exactArgs...)
+		} else {
+			frag, _ := adminUserSearchSQL("u")
+			userFilter = "AND " + frag
+			searchArgs = append(searchArgs, fuzzyArgs...)
+		}
 		sql := `
 			SELECT gb.user_id, COUNT(*) AS cnt
 			FROM game_bets gb
 			JOIN users u ON u.id = gb.user_id
-			WHERE (u.username ILIKE ? OR u.first_name ILIKE ? OR CAST(u.telegram_id AS TEXT) LIKE ?)
+			WHERE TRUE
+			  ` + userFilter + `
 			` + refFilter + `
 			GROUP BY gb.user_id
 			ORDER BY cnt DESC
 			LIMIT ?`
-		args = append([]any{like, like, like}, args...)
-		args = append(args, limit)
-		err = r.db.WithContext(ctx).Raw(sql, args...).Scan(&ids).Error
+		allArgs := append(searchArgs, args...)
+		allArgs = append(allArgs, limit)
+		err = r.db.WithContext(ctx).Raw(sql, allArgs...).Scan(&ids).Error
 	} else {
 		sql := `
 			SELECT user_id, COUNT(*) AS cnt

@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { candyTileBackgroundForLoot } from "@/components/cases/case-ui";
-import { TonIcon } from "@/components/icons/TonIcon";
+import { CaseTonPrizeArt, CASE_TON_TILE_BACKGROUND } from "@/components/cases/CaseTonPrizeArt";
 import type { CaseLootPreview } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
@@ -286,12 +286,15 @@ export function CaseOpenReveal({
                       width: itemW,
                       height: itemW,
                       flex: `0 0 ${itemW}px`,
-                      background: candyTileBackgroundForLoot(item),
+                      background:
+                        item.prize_type === "ton"
+                          ? CASE_TON_TILE_BACKGROUND
+                          : candyTileBackgroundForLoot(item),
                     }}
                   >
                     {item.prize_type === "ton" ? (
                       <span className="case-reveal__ton">
-                        <TonIcon variant="brand" className="case-reveal__ton-icon" title="TON" />
+                        <CaseTonPrizeArt />
                       </span>
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element

@@ -13,7 +13,7 @@ type GateState =
   | { status: "maintenance"; message: string };
 
 type BettingStatus = {
-  /** When false, new crash/roulette/pvp bets are rejected; cashouts still work. */
+  /** When false, new crash/roulette bets are rejected; cashouts still work. */
   acceptBets: boolean;
 };
 

@@ -128,6 +128,7 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.GET("/referrals/stats", deps.ReferralHandler.Stats)
 			authed.GET("/referrals/invitee", deps.ReferralHandler.InviteeStatus)
+			authed.POST("/referrals/share/prepare", deps.ReferralHandler.PrepareShare)
 			authed.POST("/referrals/share-event", deps.ReferralHandler.ShareEvent)
 
 			authed.POST("/promos/activate", deps.PromoHandler.Activate)
@@ -172,9 +173,6 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/games/crash/bet/active", deps.GameHandler.CrashActiveBet)
 			authed.POST("/games/crash/bet", deps.GameHandler.CrashBet)
 			authed.POST("/games/crash/bet/:id/cashout", deps.GameHandler.CrashCashout)
-			authed.GET("/games/pvp/rooms", deps.GameHandler.PvPListRooms)
-			authed.POST("/games/pvp/rooms", deps.GameHandler.PvPCreateRoom)
-			authed.POST("/games/pvp/rooms/:id/join", deps.GameHandler.PvPJoinRoom)
 		}
 
 		admin := v1.Group("/admin")
@@ -243,6 +241,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.DELETE("/quests/:id", deps.AdminHandler.DeleteDailyQuest)
 			adminAuthed.GET("/quests/board", deps.AdminHandler.GetDailyQuestBoard)
 			adminAuthed.PUT("/quests/board", deps.AdminHandler.UpdateDailyQuestBoard)
+			adminAuthed.POST("/quests/reset", deps.AdminHandler.ResetDailyQuestClaims)
 			adminAuthed.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
 			adminAuthed.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
 			adminAuthed.GET("/maintenance", deps.AdminHandler.GetMaintenanceSettings)
@@ -287,7 +286,7 @@ func NewRouter(deps Deps) *gin.Engine {
 	r.GET("/ws/games/:game", func(c *gin.Context) {
 		game := c.Param("game")
 		switch game {
-		case "roulette", "crash", "pvp", "cases":
+		case "roulette", "crash", "cases":
 			websocket.ServeWS(deps.Hub, game, c.Writer, c.Request)
 		default:
 			c.Status(http.StatusNotFound)

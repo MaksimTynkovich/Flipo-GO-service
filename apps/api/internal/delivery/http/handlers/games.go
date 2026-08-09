@@ -13,7 +13,6 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
-	"github.com/flipo/flipo/apps/api/internal/usecase/pvp"
 	"github.com/flipo/flipo/apps/api/internal/usecase/risk"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
 	"github.com/gin-gonic/gin"
@@ -23,15 +22,14 @@ import (
 type GameHandler struct {
 	roulette  *roulette.Service
 	crash     *crash.Service
-	pvp       *pvp.Service
 	risk      *risk.Service
 	fairness  *fairness.Service
 	analytics *analyticsuc.Service
 	funding   *betfunding.Service
 }
 
-func NewGameHandler(r *roulette.Service, c *crash.Service, p *pvp.Service, riskSvc *risk.Service, fairnessSvc *fairness.Service, analyticsSvc *analyticsuc.Service, fundingSvc *betfunding.Service) *GameHandler {
-	return &GameHandler{roulette: r, crash: c, pvp: p, risk: riskSvc, fairness: fairnessSvc, analytics: analyticsSvc, funding: fundingSvc}
+func NewGameHandler(r *roulette.Service, c *crash.Service, riskSvc *risk.Service, fairnessSvc *fairness.Service, analyticsSvc *analyticsuc.Service, fundingSvc *betfunding.Service) *GameHandler {
+	return &GameHandler{roulette: r, crash: c, risk: riskSvc, fairness: fairnessSvc, analytics: analyticsSvc, funding: fundingSvc}
 }
 
 func (h *GameHandler) Modes(c *gin.Context) {
@@ -264,108 +262,6 @@ func (h *GameHandler) CrashCashout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"payout_nanoton": payout})
 }
 
-func (h *GameHandler) PvPListRooms(c *gin.Context) {
-	if !h.requireMode(c, domain.GamePvP) {
-		return
-	}
-	state, err := h.pvp.CurrentState(c.Request.Context())
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	if state.Active == nil {
-		state.Active = []pvp.RoomView{}
-	}
-	if state.History == nil {
-		state.History = []pvp.RoomView{}
-	}
-	c.JSON(http.StatusOK, state)
-}
-
-func (h *GameHandler) PvPCreateRoom(c *gin.Context) {
-	if !h.requireMode(c, domain.GamePvP) {
-		return
-	}
-	userID := middleware.GetUserID(c)
-	var req struct {
-		Funding           string   `json:"funding"`
-		BetAmountNanoton  int64    `json:"bet_amount_nanoton"`
-		InventoryItemID   string   `json:"inventory_item_id"`
-		InventoryItemIDs  []string `json:"inventory_item_ids"`
-		MaxPlayers        int      `json:"max_players"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if req.MaxPlayers == 0 {
-		req.MaxPlayers = 2
-	}
-	if req.MaxPlayers != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "В PVP-комнате ровно 2 игрока"})
-		return
-	}
-	stake, err := parseStakeInput(req.Funding, req.BetAmountNanoton, req.InventoryItemID, req.InventoryItemIDs)
-	if err != nil {
-		writeGameBetError(c, err)
-		return
-	}
-	stakeAmount, err := h.stakeAmount(c.Request.Context(), userID, stake)
-	if err != nil {
-		writeGameBetError(c, err)
-		return
-	}
-	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
-		UserID: userID, TelegramID: middleware.GetTelegramID(c), GameType: domain.GamePvP,
-		Amount: stakeAmount, MaxPayout: stakeAmount * 2,
-	}); err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "error", "risk_blocked", err.Error(), map[string]any{"mode": "pvp", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
-		writeGameBetError(c, err)
-		return
-	}
-	room, err := h.pvp.CreateRoom(c.Request.Context(), userID, stake, req.MaxPlayers)
-	if err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "error", "create_failed", err.Error(), map[string]any{"mode": "pvp", "amount_nanoton": stakeAmount, "funding": stake.FundingType})
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_created", "success", "", "", map[string]any{"mode": "pvp", "room_id": room.ID, "amount_nanoton": stakeAmount, "funding": stake.FundingType})
-	c.JSON(http.StatusCreated, room)
-}
-
-func (h *GameHandler) PvPJoinRoom(c *gin.Context) {
-	if !h.requireMode(c, domain.GamePvP) {
-		return
-	}
-	userID := middleware.GetUserID(c)
-	roomID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID комнаты"})
-		return
-	}
-	var req struct {
-		Funding          string   `json:"funding"`
-		AmountNanoton    int64    `json:"amount_nanoton"`
-		InventoryItemID  string   `json:"inventory_item_id"`
-		InventoryItemIDs []string `json:"inventory_item_ids"`
-	}
-	_ = c.ShouldBindJSON(&req)
-	// Balance-only join may omit amount; JoinRoom fills room stake. Combined/gift must send stake.
-	stake, err := parseStakeInputAllowZeroBalance(req.Funding, req.AmountNanoton, req.InventoryItemID, req.InventoryItemIDs)
-	if err != nil {
-		writeGameBetError(c, err)
-		return
-	}
-	room, err := h.pvp.JoinRoom(c.Request.Context(), userID, roomID, stake)
-	if err != nil {
-		trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_joined", "error", "join_failed", err.Error(), map[string]any{"mode": "pvp", "room_id": roomID.String(), "funding": stake.FundingType})
-		writeGameBetError(c, err)
-		return
-	}
-	trackUserEvent(h.analytics, c.Request.Context(), userID, "pvp", "pvp_room_joined", "success", "", "", map[string]any{"mode": "pvp", "room_id": roomID.String(), "funding": stake.FundingType})
-	c.JSON(http.StatusOK, room)
-}
-
 func (h *GameHandler) RoundProof(c *gin.Context) {
 	roundID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -438,16 +334,6 @@ func writeGameBetError(c *gin.Context, err error) {
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
 			"error": "Ставка должна быть в пределах ±10% от ставки комнаты.",
 			"code":  "gift_value_mismatch",
-		})
-	case errors.Is(err, domain.ErrRoomFull):
-		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
-			"error": "Комната уже заполнена.",
-			"code":  "room_full",
-		})
-	case errors.Is(err, domain.ErrAlreadyJoined):
-		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
-			"error": "Вы уже в этой комнате.",
-			"code":  "already_joined",
 		})
 	default:
 		msg := err.Error()

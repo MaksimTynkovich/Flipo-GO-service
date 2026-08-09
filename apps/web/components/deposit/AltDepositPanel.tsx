@@ -16,6 +16,7 @@ import {
   type StarsQuote,
 } from "@/lib/api";
 import { patchUserBalance } from "@/lib/apply-balance";
+import { emitBalanceWin } from "@/lib/balance-win";
 import { formatUserError } from "@/lib/user-errors";
 import { nanotonFromTonInput, MIN_TRANSFER_NANOTON } from "@/lib/wallet";
 import { openTelegramInvoice, openTelegramLink } from "@/src/shared/lib/twa";
@@ -96,6 +97,9 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
             );
           } catch {
             /* ignore */
+          }
+          if (intent.amount_nanoton > 0) {
+            emitBalanceWin(intent.amount_nanoton, { source: "local" });
           }
           showToast({
             variant: "success",
@@ -203,6 +207,9 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
                   );
                 } catch {
                   /* ignore */
+                }
+                if (fresh.amount_nanoton > 0) {
+                  emitBalanceWin(fresh.amount_nanoton, { source: "local" });
                 }
                 showToast({
                   variant: "success",

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -13,6 +14,7 @@ import { BalanceGainFx } from "@/src/widgets/app-shell/ui/BalanceGainFx";
 export function AppHeader() {
   const { user, loading } = useAuth();
   const haptics = useTelegramHaptics();
+  const balanceRef = useRef<HTMLDivElement>(null);
 
   return (
     <header className="app-header absolute left-0 right-0 top-0 z-50 pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)]">
@@ -26,11 +28,7 @@ export function AppHeader() {
           <UserAvatar user={user} size={36} className="app-header__avatar-img ring-0" />
         </Link>
 
-        <div className="app-header__balance relative z-10 min-w-0">
-          <div className="app-header__gain" aria-live="polite">
-            <BalanceGainFx />
-          </div>
-
+        <div ref={balanceRef} className="app-header__balance relative z-10 min-w-0">
           <div className="balance-pill">
             <div className="balance-pill__amount">
               <TonIcon variant="brand" className="balance-pill__ton h-4 w-4 shrink-0" />
@@ -50,6 +48,8 @@ export function AppHeader() {
           </div>
         </div>
       </div>
+
+      <BalanceGainFx anchorRef={balanceRef} />
     </header>
   );
 }

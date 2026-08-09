@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/giftimage"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 	"github.com/google/uuid"
@@ -16,12 +18,23 @@ import (
 	"gorm.io/gorm"
 )
 
+type AdminQuestNotifier interface {
+	NotifyQuestClaimed(
+		ctx context.Context,
+		actor telegram.AdminActor,
+		isBonus bool,
+		questTitle, rewardLabel string,
+		rewardNanoton int64,
+	)
+}
+
 type Service struct {
 	quests    domain.DailyQuestRepository
 	cases     domain.CaseRepository
 	users     domain.UserRepository
 	inventory domain.InventoryRepository
 	balance   *balance.Service
+	admin     AdminQuestNotifier
 }
 
 func NewService(
@@ -32,6 +45,10 @@ func NewService(
 	balanceSvc *balance.Service,
 ) *Service {
 	return &Service{quests: quests, cases: cases, users: users, inventory: inventory, balance: balanceSvc}
+}
+
+func (s *Service) SetAdminNotifier(notifier AdminQuestNotifier) {
+	s.admin = notifier
 }
 
 type RewardView struct {
@@ -48,15 +65,18 @@ type RewardView struct {
 }
 
 type TaskView struct {
-	ID          uuid.UUID  `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Objective   string     `json:"objective_type"`
-	Target      int        `json:"target"`
-	Progress    int        `json:"progress"`
-	Status      string     `json:"status"` // active | ready | claimed
-	Action      string     `json:"action"` // cases | referrals | claim | none
-	Reward      RewardView `json:"reward"`
+	ID                 uuid.UUID  `json:"id"`
+	Title              string     `json:"title"`
+	Description        string     `json:"description"`
+	Objective          string     `json:"objective_type"`
+	Target             int        `json:"target"`
+	Progress           int        `json:"progress"`
+	Status             string     `json:"status"` // active | ready | claimed
+	Action             string     `json:"action"` // cases | referrals | claim | none
+	ObjectiveCaseID    *uuid.UUID `json:"objective_case_id,omitempty"`
+	ObjectiveCaseSlug  string     `json:"objective_case_slug,omitempty"`
+	ObjectiveCaseTitle string     `json:"objective_case_title,omitempty"`
+	Reward             RewardView `json:"reward"`
 }
 
 type BonusView struct {
@@ -128,7 +148,7 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 		if err != nil {
 			return nil, err
 		}
-		views = append(views, TaskView{
+		view := TaskView{
 			ID:          q.ID,
 			Title:       q.Title,
 			Description: q.Description,
@@ -138,7 +158,15 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 			Status:      status,
 			Action:      action,
 			Reward:      reward,
-		})
+		}
+		if q.ObjectiveType == domain.DailyQuestObjectiveOpenCases && q.ObjectiveCaseID != nil {
+			view.ObjectiveCaseID = q.ObjectiveCaseID
+			if c, cErr := s.cases.FindByID(ctx, *q.ObjectiveCaseID); cErr == nil && c != nil {
+				view.ObjectiveCaseSlug = c.Slug
+				view.ObjectiveCaseTitle = c.Title
+			}
+		}
+		views = append(views, view)
 	}
 
 	board, err := s.quests.GetBoardSettings(ctx)
@@ -210,7 +238,12 @@ func (s *Service) ClaimTask(ctx context.Context, userID, questID uuid.UUID) (*Cl
 		return nil, domain.ErrQuestNotReady
 	}
 
-	return s.grantClaim(ctx, userID, dayDate, domain.DailyQuestClaimTask, &q.ID, rewardSpecFromQuest(*q))
+	result, err := s.grantClaim(ctx, userID, dayDate, domain.DailyQuestClaimTask, &q.ID, rewardSpecFromQuest(*q))
+	if err != nil {
+		return nil, err
+	}
+	s.notifyClaim(ctx, userID, false, q.Title, result.Reward)
+	return result, nil
 }
 
 func (s *Service) ClaimBonus(ctx context.Context, userID uuid.UUID) (*ClaimResult, error) {
@@ -249,7 +282,12 @@ func (s *Service) ClaimBonus(ctx context.Context, userID uuid.UUID) (*ClaimResul
 		}
 	}
 
-	return s.grantClaim(ctx, userID, dayDate, domain.DailyQuestClaimBonus, nil, rewardSpecFromBoard(board))
+	result, err := s.grantClaim(ctx, userID, dayDate, domain.DailyQuestClaimBonus, nil, rewardSpecFromBoard(board))
+	if err != nil {
+		return nil, err
+	}
+	s.notifyClaim(ctx, userID, true, board.BonusTitle, result.Reward)
+	return result, nil
 }
 
 func (s *Service) grantClaim(
@@ -387,6 +425,66 @@ func (s *Service) grantGift(ctx context.Context, userID, claimID uuid.UUID, spec
 	return item, nil
 }
 
+func (s *Service) notifyClaim(ctx context.Context, userID uuid.UUID, isBonus bool, title string, reward RewardView) {
+	if s.admin == nil {
+		return
+	}
+	actor := telegram.AdminActor{}
+	if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+		actor = telegram.AdminActor{
+			TelegramID: user.TelegramID,
+			Username:   user.Username,
+			FirstName:  user.FirstName,
+			LastName:   user.LastName,
+		}
+	}
+	s.admin.NotifyQuestClaimed(ctx, actor, isBonus, title, rewardLabelForNotify(reward), reward.Nanoton)
+}
+
+func rewardLabelForNotify(reward RewardView) string {
+	switch reward.Type {
+	case domain.DailyQuestRewardBalance:
+		if reward.Nanoton > 0 {
+			return fmt.Sprintf("%s TON", formatQuestTON(reward.Nanoton))
+		}
+		return "TON на баланс"
+	case domain.DailyQuestRewardFreeCase:
+		title := strings.TrimSpace(reward.CaseTitle)
+		if title != "" {
+			return "кейс «" + title + "»"
+		}
+		return "бесплатный кейс"
+	case domain.DailyQuestRewardGift:
+		name := strings.TrimSpace(reward.GiftName)
+		if name == "" {
+			name = strings.TrimSpace(reward.ModelName)
+		}
+		if name == "" {
+			name = strings.TrimSpace(reward.CollectionSlug)
+		}
+		if name == "" {
+			name = "подарок"
+		}
+		if reward.Nanoton > 0 {
+			return fmt.Sprintf("%s (%s TON)", name, formatQuestTON(reward.Nanoton))
+		}
+		return name
+	default:
+		return "награда"
+	}
+}
+
+func formatQuestTON(nanoton int64) string {
+	if nanoton%1_000_000_000 == 0 {
+		return fmt.Sprintf("%d", nanoton/1_000_000_000)
+	}
+	v := float64(nanoton) / 1e9
+	s := fmt.Sprintf("%.4f", v)
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimRight(s, ".")
+	return s
+}
+
 func (s *Service) progress(ctx context.Context, userID uuid.UUID, q domain.DailyQuest, dayStartUTC time.Time) (int, error) {
 	switch q.ObjectiveType {
 	case domain.DailyQuestObjectiveOpenCases:
@@ -522,7 +620,10 @@ func validateQuest(q *domain.DailyQuest) error {
 		return domain.ErrInvalidAmount
 	}
 	switch q.ObjectiveType {
-	case domain.DailyQuestObjectiveOpenCases, domain.DailyQuestObjectiveInviteReferrals:
+	case domain.DailyQuestObjectiveOpenCases:
+		// ObjectiveCaseID optional: nil = any paid case open.
+	case domain.DailyQuestObjectiveInviteReferrals:
+		q.ObjectiveCaseID = nil
 	default:
 		return domain.ErrInvalidAmount
 	}
@@ -644,6 +745,12 @@ func (s *Service) AdminUpsertQuest(ctx context.Context, req AdminQuestUpsert) (*
 	if err := validateQuest(q); err != nil {
 		return nil, err
 	}
+	if q.ObjectiveType == domain.DailyQuestObjectiveOpenCases && q.ObjectiveCaseID != nil {
+		c, err := s.cases.FindByID(ctx, *q.ObjectiveCaseID)
+		if err != nil || c == nil {
+			return nil, domain.ErrCaseUnavailable
+		}
+	}
 	if q.RewardType == domain.DailyQuestRewardFreeCase && q.RewardCaseID != nil {
 		c, err := s.cases.FindByID(ctx, *q.RewardCaseID)
 		if err != nil || c == nil {
@@ -698,4 +805,63 @@ func (s *Service) AdminUpdateBoard(ctx context.Context, settings *domain.DailyQu
 		}
 	}
 	return s.quests.UpdateBoardSettings(ctx, settings)
+}
+
+type AdminResetClaimsRequest struct {
+	UserID     *uuid.UUID `json:"user_id"`
+	TelegramID *int64     `json:"telegram_id"`
+	DayMSK     *string    `json:"day_msk"`
+}
+
+type AdminResetClaimsResult struct {
+	DayMSK        string     `json:"day_msk"`
+	UserID        *uuid.UUID `json:"user_id,omitempty"`
+	DeletedClaims int64      `json:"deleted_claims"`
+}
+
+func (s *Service) AdminResetClaims(ctx context.Context, req AdminResetClaimsRequest) (*AdminResetClaimsResult, error) {
+	dayStart, _ := staking.CurrentEpochBounds(time.Now())
+	dayMSK := dayStart.In(staking.MoscowLocation())
+	dayDate := time.Date(dayMSK.Year(), dayMSK.Month(), dayMSK.Day(), 0, 0, 0, 0, staking.MoscowLocation())
+	if req.DayMSK != nil {
+		parsed, err := parseDatePtr(req.DayMSK)
+		if err != nil || parsed == nil {
+			return nil, domain.ErrInvalidAmount
+		}
+		dayDate = *parsed
+	}
+
+	var userID *uuid.UUID
+	switch {
+	case req.UserID != nil && *req.UserID != uuid.Nil:
+		u, err := s.users.FindByID(ctx, *req.UserID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, domain.ErrNotFound
+			}
+			return nil, err
+		}
+		id := u.ID
+		userID = &id
+	case req.TelegramID != nil && *req.TelegramID > 0:
+		u, err := s.users.FindByTelegramID(ctx, *req.TelegramID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, domain.ErrNotFound
+			}
+			return nil, err
+		}
+		id := u.ID
+		userID = &id
+	}
+
+	deleted, err := s.quests.ResetClaimsForDay(ctx, dayDate, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &AdminResetClaimsResult{
+		DayMSK:        dayDate.Format("2006-01-02"),
+		UserID:        userID,
+		DeletedClaims: deleted,
+	}, nil
 }

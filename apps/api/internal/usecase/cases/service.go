@@ -172,6 +172,8 @@ type CaseView struct {
 	Loot              []LootPreview `json:"loot,omitempty"`
 	DailyAvailable    *bool         `json:"daily_available,omitempty"`
 	NextAvailableAt   *time.Time    `json:"next_available_at,omitempty"`
+	// FreeOpenAvailable — user has an unused daily-quest free open for this case.
+	FreeOpenAvailable bool `json:"free_open_available,omitempty"`
 }
 
 // AdminLootEntry — loot row for admin CRUD (includes weight).
@@ -291,6 +293,7 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID, telegramID int6
 		channelCached = &ok
 		return channelCached
 	}
+	freeOpenByCase := s.availableFreeOpenCaseIDs(ctx, userID)
 	for _, row := range rows {
 		view := s.toCaseView(ctx, row, true)
 		if view.RequireChannel {
@@ -308,6 +311,9 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID, telegramID int6
 			if !avail {
 				view.NextAvailableAt = next
 			}
+		}
+		if _, ok := freeOpenByCase[row.ID]; ok {
+			view.FreeOpenAvailable = true
 		}
 		s.attachQuestStatus(ctx, &view, userID)
 		switch row.Kind {
@@ -341,6 +347,9 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID, te
 		if !avail {
 			view.NextAvailableAt = next
 		}
+	}
+	if _, ok := s.availableFreeOpenCaseIDs(ctx, userID)[c.ID]; ok {
+		view.FreeOpenAvailable = true
 	}
 	s.attachChannelStatus(ctx, &view, userID)
 	s.attachQuestStatus(ctx, &view, userID)
@@ -1797,6 +1806,22 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 		}
 	}
 	return view
+}
+
+// availableFreeOpenCaseIDs returns case IDs with at least one unused quest entitlement.
+func (s *Service) availableFreeOpenCaseIDs(ctx context.Context, userID uuid.UUID) map[uuid.UUID]struct{} {
+	out := make(map[uuid.UUID]struct{})
+	if userID == uuid.Nil || s.entitlements == nil {
+		return out
+	}
+	rows, err := s.entitlements.ListAvailableEntitlements(ctx, userID)
+	if err != nil {
+		return out
+	}
+	for _, row := range rows {
+		out[row.CaseID] = struct{}{}
+	}
+	return out
 }
 
 func (s *Service) attachQuestStatus(ctx context.Context, view *CaseView, userID uuid.UUID) {

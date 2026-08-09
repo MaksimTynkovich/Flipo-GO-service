@@ -64,19 +64,22 @@ func (s *Service) RoundProof(ctx context.Context, roundID uuid.UUID) (*domain.Ro
 	if err != nil {
 		return nil, err
 	}
-	if round.Status != "finished" {
-		return nil, domain.ErrNotFound
-	}
 
 	proof := &domain.RoundProof{
 		RoundID:        round.ID,
 		GameType:       round.GameType,
 		RoundNumber:    round.RoundNumber,
 		ServerSeedHash: round.ServerSeedHash,
-		ServerSeed:     round.ServerSeed,
 		ClientSeed:     round.ClientSeed,
 		Nonce:          round.Nonce,
 	}
+
+	// In-progress rounds only expose the hash commitment; seed unlocks after finish.
+	if round.Status != "finished" {
+		return proof, nil
+	}
+
+	proof.ServerSeed = round.ServerSeed
 
 	var payload map[string]any
 	_ = json.Unmarshal(round.ResultPayload, &payload)

@@ -58,6 +58,8 @@ function formatCountdown(ms: number): string {
 
 /** Next unfinished quest: share first, then name tag. */
 function nextQuestStep(c: CaseView): CaseQuestStep | null {
+  // Quest reward free open does not require case share/name gates.
+  if (c.free_open_available) return null;
   const needShare = Boolean(c.require_share) && c.share_done !== true;
   if (needShare) return "share";
   const tag = c.required_name_tag?.trim();
@@ -160,7 +162,8 @@ export function CaseDetailView() {
   const cooldownBlocked = caseItem?.daily_available === false;
   const isFree =
     Boolean(caseItem) &&
-    (caseItem!.kind === "daily" ||
+    (caseItem!.free_open_available === true ||
+      caseItem!.kind === "daily" ||
       caseItem!.kind === "promo" ||
       caseItem!.price_nanoton <= 0);
   const needsChannel =
@@ -422,6 +425,7 @@ export function CaseDetailView() {
     }
     if (needsChannel) return "Подписаться и открыть";
     if (isPromo) return "Открыть по промокоду";
+    if (caseItem?.free_open_available) return "Открыть бесплатно";
     if (caseItem && caseItem.price_nanoton > 0) {
       return `Открыть · ${formatCasePrice(caseItem.price_nanoton)} TON`;
     }

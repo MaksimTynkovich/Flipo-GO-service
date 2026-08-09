@@ -149,11 +149,14 @@ func (r *StakingRepo) HasQualifyingGameBet(ctx context.Context, userID uuid.UUID
 	}
 
 	var pvpCount int64
-	pvpQ := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).Where("user_id = ?", userID)
+	pvpSQL := `SELECT COUNT(*) FROM pvp_room_players WHERE user_id = ?`
+	args := []any{userID}
 	if minNanoton > 0 {
-		pvpQ = pvpQ.Where("stake_nanoton >= ?", minNanoton)
+		pvpSQL += ` AND stake_nanoton >= ?`
+		args = append(args, minNanoton)
 	}
-	if err := pvpQ.Limit(1).Count(&pvpCount).Error; err != nil {
+	pvpSQL += ` LIMIT 1`
+	if err := r.db.WithContext(ctx).Raw(pvpSQL, args...).Scan(&pvpCount).Error; err != nil {
 		return false, err
 	}
 	return pvpCount > 0, nil
@@ -167,9 +170,7 @@ func (r *StakingRepo) SumWagerByGame(ctx context.Context, userID uuid.UUID, game
 	return total, err
 }
 
-// SumTotalWager — volume across modes: crash/roulette bets, PvP stakes, paid case opens.
-// Uses GORM models (not hardcoded table names) so PvP resolves to the live table
-// (historically pv_p_room_players via GORM pluralization).
+// SumTotalWager — volume across modes: crash/roulette bets, historical PvP stakes, paid case opens.
 func (r *StakingRepo) SumTotalWager(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var bets, pvp, cases int64
 	if err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
@@ -177,9 +178,9 @@ func (r *StakingRepo) SumTotalWager(ctx context.Context, userID uuid.UUID) (int6
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&bets).Error; err != nil {
 		return 0, err
 	}
-	if err := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).
-		Where("user_id = ?", userID).
-		Select("COALESCE(SUM(stake_nanoton), 0)").Scan(&pvp).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(
+		`SELECT COALESCE(SUM(stake_nanoton), 0) FROM pvp_room_players WHERE user_id = ?`, userID,
+	).Scan(&pvp).Error; err != nil {
 		return 0, err
 	}
 	if err := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
@@ -197,9 +198,9 @@ func (r *StakingRepo) HasPvPMatch(ctx context.Context, userID uuid.UUID) (bool, 
 
 func (r *StakingRepo) CountPvPMatches(ctx context.Context, userID uuid.UUID) (int64, error) {
 	var roomCount int64
-	err := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).
-		Where("user_id = ?", userID).
-		Count(&roomCount).Error
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT COUNT(*) FROM pvp_room_players WHERE user_id = ?`, userID,
+	).Scan(&roomCount).Error
 	if err != nil {
 		return 0, err
 	}
@@ -208,7 +209,7 @@ func (r *StakingRepo) CountPvPMatches(ctx context.Context, userID uuid.UUID) (in
 	}
 	var betCount int64
 	err = r.db.WithContext(ctx).Model(&domain.GameBet{}).
-		Where("user_id = ? AND game_type = ?", userID, domain.GamePvP).
+		Where("user_id = ? AND game_type = ?", userID, "pvp").
 		Count(&betCount).Error
 	return betCount, err
 }
@@ -441,7 +442,7 @@ func (r *GameRepo) SumRoundBets(ctx context.Context, roundID uuid.UUID) (int64, 
 }
 
 func (r *GameRepo) GameStats(ctx context.Context) ([]domain.AdminGameStat, error) {
-	gameTypes := []domain.GameType{domain.GameRoulette, domain.GameCrash, domain.GamePvP}
+	gameTypes := []domain.GameType{domain.GameRoulette, domain.GameCrash}
 	out := make([]domain.AdminGameStat, 0, len(gameTypes))
 	for _, gt := range gameTypes {
 		var stat domain.AdminGameStat
@@ -474,122 +475,3 @@ func (r *GameRepo) GameStats(ctx context.Context) ([]domain.AdminGameStat, error
 }
 
 var _ domain.GameRepository = (*GameRepo)(nil)
-
-type PvPRepo struct {
-	db *gorm.DB
-}
-
-func NewPvPRepo(db *gorm.DB) *PvPRepo {
-	return &PvPRepo{db: db}
-}
-
-func (r *PvPRepo) CreateRoom(ctx context.Context, room *domain.PvPRoom) error {
-	return r.db.WithContext(ctx).Create(room).Error
-}
-
-func (r *PvPRepo) GetRoom(ctx context.Context, id uuid.UUID) (*domain.PvPRoom, error) {
-	var room domain.PvPRoom
-	if err := r.db.WithContext(ctx).First(&room, "id = ?", id).Error; err != nil {
-		return nil, err
-	}
-	return &room, nil
-}
-
-func (r *PvPRepo) UpdateRoom(ctx context.Context, room *domain.PvPRoom) error {
-	return r.db.WithContext(ctx).Save(room).Error
-}
-
-func (r *PvPRepo) ListOpenRooms(ctx context.Context) ([]domain.PvPRoom, error) {
-	var rooms []domain.PvPRoom
-	err := r.db.WithContext(ctx).Where("status = ?", "open").Order("created_at DESC").Find(&rooms).Error
-	return rooms, err
-}
-
-func (r *PvPRepo) ListOpenExpired(ctx context.Context, olderThan time.Time) ([]domain.PvPRoom, error) {
-	var rooms []domain.PvPRoom
-	err := r.db.WithContext(ctx).
-		Where("status = ? AND created_at <= ?", "open", olderThan).
-		Order("created_at ASC").
-		Find(&rooms).Error
-	return rooms, err
-}
-
-func (r *PvPRepo) ListActiveRooms(ctx context.Context) ([]domain.PvPRoom, error) {
-	var rooms []domain.PvPRoom
-	err := r.db.WithContext(ctx).
-		Where("status IN ?", []string{"open", "countdown", "spinning"}).
-		Order("created_at DESC").
-		Find(&rooms).Error
-	return rooms, err
-}
-
-func (r *PvPRepo) ListRecentFinishedRooms(ctx context.Context, since time.Time, limit int) ([]domain.PvPRoom, error) {
-	var rooms []domain.PvPRoom
-	err := r.db.WithContext(ctx).
-		Where("status = ? AND finished_at IS NOT NULL AND finished_at >= ?", "finished", since).
-		Order("finished_at DESC").
-		Limit(limit).
-		Find(&rooms).Error
-	return rooms, err
-}
-
-func (r *PvPRepo) ListCountdownDue(ctx context.Context, now time.Time) ([]domain.PvPRoom, error) {
-	var rooms []domain.PvPRoom
-	err := r.db.WithContext(ctx).
-		Where("status = ? AND spin_at IS NOT NULL AND spin_at <= ?", "countdown", now).
-		Find(&rooms).Error
-	return rooms, err
-}
-
-func (r *PvPRepo) ListSpinningDue(ctx context.Context, now time.Time) ([]domain.PvPRoom, error) {
-	var rooms []domain.PvPRoom
-	err := r.db.WithContext(ctx).
-		Where("status = ? AND spin_ends_at IS NOT NULL AND spin_ends_at <= ?", "spinning", now).
-		Find(&rooms).Error
-	return rooms, err
-}
-
-func (r *PvPRepo) HasPlayer(ctx context.Context, roomID, userID uuid.UUID) (bool, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).
-		Where("room_id = ? AND user_id = ?", roomID, userID).
-		Count(&count).Error
-	return count > 0, err
-}
-
-func (r *PvPRepo) AddPlayer(ctx context.Context, player *domain.PvPRoomPlayer) error {
-	return r.db.WithContext(ctx).Create(player).Error
-}
-
-func (r *PvPRepo) ReplacePlayerGifts(ctx context.Context, roomID, userID uuid.UUID, gifts []domain.PvPRoomPlayerGift) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("room_id = ? AND user_id = ?", roomID, userID).
-			Delete(&domain.PvPRoomPlayerGift{}).Error; err != nil {
-			return err
-		}
-		if len(gifts) == 0 {
-			return nil
-		}
-		return tx.Create(&gifts).Error
-	})
-}
-
-func (r *PvPRepo) ListRoomPlayerGifts(ctx context.Context, roomID uuid.UUID) ([]domain.PvPRoomPlayerGift, error) {
-	var gifts []domain.PvPRoomPlayerGift
-	err := r.db.WithContext(ctx).Where("room_id = ?", roomID).Find(&gifts).Error
-	return gifts, err
-}
-
-func (r *PvPRepo) ListPlayers(ctx context.Context, roomID uuid.UUID) ([]domain.PvPRoomPlayer, error) {
-	var players []domain.PvPRoomPlayer
-	err := r.db.WithContext(ctx).Where("room_id = ?", roomID).Find(&players).Error
-	return players, err
-}
-
-func (r *PvPRepo) CountPlayers(ctx context.Context, roomID uuid.UUID) (int, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).Where("room_id = ?", roomID).Count(&count).Error
-	return int(count), err
-}
-
-var _ domain.PvPRepository = (*PvPRepo)(nil)

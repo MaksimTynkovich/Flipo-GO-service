@@ -411,6 +411,56 @@ func (n *AdminNotifier) NotifyPromoActivationFailed(ctx context.Context, actor A
 	)
 }
 
+// NotifyQuestClaimed — user claimed a daily quest task or the board bonus reward.
+func (n *AdminNotifier) NotifyQuestClaimed(
+	ctx context.Context,
+	actor AdminActor,
+	isBonus bool,
+	questTitle, rewardLabel string,
+	rewardNanoton int64,
+) {
+	questTitle = strings.TrimSpace(questTitle)
+	if questTitle == "" {
+		if isBonus {
+			questTitle = "Бонус дня"
+		} else {
+			questTitle = "Задание"
+		}
+	}
+	rewardLabel = strings.TrimSpace(rewardLabel)
+	if rewardLabel == "" {
+		rewardLabel = "награда"
+	}
+
+	kind := "quest_claimed"
+	title := "Задание выполнено"
+	metaKind := "task"
+	if isBonus {
+		kind = "quest_bonus_claimed"
+		title = "Бонус дня получен"
+		metaKind = "bonus"
+	}
+
+	summary := fmt.Sprintf("%s · %s · %s", FormatActor(actor), questTitle, rewardLabel)
+	scopeLabel := "Задание"
+	if isBonus {
+		scopeLabel = "Бонус"
+	}
+	body := fmt.Sprintf("%s\n%s: %s\nНаграда: %s", FormatActor(actor), scopeLabel, questTitle, rewardLabel)
+	meta := map[string]any{
+		"quest_title":  questTitle,
+		"reward_label": rewardLabel,
+		"claim_kind":   metaKind,
+	}
+	var amount *int64
+	if rewardNanoton > 0 {
+		v := rewardNanoton
+		amount = &v
+		meta["reward_nanoton"] = rewardNanoton
+	}
+	n.persist(ctx, true, actor, kind, "quests", "info", title, summary, body, amount, meta)
+}
+
 func (n *AdminNotifier) NotifyReferralJoined(ctx context.Context, actor, referrer AdminActor) {
 	n.persist(ctx, true, actor, "referral_joined", "referral", "info",
 		"Пришёл по реф.ссылке",

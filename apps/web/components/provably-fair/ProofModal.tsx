@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Shield, XCircle } from "lucide-react";
+import { CheckCircle2, Clock3, Shield, XCircle } from "lucide-react";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { getRoundProof, type RoundProof } from "@/lib/api";
 import { verifyRoundProof } from "@/lib/provably-fair";
@@ -18,9 +18,14 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
   const [proof, setProof] = useState<RoundProof | null>(null);
   const [verified, setVerified] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setProof(null);
+    setVerified(null);
+    setError(null);
     // Let the sheet finish its enter animation before crypto/network work
     // so the slide stays smooth on mobile WebViews.
     const start = window.setTimeout(() => {
@@ -28,11 +33,21 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
         .then(async (data) => {
           if (cancelled) return;
           setProof(data);
+          if (!data.server_seed) {
+            setVerified(null);
+            return;
+          }
           const ok = await verifyRoundProof(data);
           if (!cancelled) setVerified(ok);
         })
-        .catch(() => {
-          if (!cancelled) setProof(null);
+        .catch((e: unknown) => {
+          if (cancelled) return;
+          setProof(null);
+          const message =
+            e && typeof e === "object" && "message" in e && typeof e.message === "string"
+              ? e.message
+              : "Проверка честности недоступна для этого раунда";
+          setError(message);
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -44,6 +59,8 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
       window.clearTimeout(start);
     };
   }, [roundId, gameType]);
+
+  const pendingReveal = !!proof && !proof.server_seed;
 
   return (
     <ModalOverlay onClose={onClose} analyticsModalId="proof_modal">
@@ -86,27 +103,34 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
             ) : !proof ? (
               <div className="proof-sheet__status proof-sheet__status--fail">
                 <XCircle className="h-4 w-4 shrink-0" />
-                Проверка честности недоступна для этого раунда
+                {error || "Проверка честности недоступна для этого раунда"}
               </div>
             ) : (
               <>
-                <div
-                  className={cn(
-                    "proof-sheet__status",
-                    verified ? "proof-sheet__status--ok" : "proof-sheet__status--fail",
-                  )}
-                >
-                  {verified ? (
-                    <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  ) : (
-                    <XCircle className="h-4 w-4 shrink-0" />
-                  )}
-                  {verified === null
-                    ? "—"
-                    : verified
-                      ? "Проверка пройдена"
-                      : "Проверка не пройдена"}
-                </div>
+                {pendingReveal ? (
+                  <div className="proof-sheet__status proof-sheet__status--pending">
+                    <Clock3 className="h-4 w-4 shrink-0" />
+                    Раунд ещё идёт — seed раскроется после завершения
+                  </div>
+                ) : (
+                  <div
+                    className={cn(
+                      "proof-sheet__status",
+                      verified ? "proof-sheet__status--ok" : "proof-sheet__status--fail",
+                    )}
+                  >
+                    {verified ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 shrink-0" />
+                    )}
+                    {verified === null
+                      ? "—"
+                      : verified
+                        ? "Проверка пройдена"
+                        : "Проверка не пройдена"}
+                  </div>
+                )}
 
                 <ProofRow label="Раунд" value={`#${proof.round_number}`} />
                 <ProofRow label="Server seed hash" value={proof.server_seed_hash} mono />
@@ -117,7 +141,11 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
                 />
                 <ProofRow label="Client seed" value={proof.client_seed || "—"} mono />
                 <ProofRow label="Nonce" value={String(proof.nonce)} />
-                <ProofRow label="Результат" value={proof.result || "—"} emphasize />
+                <ProofRow
+                  label="Результат"
+                  value={proof.result || (pendingReveal ? "ожидается" : "—")}
+                  emphasize
+                />
               </>
             )}
           </div>

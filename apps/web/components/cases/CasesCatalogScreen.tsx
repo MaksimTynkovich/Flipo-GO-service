@@ -2,10 +2,11 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { ChevronRight, Gift } from "lucide-react";
+import { Gift } from "lucide-react";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { candyTileBackgroundForLoot, formatCasePrice, getCatalogAccent } from "@/components/cases/case-ui";
-import { formatTON, resolveAsset, type CaseLootPreview, type CaseView } from "@/lib/api";
+import { candyTileBackgroundForLoot, formatCasePrice, formatCompactTON, getCatalogAccent } from "@/components/cases/case-ui";
+import { CaseTonPrizeArt, CaseMiniTonPrice, CASE_TON_TILE_BACKGROUND } from "@/components/cases/CaseTonPrizeArt";
+import { resolveAsset, type CaseLootPreview, type CaseView } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ const LOOT_PREVIEW_LIMIT = 4;
 
 function isFreeCase(caseItem: CaseView): boolean {
   return (
+    caseItem.free_open_available === true ||
     caseItem.kind === "daily" ||
     caseItem.kind === "promo" ||
     caseItem.price_nanoton <= 0
@@ -37,14 +39,13 @@ function lootValueNanoton(entry: CaseLootPreview): number {
   return entry.floor_price_nanoton || 0;
 }
 
-/** Top N most expensive gift prizes for catalog card preview. */
+/** Top N most expensive prizes (gifts + TON) for catalog card preview. */
 export function topCaseLootGifts(
   loot: CaseLootPreview[] | undefined,
   limit = LOOT_PREVIEW_LIMIT,
 ): CaseLootPreview[] {
   if (!loot?.length || limit <= 0) return [];
   return loot
-    .filter((entry) => entry.prize_type !== "ton")
     .slice()
     .sort((a, b) => {
       const byValue = lootValueNanoton(b) - lootValueNanoton(a);
@@ -58,36 +59,44 @@ function CaseCardLootPreview({ items }: { items: CaseLootPreview[] }) {
   if (items.length === 0) return null;
 
   return (
-    <ul className="cases-card__loot" aria-hidden>
+    <ul
+      className={cn(
+        "cases-card__loot",
+        items.length < LOOT_PREVIEW_LIMIT && "cases-card__loot--compact",
+      )}
+      aria-hidden
+    >
       {items.map((entry) => {
         const value = lootValueNanoton(entry);
+        const isTon = entry.prize_type === "ton";
         return (
           <li
             key={entry.id}
             className="cases-card__loot-tile"
-            style={{ background: candyTileBackgroundForLoot(entry) }}
+            style={{
+              background: isTon ? CASE_TON_TILE_BACKGROUND : candyTileBackgroundForLoot(entry),
+            }}
             title={
               value > 0
-                ? `${entry.display_name} · ${formatTON(value)} TON`
-                : entry.display_name
+                ? `${entry.display_name || (isTon ? "TON" : "")} · ${formatCompactTON(value)} TON`
+                : entry.display_name || (isTon ? "TON" : "")
             }
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={giftImageUrl(entry.collection_slug, entry.image_url)}
-              alt=""
-              className="cases-card__loot-img"
-              draggable={false}
-            />
-            {value > 0 ? (
-              <span className="cases-card__loot-price">
-                {formatTON(value)}
-                <TonIcon
-                  variant="brand"
-                  className="cases-card__loot-price-icon"
-                  title=""
-                />
+            {isTon ? (
+              <span className="cases-card__loot-ton">
+                <CaseTonPrizeArt />
               </span>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={giftImageUrl(entry.collection_slug, entry.image_url)}
+                alt=""
+                className="cases-card__loot-img"
+                draggable={false}
+              />
+            )}
+            {value > 0 ? (
+              <CaseMiniTonPrice nanoton={value} className="cases-card__loot-price" />
             ) : null}
           </li>
         );
@@ -153,9 +162,9 @@ export function CaseCard({
       </div>
 
       <div className="cases-card__panel">
-        <h3 className="cases-card__title">{caseItem.title}</h3>
         <CaseCardLootPreview items={lootPreview} />
         <span className="cases-card__cta">
+          <span className="cases-card__cta-title">{caseItem.title}</span>
           <span className="cases-card__cta-label">
             <span className="cases-card__cta-text">{price.text}</span>
             {!price.free ? (
@@ -167,7 +176,6 @@ export function CaseCard({
               />
             ) : null}
           </span>
-          <ChevronRight className="cases-card__cta-chevron" strokeWidth={2.75} aria-hidden />
         </span>
       </div>
     </>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { GiftPickerModal } from "@/components/admin/GiftPickerModal";
+import { AdminUserPicker } from "@/components/admin/AdminUserPicker";
 import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminIntField, AdminTonField } from "@/components/admin/AdminInputs";
 import { useToast } from "@/components/providers/ToastProvider";
@@ -11,6 +12,7 @@ import {
   getAdminCases,
   getAdminDailyQuestBoard,
   getAdminDailyQuests,
+  resetAdminDailyQuestClaims,
   updateAdminDailyQuestBoard,
   upsertAdminDailyQuest,
   type AdminCase,
@@ -26,6 +28,7 @@ const EMPTY_QUEST: AdminDailyQuest = {
   active: true,
   objective_type: "open_cases",
   objective_target: 1,
+  objective_case_id: null,
   reward_type: "balance_nanoton",
   reward_nanoton: 1_000_000_000,
   reward_collection_slug: "",
@@ -64,6 +67,8 @@ export default function QuestsSection() {
   const [cases, setCases] = useState<AdminCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetTelegramId, setResetTelegramId] = useState<number | null>(null);
   const [giftPickerTarget, setGiftPickerTarget] = useState<"quest" | "board" | null>(null);
 
   const caseOptions = useMemo(
@@ -133,7 +138,8 @@ export default function QuestsSection() {
         description: draft.description.trim(),
         active_from: draft.active_from || null,
         active_to: draft.active_to || null,
-        objective_case_id: draft.objective_case_id || null,
+        objective_case_id:
+          draft.objective_type === "open_cases" ? draft.objective_case_id || null : null,
         reward_case_id: draft.reward_type === "free_case_open" ? draft.reward_case_id || null : null,
         reward_nanoton:
           draft.reward_type === "balance_nanoton" || draft.reward_type === "gift"
@@ -218,6 +224,53 @@ export default function QuestsSection() {
     }
   }
 
+  async function resetClaims(scope: "all" | "user") {
+    if (resetting) return;
+    let telegramId: number | undefined;
+    if (scope === "user") {
+      if (resetTelegramId == null || resetTelegramId <= 0) {
+        showToast({ variant: "error", title: "Выберите игрока" });
+        return;
+      }
+      telegramId = resetTelegramId;
+      if (
+        !window.confirm(
+          `Сбросить клеймы заданий за сегодня (МСК) у игрока ${telegramId}? Уже выданные TON и подарки не забираются.`,
+        )
+      ) {
+        return;
+      }
+    } else if (
+      !window.confirm(
+        "Сбросить клеймы заданий за сегодня (МСК) у ВСЕХ игроков? Уже выданные TON и подарки не забираются.",
+      )
+    ) {
+      return;
+    }
+
+    setResetting(true);
+    try {
+      const result = await resetAdminDailyQuestClaims(
+        scope === "user" ? { telegram_id: telegramId } : {},
+      );
+      showToast({
+        variant: "success",
+        title:
+          result.deleted_claims > 0
+            ? `Сброшено клеймов: ${result.deleted_claims} (${result.day_msk})`
+            : `Клеймов за ${result.day_msk} не найдено`,
+      });
+      if (scope === "user") setResetTelegramId(null);
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось сбросить",
+      });
+    } finally {
+      setResetting(false);
+    }
+  }
+
   function rewardLabel(q: AdminDailyQuest): string {
     if (q.reward_type === "free_case_open") {
       const c = caseOptions.find((x) => x.id === q.reward_case_id);
@@ -231,11 +284,45 @@ export default function QuestsSection() {
 
   function objectiveLabel(q: AdminDailyQuest): string {
     if (q.objective_type === "invite_referrals") return `Рефералы ×${q.objective_target}`;
-    return `Кейсы ×${q.objective_target}`;
+    const caseTitle = caseOptions.find((x) => x.id === q.objective_case_id)?.title;
+    if (caseTitle) return `Кейс «${caseTitle}» ×${q.objective_target}`;
+    return `Любые кейсы ×${q.objective_target}`;
   }
 
   return (
     <AdminPage title="Задания" description="Ежедневные задания и бонус за выполнение всех.">
+      <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
+        <h3 className="text-sm font-semibold">Сброс клеймов</h3>
+        <p className="text-xs text-muted">
+          Удаляет полученные сегодня (по МСК) отметки заданий и бонуса. Неиспользованные бесплатные
+          открытия кейсов с квестов тоже снимаются. Баланс и подарки в инвентаре не трогаются.
+        </p>
+        <AdminToolbar>
+          <AdminButton
+            variant="danger"
+            disabled={resetting || loading}
+            onClick={() => void resetClaims("all")}
+          >
+            Сбросить у всех
+          </AdminButton>
+        </AdminToolbar>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <AdminUserPicker
+            label="Игрок для сброса"
+            value={resetTelegramId}
+            onChange={(telegramId) => setResetTelegramId(telegramId)}
+            className="text-sm text-muted"
+          />
+          <AdminButton
+            variant="secondary"
+            disabled={resetting || loading || resetTelegramId == null}
+            onClick={() => void resetClaims("user")}
+          >
+            Сбросить игроку
+          </AdminButton>
+        </div>
+      </section>
+
       <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
         <h3 className="text-sm font-semibold">Бонус за все задания</h3>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -371,7 +458,14 @@ export default function QuestsSection() {
             <select
               className="w-full rounded-lg border border-border bg-background px-3 py-2"
               value={draft.objective_type}
-              onChange={(e) => setDraft({ ...draft, objective_type: e.target.value })}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  objective_type: e.target.value,
+                  objective_case_id:
+                    e.target.value === "open_cases" ? draft.objective_case_id ?? null : null,
+                })
+              }
             >
               <option value="open_cases">Открыть кейсы</option>
               <option value="invite_referrals">Пригласить рефералов</option>
@@ -382,6 +476,25 @@ export default function QuestsSection() {
             value={draft.objective_target}
             onChange={(v) => setDraft({ ...draft, objective_target: Math.max(1, v) })}
           />
+          {draft.objective_type === "open_cases" ? (
+            <label className="space-y-1 text-sm sm:col-span-2">
+              <span className="text-muted">Какой кейс открыть</span>
+              <select
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={draft.objective_case_id ?? ""}
+                onChange={(e) =>
+                  setDraft({ ...draft, objective_case_id: e.target.value || null })
+                }
+              >
+                <option value="">Любой платный кейс</option>
+                {caseOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="space-y-1 text-sm">
             <span className="text-muted">Награда</span>
             <select

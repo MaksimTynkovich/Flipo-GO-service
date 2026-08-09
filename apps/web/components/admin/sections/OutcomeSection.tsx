@@ -9,11 +9,10 @@ import {
   listOutcomeOverrides,
   type AdminOutcomeOverride,
   type AdminOutcomeCrashTarget,
-  type AdminOutcomePvPTarget,
   type AdminOutcomeRouletteTarget,
 } from "@/lib/api";
 
-type GameType = "roulette" | "crash" | "pvp";
+type GameType = "roulette" | "crash";
 type Mode = "force" | "bias";
 
 const ROULETTE_COLORS = [
@@ -38,7 +37,6 @@ export default function OutcomeSection() {
   const [crashExact, setCrashExact] = useState("");
   const [crashMin, setCrashMin] = useState("1.5");
   const [crashMax, setCrashMax] = useState("3");
-  const [pvpWinner, setPvpWinner] = useState("");
 
   const [rounds, setRounds] = useState("1");
   const [note, setNote] = useState("");
@@ -61,7 +59,7 @@ export default function OutcomeSection() {
 
   async function submit() {
     const w = Math.min(100, Math.max(0, Number(weight) || 0));
-    let target: AdminOutcomeRouletteTarget | AdminOutcomeCrashTarget | AdminOutcomePvPTarget;
+    let target: AdminOutcomeRouletteTarget | AdminOutcomeCrashTarget;
     if (game === "roulette") {
       const t: AdminOutcomeRouletteTarget = { color: rouletteColor, mode, weight: w };
       if (rouletteNumber.trim() !== "") {
@@ -69,7 +67,7 @@ export default function OutcomeSection() {
         if (!Number.isNaN(n)) t.number = n;
       }
       target = t;
-    } else if (game === "crash") {
+    } else {
       const t: AdminOutcomeCrashTarget = {
         min_point: Math.max(1, Number(crashMin) || 1),
         max_point: Math.max(1, Number(crashMax) || 1),
@@ -81,19 +79,12 @@ export default function OutcomeSection() {
         if (!Number.isNaN(ep) && ep >= 1) t.exact_point = ep;
       }
       target = t;
-    } else {
-      if (!pvpWinner.trim()) {
-        showToast({ title: "Укажите ID победителя", variant: "error" });
-        return;
-      }
-      target = { winner_id: pvpWinner.trim(), mode, weight: w };
     }
     setSubmitting(true);
     try {
       await createOutcomeOverride(game, target, Number(rounds) || 1, Number(duration) || 0, note.trim());
       showToast({ title: "Исход назначен", variant: "success" });
       setNote("");
-      setPvpWinner("");
       await load();
     } catch (e) {
       showToast({ title: "Не удалось назначить исход", variant: "error" });
@@ -122,7 +113,7 @@ export default function OutcomeSection() {
       const pt = t?.exact_point ? `${t.exact_point}×` : `${t?.min_point}×–${t?.max_point}×`;
       return `crash ${pt} · ${modeLabel}`;
     }
-    return `победитель ${t?.winner_id?.slice(0, 8)}… · ${modeLabel}`;
+    return `${o.game_type} · ${modeLabel}`;
   }
 
   return (
@@ -138,7 +129,6 @@ export default function OutcomeSection() {
                 <select className="input-field" value={game} onChange={(e) => setGame(e.target.value as GameType)}>
                   <option value="roulette">Рулетка</option>
                   <option value="crash">Crash</option>
-                  <option value="pvp">PvP</option>
                 </select>
               </AdminField>
               <AdminField label="Режим" hint="force — всегда; bias — с заданной вероятностью">
@@ -188,12 +178,6 @@ export default function OutcomeSection() {
               </>
             )}
 
-            {game === "pvp" && (
-              <AdminField label="ID победителя (user_id)">
-                <input className="input-field" value={pvpWinner} onChange={(e) => setPvpWinner(e.target.value)} placeholder="uuid победителя" />
-              </AdminField>
-            )}
-
             <div className="grid grid-cols-3 gap-3">
               <AdminField label="Кол-во раундов">
                 <input className="input-field" type="number" min="1" value={rounds} onChange={(e) => setRounds(e.target.value)} />
@@ -212,7 +196,7 @@ export default function OutcomeSection() {
           </div>
         </AdminPanel>
 
-        <AdminPanel title="Активные назначения" description="Расходуются по одному на следующие раунды/комнаты выбранной игры.">
+        <AdminPanel title="Активные назначения" description="Расходуются по одному на следующие раунды выбранной игры.">
           {loading ? (
             <p className="text-sm text-muted">Загрузка…</p>
           ) : overrides.length === 0 ? (

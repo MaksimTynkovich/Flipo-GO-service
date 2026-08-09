@@ -81,7 +81,7 @@ export function AdminUserPicker({ label = "Игрок", value, onChange, classNa
       <span>{label}</span>
       <div className="mt-1">
         {selected && value != null ? (
-          <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-surface px-2 py-1.5">
+          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5">
             <p className="min-w-0 flex-1 truncate text-sm text-foreground">{userLabel(selected)}</p>
             <button
               type="button"
@@ -93,8 +93,8 @@ export function AdminUserPicker({ label = "Игрок", value, onChange, classNa
           </div>
         ) : (
           <input
-            className="w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-foreground"
-            placeholder="Имя, @username или Telegram ID"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            placeholder="Имя, @username, Telegram ID или UUID"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -113,7 +113,7 @@ export function AdminUserPicker({ label = "Игрок", value, onChange, classNa
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-white/10 bg-surface py-1 shadow-lg"
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg"
         >
           {loading ? (
             <li className="px-3 py-2 text-sm text-muted">Поиск…</li>

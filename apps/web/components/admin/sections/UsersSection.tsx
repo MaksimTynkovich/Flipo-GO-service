@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   humanizeAnalyticsName,
   humanizeAnalyticsSource,
@@ -34,6 +34,7 @@ import {
   setAdminUserBalance,
   setAdminUserBanned,
   setAdminUserWithdrawalsDisabled,
+  resetAdminDailyQuestClaims,
   type AdminUserAnalytics,
   type AdminUserAudience,
   type AdminUserBetItem,
@@ -56,6 +57,9 @@ import { cn } from "@/lib/utils";
 
 type UsersPayload = [AdminUserAudience, AdminUser[], AdminRiskUser[]];
 type DetailTab = "bets" | "transfers" | "ledger" | "gifts" | "cases" | "activity";
+
+const USERS_CACHE_PREFIX = "admin:users:v11";
+const SEARCH_DEBOUNCE_MS = 280;
 
 const SORT_OPTIONS: { id: AdminUserSort; label: string }[] = [
   { id: "last_login", label: "Последний вход" },
@@ -112,6 +116,77 @@ function statusTone(status: string) {
   return "text-muted";
 }
 
+function userInitials(user: AdminUser) {
+  const name = displayName(user).trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]!.charAt(0)}${parts[1]!.charAt(0)}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase() || "?";
+}
+
+function StatusBadge({
+  tone = "muted",
+  children,
+}: {
+  tone?: "danger" | "warn" | "ok" | "accent" | "muted" | "info";
+  children: ReactNode;
+}) {
+  return <span className={cn("admin-user-badge", `admin-user-badge--${tone}`)}>{children}</span>;
+}
+
+function UserStatusBadges({
+  user,
+  risky,
+  compact,
+}: {
+  user: AdminUser;
+  risky?: boolean;
+  compact?: boolean;
+}) {
+  const badges: { tone: "danger" | "warn" | "ok" | "accent" | "muted" | "info"; label: string }[] =
+    [];
+  if (user.is_banned) badges.push({ tone: "danger", label: "Бан" });
+  if (user.withdrawals_disabled) badges.push({ tone: "warn", label: "Холд выводов" });
+  if (risky) badges.push({ tone: "warn", label: "Риск" });
+  if (user.staking_tier === "boost") badges.push({ tone: "accent", label: "Boost" });
+  if ((user.referral_count ?? 0) > 0 && !compact) {
+    badges.push({ tone: "info", label: `${user.referral_count} реф.` });
+  }
+  if (badges.length === 0) return null;
+  return (
+    <span className="admin-user-badges">
+      {badges.map((b) => (
+        <StatusBadge key={b.label} tone={b.tone}>
+          {b.label}
+        </StatusBadge>
+      ))}
+    </span>
+  );
+}
+
+function CopyChip({
+  label,
+  value,
+  onCopy,
+}: {
+  label: string;
+  value?: string | null;
+  onCopy: (label: string, value?: string | null) => void;
+}) {
+  if (!value) return null;
+  return (
+    <button
+      type="button"
+      className="admin-user-copy"
+      title={`Скопировать ${label}`}
+      onClick={() => onCopy(label, value)}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function UsersSection() {
   const { showToast } = useToast();
   const [query, setQuery] = useState("");
@@ -143,6 +218,10 @@ export default function UsersSection() {
   const [balanceDraft, setBalanceDraft] = useState(0);
   const [balanceReason, setBalanceReason] = useState("");
   const [balanceBusy, setBalanceBusy] = useState(false);
+  const [questResetBusy, setQuestResetBusy] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(true);
+  const searchGenRef = useRef(0);
+  const searchBootstrappedRef = useRef(false);
 
   const riskIds = useMemo(() => new Set(riskUsers.map((user) => user.user_id)), [riskUsers]);
   const riskById = useMemo(() => {
@@ -158,22 +237,30 @@ export default function UsersSection() {
   }
 
   async function load(search = query, nextSort = sort, nextMinReferrals = minReferrals) {
+    const gen = ++searchGenRef.current;
     setLoading(true);
     try {
-      const cacheKey = `admin:users:v10:${nextSort}:${nextMinReferrals}:${search.trim().toLowerCase() || "default"}`;
-      const [audienceData, userData, riskData] = await loadCached(cacheKey, () =>
+      const trimmed = search.trim();
+      const cacheKey = `${USERS_CACHE_PREFIX}:${nextSort}:${nextMinReferrals}:${trimmed.toLowerCase() || "default"}`;
+      const fetcher = () =>
         Promise.all([
           getAdminUserAudience(),
-          getAdminUsers(search, nextSort, nextMinReferrals),
+          getAdminUsers(trimmed, nextSort, nextMinReferrals),
           getAdminRiskUsers(),
-        ]),
-      );
+        ]);
+      // Live search must be fresh; only cache the default browse list.
+      const [audienceData, userData, riskData] = trimmed
+        ? await fetcher()
+        : await loadCached(cacheKey, fetcher);
+      if (gen !== searchGenRef.current) return;
       setAudience(audienceData);
       setUsers(userData);
       setRiskUsers(riskData);
-      primeCache(cacheKey, [audienceData, userData, riskData] satisfies UsersPayload);
+      if (!trimmed) {
+        primeCache(cacheKey, [audienceData, userData, riskData] satisfies UsersPayload);
+      }
     } finally {
-      setLoading(false);
+      if (gen === searchGenRef.current) setLoading(false);
     }
   }
 
@@ -186,15 +273,30 @@ export default function UsersSection() {
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cached = readCached<UsersPayload>("admin:users:v10:last_login:0:default");
+      const cached = readCached<UsersPayload>(`${USERS_CACHE_PREFIX}:last_login:0:default`);
       if (cached) {
         setAudience(cached[0]);
         setUsers(cached[1]);
         setRiskUsers(cached[2]);
       }
-      load().catch(() => {});
+      load()
+        .catch(() => {})
+        .finally(() => {
+          searchBootstrappedRef.current = true;
+        });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount bootstrap only
   }, []);
+
+  useEffect(() => {
+    if (!searchBootstrappedRef.current) return;
+    const trimmed = query.trim();
+    const timer = window.setTimeout(() => {
+      void load(query, sort, minReferrals);
+    }, trimmed ? SEARCH_DEBOUNCE_MS : 80);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce query typing only
+  }, [query]);
 
   async function loadUserBets(userId: string, period: AdminUserPeriod) {
     const data = await getAdminUserBets(userId, period);
@@ -432,18 +534,64 @@ export default function UsersSection() {
     }
   }
 
+  async function resetDailyQuests() {
+    if (!selected || questResetBusy) return;
+    const name = displayName(selected);
+    if (
+      !window.confirm(
+        `Сбросить клеймы ежедневных заданий за сегодня (МСК) у ${name}? Уже выданные TON и подарки не забираются.`,
+      )
+    ) {
+      return;
+    }
+    setQuestResetBusy(true);
+    try {
+      const result = await resetAdminDailyQuestClaims({ user_id: selected.id });
+      showToast({
+        variant: "success",
+        title:
+          result.deleted_claims > 0
+            ? `Сброшено клеймов: ${result.deleted_claims}`
+            : "Клеймов за сегодня не найдено",
+      });
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: formatUserError(err, "Не удалось сбросить задания"),
+      });
+    } finally {
+      setQuestResetBusy(false);
+    }
+  }
+
   return (
     <AdminPage title="Пользователи" description="Поиск, сортировка и карточка игрока.">
       <AdminToolbar>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") searchUsers().catch(() => {});
-          }}
-          className="input-field h-8 min-w-[180px] flex-1"
-          placeholder="Имя, username или Telegram ID"
-        />
+        <div className="relative min-w-[220px] flex-1">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") searchUsers().catch(() => {});
+              if (e.key === "Escape" && query) setQuery("");
+            }}
+            className="input-field h-9 w-full pr-16"
+            placeholder="Имя, @username, Telegram ID или UUID"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <div className="absolute inset-y-0 right-1.5 flex items-center gap-1">
+            {query ? (
+              <button
+                type="button"
+                className="rounded px-1.5 text-[11px] text-muted hover:text-foreground"
+                onClick={() => setQuery("")}
+              >
+                Очистить
+              </button>
+            ) : null}
+          </div>
+        </div>
         <input
           type="number"
           min={1}
@@ -453,7 +601,7 @@ export default function UsersSection() {
           onKeyDown={(e) => {
             if (e.key === "Enter") searchUsers().catch(() => {});
           }}
-          className="input-field h-8 w-[7.5rem]"
+          className="input-field h-9 w-[7.5rem]"
           placeholder="От N реф."
           title="Минимум приглашённых рефералов"
         />
@@ -582,242 +730,363 @@ export default function UsersSection() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <AdminPanel title="Список" description={`${users.length} в выдаче`}>
+      <div className={cn("admin-users-layout", selected && "admin-users-layout--split")}>
+        <section className="admin-users-list">
+          <div className="admin-users-list__head">
+            <div>
+              <h2 className="admin-users-list__title">Список</h2>
+              <p className="admin-users-list__meta">
+                {query.trim()
+                  ? `${users.length} найдено · «${query.trim()}»`
+                  : `${users.length} в выдаче`}
+                {!selected ? " · выберите игрока" : ""}
+              </p>
+            </div>
+            {loading ? <span className="admin-users-list__loading">Обновление…</span> : null}
+          </div>
+
           {users.length === 0 && loading ? (
-            <p className="text-sm text-muted">Загрузка…</p>
+            <p className="px-1 py-6 text-sm text-muted">Загрузка…</p>
           ) : users.length === 0 ? (
-            <AdminEmpty>Пользователи не найдены.</AdminEmpty>
+            <AdminEmpty>
+              {query.trim()
+                ? "Никого не найдено. Попробуйте Telegram ID, @username или имя."
+                : "Пользователи не найдены."}
+            </AdminEmpty>
           ) : (
-            <div className="max-h-[36rem] space-y-1 overflow-auto">
+            <div className="admin-users-feed">
               {users.map((user) => {
                 const risky = riskIds.has(user.id);
                 const stake = user.staking_principal_nanoton || 0;
+                const active = selected?.id === user.id;
                 return (
                   <button
                     key={user.id}
                     type="button"
                     onClick={() => selectUser(user).catch(() => {})}
                     className={cn(
-                      "w-full rounded-lg px-2.5 py-2 text-left transition-colors",
-                      selected?.id === user.id
-                        ? "bg-accent/15 ring-1 ring-accent/30"
-                        : "bg-surface-raised/40 hover:bg-surface-raised/70",
+                      "admin-users-row",
+                      active && "admin-users-row--active",
+                      user.is_banned && "admin-users-row--banned",
+                      risky && !user.is_banned && "admin-users-row--risk",
                     )}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {displayName(user)}
-                          {user.username ? (
-                            <span className="ml-1.5 font-normal text-muted">@{user.username}</span>
-                          ) : null}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-muted">
-                          {formatShortWhen(user.last_login_at)}
-                          {(user.referral_count ?? 0) > 0
-                            ? ` · ${user.referral_count} реф.`
-                            : ""}
-                          {user.is_banned ? " · ban" : ""}
-                          {user.withdrawals_disabled ? " · no-withdraw" : ""}
-                          {risky ? " · risk" : ""}
-                          {user.staking_tier === "boost" ? " · boost" : ""}
-                        </p>
+                    <span className="admin-users-avatar" aria-hidden>
+                      {userInitials(user)}
+                    </span>
+                    <div className="admin-users-row__main">
+                      <div className="admin-users-row__top">
+                        <span className="admin-users-row__name">{displayName(user)}</span>
+                        {user.username ? (
+                          <span className="admin-users-row__handle">@{user.username}</span>
+                        ) : null}
+                        <UserStatusBadges user={user} risky={risky} compact />
                       </div>
-                      <div className="shrink-0 text-right text-xs tabular-nums">
-                        <p className="font-medium">{formatTON(user.betting_balance)} TON</p>
-                        <p className={stake > 0 ? "text-accent" : "text-muted"}>
-                          stake {formatTON(stake)}
-                        </p>
-                        <p className="text-muted">{user.bets_count ?? 0} игр</p>
-                      </div>
+                      <p className="admin-users-row__sub">
+                        TG {user.telegram_id}
+                        <span className="admin-users-dot">·</span>
+                        {formatShortWhen(user.last_login_at)}
+                        {(user.referral_count ?? 0) > 0 ? (
+                          <>
+                            <span className="admin-users-dot">·</span>
+                            {user.referral_count} реф.
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                    <div className="admin-users-row__metrics">
+                      <span className="admin-users-row__balance">
+                        {formatTON(user.betting_balance)} TON
+                      </span>
+                      <span className={cn("admin-users-row__stake", stake > 0 && "is-active")}>
+                        stake {formatTON(stake)}
+                      </span>
+                      <span className="admin-users-row__games">{user.bets_count ?? 0} игр</span>
                     </div>
                   </button>
                 );
               })}
             </div>
           )}
-        </AdminPanel>
+        </section>
 
         {selected ? (
-          <div className="space-y-3">
-            <AdminPanel
-              title={displayName(selected)}
-              description={
-                selected.username
-                  ? `@${selected.username} · TG ${selected.telegram_id}`
-                  : `TG ${selected.telegram_id}`
-              }
-            >
-              <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-                <AdminChip active={(selected.referral_count ?? 0) > 0}>
-                  Рефералы: {selected.referral_count ?? 0}
-                </AdminChip>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <AdminMetric
-                  label="Баланс"
-                  value={`${formatTON(selected.betting_balance)} TON`}
-                  accent
-                />
-                <AdminMetric
-                  label="В стейкинге"
-                  value={`${formatTON(selected.staking_principal_nanoton || 0)} TON`}
-                  hint={
-                    selected.active_stakes
-                      ? `${selected.active_stakes} акт. · ${selected.staking_tier || "base"}`
-                      : selected.staking_tier || "base"
-                  }
-                  accent
-                />
-                <AdminMetric label="Игр" value={String(selected.bets_count ?? 0)} />
-                <AdminMetric
-                  label="Приглашено"
-                  value={String(selected.referral_count ?? 0)}
-                  hint="Рефералы по ссылке"
-                  accent={(selected.referral_count ?? 0) > 0}
-                />
-                <AdminMetric label="Последний вход" value={formatShortWhen(selected.last_login_at)} />
-              </div>
+          <aside className="admin-users-detail-rail">
+            <div className="admin-users-detail">
+              <header className="admin-users-detail__head">
+                <div className="admin-users-detail__identity">
+                  <span
+                    className={cn(
+                      "admin-users-avatar admin-users-avatar--lg",
+                      selected.is_banned && "admin-users-avatar--banned",
+                    )}
+                    aria-hidden
+                  >
+                    {userInitials(selected)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="admin-users-detail__name">{displayName(selected)}</h2>
+                      <UserStatusBadges
+                        user={selected}
+                        risky={riskById.has(selected.id)}
+                      />
+                    </div>
+                    <p className="admin-users-detail__sub">
+                      {selected.username ? `@${selected.username}` : "без username"}
+                      <span className="admin-users-dot">·</span>
+                      TG {selected.telegram_id}
+                    </p>
+                    <div className="admin-users-detail__copies">
+                      <CopyChip
+                        label="TG ID"
+                        value={String(selected.telegram_id)}
+                        onCopy={(l, v) => copyText(l, v).catch(() => {})}
+                      />
+                      <CopyChip
+                        label="UUID"
+                        value={selected.id}
+                        onCopy={(l, v) => copyText(l, v).catch(() => {})}
+                      />
+                      {selected.username ? (
+                        <CopyChip
+                          label="@username"
+                          value={selected.username}
+                          onCopy={(l, v) => copyText(l, v).catch(() => {})}
+                        />
+                      ) : null}
+                      {selected.ton_wallet ? (
+                        <CopyChip
+                          label="Кошелёк"
+                          value={selected.ton_wallet}
+                          onCopy={(l, v) => copyText(l, v).catch(() => {})}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
 
-              <div className="mt-2.5 flex items-center gap-2 rounded-md bg-surface-raised/40 px-2.5 py-2 text-sm">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] text-muted">Кошелёк</p>
-                  <p className="truncate font-mono text-xs">
-                    {selected.ton_wallet ? truncateMiddle(selected.ton_wallet, 10, 6) : "не привязан"}
+                {(selected.is_banned ||
+                  selected.withdrawals_disabled ||
+                  (selected.risk_flags?.length ?? 0) > 0 ||
+                  riskById.has(selected.id)) && (
+                  <div className="admin-users-alert">
+                    {[
+                      selected.is_banned ? "Заблокирован" : null,
+                      selected.withdrawals_disabled ? "Выводы на холде" : null,
+                      ...(selected.risk_flags || []),
+                      riskById.has(selected.id) ? "В мониторинге риска" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                )}
+              </header>
+
+              <div className="admin-users-stats">
+                <div className="admin-users-stat admin-users-stat--accent">
+                  <p className="admin-users-stat__label">Баланс</p>
+                  <p className="admin-users-stat__value">
+                    {formatTON(selected.betting_balance)}{" "}
+                    <span className="admin-users-stat__unit">TON</span>
                   </p>
                 </div>
-                {selected.ton_wallet ? (
-                  <AdminChip onClick={() => copyText("Кошелёк", selected.ton_wallet).catch(() => {})}>
-                    Копировать
-                  </AdminChip>
-                ) : null}
-              </div>
-
-              <div className="mt-2.5 space-y-2 rounded-md border border-border/70 px-2.5 py-2">
-                <p className="text-[11px] text-muted">
-                  Новый баланс (абсолютное значение). Перед сохранением потребуется два подтверждения.
-                </p>
-                <AdminTonField
-                  label="Баланс, TON"
-                  valueNanoton={balanceDraft}
-                  onChangeNanoton={setBalanceDraft}
-                  hint={`Сейчас: ${formatTON(selected.betting_balance)} TON`}
-                />
-                <input
-                  value={balanceReason}
-                  onChange={(e) => setBalanceReason(e.target.value)}
-                  className="input-field"
-                  placeholder="Причина (обязательно)"
-                />
-                <AdminToolbar>
-                  <AdminButton
-                    variant="danger"
-                    disabled={
-                      balanceBusy || Math.round(balanceDraft) === (selected.betting_balance ?? 0)
-                    }
-                    onClick={() => {
-                      applyBalance().catch(() => {});
-                    }}
-                  >
-                    Изменить баланс
-                  </AdminButton>
-                  <AdminButton
-                    variant="secondary"
-                    disabled={balanceBusy}
-                    onClick={() => {
-                      setBalanceDraft(selected.betting_balance ?? 0);
-                      setBalanceReason("");
-                    }}
-                  >
-                    Сбросить
-                  </AdminButton>
-                </AdminToolbar>
-              </div>
-
-              {(selected.is_banned ||
-                selected.withdrawals_disabled ||
-                (selected.risk_flags?.length ?? 0) > 0 ||
-                riskById.has(selected.id)) && (
-                <div className="mt-2 rounded-md bg-danger/10 px-2.5 py-2 text-xs text-danger">
-                  {[
-                    selected.is_banned ? "ban" : null,
-                    selected.withdrawals_disabled ? "withdrawals held" : null,
-                    ...(selected.risk_flags || []),
-                    riskById.has(selected.id) ? "в мониторинге" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                <div className="admin-users-stat">
+                  <p className="admin-users-stat__label">Стейкинг</p>
+                  <p className="admin-users-stat__value">
+                    {formatTON(selected.staking_principal_nanoton || 0)}{" "}
+                    <span className="admin-users-stat__unit">TON</span>
+                  </p>
+                  <p className="admin-users-stat__hint">
+                    {selected.active_stakes
+                      ? `${selected.active_stakes} акт. · ${selected.staking_tier || "base"}`
+                      : selected.staking_tier || "base"}
+                  </p>
                 </div>
-              )}
-
-              <div className="mt-2.5 space-y-2 rounded-md border border-border/70 px-2.5 py-2">
-                <p className="text-[11px] text-muted">
-                  {selected.is_banned
-                    ? "Игрок заблокирован — вход и действия в приложении недоступны."
-                    : "Блокировка отключает вход и все действия в приложении."}
-                </p>
-                <input
-                  value={banReason}
-                  onChange={(e) => setBanReason(e.target.value)}
-                  className="input-field"
-                  placeholder="Причина (для аудита)"
-                />
-                <AdminToolbar>
-                  {selected.is_banned ? (
-                    <AdminButton
-                      variant="secondary"
-                      disabled={banBusy}
-                      onClick={() => {
-                        toggleBan(false).catch(() => {});
-                      }}
-                    >
-                      Разблокировать
-                    </AdminButton>
-                  ) : (
-                    <AdminButton
-                      variant="danger"
-                      disabled={banBusy}
-                      onClick={() => {
-                        toggleBan(true).catch(() => {});
-                      }}
-                    >
-                      Заблокировать
-                    </AdminButton>
-                  )}
-                </AdminToolbar>
+                <div className="admin-users-stat">
+                  <p className="admin-users-stat__label">Игры</p>
+                  <p className="admin-users-stat__value">{selected.bets_count ?? 0}</p>
+                </div>
+                <div className="admin-users-stat">
+                  <p className="admin-users-stat__label">Рефералы</p>
+                  <p className="admin-users-stat__value">{selected.referral_count ?? 0}</p>
+                </div>
               </div>
 
-              <div className="mt-2.5 space-y-2 rounded-md border border-border/70 px-2.5 py-2">
-                <p className="text-[11px] text-muted">
-                  Тихий холд: выводы TON и подарков уходят «в ожидание», игрок не видит блокировку.
-                </p>
-                <AdminToolbar>
-                  {selected.withdrawals_disabled ? (
-                    <AdminButton
-                      variant="secondary"
-                      disabled={withdrawHoldBusy}
-                      onClick={() => {
-                        toggleWithdrawHold(false).catch(() => {});
-                      }}
-                    >
-                      Включить выводы
-                    </AdminButton>
+              <div className="admin-users-meta-grid">
+                <div className="admin-users-meta-card">
+                  <p className="admin-users-stat__label">Последний вход</p>
+                  <p className="admin-users-meta-card__value">
+                    {formatShortWhen(selected.last_login_at)}
+                  </p>
+                  <p className="admin-users-stat__hint">{formatWhen(selected.last_login_at)}</p>
+                </div>
+                <div className="admin-users-meta-card">
+                  <p className="admin-users-stat__label">Кошелёк</p>
+                  {selected.ton_wallet ? (
+                    <>
+                      <p className="admin-users-meta-card__value font-mono text-xs">
+                        {truncateMiddle(selected.ton_wallet, 10, 6)}
+                      </p>
+                      <p className="admin-users-stat__hint">Привязан</p>
+                    </>
                   ) : (
-                    <AdminButton
-                      variant="danger"
-                      disabled={withdrawHoldBusy}
-                      onClick={() => {
-                        toggleWithdrawHold(true).catch(() => {});
-                      }}
-                    >
-                      Отключить выводы
-                    </AdminButton>
+                    <>
+                      <p className="admin-users-meta-card__value text-muted">Не привязан</p>
+                      <p className="admin-users-stat__hint">Нет TON-адреса</p>
+                    </>
                   )}
-                </AdminToolbar>
+                </div>
               </div>
 
-              <AdminToolbar className="mt-3">
+              <section className="admin-users-actions">
+                <button
+                  type="button"
+                  className="admin-users-actions__toggle"
+                  onClick={() => setActionsOpen((v) => !v)}
+                >
+                  <span>Управление</span>
+                  <span className="text-muted">{actionsOpen ? "Свернуть" : "Развернуть"}</span>
+                </button>
+
+                {actionsOpen ? (
+                  <div className="admin-users-actions__body">
+                    <div className="admin-users-action-card">
+                      <div className="admin-users-action-card__head">
+                        <p className="admin-users-action-card__title">Баланс</p>
+                        <p className="admin-users-action-card__desc">
+                          Абсолютное значение · два подтверждения
+                        </p>
+                      </div>
+                      <AdminTonField
+                        label="Новый баланс, TON"
+                        valueNanoton={balanceDraft}
+                        onChangeNanoton={setBalanceDraft}
+                        hint={`Сейчас: ${formatTON(selected.betting_balance)} TON${
+                          Math.round(balanceDraft) !== (selected.betting_balance ?? 0)
+                            ? ` · Δ ${
+                                Math.round(balanceDraft) - (selected.betting_balance ?? 0) >= 0
+                                  ? "+"
+                                  : ""
+                              }${formatTON(
+                                Math.round(balanceDraft) - (selected.betting_balance ?? 0),
+                              )}`
+                            : ""
+                        }`}
+                      />
+                      <input
+                        value={balanceReason}
+                        onChange={(e) => setBalanceReason(e.target.value)}
+                        className="input-field"
+                        placeholder="Причина (обязательно)"
+                      />
+                      <AdminToolbar>
+                        <AdminButton
+                          variant="danger"
+                          disabled={
+                            balanceBusy ||
+                            Math.round(balanceDraft) === (selected.betting_balance ?? 0)
+                          }
+                          onClick={() => {
+                            applyBalance().catch(() => {});
+                          }}
+                        >
+                          Изменить баланс
+                        </AdminButton>
+                        <AdminButton
+                          variant="secondary"
+                          disabled={balanceBusy}
+                          onClick={() => {
+                            setBalanceDraft(selected.betting_balance ?? 0);
+                            setBalanceReason("");
+                          }}
+                        >
+                          Сбросить
+                        </AdminButton>
+                      </AdminToolbar>
+                    </div>
+
+                    <div className="admin-users-action-card">
+                      <div className="admin-users-action-card__head">
+                        <p className="admin-users-action-card__title">Задания дня</p>
+                        <p className="admin-users-action-card__desc">
+                          Сброс клеймов за сегодня (МСК). Баланс и инвентарь не трогаются.
+                        </p>
+                      </div>
+                      <AdminButton
+                        variant="secondary"
+                        disabled={questResetBusy}
+                        onClick={() => {
+                          resetDailyQuests().catch(() => {});
+                        }}
+                      >
+                        {questResetBusy ? "Сброс…" : "Сбросить задания дня"}
+                      </AdminButton>
+                    </div>
+
+                    <div className="admin-users-action-card admin-users-action-card--moderation">
+                      <div className="admin-users-action-card__head">
+                        <p className="admin-users-action-card__title">Модерация</p>
+                        <p className="admin-users-action-card__desc">
+                          Бан отключает вход. Холд выводов — тихий: игрок видит «ожидание».
+                        </p>
+                      </div>
+                      <input
+                        value={banReason}
+                        onChange={(e) => setBanReason(e.target.value)}
+                        className="input-field"
+                        placeholder="Причина (для аудита)"
+                      />
+                      <div className="admin-users-moderation-row">
+                        {selected.is_banned ? (
+                          <AdminButton
+                            variant="secondary"
+                            disabled={banBusy}
+                            onClick={() => {
+                              toggleBan(false).catch(() => {});
+                            }}
+                          >
+                            Разблокировать
+                          </AdminButton>
+                        ) : (
+                          <AdminButton
+                            variant="danger"
+                            disabled={banBusy}
+                            onClick={() => {
+                              toggleBan(true).catch(() => {});
+                            }}
+                          >
+                            Заблокировать
+                          </AdminButton>
+                        )}
+                        {selected.withdrawals_disabled ? (
+                          <AdminButton
+                            variant="secondary"
+                            disabled={withdrawHoldBusy}
+                            onClick={() => {
+                              toggleWithdrawHold(false).catch(() => {});
+                            }}
+                          >
+                            Включить выводы
+                          </AdminButton>
+                        ) : (
+                          <AdminButton
+                            variant="danger"
+                            disabled={withdrawHoldBusy}
+                            onClick={() => {
+                              toggleWithdrawHold(true).catch(() => {});
+                            }}
+                          >
+                            Отключить выводы
+                          </AdminButton>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+
+              <div className="admin-users-tabs">
                 {(
                   [
                     { id: "ledger" as const, label: "Движения" },
@@ -842,65 +1111,63 @@ export default function UsersSection() {
                     {tab.label}
                   </AdminChip>
                 ))}
-              </AdminToolbar>
+              </div>
 
-              {detailTab === "ledger" ? (
-                <LedgerPanel
-                  ledger={ledger}
-                  period={ledgerPeriod}
-                  loading={detailLoading && !ledger}
-                  onPeriod={changeLedgerPeriod}
-                />
-              ) : null}
+              <div className="admin-users-tab-body">
+                {detailTab === "ledger" ? (
+                  <LedgerPanel
+                    ledger={ledger}
+                    period={ledgerPeriod}
+                    loading={detailLoading && !ledger}
+                    onPeriod={changeLedgerPeriod}
+                  />
+                ) : null}
 
-              {detailTab === "gifts" ? (
-                <GiftsPanel inventory={inventory} loading={detailLoading && !inventory} />
-              ) : null}
+                {detailTab === "gifts" ? (
+                  <GiftsPanel inventory={inventory} loading={detailLoading && !inventory} />
+                ) : null}
 
-              {detailTab === "cases" ? (
-                <CasesPanel
-                  caseOpens={caseOpens}
-                  period={casesPeriod}
-                  loading={detailLoading && !caseOpens}
-                  onPeriod={changeCasesPeriod}
-                />
-              ) : null}
+                {detailTab === "cases" ? (
+                  <CasesPanel
+                    caseOpens={caseOpens}
+                    period={casesPeriod}
+                    loading={detailLoading && !caseOpens}
+                    onPeriod={changeCasesPeriod}
+                  />
+                ) : null}
 
-              {detailTab === "bets" ? (
-                <BetsPanel
-                  bets={bets}
-                  period={betsPeriod}
-                  loading={detailLoading && !bets}
-                  onPeriod={changeBetsPeriod}
-                />
-              ) : null}
+                {detailTab === "bets" ? (
+                  <BetsPanel
+                    bets={bets}
+                    period={betsPeriod}
+                    loading={detailLoading && !bets}
+                    onPeriod={changeBetsPeriod}
+                  />
+                ) : null}
 
-              {detailTab === "transfers" ? (
-                <TransfersPanel
-                  transfers={transfers}
-                  period={transfersPeriod}
-                  loading={detailLoading && !transfers}
-                  onPeriod={changeTransfersPeriod}
-                  onCopyTx={(hash) => copyText("Tx hash", hash)}
-                />
-              ) : null}
+                {detailTab === "transfers" ? (
+                  <TransfersPanel
+                    transfers={transfers}
+                    period={transfersPeriod}
+                    loading={detailLoading && !transfers}
+                    onPeriod={changeTransfersPeriod}
+                    onCopyTx={(hash) => copyText("Tx hash", hash)}
+                  />
+                ) : null}
 
-              {detailTab === "activity" ? (
-                <ActivityPanel
-                  analytics={analytics}
-                  selected={selected}
-                  selectedSessionId={selectedSessionId}
-                  detailLoading={detailLoading}
-                  onSelectSession={(id) => selectSession(id).catch(() => {})}
-                />
-              ) : null}
-            </AdminPanel>
-          </div>
-        ) : (
-          <AdminPanel title="Карточка игрока">
-            <p className="text-sm text-muted">Выберите пользователя слева.</p>
-          </AdminPanel>
-        )}
+                {detailTab === "activity" ? (
+                  <ActivityPanel
+                    analytics={analytics}
+                    selected={selected}
+                    selectedSessionId={selectedSessionId}
+                    detailLoading={detailLoading}
+                    onSelectSession={(id) => selectSession(id).catch(() => {})}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </aside>
+        ) : null}
       </div>
     </AdminPage>
   );
@@ -964,7 +1231,7 @@ function BetsPanel({
           {bets.items.length === 0 ? (
             <AdminEmpty>Нет ставок за период.</AdminEmpty>
           ) : (
-            <div className="max-h-[28rem] space-y-1 overflow-auto">
+            <div className="admin-users-scroll-list">
               {bets.items.map((bet) => {
                 const net = betNet(bet);
                 return (
@@ -1026,7 +1293,7 @@ function LedgerPanel({
       ) : ledger.items.length === 0 ? (
         <AdminEmpty>Нет движений по балансу за период.</AdminEmpty>
       ) : (
-        <div className="max-h-[28rem] space-y-1 overflow-auto">
+        <div className="admin-users-scroll-list">
           {ledger.items.map((row) => {
             const positive = row.amount_nanoton >= 0;
             return (
@@ -1074,7 +1341,7 @@ function GiftsPanel({
       ) : inventory.items.length === 0 ? (
         <AdminEmpty>У пользователя нет подарков в инвентаре.</AdminEmpty>
       ) : (
-        <div className="max-h-[28rem] space-y-1 overflow-auto">
+        <div className="admin-users-scroll-list">
           {inventory.items.map((item) => (
             <div
               key={item.id}
@@ -1220,7 +1487,7 @@ function CasesPanel({
 
           <div className="space-y-1.5">
             <p className="text-[11px] uppercase tracking-wide text-muted">Какие кейсы открывал</p>
-            <div className="max-h-40 space-y-1 overflow-auto">
+            <div className="admin-users-scroll-list">
               {summary.map((row) => {
                 const net = row.prizeNanoton - row.paidNanoton;
                 return (
@@ -1252,7 +1519,7 @@ function CasesPanel({
 
           <div className="space-y-1.5">
             <p className="text-[11px] uppercase tracking-wide text-muted">История открытий</p>
-            <div className="max-h-[22rem] space-y-1 overflow-auto">
+            <div className="admin-users-scroll-list">
               {caseOpens.items.map((op) => {
                 const net = op.prize_nanoton - op.price_paid_nanoton;
                 return (
@@ -1325,7 +1592,7 @@ function TransfersPanel({
           {transfers.items.length === 0 ? (
             <AdminEmpty>Нет переводов за период.</AdminEmpty>
           ) : (
-            <div className="max-h-[28rem] space-y-1 overflow-auto">
+            <div className="admin-users-scroll-list">
               {transfers.items.map((tx) => (
                 <TransferRow key={tx.id} tx={tx} onCopyTx={onCopyTx} />
               ))}
@@ -1505,7 +1772,7 @@ function ActivityPanel({
               ) : null}
             </div>
             {analytics.timeline?.length ? (
-              <div className="max-h-56 space-y-1 overflow-auto text-xs">
+              <div className="admin-users-scroll-list text-xs">
                 {analytics.timeline.map((event) => (
                   <div key={event.id} className="rounded-md bg-surface-raised/40 px-2.5 py-2">
                     <div className="flex items-center justify-between gap-2">
@@ -1580,7 +1847,7 @@ function SessionsPanel({
       ) : sessions.length === 0 ? (
         <p className="text-sm text-muted">Сессий пока нет.</p>
       ) : (
-        <div className="max-h-52 space-y-1 overflow-auto">
+        <div className="admin-users-scroll-list">
           {sessions.map((session) => {
             const active = activeSessionId === session.session_id;
             return (
