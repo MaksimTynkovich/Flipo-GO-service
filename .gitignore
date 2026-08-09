@@ -18,3 +18,4 @@ data/cases/
 apps/api/assets/bots/
 # Prebuilt Linux binaries for small VPS deploys
 deploy/prebuilt/
+apps/api/server
