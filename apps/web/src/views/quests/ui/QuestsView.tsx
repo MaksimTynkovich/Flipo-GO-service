@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 type ClaimCelebration = {
   reward: DailyQuestReward;
   isBonus: boolean;
+  cardImageUrl?: string;
 };
 
 type TaskTone = "teal" | "blue" | "green" | "cyan";
@@ -159,10 +160,10 @@ export function QuestsView() {
     void load();
   }, [load]);
 
-  function celebrateClaim(result: DailyQuestClaimResult, isBonus: boolean) {
+  function celebrateClaim(result: DailyQuestClaimResult, isBonus: boolean, cardImageUrl?: string) {
     notifyInventoryIfGift(result);
     if (shouldCelebrateClaim(result.reward)) {
-      setClaimCelebration({ reward: result.reward, isBonus });
+      setClaimCelebration({ reward: result.reward, isBonus, cardImageUrl });
       return;
     }
     showToast({
@@ -179,7 +180,7 @@ export function QuestsView() {
       if (result.balance_after != null) {
         setUser((u) => (u ? patchUserBalance(u, { betting_balance: result.balance_after }) : u));
       }
-      celebrateClaim(result, false);
+      celebrateClaim(result, false, task.card_image_url);
       await load();
     } catch (e) {
       showToast({
@@ -199,7 +200,7 @@ export function QuestsView() {
       if (result.balance_after != null) {
         setUser((u) => (u ? patchUserBalance(u, { betting_balance: result.balance_after }) : u));
       }
-      celebrateClaim(result, true);
+      celebrateClaim(result, true, board?.bonus.card_image_url);
       await load();
     } catch (e) {
       showToast({
@@ -263,6 +264,7 @@ export function QuestsView() {
         <QuestClaimModal
           reward={claimCelebration.reward}
           isBonus={claimCelebration.isBonus}
+          cardImageUrl={claimCelebration.cardImageUrl}
           onClose={() => setClaimCelebration(null)}
         />
       ) : null}

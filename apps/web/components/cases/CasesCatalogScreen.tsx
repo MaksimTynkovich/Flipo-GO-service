@@ -246,6 +246,56 @@ export function splitCasesForCatalog(params: {
   };
 }
 
+const LOBBY_LIVE_SKEL = 8;
+const LOBBY_CARD_SKEL = 6;
+
+/** Full lobby stubs — live strip, quest banner, catalog grid. */
+export function CasesLobbySkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn("cases-lobby space-y-4 pb-2", className)}
+      aria-busy="true"
+      aria-label="Загрузка кейсов"
+    >
+      <div className="cases-live cases-live--skeleton" aria-hidden>
+        <div className="cases-live__row">
+          <div className="cases-live__badge">
+            <span className="cases-live__dot" />
+            <span className="cases-live__label">LIVE</span>
+          </div>
+          <div className="cases-live__scroller">
+            <div className="cases-live__track">
+              {Array.from({ length: LOBBY_LIVE_SKEL }).map((_, i) => (
+                <div
+                  key={i}
+                  className="skel-shimmer cases-live__tile-skel"
+                  style={{ animationDelay: `${i * 60}ms` }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="skel-shimmer cases-quest-promo cases-quest-promo--skeleton" aria-hidden />
+
+      <div className="cases-catalog cases-catalog--loading" aria-hidden>
+        <div className="cases-catalog__grid">
+          {Array.from({ length: LOBBY_CARD_SKEL }).map((_, i) => (
+            <div
+              key={i}
+              className="cases-card cases-card--tile cases-card--loot cases-card--skeleton"
+              style={{ animationDelay: `${i * 70}ms` }}
+            >
+              <div className="skel-shimmer cases-card__skel-fill" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CasesCatalogScreen({
   cases,
   bannersEnabled = false,

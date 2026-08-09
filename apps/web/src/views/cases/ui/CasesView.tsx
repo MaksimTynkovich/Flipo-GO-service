@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
-import { CasesCatalogScreen } from "@/components/cases/CasesCatalogScreen";
+import { CasesCatalogScreen, CasesLobbySkeleton } from "@/components/cases/CasesCatalogScreen";
 import { CasesLiveFeed } from "@/components/cases/CasesLiveFeed";
 import { CasesQuestBanner } from "@/components/cases/CasesQuestBanner";
 import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
@@ -146,45 +146,22 @@ export function CasesView() {
       ]
     : [];
 
+  if (loading && !data) {
+    return (
+      <PageShell flush>
+        <CasesLobbySkeleton />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell flush>
       <div className="cases-lobby space-y-4 pb-2">
         {live.length > 0 ? (
           <CasesLiveFeed items={live} freshOpenId={freshOpenId} />
-        ) : loading ? (
-          <div className="cases-live cases-live--skeleton" aria-hidden>
-            <div className="cases-live__row">
-              <div className="cases-live__badge">
-                <span className="cases-live__dot" />
-                <span className="cases-live__label">LIVE</span>
-              </div>
-              <div className="cases-live__scroller">
-                <div className="cases-live__track">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="skel-shimmer cases-live__tile-skel" />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
         ) : null}
 
         <CasesQuestBanner />
-
-        {loading && !data ? (
-          <div className="cases-catalog cases-catalog--loading">
-            <div className="cases-catalog__grid">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="skel-shimmer cases-card cases-card--tile"
-                  style={{ animationDelay: `${i * 80}ms` }}
-                  aria-hidden
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         {data ? <CasesCatalogScreen cases={cases} equalGrid /> : null}
       </div>

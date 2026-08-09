@@ -257,7 +257,16 @@ export function CasesQuestBanner() {
     return () => window.clearInterval(timer);
   }, [paused, slides]);
 
-  if (!slides || slides.length === 0) return null;
+  if (!slides) {
+    return (
+      <div
+        className="skel-shimmer cases-quest-promo cases-quest-promo--skeleton"
+        aria-hidden
+        aria-busy="true"
+      />
+    );
+  }
+  if (slides.length === 0) return null;
 
   const visibleSlides = slides;
 

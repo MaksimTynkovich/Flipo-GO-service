@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 type Props = {
   reward: DailyQuestReward;
   isBonus?: boolean;
+  /** Admin-uploaded card art — preferred over reward preview when set. */
+  cardImageUrl?: string;
   onClose: () => void;
 };
 
@@ -26,12 +28,13 @@ function rewardKind(reward: DailyQuestReward): "gift" | "case" | "ton" {
   return "ton";
 }
 
-export function QuestClaimModal({ reward, isBonus = false, onClose }: Props) {
+export function QuestClaimModal({ reward, isBonus = false, cardImageUrl, onClose }: Props) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
 
   const kind = rewardKind(reward);
+  const customCover = resolveAsset(cardImageUrl?.trim());
   const caseCover = resolveAsset(reward.case_image_url?.trim());
   const caseTitle = reward.case_title?.trim() || "Бесплатный кейс";
   const caseHref =
@@ -129,7 +132,15 @@ export function QuestClaimModal({ reward, isBonus = false, onClose }: Props) {
         <div className="case-win-modal__prize" aria-hidden>
           <span className="case-win-modal__aura" />
           <span className="quest-gift-claim__burst" />
-          {kind === "ton" ? (
+          {customCover ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={customCover}
+              alt=""
+              className="case-win-modal__img quest-claim-modal__card-img"
+              draggable={false}
+            />
+          ) : kind === "ton" ? (
             <span className="case-win-modal__ton">
               <CaseTonPrizeArt />
             </span>

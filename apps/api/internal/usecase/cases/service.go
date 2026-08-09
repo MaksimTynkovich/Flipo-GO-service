@@ -2130,7 +2130,8 @@ func caseQuestSharePromoURL(webAppURL string) string {
 	if !strings.HasPrefix(base, "https://") && !strings.HasPrefix(base, "http://") {
 		return ""
 	}
-	return base + "/share/case-quest-promo.jpg"
+	// Cache-bust so Telegram re-fetches after art updates.
+	return base + "/share/case-quest-promo.jpg?v=2"
 }
 
 func (s *Service) attachChannelStatus(ctx context.Context, view *CaseView, userID uuid.UUID) {

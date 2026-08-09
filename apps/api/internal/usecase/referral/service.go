@@ -16,7 +16,7 @@ type Service struct {
 	users           domain.UserRepository
 	platform        domain.PlatformRepository
 	referrals       domain.ReferralRepository
-	games          domain.GameRepository
+	games           domain.GameRepository
 	staking         domain.StakingRepository
 	balance         *balance.Service
 	notifier        balance.BalanceNotifier
@@ -59,20 +59,20 @@ func (s *Service) SetPreparedShareBot(api *telegram.BotAPI, botUsername, webAppS
 }
 
 type Stats struct {
-	ReferralCount         int64   `json:"referral_count"`
-	ActiveReferralCount   int64   `json:"active_referral_count"`
-	QualifiedReferralCount int64  `json:"qualified_referral_count"`
-	TotalEarnedNanoton    int64   `json:"total_earned_nanoton"`
-	StakingEarnedNanoton  int64   `json:"staking_earned_nanoton"`
-	GGREarnedNanoton      int64   `json:"ggr_earned_nanoton"`
-	MilestoneEarnedNanoton int64  `json:"milestone_earned_nanoton"`
-	SharePercent          float64 `json:"share_percent"`
-	GGRSharePercent       float64 `json:"ggr_share_percent"`
-	SharePercentWeekly    float64 `json:"share_percent_weekly"`
-	ExampleWeeklyTon      string  `json:"example_weekly_per_referral_ton"`
-	MilestoneAmountNanoton int64  `json:"milestone_amount_nanoton"`
-	InviteeBoostPercent   float64 `json:"invitee_boost_percent"`
-	InviteeLimitBonusTon  string  `json:"invitee_limit_bonus_ton"`
+	ReferralCount          int64   `json:"referral_count"`
+	ActiveReferralCount    int64   `json:"active_referral_count"`
+	QualifiedReferralCount int64   `json:"qualified_referral_count"`
+	TotalEarnedNanoton     int64   `json:"total_earned_nanoton"`
+	StakingEarnedNanoton   int64   `json:"staking_earned_nanoton"`
+	GGREarnedNanoton       int64   `json:"ggr_earned_nanoton"`
+	MilestoneEarnedNanoton int64   `json:"milestone_earned_nanoton"`
+	SharePercent           float64 `json:"share_percent"`
+	GGRSharePercent        float64 `json:"ggr_share_percent"`
+	SharePercentWeekly     float64 `json:"share_percent_weekly"`
+	ExampleWeeklyTon       string  `json:"example_weekly_per_referral_ton"`
+	MilestoneAmountNanoton int64   `json:"milestone_amount_nanoton"`
+	InviteeBoostPercent    float64 `json:"invitee_boost_percent"`
+	InviteeLimitBonusTon   string  `json:"invitee_limit_bonus_ton"`
 }
 
 func (s *Service) GetStats(ctx context.Context, userID uuid.UUID) (*Stats, error) {
@@ -217,7 +217,7 @@ func (s *Service) PrepareShare(ctx context.Context, userID uuid.UUID, telegramID
 	description := "Заходи в Flipo по моей ссылке — получи бесплатный кейс и забирай подарки!"
 	caption := strings.Join([]string{
 		"🎁 Присоединяйся ко мне в Flipo!",
-		"Открой бесплатный кейс и забирай Telegram-подарки — по моей ссылке вход ещё выгоднее.",
+		"Открой бесплатный кейс и забирай подарки.",
 		"",
 		shareURL,
 	}, "\n")

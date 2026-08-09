@@ -190,8 +190,10 @@ export function formatCompactTON(nanoton: number): string {
     const s = ton.toFixed(1);
     return s.endsWith(".0") ? s.slice(0, -2) : s;
   }
-  const s = ton.toFixed(2);
-  return s.replace(/\.?0+$/, "") || "0";
+  // Keep a third digit for sub-0.01 prizes (e.g. 0.002).
+  const fixed3 = ton.toFixed(3);
+  if (!fixed3.endsWith("0")) return fixed3;
+  return ton.toFixed(2).replace(/\.?0+$/, "") || "0";
 }
 
 function accentFromHex(hex: string): CatalogAccent {
