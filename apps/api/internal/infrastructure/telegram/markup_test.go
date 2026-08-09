@@ -68,7 +68,7 @@ func TestOpenAppButtonMarkupCustomText(t *testing.T) {
 
 func TestOpenAppButtonMarkupTelegramDeepLink(t *testing.T) {
 	markup := OpenAppButtonMarkup(OpenAppButtonOptions{
-		WebAppURL: "https://t.me/flipo_bot/app?startapp=wheel",
+		WebAppURL: "https://t.me/flipo_bot/app?startapp=crash",
 	})
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
 	btn := row[0]
@@ -79,8 +79,8 @@ func TestOpenAppButtonMarkupTelegramDeepLink(t *testing.T) {
 	if !strings.Contains(got, "domain=flipo_bot") || !strings.Contains(got, "appname=app") {
 		t.Fatalf("unexpected resolve params: %v", got)
 	}
-	if !strings.Contains(got, "startapp=wheel") {
-		t.Fatalf("expected startapp=wheel, got %v", got)
+	if !strings.Contains(got, "startapp=crash") {
+		t.Fatalf("expected startapp=crash, got %v", got)
 	}
 	if !strings.Contains(got, "mode=fullscreen") {
 		t.Fatalf("expected mode=fullscreen, got %v", got)
@@ -95,7 +95,7 @@ func TestOpenAppButtonMarkupHttpsPreferredOverDeepLink(t *testing.T) {
 		WebAppURL:       "https://flipo.example",
 		BotUsername:     "flipo_bot",
 		WebAppShortName: "app",
-		StartPayload:    "wheel",
+		StartPayload:    "crash",
 		ButtonText:      "Играть",
 	})
 	row := markup["inline_keyboard"].([][]map[string]any)[0]
@@ -104,7 +104,7 @@ func TestOpenAppButtonMarkupHttpsPreferredOverDeepLink(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected web_app button, got %#v", btn)
 	}
-	if webApp["url"] != "https://flipo.example?tgWebAppStartParam=wheel" {
+	if webApp["url"] != "https://flipo.example?tgWebAppStartParam=crash" {
 		t.Fatalf("unexpected web_app url: %s", webApp["url"])
 	}
 }

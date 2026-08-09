@@ -55,15 +55,17 @@ type BetOverlay interface {
 }
 
 type ColorTotals struct {
-	Red   int64 `json:"red"`
-	Green int64 `json:"green"`
-	Black int64 `json:"black"`
+	Blue   int64 `json:"blue"`
+	Red    int64 `json:"red"`
+	Green  int64 `json:"green"`
+	Yellow int64 `json:"yellow"`
 }
 
 type ColorCounts struct {
-	Red   int `json:"red"`
-	Green int `json:"green"`
-	Black int `json:"black"`
+	Blue   int `json:"blue"`
+	Red    int `json:"red"`
+	Green  int `json:"green"`
+	Yellow int `json:"yellow"`
 }
 
 type RoundBetsState struct {
@@ -71,6 +73,11 @@ type RoundBetsState struct {
 	Bets    []BetView   `json:"bets"`
 	Totals  ColorTotals `json:"totals"`
 	Counts  ColorCounts `json:"counts"`
+}
+
+type TickNotifier interface {
+	NotifyGameTick(game string, data []byte)
+	NotifyGameBets(game string, data []byte)
 }
 
 type Service struct {
@@ -85,11 +92,16 @@ type Service struct {
 	spinS     int
 	overlay   BetOverlay
 	admin     AdminGameNotifier
+	notifier  TickNotifier
 	betHook   func(context.Context, uuid.UUID, int64)
 }
 
 type AdminGameNotifier interface {
 	NotifyGameResult(ctx context.Context, actor telegram.AdminActor, game, outcome, selection string, stakeNanoton, payoutNanoton int64, multiplier, crashPoint *float64, resultLabel string)
+}
+
+func (s *Service) SetTickNotifier(notifier TickNotifier) {
+	s.notifier = notifier
 }
 
 func (s *Service) SetQualifyingBetHook(hook func(context.Context, uuid.UUID, int64)) {
@@ -136,7 +148,7 @@ func (s *Service) CurrentState(ctx context.Context) (*RoundState, error) {
 }
 
 func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, stake betfunding.StakeInput, idempotencyKey string) (*domain.GameBet, error) {
-	if color != "red" && color != "black" && color != "green" {
+	if !provablyfair.ValidRouletteColor(color) {
 		return nil, domain.ErrInvalidAmount
 	}
 
@@ -172,9 +184,6 @@ func (s *Service) PlaceBet(ctx context.Context, userID uuid.UUID, color string, 
 	if err := s.games.CreateBet(ctx, bet); err != nil {
 		s.funding.Rollback(ctx, userID, betID, resolved, "game_bet")
 		return nil, err
-	}
-	if resolved.BalanceNanoton > 0 && s.users != nil {
-		_ = s.users.AddWagerProgress(ctx, userID, resolved.BalanceNanoton)
 	}
 	if s.betHook != nil {
 		s.betHook(ctx, userID, resolved.AmountNanoton)
@@ -297,12 +306,14 @@ func (s *Service) SettleRound(ctx context.Context, roundID uuid.UUID, serverSeed
 
 func rouletteColorLabel(color string) string {
 	switch color {
+	case "blue":
+		return "синее ×2"
 	case "red":
-		return "красное"
-	case "black":
-		return "чёрное"
+		return "красное ×2"
 	case "green":
-		return "зелёное"
+		return "зелёное ×5"
+	case "yellow":
+		return "жёлтое ×50"
 	default:
 		return color
 	}
@@ -395,33 +406,13 @@ func (s *Service) buildRoundBets(ctx context.Context, roundID uuid.UUID) (*Round
 		}
 
 		views = append(views, view)
-		switch color {
-		case "red":
-			totals.Red += bet.AmountNanoton
-			counts.Red++
-		case "green":
-			totals.Green += bet.AmountNanoton
-			counts.Green++
-		case "black":
-			totals.Black += bet.AmountNanoton
-			counts.Black++
-		}
+		addColorTotal(&totals, &counts, color, bet.AmountNanoton)
 	}
 
 	if s.overlay != nil {
 		for _, ghost := range s.overlay.RouletteBets(roundID) {
 			views = append(views, ghost)
-			switch ghost.Color {
-			case "red":
-				totals.Red += ghost.AmountNanoton
-				counts.Red++
-			case "green":
-				totals.Green += ghost.AmountNanoton
-				counts.Green++
-			case "black":
-				totals.Black += ghost.AmountNanoton
-				counts.Black++
-			}
+			addColorTotal(&totals, &counts, ghost.Color, ghost.AmountNanoton)
 		}
 	}
 
@@ -440,10 +431,24 @@ func emptyRoundBets(roundID uuid.UUID) *RoundBetsState {
 	}
 }
 
-func (s *Service) PublishBets(ctx context.Context, roundID uuid.UUID) error {
-	if s.cache == nil {
-		return nil
+func addColorTotal(totals *ColorTotals, counts *ColorCounts, color string, amount int64) {
+	switch color {
+	case "blue":
+		totals.Blue += amount
+		counts.Blue++
+	case "red":
+		totals.Red += amount
+		counts.Red++
+	case "green":
+		totals.Green += amount
+		counts.Green++
+	case "yellow":
+		totals.Yellow += amount
+		counts.Yellow++
 	}
+}
+
+func (s *Service) PublishBets(ctx context.Context, roundID uuid.UUID) error {
 	state, err := s.buildRoundBets(ctx, roundID)
 	if err != nil {
 		return err
@@ -451,6 +456,12 @@ func (s *Service) PublishBets(ctx context.Context, roundID uuid.UUID) error {
 	data, err := json.Marshal(state)
 	if err != nil {
 		return err
+	}
+	if s.notifier != nil {
+		s.notifier.NotifyGameBets("roulette", data)
+	}
+	if s.cache == nil {
+		return nil
 	}
 	return s.cache.Publish(ctx, "pubsub:game:roulette:bets", data)
 }
@@ -466,6 +477,12 @@ func (s *Service) PublishState(ctx context.Context, state *RoundState) error {
 	if s.overlay != nil {
 		endsAt := state.EndsAt
 		s.overlay.OnRouletteState(state.RoundID, state.Phase, &endsAt, state.Result)
+	}
+	if s.notifier != nil {
+		s.notifier.NotifyGameTick("roulette", data)
+	}
+	if s.cache == nil {
+		return nil
 	}
 	return s.cache.Publish(ctx, "pubsub:game:roulette", data)
 }
@@ -571,11 +588,20 @@ func (s *Service) GetHistory(ctx context.Context, limit int) ([]HistoryEntry, er
 		if payload.Color == "" {
 			continue
 		}
+		color := payload.Color
+		switch color {
+		case "gray":
+			color = "blue"
+		case "gold":
+			color = "yellow"
+		case "black":
+			color = "red"
+		}
 		entries = append(entries, HistoryEntry{
 			RoundID:     round.ID.String(),
 			RoundNumber: round.RoundNumber,
 			Number:      payload.Number,
-			Color:       payload.Color,
+			Color:       color,
 		})
 	}
 	return entries, nil

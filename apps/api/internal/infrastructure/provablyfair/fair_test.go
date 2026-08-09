@@ -7,9 +7,29 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestX50WheelColorCounts(t *testing.T) {
+	if len(WheelColors) != RouletteSegmentCount {
+		t.Fatalf("WheelColors len=%d want %d", len(WheelColors), RouletteSegmentCount)
+	}
+	counts := map[string]int{}
+	for i, c := range WheelColors {
+		if c == "" {
+			t.Fatalf("empty color at %d", i)
+		}
+		counts[c]++
+	}
+	want := map[string]int{"blue": 20, "red": 20, "green": 9, "yellow": 1}
+	for color, n := range want {
+		if counts[color] != n {
+			t.Fatalf("%s count=%d want %d (got %#v)", color, counts[color], n, counts)
+		}
+	}
+	t.Log(WheelColors)
+}
+
 func TestFindRouletteSeed(t *testing.T) {
 	nonce := int64(12345)
-	for _, color := range []string{"red", "black", "green"} {
+	for _, color := range []string{"blue", "red", "green", "yellow"} {
 		seed, ok := FindRouletteSeed(color, nil, nonce, 200000)
 		if !ok {
 			t.Fatalf("no seed found for color %s", color)

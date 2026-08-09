@@ -409,7 +409,9 @@ func ledgerTypeLabel(t domain.LedgerType) string {
 		return "Продажа на маркете"
 	case domain.LedgerPromoBonus:
 		return "Промобонус"
-	case domain.LedgerWheelPrize:
+	case domain.LedgerQuestReward:
+		return "Задание"
+	case "wheel_prize": // historical Lucky Strike ledger rows
 		return "Приз колеса"
 	case domain.LedgerStakeYield:
 		return "Стейкинг"
@@ -698,10 +700,8 @@ func (s *Service) UpdateWithdrawalSettings(ctx context.Context, adminID uuid.UUI
 		return err
 	}
 	return s.audit(ctx, adminID, "withdrawal_settings_updated", "platform_withdrawal_settings", "1", map[string]any{
-		"enabled":               settings.Enabled,
-		"gifts_manual":          settings.GiftsManual,
-		"deposit_wager_enabled": settings.DepositWagerEnabled,
-		"crash_wager_target":    settings.CrashWagerTarget,
+		"enabled":      settings.Enabled,
+		"gifts_manual": settings.GiftsManual,
 	})
 }
 

@@ -18,11 +18,49 @@ import { formatUserError } from "@/lib/user-errors";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { connectGameWS } from "@/lib/ws";
 
-const LIVE_FEED_LIMIT = 6;
+const LIVE_FEED_LIMIT = 24;
+
+function dropTimeMs(drop: CaseLiveDrop): number {
+  const ms = Date.parse(drop.created_at);
+  return Number.isFinite(ms) ? ms : 0;
+}
 
 function prependLiveDrop(prev: CaseLiveDrop[], drop: CaseLiveDrop): CaseLiveDrop[] {
   if (prev.some((item) => item.open_id === drop.open_id)) return prev;
   return [drop, ...prev].slice(0, LIVE_FEED_LIMIT);
+}
+
+/** Merge HTTP snapshot with in-memory WS drops so reconnect refetch cannot wipe fresher events. */
+function mergeLiveFeed(server: CaseLiveDrop[], local: CaseLiveDrop[]): CaseLiveDrop[] {
+  const byId = new Map<string, CaseLiveDrop>();
+  const consider = (drop: CaseLiveDrop | null | undefined) => {
+    const id = drop?.open_id?.trim();
+    if (!drop || !id) return;
+    const prev = byId.get(id);
+    if (!prev || dropTimeMs(drop) >= dropTimeMs(prev)) {
+      byId.set(id, drop);
+    }
+  };
+  for (const drop of local) consider(drop);
+  for (const drop of server) consider(drop);
+  return Array.from(byId.values())
+    .sort((a, b) => dropTimeMs(b) - dropTimeMs(a))
+    .slice(0, LIVE_FEED_LIMIT);
+}
+
+function parseLiveDrop(payload: unknown): CaseLiveDrop | null {
+  let raw: unknown = payload;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const drop = raw as CaseLiveDrop;
+  if (!drop.open_id?.trim()) return null;
+  return drop;
 }
 
 export function CasesView() {
@@ -31,6 +69,7 @@ export function CasesView() {
   const { showToast } = useToast();
   const [data, setData] = useState<CasesCatalog | null>(null);
   const [live, setLive] = useState<CaseLiveDrop[]>([]);
+  const [freshOpenId, setFreshOpenId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,7 +81,8 @@ export function CasesView() {
 
   const loadLive = useCallback(async () => {
     try {
-      setLive(await getCasesLiveFeed());
+      const feed = await getCasesLiveFeed();
+      setLive((prev) => mergeLiveFeed(feed, prev));
     } catch {
       /* keep current feed */
     }
@@ -56,7 +96,7 @@ export function CasesView() {
         getCasesLiveFeed().catch(() => [] as CaseLiveDrop[]),
       ]);
       setData(catalog);
-      setLive(feed);
+      setLive((prev) => mergeLiveFeed(feed, prev));
     } catch (e) {
       showToast({
         variant: "error",
@@ -77,14 +117,21 @@ export function CasesView() {
     return connectGameWS(
       "cases",
       (msg) => {
-        if (msg.event !== "drop" || !msg.payload || typeof msg.payload !== "object") return;
-        const drop = msg.payload as CaseLiveDrop;
-        if (!drop.open_id) return;
+        if (msg.event !== "drop") return;
+        const drop = parseLiveDrop(msg.payload);
+        if (!drop) return;
+        setFreshOpenId(drop.open_id);
         setLive((prev) => prependLiveDrop(prev, drop));
       },
       { onOpen: () => void loadLive() },
     );
   }, [loadLive, featuresReady, casesVisible]);
+
+  useEffect(() => {
+    if (!freshOpenId) return;
+    const t = window.setTimeout(() => setFreshOpenId(null), 2200);
+    return () => window.clearTimeout(t);
+  }, [freshOpenId]);
 
   if (!featuresReady || !casesVisible) {
     return null;
@@ -100,23 +147,43 @@ export function CasesView() {
 
   return (
     <PageShell flush>
-      <div className="space-y-4 pb-2">
-        {live.length > 0 ? <CasesLiveFeed items={live} /> : null}
-
-        {loading && !data ? (
-          <div className="grid grid-cols-2 gap-2.5">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="aspect-[4/5] animate-pulse rounded-2xl bg-surface" />
-            ))}
+      <div className="cases-lobby space-y-4 pb-2">
+        {live.length > 0 ? (
+          <CasesLiveFeed items={live} freshOpenId={freshOpenId} />
+        ) : loading ? (
+          <div className="cases-live cases-live--skeleton" aria-hidden>
+            <div className="cases-live__row">
+              <div className="cases-live__badge">
+                <span className="cases-live__dot" />
+                <span className="cases-live__label">LIVE</span>
+              </div>
+              <div className="cases-live__scroller">
+                <div className="cases-live__track">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="skel-shimmer cases-live__tile-skel" />
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         ) : null}
 
-        {data ? (
-          <CasesCatalogScreen
-            cases={cases}
-            bannersEnabled={Boolean(data.banners_enabled)}
-          />
+        {loading && !data ? (
+          <div className="cases-catalog cases-catalog--loading">
+            <div className="cases-catalog__grid">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="skel-shimmer cases-card cases-card--tile"
+                  style={{ animationDelay: `${i * 80}ms` }}
+                  aria-hidden
+                />
+              ))}
+            </div>
+          </div>
         ) : null}
+
+        {data ? <CasesCatalogScreen cases={cases} equalGrid /> : null}
       </div>
     </PageShell>
   );

@@ -186,7 +186,7 @@ export function BetFundingControl({
         <ModalOverlay onClose={() => setOpen(false)} analyticsModalId="bet_funding">
           {(close) => (
             <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
-              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+              <div className="sheet-handle" />
               <div className="mb-4 text-center">
                 <p className="text-[15px] font-semibold text-foreground">{title}</p>
                 {resolvedSubtitle ? (

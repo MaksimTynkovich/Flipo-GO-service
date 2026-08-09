@@ -68,7 +68,6 @@ func isExpectedClientError(err error, status int) bool {
 	expected := []error{
 		domain.ErrInvalidAmount,
 		domain.ErrInsufficientFunds,
-		domain.ErrWagerIncomplete,
 		domain.ErrRoundNotOpen,
 		domain.ErrRoomFull,
 		domain.ErrNotFound,
@@ -99,6 +98,11 @@ func isExpectedClientError(err error, status int) bool {
 		domain.ErrGiftAlreadyStakedEpoch,
 		domain.ErrUnbackedBuyback,
 		domain.ErrCaseClaimCashoutOnly,
+		domain.ErrQuestNotReady,
+		domain.ErrQuestAlreadyClaimed,
+		domain.ErrQuestBonusLocked,
+		domain.ErrQuestUnavailable,
+		domain.ErrCaseEntitlementMissing,
 	}
 	for _, target := range expected {
 		if errors.Is(err, target) {

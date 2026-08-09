@@ -18,10 +18,6 @@ type UserRepository interface {
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (balanceAfter int64, adminFundedConsumed int64, err error)
 	// RestoreAdminCredit puts back admin-funded balance after a failed/refunded debit.
 	RestoreAdminCredit(ctx context.Context, userID uuid.UUID, amount int64) error
-	AddWagerRequired(ctx context.Context, userID uuid.UUID, amount int64) error
-	AddWagerProgress(ctx context.Context, userID uuid.UUID, amount int64) error
-	// ConsumeWagerProgress subtracts playthrough credit (gift withdraw unlock). Fails if progress < amount.
-	ConsumeWagerProgress(ctx context.Context, userID uuid.UUID, amount int64) error
 	GetBalanceForUpdate(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
@@ -90,6 +86,8 @@ type CaseRepository interface {
 	ListDailyCooldownsReadyForNotify(ctx context.Context, cooldown time.Duration, limit int) ([]CaseCooldownReadyNotify, error)
 	MarkCaseCooldownReadyNotified(ctx context.Context, userID, caseID uuid.UUID, notifiedAt time.Time) error
 	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
+	// CountPaidOpensSince counts paid case opens for progress (optional case filter).
+	CountPaidOpensSince(ctx context.Context, userID uuid.UUID, since time.Time, caseID *uuid.UUID) (int64, error)
 	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
 	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
@@ -209,36 +207,6 @@ type ReferralRepository interface {
 	CreateMilestone(ctx context.Context, milestone *ReferralMilestone) error
 	SumUserPvPNetLossSince(ctx context.Context, userID uuid.UUID, since time.Time, excludeReferrerInRoom bool) (int64, error)
 	CountQualifiedReferrals(ctx context.Context, referrerID uuid.UUID, minAge time.Duration, minDeposit, minStake int64) (int64, error)
-}
-
-type WheelRepository interface {
-	ListActiveSegments(ctx context.Context) ([]WheelSegment, error)
-	ListAllSegments(ctx context.Context) ([]WheelSegment, error)
-	UpdateSegment(ctx context.Context, seg *WheelSegment) error
-	GetOrCreateState(ctx context.Context, userID uuid.UUID) (*UserWheelState, error)
-	SaveState(ctx context.Context, state *UserWheelState) error
-	AddBonusSpins(ctx context.Context, userID uuid.UUID, delta int) error
-	// ClaimDailyOrBonusSpin atomically consumes the UTC daily spin or one bonus spin.
-	// Concurrent callers serialize on user_wheel_state row lock — prevents double daily.
-	ClaimDailyOrBonusSpin(ctx context.Context, userID uuid.UUID, today time.Time) (source string, state *UserWheelState, err error)
-	// ReleaseSpinClaim undoes a successful ClaimDailyOrBonusSpin (e.g. prize credit failed).
-	ReleaseSpinClaim(ctx context.Context, userID uuid.UUID, source string, today time.Time) error
-	// TryAddReferralBonusSpin grants +1 bonus spin if referrer is under the MSK daily cap.
-	TryAddReferralBonusSpin(ctx context.Context, userID uuid.UUID, day time.Time, dailyLimit int) (granted bool, err error)
-	CountSpinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
-	CreateSpin(ctx context.Context, spin *WheelSpin) error
-	SumPrizesSince(ctx context.Context, since time.Time) (int64, error)
-	CountSpinsGlobalSince(ctx context.Context, since time.Time) (int64, error)
-	AdminPeriodStats(ctx context.Context, since time.Time) (WheelPeriodStats, error)
-	AdminSourceStats(ctx context.Context, since time.Time) ([]WheelSourceStats, error)
-	AdminSegmentHits(ctx context.Context) ([]WheelSegmentHitStats, error)
-	AdminSpinsByDay(ctx context.Context, since time.Time) ([]WheelDailyStats, error)
-	SumPendingBonusSpins(ctx context.Context) (int64, error)
-	GetSegmentByID(ctx context.Context, id uuid.UUID) (*WheelSegment, error)
-	UpsertPendingOverride(ctx context.Context, userID, segmentID, createdBy uuid.UUID, note string) (*WheelSpinOverride, error)
-	ListPendingOverrides(ctx context.Context) ([]WheelSpinOverrideView, error)
-	DeletePendingOverride(ctx context.Context, id uuid.UUID) error
-	ConsumePendingOverride(ctx context.Context, userID uuid.UUID) (*WheelSpinOverride, error)
 }
 
 type GameRepository interface {
@@ -463,4 +431,28 @@ type OutcomeOverrideRepository interface {
 	// TakePending atomically fetches and decrements the next active override for a
 	// game type. Returns (nil, false) when none remain or all are expired.
 	TakePending(ctx context.Context, gameType GameType) (*GameOutcomeOverride, bool, error)
+}
+
+// DailyQuestRepository — daily quest catalog, claims, board bonus, case entitlements.
+type DailyQuestRepository interface {
+	ListQuests(ctx context.Context) ([]DailyQuest, error)
+	ListActiveQuestsForDay(ctx context.Context, dayMSK time.Time) ([]DailyQuest, error)
+	FindQuest(ctx context.Context, id uuid.UUID) (*DailyQuest, error)
+	UpsertQuest(ctx context.Context, q *DailyQuest) error
+	DeleteQuest(ctx context.Context, id uuid.UUID) error
+
+	GetBoardSettings(ctx context.Context) (*DailyQuestBoardSettings, error)
+	UpdateBoardSettings(ctx context.Context, settings *DailyQuestBoardSettings) error
+
+	FindTaskClaim(ctx context.Context, userID, questID uuid.UUID, dayMSK time.Time) (*DailyQuestClaim, error)
+	FindBonusClaim(ctx context.Context, userID uuid.UUID, dayMSK time.Time) (*DailyQuestClaim, error)
+	CreateClaim(ctx context.Context, claim *DailyQuestClaim) error
+	DeleteClaim(ctx context.Context, id uuid.UUID) error
+	UpdateClaimEntitlement(ctx context.Context, claimID, entitlementID uuid.UUID) error
+
+	CreateEntitlement(ctx context.Context, e *UserCaseEntitlement) error
+	// ClaimEntitlementForOpen marks one available entitlement as used; returns it or ErrCaseEntitlementMissing.
+	ClaimEntitlementForOpen(ctx context.Context, userID, caseID uuid.UUID) (*UserCaseEntitlement, error)
+	ReleaseEntitlement(ctx context.Context, id uuid.UUID) error
+	ListAvailableEntitlements(ctx context.Context, userID uuid.UUID) ([]UserCaseEntitlement, error)
 }

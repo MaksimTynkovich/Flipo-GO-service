@@ -8,68 +8,84 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 )
 
-// ColorStakeTotals sums pending bet stakes by color (real bets only).
-func ColorStakeTotals(bets []domain.GameBet) (red, green, black, total int64) {
+// ColorStakeMap sums pending bet stakes by color (real bets only).
+func ColorStakeMap(bets []domain.GameBet) (byColor map[string]int64, total int64) {
+	byColor = map[string]int64{
+		"blue":   0,
+		"red":    0,
+		"green":  0,
+		"yellow": 0,
+	}
 	for _, bet := range bets {
 		var sel map[string]string
 		_ = json.Unmarshal(bet.Selection, &sel)
-		switch sel["color"] {
-		case "red":
-			red += bet.AmountNanoton
-		case "green":
-			green += bet.AmountNanoton
-		case "black":
-			black += bet.AmountNanoton
+		color := sel["color"]
+		if _, ok := byColor[color]; ok {
+			byColor[color] += bet.AmountNanoton
 		}
 		total += bet.AmountNanoton
 	}
-	return red, green, black, total
+	return byColor, total
 }
 
 // HousePnLIfColor returns house profit if the given color wins:
 // totalStakes - payout owed to winners of that color.
-func HousePnLIfColor(color string, red, green, black, total int64) int64 {
-	var onColor int64
-	switch color {
-	case "red":
-		onColor = red
-	case "green":
-		onColor = green
-	case "black":
-		onColor = black
-	default:
+func HousePnLIfColor(color string, byColor map[string]int64, total int64) int64 {
+	if !provablyfair.ValidRouletteColor(color) {
 		return total
 	}
-	return total - provablyfair.RoulettePayout(color, onColor)
+	return total - provablyfair.RoulettePayout(color, byColor[color])
 }
 
-// PickBestHouseColor chooses red or black to maximize house PnL given stakes.
-// Green is never auto-picked: thin green books make it the "optimal" drain almost
-// every round and look obviously rigged (~1/15 natural rate).
+// recoveryColors are eligible for auto house bias. Yellow is never auto-picked:
+// a thin yellow book makes it the "optimal" drain and looks obviously rigged.
+var recoveryColors = []string{"blue", "red", "green"}
+
+// PickBestHouseColor chooses blue/red/green to maximize house PnL given stakes.
 func PickBestHouseColor(bets []domain.GameBet) string {
-	red, green, black, total := ColorStakeTotals(bets)
-	redPnL := HousePnLIfColor("red", red, green, black, total)
-	blackPnL := HousePnLIfColor("black", red, green, black, total)
-	if redPnL > blackPnL {
-		return "red"
+	byColor, total := ColorStakeMap(bets)
+
+	bestPnL := HousePnLIfColor(recoveryColors[0], byColor, total)
+	candidates := []string{recoveryColors[0]}
+	for _, color := range recoveryColors[1:] {
+		pnl := HousePnLIfColor(color, byColor, total)
+		if pnl > bestPnL {
+			bestPnL = pnl
+			candidates = []string{color}
+		} else if pnl == bestPnL {
+			candidates = append(candidates, color)
+		}
 	}
-	if blackPnL > redPnL {
-		return "black"
+
+	if len(candidates) == 1 {
+		return candidates[0]
 	}
-	// Equal PnL: lean to the lighter book; if still tied, coin flip.
-	if red < black {
-		return "red"
+
+	lightest := candidates[0]
+	for _, color := range candidates[1:] {
+		if byColor[color] < byColor[lightest] {
+			lightest = color
+		}
 	}
-	if black < red {
-		return "black"
+	tied := make([]string, 0, len(candidates))
+	for _, color := range candidates {
+		if byColor[color] == byColor[lightest] {
+			tied = append(tied, color)
+		}
 	}
-	return randomRedOrBlack()
+	if len(tied) == 1 {
+		return tied[0]
+	}
+	return randomAmong(tied)
 }
 
-func randomRedOrBlack() string {
-	var b [1]byte
-	if _, err := rand.Read(b[:]); err != nil || b[0]%2 == 0 {
-		return "red"
+func randomAmong(colors []string) string {
+	if len(colors) == 0 {
+		return "blue"
 	}
-	return "black"
+	var b [1]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return colors[0]
+	}
+	return colors[int(b[0])%len(colors)]
 }

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope } from "next/font/google";
+import { Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers/Providers";
@@ -7,7 +7,7 @@ import { AppLayout } from "@/src/widgets/app-shell/ui/AppLayout";
 import { BRAND_BG, BRAND_SURFACE } from "@/src/shared/config/brand";
 import { cn } from "@/lib/utils";
 
-const sans = Manrope({
+const sans = Inter({
   subsets: ["latin", "latin-ext", "cyrillic"],
   variable: "--font-sans",
   display: "swap",
@@ -211,7 +211,7 @@ const bootWatchdog = `
     el.style.cssText =
       "position:fixed;inset:0;z-index:2147483646;display:flex;flex-direction:column;" +
       "align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;" +
-      "background:var(--background,#0c141c);color:var(--foreground,#f2f5f7);" +
+      "background:var(--background,#0a121a);color:var(--foreground,#f4f7fa);" +
       "font-family:system-ui,-apple-system,sans-serif;";
     el.innerHTML =
       '<p style="margin:0;font-size:15px;line-height:1.45;max-width:280px;opacity:.9">' +

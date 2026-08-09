@@ -36,7 +36,7 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
     <ModalOverlay onClose={onClose} analyticsModalId="staking_gift_detail">
       {(close) => (
       <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+        <div className="sheet-handle" />
 
         <div className="relative mb-4 flex items-center justify-center">
           <p className="text-[15px] font-semibold text-foreground">

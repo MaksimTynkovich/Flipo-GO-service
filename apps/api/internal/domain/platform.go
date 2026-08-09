@@ -207,15 +207,11 @@ func (PlatformMaintenanceSettings) TableName() string { return "platform_mainten
 // PlatformWithdrawalSettings — silent hold for withdrawals (singleton id=1).
 // When Enabled, TON (and gift) withdrawals look like "pending" to the player.
 // When GiftsManual, all gift withdrawals queue for admin review/fulfillment.
-// DepositWagerEnabled gates 1× deposit playthrough on TON withdraw.
-// CrashWagerTarget is the cashout multiplier for full crash stake credit (default 2.0).
 type PlatformWithdrawalSettings struct {
-	ID                  int       `gorm:"primaryKey" json:"id"`
-	Enabled             bool      `gorm:"not null;default:false" json:"enabled"`
-	GiftsManual         bool      `gorm:"not null;default:false" json:"gifts_manual"`
-	DepositWagerEnabled bool      `gorm:"not null;default:true" json:"deposit_wager_enabled"`
-	CrashWagerTarget    float64   `gorm:"type:double precision;not null;default:2" json:"crash_wager_target"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID          int       `gorm:"primaryKey" json:"id"`
+	Enabled     bool      `gorm:"not null;default:false" json:"enabled"`
+	GiftsManual bool      `gorm:"not null;default:false" json:"gifts_manual"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func (PlatformWithdrawalSettings) TableName() string { return "platform_withdrawal_settings" }

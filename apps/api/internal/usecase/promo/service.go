@@ -68,13 +68,11 @@ type StatusView struct {
 }
 
 func (s *Service) Activate(ctx context.Context, userID uuid.UUID, code string) (*StatusView, error) {
-	code = strings.ToUpper(strings.TrimSpace(code))
-	status, err := s.activate(ctx, userID, code)
-	if err != nil {
-		s.notifyActivationFailed(ctx, userID, code, promoFailureReason(err))
-		return nil, err
-	}
-	return status, nil
+	_ = ctx
+	_ = userID
+	_ = code
+	// Balance promo codes are retired — only case promo codes remain.
+	return nil, domain.ErrPromoInvalid
 }
 
 func (s *Service) NotifyActivationFailed(ctx context.Context, userID uuid.UUID, code, reason string) {

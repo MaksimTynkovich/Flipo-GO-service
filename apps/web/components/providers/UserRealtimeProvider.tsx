@@ -1,22 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { InventoryItem } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { connectUserWS } from "@/lib/ws";
 import { emitBalanceWin } from "@/lib/balance-win";
-import { getMe } from "@/lib/api";
-import { patchUserSession } from "@/lib/apply-balance";
 import {
   isCasePrizeBalanceHeld,
   stashCasePrizeBalance,
 } from "@/lib/case-prize-balance";
-import {
-  isWheelPrizeBalanceHeld,
-  stashWheelPrizeBalance,
-} from "@/lib/wheel-prize-balance";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 
 export const INVENTORY_DEPOSITED_EVENT = "flipo:inventory-deposited";
@@ -31,29 +25,6 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
   const recentDepositEventsRef = useRef<Map<string, number>>(new Map());
-  const wagerRefreshTimerRef = useRef<number | null>(null);
-
-  const scheduleWagerRefresh = useCallback(() => {
-    if (wagerRefreshTimerRef.current != null) {
-      window.clearTimeout(wagerRefreshTimerRef.current);
-    }
-    wagerRefreshTimerRef.current = window.setTimeout(() => {
-      wagerRefreshTimerRef.current = null;
-      void getMe()
-        .then((me) => {
-          setUser((prev) => (prev ? patchUserSession(prev, me) : me));
-        })
-        .catch(() => {});
-    }, 250);
-  }, [setUser]);
-
-  useEffect(() => {
-    return () => {
-      if (wagerRefreshTimerRef.current != null) {
-        window.clearTimeout(wagerRefreshTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -65,20 +36,6 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
           delta_nanoton?: number;
           ledger_type?: string;
         };
-
-        // Wheel credits the prize when the API returns; keep header balance
-        // frozen until the reel animation finishes (WheelView releases hold).
-        if (
-          payload.ledger_type === "wheel_prize" &&
-          payload.betting_balance != null &&
-          isWheelPrizeBalanceHeld()
-        ) {
-          stashWheelPrizeBalance({
-            betting_balance: payload.betting_balance,
-            delta_nanoton: payload.delta_nanoton,
-          });
-          return;
-        }
 
         // Case TON prize: freeze until CaseDetailView reveal completes.
         if (
@@ -94,34 +51,14 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
         }
 
         if (payload.betting_balance != null) {
-          setUser((prev) => {
-            if (
-              prev &&
-              (prev.wager_required_nanoton ?? 0) > 0 &&
-              (payload.ledger_type === "win" ||
-                payload.ledger_type === "case_open" ||
-                payload.ledger_type === "game_bet")
-            ) {
-              scheduleWagerRefresh();
-            }
-            return prev
+          setUser((prev) =>
+            prev
               ? {
                   ...prev,
                   betting_balance: payload.betting_balance!,
                 }
-              : prev;
-          });
-        } else if (
-          (payload.ledger_type === "win" ||
-            payload.ledger_type === "case_open" ||
-            payload.ledger_type === "game_bet")
-        ) {
-          setUser((prev) => {
-            if (prev && (prev.wager_required_nanoton ?? 0) > 0) {
-              scheduleWagerRefresh();
-            }
-            return prev;
-          });
+              : prev,
+          );
         }
         const creditTypes = new Set([
           "win",
@@ -192,7 +129,7 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
     });
     // Reconnect only when the authenticated user changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, scheduleWagerRefresh]);
+  }, [user?.id]);
 
   return <>{children}</>;
 }

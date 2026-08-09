@@ -1,26 +1,30 @@
-/** 15-секторная рулетка (0–14) — порядок как на референсе */
+/** x50 рулетка: 50 секторов — blue×2, red×2, green×5, yellow×50 */
 
 import { easeSpinWithSoftLanding } from "@/lib/spin-ease";
 
-export const WHEEL_ORDER = [0, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14] as const;
+export const ROULETTE_COLORS = ["blue", "red", "green", "yellow"] as const;
+export type RouletteColor = (typeof ROULETTE_COLORS)[number];
+
+/** Must match apps/api provablyfair.WheelColors exactly (interleaved). */
+export const WHEEL_COLORS = [
+  "yellow", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+  "red", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+  "red", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+  "red", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+  "red", "blue", "red", "green", "blue", "red", "blue", "red", "blue", "red",
+] as const satisfies readonly RouletteColor[];
+
+export const WHEEL_ORDER = WHEEL_COLORS.map((_, i) => i);
 
 export const ROULETTE_SEGMENTS = WHEEL_ORDER.length;
 export const SEGMENT_ANGLE = 360 / ROULETTE_SEGMENTS;
 export const SPIN_DURATION_MS = 12_000;
-/** Пауза после остановки колеса до объявления результата (0 = сразу) */
 export const RESULT_PAUSE_MS = 0;
-/** Must match backend ROULETTE_RESULT_DISPLAY_SECONDS — used for HTTP resync */
 export const RESULT_DISPLAY_MS = 3_000;
-/** Доля половины сектора — случайное смещение остановки внутри ячейки */
 export const SEGMENT_JITTER_RATIO = 0.38;
 
-/** Указатель сверху (12 часов) */
 export const POINTER_ANGLE_DEG = -90;
 
-/**
- * Детерминированное смещение внутри сектора (не в центр числа).
- * Зависит от round_id — одинаково при перезагрузке.
- */
 export function jitterForRound(roundId: string): number {
   let hash = 0;
   for (let i = 0; i < roundId.length; i++) {
@@ -31,17 +35,12 @@ export function jitterForRound(roundId: string): number {
   return (t * 2 - 1) * max;
 }
 
-/**
- * Угол CSS-поворота, при котором центр сектора index окажется под указателем.
- * В SVG/CSS положительный rotate сдвигает точку: мировой_угол = локальный + R
- */
 export function rotationForIndex(index: number, fullSpins = 0, jitterDeg = 0): number {
   const localCenter = (index + 0.5) * SEGMENT_ANGLE - 90 + jitterDeg;
   const mod = ((-localCenter + POINTER_ANGLE_DEG) % 360 + 360) % 360;
   return fullSpins * 360 + mod;
 }
 
-/** Какой индекс сектора сейчас под указателем при данном rotation */
 export function indexAtPointer(rotationDeg: number): number {
   const r = ((rotationDeg % 360) + 360) % 360;
   const localCenter = POINTER_ANGLE_DEG - r;
@@ -50,8 +49,8 @@ export function indexAtPointer(rotationDeg: number): number {
 }
 
 export function wheelIndexForNumber(n: number): number {
-  const idx = WHEEL_ORDER.indexOf(n as (typeof WHEEL_ORDER)[number]);
-  return idx >= 0 ? idx : 0;
+  if (n >= 0 && n < ROULETTE_SEGMENTS) return n;
+  return 0;
 }
 
 export function resolveWheelIndex(state: {
@@ -90,7 +89,6 @@ export function spinTargetRotation(
   return currentMod + delta + minFullSpins * 360;
 }
 
-/** Колесо остановилось, но результат ещё не объявлен */
 export function isLandingPause(state: RouletteRoundState): boolean {
   if (state.phase !== "spinning") return false;
   const endRaw = state.spin_ends_at || state.ends_at;
@@ -100,9 +98,6 @@ export function isLandingPause(state: RouletteRoundState): boolean {
   return Date.now() >= endMs;
 }
 
-/**
- * Имитация трения: сильный старт, затем мягкая посадка с нулевой скоростью в конце.
- */
 export function easeSpinRoulette(t: number): number {
   return easeSpinWithSoftLanding(t);
 }
@@ -122,35 +117,66 @@ export type RouletteRoundState = {
   server_seed?: string;
 };
 
-export function numberColor(n: number): "green" | "red" | "black" {
-  if (n === 0) return "green";
-  if (n >= 1 && n <= 7) return "red";
-  return "black";
+export function numberColor(n: number): RouletteColor {
+  if (n >= 0 && n < WHEEL_COLORS.length) return WHEEL_COLORS[n];
+  return "blue";
+}
+
+export function isRouletteColor(color: string): color is RouletteColor {
+  return (ROULETTE_COLORS as readonly string[]).includes(color);
+}
+
+/** Map legacy round colors (classic / early x50) onto the current palette. */
+export function normalizeRouletteColor(color: string): RouletteColor | null {
+  switch (color) {
+    case "blue":
+    case "red":
+    case "green":
+    case "yellow":
+      return color;
+    case "gray":
+      return "blue";
+    case "gold":
+      return "yellow";
+    case "black":
+      return "red";
+    default:
+      return null;
+  }
 }
 
 export function colorLabel(color: string): string {
-  switch (color) {
-    case "green":
-      return "Зелёное";
+  switch (normalizeRouletteColor(color) ?? color) {
+    case "blue":
+      return "Синее";
     case "red":
       return "Красное";
-    case "black":
-      return "Чёрное";
+    case "green":
+      return "Зелёное";
+    case "yellow":
+      return "Жёлтое";
     default:
       return color;
   }
 }
 
-export function payoutLabel(color: string): string {
+export function rouletteMultiplier(color: string): number {
   switch (color) {
-    case "green":
-      return "14x";
+    case "blue":
     case "red":
-    case "black":
-      return "2x";
+      return 2;
+    case "green":
+      return 5;
+    case "yellow":
+      return 50;
     default:
-      return "";
+      return 0;
   }
+}
+
+export function payoutLabel(color: string): string {
+  const m = rouletteMultiplier(color);
+  return m > 0 ? `${m}x` : "";
 }
 
 export function roulettePlayerName(player: {
@@ -162,49 +188,56 @@ export function roulettePlayerName(player: {
   return "Игрок";
 }
 
-/** Классические цвета рулетки — насыщенные, но без неонового перебора */
 export const ROULETTE_WHEEL_COLORS = {
-  red: "#c62828",
-  green: "#2e9b52",
-  black: "#181818",
+  blue: "#3390ec",
+  red: "#e56555",
+  green: "#3ecf8e",
+  yellow: "#f0d060",
 } as const;
 
 export function rouletteFillStyle(
   color: string,
 ): { backgroundColor: string } | undefined {
-  const key = color as keyof typeof ROULETTE_WHEEL_COLORS;
-  if (key in ROULETTE_WHEEL_COLORS) {
-    return { backgroundColor: ROULETTE_WHEEL_COLORS[key] };
-  }
-  return undefined;
+  const normalized = normalizeRouletteColor(color);
+  if (!normalized) return undefined;
+  return { backgroundColor: ROULETTE_WHEEL_COLORS[normalized] };
 }
 
 export const ROULETTE_COLOR_STYLES = {
+  blue: {
+    bg: "bg-[#3390ec]",
+    chip: "bg-[#3390ec]",
+    tile: "bg-[#3390ec]/14 border border-[#3390ec]/30",
+    dot: "bg-[#3390ec]",
+    text: "text-[#6ab3f3]",
+    label: "Синее",
+    multiplier: "×2",
+  },
   red: {
-    bg: "bg-[#c62828]",
-    chip: "bg-[#c62828]",
-    tile: "bg-[#c62828]/14 border border-[#c62828]/30",
-    dot: "bg-[#c62828]",
+    bg: "bg-[#e56555]",
+    chip: "bg-[#e56555]",
+    tile: "bg-[#e56555]/14 border border-[#e56555]/30",
+    dot: "bg-[#e56555]",
     text: "text-[#e57373]",
     label: "Красное",
     multiplier: "×2",
   },
   green: {
-    bg: "bg-[#2e9b52]",
-    chip: "bg-[#2e9b52]",
-    tile: "bg-[#2e9b52]/14 border border-[#2e9b52]/30",
-    dot: "bg-[#2e9b52]",
-    text: "text-[#81c784]",
+    bg: "bg-[#3ecf8e]",
+    chip: "bg-[#3ecf8e]",
+    tile: "bg-[#3ecf8e]/14 border border-[#3ecf8e]/30",
+    dot: "bg-[#3ecf8e]",
+    text: "text-[#5ee0a8]",
     label: "Зелёное",
-    multiplier: "×14",
+    multiplier: "×5",
   },
-  black: {
-    bg: "bg-[#181818]",
-    chip: "bg-[#181818] ring-1 ring-inset ring-white/[0.1]",
-    tile: "bg-[#181818]/50 border border-white/[0.1]",
-    dot: "bg-[#181818] ring-1 ring-inset ring-white/[0.12]",
-    text: "text-foreground",
-    label: "Чёрное",
-    multiplier: "×2",
+  yellow: {
+    bg: "bg-[#f0d060]",
+    chip: "bg-[#f0d060]",
+    tile: "bg-[#f0d060]/14 border border-[#f0d060]/35",
+    dot: "bg-[#f0d060]",
+    text: "text-[#f0d060]",
+    label: "Жёлтое",
+    multiplier: "×50",
   },
 } as const;

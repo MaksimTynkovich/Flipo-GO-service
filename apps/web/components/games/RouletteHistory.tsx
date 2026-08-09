@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RouletteHistoryEntry } from "@/lib/api";
-import { rouletteFillStyle } from "@/lib/roulette";
+import { colorLabel, normalizeRouletteColor, rouletteFillStyle } from "@/lib/roulette";
 import { cn } from "@/lib/utils";
 
-const HISTORY_LIMIT = 14;
+/** Half of previous dense packing (~2+2px). */
+const HISTORY_LIMIT = 40;
+const DASH_SLOT_PX = 10;
 
 type Props = {
   history: RouletteHistoryEntry[];
@@ -15,7 +17,7 @@ type Props = {
 
 export function RouletteHistory({ history, onSelectRound, className }: Props) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const [fitCount, setFitCount] = useState(10);
+  const [fitCount, setFitCount] = useState(24);
   const recent = history.slice(0, HISTORY_LIMIT);
 
   useEffect(() => {
@@ -25,14 +27,8 @@ export function RouletteHistory({ history, onSelectRound, className }: Props) {
     function recalc() {
       const el = rowRef.current;
       if (!el) return;
-      const styles = getComputedStyle(el);
-      const pad =
-        (Number.parseFloat(styles.paddingLeft) || 0) +
-        (Number.parseFloat(styles.paddingRight) || 0);
-      const gap = Number.parseFloat(styles.columnGap || styles.gap) || 6;
-      const width = el.clientWidth - pad;
-      const chip = 28;
-      const next = Math.max(1, Math.floor((width + gap) / (chip + gap)));
+      const width = el.clientWidth;
+      const next = Math.max(8, Math.floor(width / DASH_SLOT_PX));
       setFitCount((prev) => (prev === next ? prev : next));
     }
 
@@ -42,16 +38,18 @@ export function RouletteHistory({ history, onSelectRound, className }: Props) {
     return () => ro.disconnect();
   }, [recent.length]);
 
-  const visible = recent.slice(0, fitCount);
+  const visible = recent.slice(0, Math.min(fitCount, HISTORY_LIMIT));
 
   return (
     <div className={cn("roulette-history", className)}>
-      <div ref={rowRef} className="roulette-history__row">
+      <div ref={rowRef} className="roulette-history__row roulette-history__row--dashes">
         {visible.length === 0 ? (
           <span className="roulette-history__empty">Нет игр</span>
         ) : (
           visible.map((entry, index) => {
-            const fill = rouletteFillStyle(entry.color);
+            const color = normalizeRouletteColor(entry.color);
+            if (!color) return null;
+            const fill = rouletteFillStyle(color);
             const clickable = !!entry.round_id && !!onSelectRound;
             return (
               <button
@@ -61,16 +59,15 @@ export function RouletteHistory({ history, onSelectRound, className }: Props) {
                 disabled={!clickable}
                 onClick={() => clickable && onSelectRound?.(entry)}
                 style={fill}
+                aria-label={`Результат ${colorLabel(color)}`}
                 className={cn(
-                  "roulette-history__chip",
-                  index === 0 && "roulette-history__chip--latest",
+                  "roulette-history__dash",
+                  index === 0 && "roulette-history__dash--latest",
                   !fill && "bg-surface-raised",
                   clickable && "transition active:scale-95",
                   !clickable && "opacity-50",
                 )}
-              >
-                {entry.number}
-              </button>
+              />
             );
           })
         )}

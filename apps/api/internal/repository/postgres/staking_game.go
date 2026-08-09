@@ -168,19 +168,26 @@ func (r *StakingRepo) SumWagerByGame(ctx context.Context, userID uuid.UUID, game
 }
 
 // SumTotalWager — volume across modes: crash/roulette bets, PvP stakes, paid case opens.
+// Uses GORM models (not hardcoded table names) so PvP resolves to the live table
+// (historically pv_p_room_players via GORM pluralization).
 func (r *StakingRepo) SumTotalWager(ctx context.Context, userID uuid.UUID) (int64, error) {
-	var total int64
-	err := r.db.WithContext(ctx).Raw(`
-		SELECT
-			COALESCE((SELECT SUM(amount_nanoton) FROM game_bets WHERE user_id = ?), 0)
-			+ COALESCE((SELECT SUM(stake_nanoton) FROM pvp_room_players WHERE user_id = ?), 0)
-			+ COALESCE((
-				SELECT SUM(price_paid_nanoton)
-				FROM case_opens
-				WHERE user_id = ? AND price_paid_nanoton > 0
-			), 0)
-	`, userID, userID, userID).Scan(&total).Error
-	return total, err
+	var bets, pvp, cases int64
+	if err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where("user_id = ?", userID).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&bets).Error; err != nil {
+		return 0, err
+	}
+	if err := r.db.WithContext(ctx).Model(&domain.PvPRoomPlayer{}).
+		Where("user_id = ?", userID).
+		Select("COALESCE(SUM(stake_nanoton), 0)").Scan(&pvp).Error; err != nil {
+		return 0, err
+	}
+	if err := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Where("user_id = ? AND price_paid_nanoton > 0", userID).
+		Select("COALESCE(SUM(price_paid_nanoton), 0)").Scan(&cases).Error; err != nil {
+		return 0, err
+	}
+	return bets + pvp + cases, nil
 }
 
 func (r *StakingRepo) HasPvPMatch(ctx context.Context, userID uuid.UUID) (bool, error) {
@@ -249,11 +256,16 @@ func (r *StakingRepo) HasCompletedEpochStake(ctx context.Context, userID uuid.UU
 var _ domain.StakingRepository = (*StakingRepo)(nil)
 
 type GameRepo struct {
-	db *gorm.DB
+	db                      *gorm.DB
+	excludeAdminTelegramIDs []int64
 }
 
 func NewGameRepo(db *gorm.DB) *GameRepo {
 	return &GameRepo{db: db}
+}
+
+func (r *GameRepo) SetExcludeAdminTelegramIDs(ids []int64) {
+	r.excludeAdminTelegramIDs = append([]int64(nil), ids...)
 }
 
 func (r *GameRepo) CreateRound(ctx context.Context, round *domain.GameRound) error {
@@ -439,12 +451,12 @@ func (r *GameRepo) GameStats(ctx context.Context) ([]domain.AdminGameStat, error
 			Where("game_type = ? AND status = ?", gt, "finished").
 			Count(&stat.Rounds)
 
-		r.db.WithContext(ctx).Model(&domain.GameBet{}).
-			Where("game_type = ?", gt).
+		betQ := applyExcludeAdminUsers(r.db.WithContext(ctx).Model(&domain.GameBet{}), "user_id", r.excludeAdminTelegramIDs)
+		betQ.Where("game_type = ?", gt).
 			Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&stat.BetVolumeNanoton)
 
-		r.db.WithContext(ctx).Model(&domain.GameBet{}).
-			Where("game_type = ? AND status IN ?", gt, []domain.BetStatus{domain.BetWon, domain.BetCashedOut}).
+		winQ := applyExcludeAdminUsers(r.db.WithContext(ctx).Model(&domain.GameBet{}), "user_id", r.excludeAdminTelegramIDs)
+		winQ.Where("game_type = ? AND status IN ?", gt, []domain.BetStatus{domain.BetWon, domain.BetCashedOut}).
 			Select("COALESCE(SUM(payout_nanoton), 0)").Scan(&stat.PayoutNanoton)
 
 		stat.GGRNanoton = stat.BetVolumeNanoton - stat.PayoutNanoton

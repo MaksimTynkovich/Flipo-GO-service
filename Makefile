@@ -1,4 +1,4 @@
-.PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate api web test lint gift-quote gift-prices-refresh staking-tick staking-tick-settle staking-tick-daily
+.PHONY: dev dev-tunnel dev-remote tunnel sync-tunnel-env up down migrate seed-cases api web test lint gift-quote gift-prices-refresh staking-tick staking-tick-settle staking-tick-daily
 
 up:
 	docker compose -f deploy/docker-compose.yml --env-file .env up -d postgres redis
@@ -38,6 +38,11 @@ web:
 
 migrate:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/server --migrate-only
+
+# Pull cases/loot/covers/promos from prod into local DB (apps/api/seeds/cases_from_prod.sql).
+seed-cases:
+	@chmod +x scripts/seed-cases-from-prod.sh
+	@./scripts/seed-cases-from-prod.sh
 
 tg-auth:
 	@set -a && [ -f .env ] && . ./.env; set +a; cd apps/api && go run ./cmd/tgauth

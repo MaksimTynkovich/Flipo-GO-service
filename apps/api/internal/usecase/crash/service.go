@@ -71,6 +71,7 @@ type RoundBetsState struct {
 
 type TickNotifier interface {
 	NotifyGameTick(game string, data []byte)
+	NotifyGameBets(game string, data []byte)
 }
 
 type Service struct {
@@ -326,7 +327,6 @@ func (s *Service) settleCashout(ctx context.Context, bet domain.GameBet, multipl
 		}
 	}
 	_ = s.funding.ReleaseOnWin(ctx, bet)
-	s.applyCrashWagerProgress(ctx, bet, &multiplier)
 	_ = s.PublishBets(ctx, bet.RoundID)
 	return credit, nil
 }
@@ -354,7 +354,6 @@ func (s *Service) SettleCrashed(ctx context.Context, roundID uuid.UUID, crashPoi
 	for _, bet := range bets {
 		_, _ = s.games.SettleBet(ctx, bet.ID, domain.BetLost, 0, nil)
 		_ = s.funding.SettleLoss(ctx, bet)
-		s.applyCrashWagerProgress(ctx, bet, nil)
 	}
 	s.applyCrashBankDelta(ctx, roundID)
 	s.notifyCrashRoundAggregated(ctx, roundID, crashPoint)
@@ -467,58 +466,6 @@ func (s *Service) RecoveryBiasParams(ctx context.Context) (RecoveryBiasParams, e
 		BiasWeight:                     settings.CrashRecoveryBiasWeight,
 		ManualExposureThresholdNanoton: settings.WhaleBetThresholdNanoton,
 	}, nil
-}
-
-func (s *Service) applyCrashWagerProgress(ctx context.Context, bet domain.GameBet, cashoutMult *float64) {
-	if s.users == nil {
-		return
-	}
-	stakeTON := crashBalanceStake(bet)
-	if stakeTON <= 0 {
-		return
-	}
-	target := domain.DefaultCrashWagerTarget
-	if s.platform != nil {
-		if settings, err := s.platform.GetWithdrawalSettings(ctx); err == nil && settings != nil {
-			target = domain.NormalizeCrashWagerTarget(settings.CrashWagerTarget)
-		}
-	}
-	credit := domain.CrashWagerCredit(stakeTON, cashoutMult, target)
-	if credit <= 0 {
-		return
-	}
-	_ = s.users.AddWagerProgress(ctx, bet.UserID, credit)
-}
-
-func crashBalanceStake(bet domain.GameBet) int64 {
-	switch bet.FundingType {
-	case domain.BetFundingGift:
-		return 0
-	case domain.BetFundingCombined:
-		if bal := balanceFromSelection(bet.Selection); bal > 0 {
-			return bal
-		}
-		return 0
-	default:
-		if bal := balanceFromSelection(bet.Selection); bal > 0 {
-			return bal
-		}
-		return bet.AmountNanoton
-	}
-}
-
-func balanceFromSelection(raw datatypes.JSON) int64 {
-	if len(raw) == 0 {
-		return 0
-	}
-	var sel betSelection
-	if err := jsonUnmarshal(raw, &sel); err != nil {
-		return 0
-	}
-	if sel.BalanceNanoton > 0 {
-		return sel.BalanceNanoton
-	}
-	return 0
 }
 
 // notifyCrashRoundAggregated sends one admin notification per user for the round,
@@ -770,9 +717,6 @@ func emptyRoundBets(roundID uuid.UUID) *RoundBetsState {
 }
 
 func (s *Service) PublishBets(ctx context.Context, roundID uuid.UUID) error {
-	if s.cache == nil {
-		return nil
-	}
 	state, err := s.buildRoundBets(ctx, roundID)
 	if err != nil {
 		return err
@@ -780,6 +724,12 @@ func (s *Service) PublishBets(ctx context.Context, roundID uuid.UUID) error {
 	data, err := jsonMarshal(state)
 	if err != nil {
 		return err
+	}
+	if s.notifier != nil {
+		s.notifier.NotifyGameBets("crash", data)
+	}
+	if s.cache == nil {
+		return nil
 	}
 	return s.cache.Publish(ctx, "pubsub:game:crash:bets", data)
 }

@@ -147,9 +147,6 @@ func (r *PaymentIntentRepo) CompleteAtomic(ctx context.Context, intentID uuid.UU
 		if err := tx.Create(&ledger).Error; err != nil {
 			return err
 		}
-		if err := maybeAddDepositWagerTx(tx, &user, intent.AmountNanoton); err != nil {
-			return err
-		}
 		intent.Status = domain.PaymentStatusPaid
 		intent.PaidAt = &now
 		intent.UpdatedAt = now

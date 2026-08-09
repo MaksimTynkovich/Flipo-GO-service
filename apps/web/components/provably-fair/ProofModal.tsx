@@ -86,7 +86,7 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
             ) : !proof ? (
               <div className="proof-sheet__status proof-sheet__status--fail">
                 <XCircle className="h-4 w-4 shrink-0" />
-                Proof недоступен для этого раунда
+                Проверка честности недоступна для этого раунда
               </div>
             ) : (
               <>

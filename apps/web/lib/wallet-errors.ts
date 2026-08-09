@@ -7,25 +7,10 @@ export type WalletMessage = {
 
 const MIN_TON_LABEL = "0.1 TON";
 
-export { formatWagerBlockedMessage, formatWagerIncompleteError } from "@/lib/wager-messages";
-export type { WagerSnapshot } from "@/lib/wager-messages";
-
-import { formatWagerIncompleteError } from "@/lib/wager-messages";
-import { WITHDRAW_FEE_NANOTON } from "@/lib/wallet";
-
 export function formatWalletError(
   error: unknown,
   context: "deposit" | "withdraw",
-  fallbackUser?: import("@/lib/wager-messages").WagerSnapshot | null,
 ): string {
-  const wagerMsg =
-    context === "withdraw"
-      ? formatWagerIncompleteError(error, fallbackUser, {
-          withdrawFeeNanoton: WITHDRAW_FEE_NANOTON,
-        })
-      : formatWagerIncompleteError(error, fallbackUser);
-  if (wagerMsg) return wagerMsg;
-
   if (error instanceof Error) {
     const raw = error.message.trim();
     const lower = raw.toLowerCase();
@@ -41,22 +26,16 @@ export function formatWalletError(
 
     if (lower.includes("insufficient balance") || lower.includes("недостаточно средств")) {
       return context === "withdraw"
-        ? "Недостаточно средств. Учти комиссию — она добавляется к сумме списания."
+        ? "Недостаточно средств. Учтите комиссию — она добавляется к сумме списания."
         : "Недостаточно средств на балансе.";
     }
 
     if (
-      lower.includes("wager") ||
-      lower.includes("отыграйте депозит") ||
-      lower.includes("отыграть депозит") ||
-      lower.includes("отыграно") ||
-      lower.includes("доступно к выводу")
+      lower.includes("wallet not linked") ||
+      lower.includes("подключи ton-кошелёк") ||
+      lower.includes("подключите ton-кошелёк")
     ) {
-      return raw;
-    }
-
-    if (lower.includes("wallet not linked") || lower.includes("подключи ton-кошелёк")) {
-      return "Сначала подключи TON-кошелёк.";
+      return "Сначала подключите TON-кошелёк.";
     }
 
     if (lower.includes("invalid amount") || lower.includes("корректную сумму")) {
@@ -66,19 +45,19 @@ export function formatWalletError(
     }
 
     if (lower.includes("transfer expired") || lower.includes("время на оплату истекло")) {
-      return "Время на оплату истекло. Создай новое пополнение.";
+      return "Время на оплату истекло. Создайте новое пополнение.";
     }
 
     if (lower.includes("transfer already pending") || lower.includes("активная операция")) {
-      return "У тебя уже есть активная операция. Дождись её завершения.";
+      return "У вас уже есть активная операция. Дождитесь её завершения.";
     }
 
     if (lower.includes("chain verification unavailable") || lower.includes("ton временно недоступен")) {
-      return "Сервис TON временно недоступен. Попробуй через пару минут.";
+      return "Сервис TON временно недоступен. Попробуйте через пару минут.";
     }
 
     if (lower.includes("failed to fetch") || lower.includes("network")) {
-      return "Нет связи с сервером. Проверь интернет и попробуй снова.";
+      return "Нет связи с сервером. Проверьте интернет и попробуйте снова.";
     }
 
     if (raw && !raw.startsWith("Key:") && /[а-яё]/i.test(raw)) {
@@ -87,8 +66,8 @@ export function formatWalletError(
   }
 
   return context === "withdraw"
-    ? "Не удалось создать вывод. Попробуй ещё раз."
-    : "Не удалось выполнить пополнение. Попробуй ещё раз.";
+    ? "Не удалось создать вывод. Попробуйте ещё раз."
+    : "Не удалось выполнить пополнение. Попробуйте ещё раз.";
 }
 
 export function walletStatusLabel(status: string): string {

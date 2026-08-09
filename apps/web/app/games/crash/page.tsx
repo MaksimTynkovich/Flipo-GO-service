@@ -91,7 +91,6 @@ function CrashPageContent() {
   const autoFiredRef = useRef<Set<string>>(new Set());
   const hadStakeRef = useRef(false);
   const fxTimerRef = useRef<number | null>(null);
-  const wagerRefreshRoundRef = useRef<string | null>(null);
   const betAmountInput = useAnalyticsInput("crash_bet_amount", "crash");
 
   const refreshUserSession = useCallback(async () => {
@@ -99,7 +98,7 @@ function CrashPageContent() {
       const me = await getMe();
       setUser((prev) => (prev ? patchUserSession(prev, me) : me));
     } catch {
-      // ignore — stale wager display is acceptable until next refresh
+      // ignore — balance will refresh on next WS/event
     }
   }, [setUser]);
 
@@ -302,27 +301,6 @@ function CrashPageContent() {
       hadStakeRef.current = true;
     }
   }, [roundActiveBets.length]);
-
-  // Refresh deposit wager counters when TON crash bets settle (cashout, auto-cashout, or loss).
-  useEffect(() => {
-    if (!user?.id || !state?.round_id || !roundBets) return;
-    if (roundBets.round_id !== state.round_id) return;
-
-    const myBets = roundBets.bets.filter((bet) => bet.user_id === user.id);
-    if (myBets.length === 0) return;
-
-    const hasTonStake = myBets.some(
-      (bet) => bet.funding_type === "balance" || bet.funding_type === "combined",
-    );
-    if (!hasTonStake) return;
-
-    const allSettled = myBets.every((bet) => bet.status !== "pending");
-    if (!allSettled) return;
-    if (wagerRefreshRoundRef.current === state.round_id) return;
-
-    wagerRefreshRoundRef.current = state.round_id;
-    void refreshUserSession();
-  }, [roundBets, state?.round_id, user?.id, refreshUserSession]);
 
   useEffect(() => {
     if (state?.phase === "crashed" && lastPhase.current !== "crashed") {

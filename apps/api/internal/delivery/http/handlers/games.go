@@ -8,6 +8,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/httperr"
 	"github.com/flipo/flipo/apps/api/internal/delivery/http/middleware"
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/infrastructure/provablyfair"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
@@ -63,7 +64,7 @@ func (h *GameHandler) RouletteCurrent(c *gin.Context) {
 }
 
 func (h *GameHandler) RouletteHistory(c *gin.Context) {
-	history, err := h.roulette.GetHistory(c.Request.Context(), 10)
+	history, err := h.roulette.GetHistory(c.Request.Context(), 40)
 	if err != nil {
 		respondInternal(c, err)
 		return
@@ -117,10 +118,11 @@ func (h *GameHandler) RouletteBet(c *gin.Context) {
 	if state != nil {
 		roundID = state.RoundID
 	}
-	maxPayout := stakeAmount * 14
-	if req.Color == "red" || req.Color == "black" {
-		maxPayout = stakeAmount * 2
+	mult := provablyfair.RouletteMultiplier(req.Color)
+	if mult <= 0 {
+		mult = 50
 	}
+	maxPayout := stakeAmount * mult
 	if err := h.risk.ValidateBet(c.Request.Context(), risk.BetCheckInput{
 		UserID: userID, TelegramID: middleware.GetTelegramID(c), GameType: domain.GameRoulette, RoundID: roundID,
 		Amount: stakeAmount, MaxPayout: maxPayout,

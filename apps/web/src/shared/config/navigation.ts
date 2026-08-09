@@ -1,5 +1,13 @@
 import type { LucideIcon } from "lucide-react";
-import { CircleDot, Gamepad2, Gift, Package, Rocket, ShoppingBag, User, Users } from "lucide-react";
+import {
+  CircleDot,
+  Gamepad2,
+  ListTodo,
+  PackageOpen,
+  Rocket,
+  ShoppingBag,
+  User,
+} from "lucide-react";
 import { MARKET_ENABLED } from "@/src/shared/config/features";
 
 export const APP_ROUTES = {
@@ -9,7 +17,6 @@ export const APP_ROUTES = {
   crash: "/games/crash",
   roulette: "/games/roulette",
   pvp: "/games/pvp",
-  wheel: "/games/wheel",
   admin: "/admin",
   market: "/market",
   inventory: "/inventory",
@@ -17,6 +24,7 @@ export const APP_ROUTES = {
   profile: "/profile",
   profileStaking: "/profile/staking",
   profileReferrals: "/profile/referrals",
+  quests: "/quests",
 } as const;
 
 export type ScreenLevel = "tab" | "stack";
@@ -33,8 +41,8 @@ export type ScreenContext = {
 const TAB_ROOTS = [
   APP_ROUTES.cases,
   APP_ROUTES.games,
+  APP_ROUTES.quests,
   ...(MARKET_ENABLED ? [APP_ROUTES.market] as const : []),
-  APP_ROUTES.inventory,
   APP_ROUTES.profile,
 ] as const;
 
@@ -43,6 +51,11 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
     title: "Пополнение",
     backLabel: "Назад",
     useRouterBack: true,
+  },
+  [APP_ROUTES.inventory]: {
+    title: "Инвентарь",
+    backHref: APP_ROUTES.profile,
+    backLabel: "Профиль",
   },
   [APP_ROUTES.profileStaking]: {
     title: "Стейкинг",
@@ -69,17 +82,13 @@ const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
     backHref: APP_ROUTES.games,
     backLabel: "Игры",
   },
-  [APP_ROUTES.wheel]: {
-    title: "Колесо удачи",
-    backHref: APP_ROUTES.games,
-    backLabel: "Игры",
-  },
 };
 
 export type AppScreenItem = {
   id:
     | "cases"
     | "games"
+    | "quests"
     | "market"
     | "inventory"
     | "profile"
@@ -106,6 +115,13 @@ export const APP_SCREENS: AppScreenItem[] = [
     level: "tab",
     description: "Лобби с Crash, Рулетка и Комнаты.",
   },
+  {
+    id: "quests",
+    href: APP_ROUTES.quests,
+    label: "Задания",
+    level: "tab",
+    description: "Ежедневные задания и награды за активность.",
+  },
   ...(MARKET_ENABLED
     ? [
         {
@@ -118,18 +134,18 @@ export const APP_SCREENS: AppScreenItem[] = [
       ]
     : []),
   {
-    id: "inventory",
-    href: APP_ROUTES.inventory,
-    label: "Инвентарь",
-    level: "tab",
-    description: "Хранилище вещей с быстрым действием продажи.",
-  },
-  {
     id: "profile",
     href: APP_ROUTES.profile,
     label: "Профиль",
     level: "tab",
     description: "Личные данные, статистика и стейкинг.",
+  },
+  {
+    id: "inventory",
+    href: APP_ROUTES.inventory,
+    label: "Инвентарь",
+    level: "stack",
+    description: "Хранилище вещей с быстрым действием продажи.",
   },
   {
     id: "deposit",
@@ -148,7 +164,7 @@ export const APP_SCREENS: AppScreenItem[] = [
 ];
 
 export type MainTabItem = {
-  id: "cases" | "games" | "market" | "inventory" | "profile";
+  id: "cases" | "games" | "quests" | "market" | "profile";
   href: string;
   label: string;
   icon: LucideIcon;
@@ -160,7 +176,7 @@ const ALL_MAIN_TABS: MainTabItem[] = [
     id: "cases",
     href: APP_ROUTES.cases,
     label: "Кейсы",
-    icon: Package,
+    icon: PackageOpen,
     match: (pathname) =>
       pathname === APP_ROUTES.cases || pathname.startsWith(`${APP_ROUTES.cases}/`),
   },
@@ -173,18 +189,18 @@ const ALL_MAIN_TABS: MainTabItem[] = [
       pathname === APP_ROUTES.games || pathname.startsWith(`${APP_ROUTES.games}/`),
   },
   {
+    id: "quests",
+    href: APP_ROUTES.quests,
+    label: "Задания",
+    icon: ListTodo,
+    match: (pathname) => pathname.startsWith(APP_ROUTES.quests),
+  },
+  {
     id: "market",
     href: APP_ROUTES.market,
     label: "Маркет",
     icon: ShoppingBag,
     match: (pathname) => pathname.startsWith(APP_ROUTES.market),
-  },
-  {
-    id: "inventory",
-    href: APP_ROUTES.inventory,
-    label: "Инвентарь",
-    icon: Gift,
-    match: (pathname) => pathname.startsWith(APP_ROUTES.inventory),
   },
   {
     id: "profile",
@@ -211,23 +227,14 @@ export type GameLobbyItem = {
   badge: string;
   cta?: string;
   icon: LucideIcon;
-  tone: "wheel" | "crash" | "roulette" | "pvp";
+  tone: "crash" | "roulette";
 };
 
 export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   {
-    href: APP_ROUTES.wheel,
-    title: "Лаки страйк",
-    description: "Бесплатное вращение.",
-    badge: "HIT",
-    cta: "Крутить",
-    icon: Gift,
-    tone: "wheel",
-  },
-  {
     href: APP_ROUTES.crash,
     title: "Crash",
-    description: "Ставь и забери выигрыш до того, как множитель упадёт.",
+    description: "Успейте забрать до краша.",
     badge: "Онлайн",
     icon: Rocket,
     tone: "crash",
@@ -235,18 +242,10 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   {
     href: APP_ROUTES.roulette,
     title: "Рулетка",
-    description: "Выберите цвет — красный, чёрный или зелёный — и ждите результат.",
+    description: "Выберите цвет и ждите.",
     badge: "Онлайн",
     icon: CircleDot,
     tone: "roulette",
-  },
-  {
-    href: APP_ROUTES.pvp,
-    title: "Комнаты",
-    description: "Дуэль один на один: создай комнату или зайди в открытую.",
-    badge: "Онлайн",
-    icon: Users,
-    tone: "pvp",
   },
 ];
 

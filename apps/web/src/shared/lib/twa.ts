@@ -81,12 +81,12 @@ declare global {
 }
 
 export const TELEGRAM_THEME_DEFAULTS = {
-  bgColor: "#0c141c",
-  textColor: "#f2f5f7",
-  hintColor: "#7a8b9a",
+  bgColor: "#0a121a",
+  textColor: "#f4f7fa",
+  hintColor: "#8494a6",
   buttonColor: "#3390ec",
   linkColor: "#6ab3f3",
-  secondaryBgColor: "#141c27",
+  secondaryBgColor: "#121b26",
 } as const;
 
 export function getTelegramWebApp(): TelegramWebApp | null {

@@ -19,10 +19,10 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
 	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
+	questsuc "github.com/flipo/flipo/apps/api/internal/usecase/quests"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
-	"github.com/flipo/flipo/apps/api/internal/usecase/wheel"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -35,8 +35,8 @@ type AdminHandler struct {
 	outcome             *outcome.Service
 	treasury            *treasury.Service
 	telegram            *telegramadmin.Service
-	wheel               *wheel.Service
 	cases               *casesuc.Service
+	quests              *questsuc.Service
 	inventory           *inventory.Service
 	market              *market.Service
 	botSync             *market.BotSyncService
@@ -75,12 +75,12 @@ func (h *AdminHandler) SetMarketService(svc *market.Service) {
 	h.market = svc
 }
 
-func (h *AdminHandler) SetWheelService(wheelSvc *wheel.Service) {
-	h.wheel = wheelSvc
-}
-
 func (h *AdminHandler) SetCasesService(casesSvc *casesuc.Service) {
 	h.cases = casesSvc
+}
+
+func (h *AdminHandler) SetQuestsService(svc *questsuc.Service) {
+	h.quests = svc
 }
 
 func (h *AdminHandler) SetCasesUploadDir(dir string) {
@@ -101,178 +101,6 @@ func (h *AdminHandler) OnlineNow(c *gin.Context) {
 		online = h.onlineCounter()
 	}
 	c.JSON(http.StatusOK, gin.H{"online": online})
-}
-
-func (h *AdminHandler) WheelStats(c *gin.Context) {
-	if h.wheel == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"today":                   gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
-			"last_7_days":             gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
-			"all_time":                gin.H{"spins": 0, "unique_users": 0, "prizes_nanoton": 0},
-			"sources_today":           gin.H{"daily": gin.H{"spins": 0, "prizes_nanoton": 0}, "bonus": gin.H{"spins": 0, "prizes_nanoton": 0}},
-			"sources_all_time":        gin.H{"daily": gin.H{"spins": 0, "prizes_nanoton": 0}, "bonus": gin.H{"spins": 0, "prizes_nanoton": 0}},
-			"prize_breakdown":         []any{},
-			"spins_by_day":            []any{},
-			"pending_bonus_spins":     0,
-			"spins_today":             0,
-			"prizes_today_nanoton":    0,
-			"spins_all_time":          0,
-			"prizes_all_time_nanoton": 0,
-		})
-		return
-	}
-	stats, err := h.wheel.AdminStats(c.Request.Context())
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, stats)
-}
-
-func (h *AdminHandler) ListWheelSegments(c *gin.Context) {
-	if h.wheel == nil {
-		c.JSON(http.StatusOK, []any{})
-		return
-	}
-	items, err := h.wheel.AdminListSegments(c.Request.Context())
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, items)
-}
-
-func (h *AdminHandler) UpdateWheelSegment(c *gin.Context) {
-	if h.wheel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
-		return
-	}
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
-		return
-	}
-	var body wheel.AdminSegmentUpdate
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	updated, err := h.wheel.AdminUpdateSegment(c.Request.Context(), id, body)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "приз не найден"})
-			return
-		}
-		if errors.Is(err, domain.ErrInvalidAmount) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, updated)
-}
-
-func (h *AdminHandler) ListWheelSpinOverrides(c *gin.Context) {
-	if h.wheel == nil {
-		c.JSON(http.StatusOK, []any{})
-		return
-	}
-	items, err := h.wheel.AdminListSpinOverrides(c.Request.Context())
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	if items == nil {
-		items = []domain.WheelSpinOverrideView{}
-	}
-	c.JSON(http.StatusOK, items)
-}
-
-func (h *AdminHandler) CreateWheelSpinOverride(c *gin.Context) {
-	if h.wheel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
-		return
-	}
-	adminID := middleware.GetUserID(c)
-	var req struct {
-		TelegramID int64  `json:"telegram_id"`
-		SegmentID  string `json:"segment_id"`
-		Note       string `json:"note"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if req.TelegramID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "укажите telegram_id"})
-		return
-	}
-	segmentID, err := uuid.Parse(req.SegmentID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный segment_id"})
-		return
-	}
-	item, err := h.wheel.AdminSetSpinOverride(c.Request.Context(), adminID, req.TelegramID, segmentID, req.Note)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "пользователь или приз не найден"})
-			return
-		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, item)
-}
-
-func (h *AdminHandler) DeleteWheelSpinOverride(c *gin.Context) {
-	if h.wheel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
-		return
-	}
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
-		return
-	}
-	if err := h.wheel.AdminDeleteSpinOverride(c.Request.Context(), id); err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "подкрутка не найдена"})
-			return
-		}
-		respondInternal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
-}
-
-func (h *AdminHandler) GrantWheelBonusSpins(c *gin.Context) {
-	if h.wheel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "колесо недоступно"})
-		return
-	}
-	var req struct {
-		TelegramID int64 `json:"telegram_id"`
-		Count      int   `json:"count"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if req.TelegramID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "укажите telegram_id"})
-		return
-	}
-	result, err := h.wheel.AdminGrantBonusSpins(c.Request.Context(), req.TelegramID, req.Count)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "пользователь не найден"})
-			return
-		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, result)
 }
 
 func (h *AdminHandler) RevenueSummary(c *gin.Context) {
@@ -1138,46 +966,17 @@ func (h *AdminHandler) ListPromoCodes(c *gin.Context) {
 }
 
 func (h *AdminHandler) UpsertPromoCode(c *gin.Context) {
-	adminID := middleware.GetUserID(c)
-	var promo domain.PromoCode
-	if err := c.ShouldBindJSON(&promo); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if strings.TrimSpace(promo.Code) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Введите промокод"})
-		return
-	}
-	if err := h.admin.UpsertPromoCode(c.Request.Context(), adminID, promo); err != nil {
-		if errors.Is(err, domain.ErrPromoInvalid) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Введите промокод"})
-			return
-		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	c.JSON(http.StatusGone, gin.H{
+		"error": "Балансовые промокоды отключены. Используйте промокоды кейсов.",
+		"code":  "balance_promo_disabled",
+	})
 }
 
 func (h *AdminHandler) DeletePromoCode(c *gin.Context) {
-	adminID := middleware.GetUserID(c)
-	code := strings.ToUpper(strings.TrimSpace(c.Param("code")))
-	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Укажите код"})
-		return
-	}
-	if err := h.admin.DeletePromoCode(c.Request.Context(), adminID, code); err != nil {
-		switch {
-		case errors.Is(err, domain.ErrNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "Промокод не найден"})
-		case errors.Is(err, domain.ErrPromoInUse):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Есть активации"})
-		default:
-			respondInternal(c, err)
-		}
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	c.JSON(http.StatusGone, gin.H{
+		"error": "Балансовые промокоды отключены. Используйте промокоды кейсов.",
+		"code":  "balance_promo_disabled",
+	})
 }
 
 func (h *AdminHandler) GetBotSettings(c *gin.Context) {
@@ -1241,10 +1040,8 @@ func (h *AdminHandler) GetWithdrawalSettings(c *gin.Context) {
 func (h *AdminHandler) UpdateWithdrawalSettings(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	var body struct {
-		Enabled             *bool    `json:"enabled"`
-		GiftsManual         *bool    `json:"gifts_manual"`
-		DepositWagerEnabled *bool    `json:"deposit_wager_enabled"`
-		CrashWagerTarget    *float64 `json:"crash_wager_target"`
+		Enabled     *bool `json:"enabled"`
+		GiftsManual *bool `json:"gifts_manual"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1261,12 +1058,6 @@ func (h *AdminHandler) UpdateWithdrawalSettings(c *gin.Context) {
 	}
 	if body.GiftsManual != nil {
 		settings.GiftsManual = *body.GiftsManual
-	}
-	if body.DepositWagerEnabled != nil {
-		settings.DepositWagerEnabled = *body.DepositWagerEnabled
-	}
-	if body.CrashWagerTarget != nil {
-		settings.CrashWagerTarget = *body.CrashWagerTarget
 	}
 	if err := h.admin.UpdateWithdrawalSettings(c.Request.Context(), adminID, settings); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -2167,3 +1958,93 @@ func toAdminTransferViews(items []domain.TonTransfer) []adminTransferView {
 	}
 	return out
 }
+
+func (h *AdminHandler) ListDailyQuests(c *gin.Context) {
+	if h.quests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quests unavailable"})
+		return
+	}
+	items, err := h.quests.AdminListQuests(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (h *AdminHandler) UpsertDailyQuest(c *gin.Context) {
+	if h.quests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quests unavailable"})
+		return
+	}
+	var req questsuc.AdminQuestUpsert
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректные данные"})
+		return
+	}
+	item, err := h.quests.AdminUpsertQuest(c.Request.Context(), req)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidAmount) || errors.Is(err, domain.ErrCaseUnavailable) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), middleware.GetUserID(c), "daily_quest_upserted", "daily_quest", item.ID.String(), item)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "item": item})
+}
+
+func (h *AdminHandler) DeleteDailyQuest(c *gin.Context) {
+	if h.quests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quests unavailable"})
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный id"})
+		return
+	}
+	if err := h.quests.AdminDeleteQuest(c.Request.Context(), id); err != nil {
+		respondInternal(c, err)
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), middleware.GetUserID(c), "daily_quest_deleted", "daily_quest", id.String(), nil)
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *AdminHandler) GetDailyQuestBoard(c *gin.Context) {
+	if h.quests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quests unavailable"})
+		return
+	}
+	board, err := h.quests.AdminGetBoard(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, board)
+}
+
+func (h *AdminHandler) UpdateDailyQuestBoard(c *gin.Context) {
+	if h.quests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quests unavailable"})
+		return
+	}
+	var req domain.DailyQuestBoardSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректные данные"})
+		return
+	}
+	if err := h.quests.AdminUpdateBoard(c.Request.Context(), &req); err != nil {
+		if errors.Is(err, domain.ErrInvalidAmount) || errors.Is(err, domain.ErrCaseUnavailable) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), middleware.GetUserID(c), "daily_quest_board_updated", "daily_quest_board", "1", req)
+	c.JSON(http.StatusOK, req)
+}
+

@@ -46,33 +46,18 @@ function isAuthPath(path: string): boolean {
 export class ApiRequestError extends Error {
   code?: string;
   channel?: string;
-  wager_required_nanoton?: number;
-  wager_progress_nanoton?: number;
-  wager_remaining_nanoton?: number;
-  withdrawable_nanoton?: number;
-  gift_value_nanoton?: number;
 
   constructor(
     message: string,
     opts?: {
       code?: string;
       channel?: string;
-      wager_required_nanoton?: number;
-      wager_progress_nanoton?: number;
-      wager_remaining_nanoton?: number;
-      withdrawable_nanoton?: number;
-      gift_value_nanoton?: number;
     },
   ) {
     super(message);
     this.name = "ApiRequestError";
     this.code = opts?.code;
     this.channel = opts?.channel;
-    this.wager_required_nanoton = opts?.wager_required_nanoton;
-    this.wager_progress_nanoton = opts?.wager_progress_nanoton;
-    this.wager_remaining_nanoton = opts?.wager_remaining_nanoton;
-    this.withdrawable_nanoton = opts?.withdrawable_nanoton;
-    this.gift_value_nanoton = opts?.gift_value_nanoton;
   }
 }
 
@@ -83,10 +68,6 @@ export type User = {
   first_name: string;
   photo_url?: string;
   betting_balance: number;
-  wager_required_nanoton?: number;
-  wager_progress_nanoton?: number;
-  wager_remaining_nanoton?: number;
-  withdrawable_nanoton?: number;
   staking_tier: "base" | "boost";
   ton_wallet?: string;
   is_admin?: boolean;
@@ -244,16 +225,6 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
     throw new ApiRequestError(message, {
       code: typeof err.code === "string" ? err.code : undefined,
       channel: typeof err.channel === "string" ? err.channel : undefined,
-      wager_required_nanoton:
-        typeof err.wager_required_nanoton === "number" ? err.wager_required_nanoton : undefined,
-      wager_progress_nanoton:
-        typeof err.wager_progress_nanoton === "number" ? err.wager_progress_nanoton : undefined,
-      wager_remaining_nanoton:
-        typeof err.wager_remaining_nanoton === "number" ? err.wager_remaining_nanoton : undefined,
-      withdrawable_nanoton:
-        typeof err.withdrawable_nanoton === "number" ? err.withdrawable_nanoton : undefined,
-      gift_value_nanoton:
-        typeof err.gift_value_nanoton === "number" ? err.gift_value_nanoton : undefined,
     });
   }
   return res.json();
@@ -481,16 +452,17 @@ export type RouletteBetEntry = {
   username: string;
   first_name: string;
   photo_url?: string;
-  color: "red" | "green" | "black" | string;
+  color: "blue" | "red" | "green" | "yellow" | string;
   amount_nanoton: number;
   funding_type?: "balance" | "gift" | string;
   gift?: BetGiftView;
 };
 
 export type RouletteColorTotals = {
+  blue: number;
   red: number;
   green: number;
-  black: number;
+  yellow: number;
 };
 
 export type RouletteRoundBets = {
@@ -888,10 +860,6 @@ export async function buyMarketListing(id: string) {
   try {
     const result = await api<{
       balance: number;
-      wager_required_nanoton?: number;
-      wager_progress_nanoton?: number;
-      wager_remaining_nanoton?: number;
-      withdrawable_nanoton?: number;
     }>(`/api/v1/market/listings/${id}/buy`, {
       method: "POST",
     });
@@ -953,14 +921,6 @@ export async function reportReferralShare(action: "copy" | "share") {
   return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
     method: "POST",
     body: JSON.stringify({ action }),
-  });
-}
-
-export async function reportWheelShare(action: "copy" | "share") {
-  return api<{ ok: boolean }>("/api/v1/referrals/share-event", {
-    method: "POST",
-    body: JSON.stringify({ action, source: "wheel" }),
-    keepalive: true,
   });
 }
 
@@ -1343,8 +1303,6 @@ export type AdminWithdrawalSettings = {
   id?: number;
   enabled: boolean;
   gifts_manual: boolean;
-  deposit_wager_enabled?: boolean;
-  crash_wager_target?: number;
   updated_at?: string;
 };
 
@@ -1376,8 +1334,6 @@ export type AdminUser = {
   first_name: string;
   last_name?: string;
   betting_balance: number;
-  wager_required_nanoton?: number;
-  wager_progress_nanoton?: number;
   staking_tier?: string;
   ton_wallet?: string;
   is_banned: boolean;
@@ -1661,7 +1617,7 @@ export async function markAllAdminNotificationsRead(category?: string) {
   });
 }
 
-export type GameModeKey = "wheel" | "crash" | "roulette" | "pvp";
+export type GameModeKey = "crash" | "roulette" | "pvp";
 
 export type GameModeAccess = {
   enabled: boolean;
@@ -2372,10 +2328,7 @@ export async function getAdminWithdrawalSettings() {
 }
 
 export async function updateAdminWithdrawalSettings(
-  settings: Pick<
-    AdminWithdrawalSettings,
-    "enabled" | "gifts_manual" | "deposit_wager_enabled" | "crash_wager_target"
-  >,
+  settings: Pick<AdminWithdrawalSettings, "enabled" | "gifts_manual">,
 ) {
   return api<{ ok: boolean }>("/api/v1/admin/withdrawals/settings", {
     method: "PATCH",
@@ -2470,102 +2423,131 @@ export async function getPromoStatus() {
   return api<PromoStatus>("/api/v1/promos/status");
 }
 
-export type WheelSegment = {
+export type DailyQuestReward = {
+  type: "balance_nanoton" | "free_case_open" | "gift" | string;
+  nanoton?: number;
+  case_id?: string;
+  case_title?: string;
+  case_slug?: string;
+  case_image_url?: string;
+  collection_slug?: string;
+  model_name?: string;
+  gift_name?: string;
+  gift_image_url?: string;
+};
+
+export type DailyQuestTask = {
   id: string;
-  label: string;
-  amount_nanoton: number;
-  weight: number;
-  sort_order: number;
+  title: string;
+  description: string;
+  objective_type: string;
+  target: number;
+  progress: number;
+  status: "active" | "ready" | "claimed" | string;
+  action: "cases" | "referrals" | "claim" | "none" | string;
+  reward: DailyQuestReward;
 };
 
-export type WheelStatus = {
-  channel_subscribed: boolean;
-  required_channel?: string;
-  daily_available: boolean;
-  bonus_spins: number;
-  spins_today: number;
-  can_spin: boolean;
-  unlimited_spins?: boolean;
-  next_daily_reset_at: string;
-  segments: WheelSegment[];
+export type DailyQuestBonus = {
+  title: string;
+  description: string;
+  completed_count: number;
+  total_count: number;
+  status: "disabled" | "locked" | "ready" | "claimed" | string;
+  reward: DailyQuestReward;
 };
 
-export type WheelSpinResult = {
-  spin_id: string;
-  segment_id: string;
-  segment_label: string;
-  prize_nanoton: number;
-  spin_source: string;
-  bonus_spins: number;
-  daily_available: boolean;
-  spins_today: number;
-  unlimited_spins?: boolean;
-  created_at: string;
+export type DailyQuestBoard = {
+  day_msk: string;
+  tasks: DailyQuestTask[];
+  bonus: DailyQuestBonus;
 };
 
-export type WheelAdminPeriodStats = {
-  spins: number;
-  unique_users: number;
-  prizes_nanoton: number;
+export type DailyQuestClaimResult = {
+  reward: DailyQuestReward;
+  balance_after?: number;
+  entitlement_id?: string;
+  case_id?: string;
+  inventory_item_id?: string;
 };
 
-export type WheelAdminSourceStats = {
-  spins: number;
-  prizes_nanoton: number;
-};
-
-export type WheelAdminSourceBreakdown = {
-  daily: WheelAdminSourceStats;
-  bonus: WheelAdminSourceStats;
-};
-
-export type WheelAdminPrizeBreakdown = {
-  segment_id: string;
-  label: string;
-  amount_nanoton: number;
-  hits: number;
-  total_prizes_nanoton: number;
-  share_percent: number;
-};
-
-export type WheelAdminDailyPoint = {
-  date: string;
-  spins: number;
-  unique_users: number;
-  prizes_nanoton: number;
-};
-
-export type WheelAdminStats = {
-  today: WheelAdminPeriodStats;
-  last_7_days: WheelAdminPeriodStats;
-  all_time: WheelAdminPeriodStats;
-  sources_today: WheelAdminSourceBreakdown;
-  sources_all_time: WheelAdminSourceBreakdown;
-  prize_breakdown: WheelAdminPrizeBreakdown[];
-  spins_by_day: WheelAdminDailyPoint[];
-  pending_bonus_spins: number;
-  spins_today: number;
-  prizes_today_nanoton: number;
-  spins_all_time: number;
-  prizes_all_time_nanoton: number;
-};
-
-export type AdminWheelSegment = {
-  id: string;
-  label: string;
-  amount_nanoton: number;
-  weight: number;
-  chance_percent: number;
-  sort_order: number;
-  active: boolean;
-};
-
-export async function getWheelStatus() {
-  return api<WheelStatus>("/api/v1/wheel/status");
+export async function getDailyQuests() {
+  return api<DailyQuestBoard>("/api/v1/quests/daily");
 }
 
-export async function spinWheel() {
-  return api<WheelSpinResult>("/api/v1/wheel/spin", { method: "POST" });
+export async function claimDailyQuest(id: string) {
+  return api<DailyQuestClaimResult>(`/api/v1/quests/daily/${encodeURIComponent(id)}/claim`, {
+    method: "POST",
+  });
+}
+
+export async function claimDailyQuestBonus() {
+  return api<DailyQuestClaimResult>("/api/v1/quests/daily/bonus/claim", {
+    method: "POST",
+  });
+}
+
+export type AdminDailyQuest = {
+  id?: string;
+  title: string;
+  description: string;
+  sort_order: number;
+  active: boolean;
+  active_from?: string | null;
+  active_to?: string | null;
+  objective_type: "open_cases" | "invite_referrals" | string;
+  objective_target: number;
+  objective_case_id?: string | null;
+  reward_type: "balance_nanoton" | "free_case_open" | "gift" | string;
+  reward_nanoton: number;
+  reward_case_id?: string | null;
+  reward_collection_slug?: string;
+  reward_model_name?: string;
+  reward_gift_name?: string;
+  reward_gift_image_url?: string;
+};
+
+export type AdminDailyQuestBoard = {
+  id?: number;
+  bonus_title: string;
+  bonus_description: string;
+  bonus_reward_type: "balance_nanoton" | "free_case_open" | "gift" | string;
+  bonus_reward_nanoton: number;
+  bonus_reward_case_id?: string | null;
+  bonus_reward_collection_slug?: string;
+  bonus_reward_model_name?: string;
+  bonus_reward_gift_name?: string;
+  bonus_reward_gift_image_url?: string;
+  bonus_active: boolean;
+};
+
+export async function getAdminDailyQuests() {
+  const res = await api<{ items: AdminDailyQuest[] }>("/api/v1/admin/quests");
+  return res.items ?? [];
+}
+
+export async function upsertAdminDailyQuest(quest: AdminDailyQuest) {
+  return api<{ ok: boolean; item: AdminDailyQuest }>("/api/v1/admin/quests", {
+    method: "PUT",
+    body: JSON.stringify(quest),
+  });
+}
+
+export async function deleteAdminDailyQuest(id: string) {
+  return api<{ ok: boolean }>(`/api/v1/admin/quests/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getAdminDailyQuestBoard() {
+  return api<AdminDailyQuestBoard>("/api/v1/admin/quests/board");
+}
+
+export async function updateAdminDailyQuestBoard(board: AdminDailyQuestBoard) {
+  return api<AdminDailyQuestBoard>("/api/v1/admin/quests/board", {
+    method: "PUT",
+    body: JSON.stringify(board),
+  });
 }
 
 export type CaseLootPreview = {
@@ -2938,6 +2920,11 @@ export type AdminCaseOpenCaseRow = {
   case_id: string;
   title: string;
   slug: string;
+  image_url?: string;
+  kind?: string;
+  price_nanoton?: number;
+  sort_order?: number;
+  active?: boolean;
   opens: number;
   spent_nanoton: number;
   prize_total_nanoton: number;
@@ -2965,12 +2952,15 @@ export type AdminCaseOpenDailyPoint = {
 export type AdminCaseOpenStats = {
   today: AdminCaseOpenPeriodStats;
   last_7_days: AdminCaseOpenPeriodStats;
+  last_30_days?: AdminCaseOpenPeriodStats;
   all_time: AdminCaseOpenPeriodStats;
   sources_today: AdminCaseOpenSourceBreakdown;
   sources_all_time: AdminCaseOpenSourceBreakdown;
   prize_types_7d: AdminCaseOpenPrizeTypeStats[];
   prize_types_all_time: AdminCaseOpenPrizeTypeStats[];
+  by_case_today?: AdminCaseOpenCaseRow[];
   by_case_7d: AdminCaseOpenCaseRow[];
+  by_case_30d?: AdminCaseOpenCaseRow[];
   by_case_all_time: AdminCaseOpenCaseRow[];
   top_prizes_7d: AdminCaseOpenPrizeHit[];
   opens_by_day: AdminCaseOpenDailyPoint[];
@@ -3210,80 +3200,6 @@ export async function upsertAdminCasePromoCode(promo: {
 export async function deleteAdminCasePromoCode(code: string) {
   return api<{ ok: boolean }>(`/api/v1/admin/cases/promos/${encodeURIComponent(code)}`, {
     method: "DELETE",
-  });
-}
-
-export async function getAdminWheelStats() {
-  return api<WheelAdminStats>("/api/v1/admin/marketing/wheel");
-}
-
-export async function getAdminWheelSegments() {
-  return api<AdminWheelSegment[]>("/api/v1/admin/marketing/wheel/segments");
-}
-
-export async function updateAdminWheelSegment(
-  id: string,
-  body: {
-    label: string;
-    amount_nanoton: number;
-    weight?: number;
-    chance_percent?: number;
-    sort_order: number;
-    active: boolean;
-  },
-) {
-  return api<AdminWheelSegment>(`/api/v1/admin/marketing/wheel/segments/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
-}
-
-export type AdminWheelSpinOverride = {
-  id: string;
-  user_id: string;
-  telegram_id: number;
-  username: string;
-  first_name: string;
-  segment_id: string;
-  segment_label: string;
-  amount_nanoton: number;
-  note?: string;
-  created_at: string;
-};
-
-export async function getAdminWheelSpinOverrides() {
-  return api<AdminWheelSpinOverride[]>("/api/v1/admin/marketing/wheel/overrides");
-}
-
-export async function createAdminWheelSpinOverride(body: {
-  telegram_id: number;
-  segment_id: string;
-  note?: string;
-}) {
-  return api<AdminWheelSpinOverride>("/api/v1/admin/marketing/wheel/overrides", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-export async function deleteAdminWheelSpinOverride(id: string) {
-  return api<{ ok: boolean }>(`/api/v1/admin/marketing/wheel/overrides/${id}`, {
-    method: "DELETE",
-  });
-}
-
-export type AdminWheelGrantSpinsResult = {
-  telegram_id: number;
-  username: string;
-  first_name: string;
-  granted: number;
-  bonus_spins: number;
-};
-
-export async function grantAdminWheelBonusSpins(body: { telegram_id: number; count: number }) {
-  return api<AdminWheelGrantSpinsResult>("/api/v1/admin/marketing/wheel/grant-spins", {
-    method: "POST",
-    body: JSON.stringify(body),
   });
 }
 

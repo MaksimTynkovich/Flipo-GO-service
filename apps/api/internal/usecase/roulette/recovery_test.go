@@ -19,54 +19,56 @@ func betOn(color string, amount int64) domain.GameBet {
 	}
 }
 
-func TestPickBestHouseColor_HeavyRedPrefersBlack(t *testing.T) {
+func TestPickBestHouseColor_HeavyBluePrefersGreen(t *testing.T) {
 	bets := []domain.GameBet{
-		betOn("red", 100),
-		betOn("black", 10),
-		betOn("green", 5),
-	}
-	if got := PickBestHouseColor(bets); got != "black" {
-		t.Fatalf("got %q, want black", got)
-	}
-}
-
-func TestPickBestHouseColor_HeavyBlackPrefersRed(t *testing.T) {
-	bets := []domain.GameBet{
-		betOn("black", 100),
+		betOn("blue", 100),
 		betOn("red", 10),
+		betOn("green", 5),
+		betOn("yellow", 1),
 	}
+	// total 116; blue win: 116-200=-84; red: 116-20=96; green: 116-25=91 → red
 	if got := PickBestHouseColor(bets); got != "red" {
 		t.Fatalf("got %q, want red", got)
 	}
 }
 
-func TestPickBestHouseColor_NeverGreen(t *testing.T) {
-	// Green would maximize PnL (185-70=115 vs black 95), but must not be chosen.
+func TestPickBestHouseColor_HeavyGreenPrefersRed(t *testing.T) {
 	bets := []domain.GameBet{
-		betOn("red", 100),
-		betOn("black", 10),
-		betOn("green", 5),
+		betOn("green", 100),
+		betOn("blue", 10),
+	}
+	// red book empty → house keeps all 110
+	if got := PickBestHouseColor(bets); got != "red" {
+		t.Fatalf("got %q, want red", got)
+	}
+}
+
+func TestPickBestHouseColor_NeverYellow(t *testing.T) {
+	bets := []domain.GameBet{
+		betOn("blue", 100),
+		betOn("red", 10),
+		betOn("yellow", 2),
 	}
 	for i := 0; i < 20; i++ {
-		if got := PickBestHouseColor(bets); got == "green" {
-			t.Fatalf("green must not be auto-picked, got green")
+		if got := PickBestHouseColor(bets); got == "yellow" {
+			t.Fatalf("yellow must not be auto-picked")
 		}
 	}
-	// Empty book: only red/black.
 	for i := 0; i < 20; i++ {
 		got := PickBestHouseColor(nil)
-		if got != "red" && got != "black" {
-			t.Fatalf("empty book got %q, want red or black", got)
+		if got != "blue" && got != "red" && got != "green" {
+			t.Fatalf("empty book got %q", got)
 		}
 	}
 }
 
 func TestHousePnLIfColor(t *testing.T) {
-	if pnl := HousePnLIfColor("red", 100, 0, 0, 100); pnl != -100 {
-		t.Fatalf("red pnl=%d want -100", pnl)
+	by := map[string]int64{"blue": 100, "red": 0, "green": 0, "yellow": 0}
+	if pnl := HousePnLIfColor("blue", by, 100); pnl != -100 {
+		t.Fatalf("blue pnl=%d want -100", pnl)
 	}
-	if pnl := HousePnLIfColor("black", 100, 0, 0, 100); pnl != 100 {
-		t.Fatalf("black pnl=%d want 100", pnl)
+	if pnl := HousePnLIfColor("red", by, 100); pnl != 100 {
+		t.Fatalf("red pnl=%d want 100", pnl)
 	}
 }
 

@@ -14,11 +14,16 @@ import (
 )
 
 type CaseRepo struct {
-	db *gorm.DB
+	db                      *gorm.DB
+	excludeAdminTelegramIDs []int64
 }
 
 func NewCaseRepo(db *gorm.DB) *CaseRepo {
 	return &CaseRepo{db: db}
+}
+
+func (r *CaseRepo) SetExcludeAdminTelegramIDs(ids []int64) {
+	r.excludeAdminTelegramIDs = append([]int64(nil), ids...)
 }
 
 func (r *CaseRepo) ListActive(ctx context.Context) ([]domain.Case, error) {
@@ -298,6 +303,17 @@ func (r *CaseRepo) ListOpensByUser(ctx context.Context, userID uuid.UUID, limit 
 		Limit(limit).
 		Find(&rows).Error
 	return rows, err
+}
+
+func (r *CaseRepo) CountPaidOpensSince(ctx context.Context, userID uuid.UUID, since time.Time, caseID *uuid.UUID) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Where("user_id = ? AND source = ? AND created_at >= ?", userID, domain.CaseOpenSourcePaid, since.UTC())
+	if caseID != nil {
+		q = q.Where("case_id = ?", *caseID)
+	}
+	var count int64
+	err := q.Count(&count).Error
+	return count, err
 }
 
 func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.CaseLiveDrop, error) {
@@ -586,8 +602,9 @@ func (r *CaseRepo) CaseOpenStats(ctx context.Context, since *time.Time) (*domain
 		AdminFundedPrizeNanoton int64
 	}
 	var agg row
-	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
-		Select(`COUNT(*) AS opens_count,
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{})
+	q = applyExcludeAdminUsers(q, "user_id", r.excludeAdminTelegramIDs)
+	q = q.Select(`COUNT(*) AS opens_count,
 			COALESCE(SUM(price_paid_nanoton),0) AS spent_nanoton,
 			COALESCE(SUM(prize_nanoton),0) AS prize_total_nanoton,
 			COUNT(*) FILTER (WHERE COALESCE(admin_funded_nanoton,0) = 0 AND price_paid_nanoton > 0) AS organic_opens_count,
@@ -647,8 +664,9 @@ func (r *CaseRepo) CaseOpenPeriodStats(ctx context.Context, since time.Time) (do
 		PaidPrizeNanoton  int64
 	}
 	var out row
-	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
-		Select(`COUNT(*) AS opens,
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{})
+	q = applyExcludeAdminUsers(q, "user_id", r.excludeAdminTelegramIDs)
+	q = q.Select(`COUNT(*) AS opens,
 			COUNT(DISTINCT user_id) AS unique_users,
 			COALESCE(SUM(price_paid_nanoton), 0) AS spent_nanoton,
 			COALESCE(SUM(prize_nanoton), 0) AS prize_total_nanoton,
@@ -683,8 +701,9 @@ func (r *CaseRepo) CaseOpenSourceStats(ctx context.Context, since time.Time) ([]
 		PrizeTotalNanoton int64
 	}
 	var rows []row
-	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
-		Select(`source,
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{})
+	q = applyExcludeAdminUsers(q, "user_id", r.excludeAdminTelegramIDs)
+	q = q.Select(`source,
 			COUNT(*) AS opens,
 			COUNT(DISTINCT user_id) AS unique_users,
 			COALESCE(SUM(price_paid_nanoton), 0) AS spent_nanoton,
@@ -717,8 +736,9 @@ func (r *CaseRepo) CaseOpenPrizeTypeStats(ctx context.Context, since time.Time) 
 		PrizeTotalNanoton int64
 	}
 	var rows []row
-	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
-		Select(`COALESCE(NULLIF(prize_type, ''), 'gift') AS prize_type,
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{})
+	q = applyExcludeAdminUsers(q, "user_id", r.excludeAdminTelegramIDs)
+	q = q.Select(`COALESCE(NULLIF(prize_type, ''), 'gift') AS prize_type,
 			COUNT(*) AS opens,
 			COALESCE(SUM(prize_nanoton), 0) AS prize_total_nanoton`).
 		Group("COALESCE(NULLIF(prize_type, ''), 'gift')").
@@ -741,13 +761,15 @@ func (r *CaseRepo) CaseOpenPrizeTypeStats(ctx context.Context, since time.Time) 
 }
 
 func (r *CaseRepo) CaseOpenByCaseStats(ctx context.Context, since time.Time, limit int) ([]domain.CaseOpenCaseStats, error) {
-	if limit <= 0 {
-		limit = 15
-	}
 	type row struct {
 		CaseID            uuid.UUID
 		Title             string
 		Slug              string
+		ImageURL          string
+		Kind              string
+		PriceNanoton      int64
+		SortOrder         int
+		Active            bool
 		Opens             int64
 		SpentNanoton      int64
 		PrizeTotalNanoton int64
@@ -758,13 +780,21 @@ func (r *CaseRepo) CaseOpenByCaseStats(ctx context.Context, since time.Time, lim
 		Select(`o.case_id,
 			COALESCE(NULLIF(c.title, ''), '—') AS title,
 			COALESCE(c.slug, '') AS slug,
+			COALESCE(c.image_url, '') AS image_url,
+			COALESCE(c.kind, '') AS kind,
+			COALESCE(c.price_nanoton, 0) AS price_nanoton,
+			COALESCE(c.sort_order, 0) AS sort_order,
+			COALESCE(c.active, false) AS active,
 			COUNT(*) AS opens,
 			COALESCE(SUM(o.price_paid_nanoton), 0) AS spent_nanoton,
 			COALESCE(SUM(o.prize_nanoton), 0) AS prize_total_nanoton`).
-		Joins("LEFT JOIN cases c ON c.id = o.case_id").
-		Group("o.case_id, c.title, c.slug").
-		Order("opens DESC, spent_nanoton DESC").
-		Limit(limit)
+		Joins("LEFT JOIN cases c ON c.id = o.case_id")
+	q = applyExcludeAdminUsers(q, "o.user_id", r.excludeAdminTelegramIDs)
+	q = q.Group("o.case_id, c.title, c.slug, c.image_url, c.kind, c.price_nanoton, c.sort_order, c.active").
+		Order("opens DESC, spent_nanoton DESC")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
 	if !since.IsZero() {
 		q = q.Where("o.created_at >= ?", since.UTC())
 	}
@@ -777,6 +807,11 @@ func (r *CaseRepo) CaseOpenByCaseStats(ctx context.Context, since time.Time, lim
 			CaseID:            item.CaseID,
 			Title:             item.Title,
 			Slug:              item.Slug,
+			ImageURL:          item.ImageURL,
+			Kind:              item.Kind,
+			PriceNanoton:      item.PriceNanoton,
+			SortOrder:         item.SortOrder,
+			Active:            item.Active,
 			Opens:             item.Opens,
 			SpentNanoton:      item.SpentNanoton,
 			PrizeTotalNanoton: item.PrizeTotalNanoton,
@@ -804,8 +839,9 @@ func (r *CaseRepo) CaseOpenTopPrizes(ctx context.Context, since time.Time, limit
 			COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift') AS prize_type,
 			COUNT(*) AS hits,
 			COALESCE(SUM(o.prize_nanoton), 0) AS prize_total_nanoton`).
-		Joins("LEFT JOIN case_loot_entries e ON e.id = o.loot_entry_id").
-		Group("o.loot_entry_id, e.display_name, COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift')").
+		Joins("LEFT JOIN case_loot_entries e ON e.id = o.loot_entry_id")
+	q = applyExcludeAdminUsers(q, "o.user_id", r.excludeAdminTelegramIDs)
+	q = q.Group("o.loot_entry_id, e.display_name, COALESCE(NULLIF(o.prize_type, ''), NULLIF(e.prize_type, ''), 'gift')").
 		Order("hits DESC, prize_total_nanoton DESC").
 		Limit(limit)
 	if !since.IsZero() {
@@ -836,8 +872,9 @@ func (r *CaseRepo) CaseOpenByDay(ctx context.Context, since time.Time) ([]domain
 		PrizeTotalNanoton int64
 	}
 	var rows []row
-	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
-		Select(`date_trunc('day', created_at AT TIME ZONE 'UTC') AS day,
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{})
+	q = applyExcludeAdminUsers(q, "user_id", r.excludeAdminTelegramIDs)
+	q = q.Select(`date_trunc('day', created_at AT TIME ZONE 'UTC') AS day,
 			COUNT(*) AS opens,
 			COUNT(DISTINCT user_id) AS unique_users,
 			COALESCE(SUM(price_paid_nanoton), 0) AS spent_nanoton,

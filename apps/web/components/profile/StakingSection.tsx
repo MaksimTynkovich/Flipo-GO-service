@@ -8,7 +8,7 @@ import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
 import { StakingOverview } from "@/components/profile/StakingOverview";
 import { StakingActionBar } from "@/components/profile/StakingActionBar";
 import { StakingQuestsBlock } from "@/components/profile/StakingQuestsBlock";
-import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
+import { ChannelSubscribeSheet } from "@/components/ui/ChannelSubscribeSheet";
 import { Button } from "@/components/ui/button";
 import {
   ApiRequestError,
@@ -213,7 +213,7 @@ export function StakingSection() {
       </section>
 
       {loading ? (
-        <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
+        <div className="grid grid-cols-3 gap-x-3 gap-y-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-full min-w-0">
               <GiftTileSkeleton />
@@ -222,7 +222,7 @@ export function StakingSection() {
         </div>
       ) : gifts.length === 0 ? (
         <section className="panel flex flex-col items-center gap-3 py-9 text-center">
-          <div className="icon-box h-11 w-11 rounded-xl">
+          <div className="icon-box h-12 w-12 rounded-2xl">
             <Gift className="h-5 w-5" />
           </div>
           <div className="space-y-1.5">
@@ -379,7 +379,7 @@ export function StakingSection() {
       ) : null}
 
       {channelSheetOpen ? (
-        <WheelChannelSheet
+        <ChannelSubscribeSheet
           channel={channel}
           channelUrl={channelUrl}
           description="Чтобы застейкать подарки, подпишитесь на канал"

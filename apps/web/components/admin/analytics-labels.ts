@@ -59,9 +59,10 @@ const MODAL_LABELS: Record<string, string> = {
   inventory_gift_detail: "Подарок в инвентаре",
   market_gift_detail: "Покупка на маркете",
   staking_gift_detail: "Подарок в стейкинге",
-  roulette_bet_red: "Ставка красное (неактивно)",
-  roulette_bet_green: "Ставка зелёное (неактивно)",
-  roulette_bet_black: "Ставка чёрное (неактивно)",
+  roulette_bet_blue: "Ставка синее ×2 (неактивно)",
+  roulette_bet_red: "Ставка красное ×2 (неактивно)",
+  roulette_bet_green: "Ставка зелёное ×5 (неактивно)",
+  roulette_bet_yellow: "Ставка жёлтое ×50 (неактивно)",
   roulette_bet_amount: "Сумма ставки (рулетка)",
   crash_bet_amount: "Сумма ставки (crash)",
   deposit_ton_amount: "Сумма пополнения",
@@ -113,6 +114,7 @@ const MODE_LABELS: Record<string, string> = {
   "/deposit": "Пополнение",
   "/inventory": "Инвентарь",
   "/market": "Маркет",
+  "/quests": "Задания",
 };
 
 const ERROR_LABELS: Record<string, string> = {

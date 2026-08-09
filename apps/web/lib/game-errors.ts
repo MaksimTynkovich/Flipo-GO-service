@@ -3,7 +3,7 @@ import { formatUserError } from "@/lib/user-errors";
 export function formatGameBetError(error: unknown): string {
   const raw =
     error instanceof Error ? error.message.trim() : typeof error === "string" ? error.trim() : "";
-  if (!raw) return "Не удалось сделать ставку. Попробуй ещё раз.";
+  if (!raw) return "Не удалось сделать ставку. Попробуйте ещё раз.";
 
   const lower = raw.toLowerCase();
 
@@ -29,13 +29,13 @@ export function formatGameBetError(error: unknown): string {
     return "Вы уже в этой комнате.";
   }
   if (lower.includes("failed to fetch") || lower.includes("network")) {
-    return "Нет связи с сервером. Проверь интернет и попробуй снова.";
+    return "Нет связи с сервером. Проверьте интернет и попробуйте снова.";
   }
   if (raw.startsWith("Key:") || lower.includes("binding")) {
     return "Не удалось сделать ставку. Проверьте данные и попробуйте снова.";
   }
 
-  return formatUserError(raw, "Не удалось сделать ставку. Попробуй ещё раз.");
+  return formatUserError(raw, "Не удалось сделать ставку. Попробуйте ещё раз.");
 }
 
 export function roulettePhaseBetMessage(phase?: string | null): string {

@@ -158,9 +158,6 @@ func (r *TonTransferRepo) CreateWithdrawalAtomic(
 		if user.BettingBalance < amountNanoton {
 			return domain.ErrInsufficientFunds
 		}
-		if err := enforceDepositWagerTx(tx, &user, amountNanoton); err != nil {
-			return err
-		}
 
 		newBalance := user.BettingBalance - amountNanoton
 		now := time.Now().UTC()
@@ -262,9 +259,6 @@ func (r *TonTransferRepo) CompleteDepositAtomic(ctx context.Context, transferID 
 			CreatedAt:     now,
 		}
 		if err := tx.Create(&ledger).Error; err != nil {
-			return err
-		}
-		if err := maybeAddDepositWagerTx(tx, &user, transfer.AmountNanoton); err != nil {
 			return err
 		}
 

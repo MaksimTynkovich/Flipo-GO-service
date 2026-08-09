@@ -13,65 +13,78 @@ import (
 )
 
 type AdminRepo struct {
-	db *gorm.DB
+	db                      *gorm.DB
+	excludeAdminTelegramIDs []int64
 }
 
 func NewAdminRepo(db *gorm.DB) *AdminRepo {
 	return &AdminRepo{db: db}
 }
 
+func (r *AdminRepo) SetExcludeAdminTelegramIDs(ids []int64) {
+	r.excludeAdminTelegramIDs = append([]int64(nil), ids...)
+}
+
+func (r *AdminRepo) withoutAdmins(q *gorm.DB) *gorm.DB {
+	return applyExcludeAdminUsers(q, "user_id", r.excludeAdminTelegramIDs)
+}
+
+func (r *AdminRepo) withoutAdminUsers(q *gorm.DB) *gorm.DB {
+	return applyExcludeAdminTelegram(q, "telegram_id", r.excludeAdminTelegramIDs)
+}
+
 func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary, error) {
 	summary := &domain.RevenueSummary{}
 
 	var tonDeposits, altDeposits int64
-	r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.TonTransfer{})).
 		Where("direction = ? AND status = ?", domain.TonDirectionDeposit, domain.TonStatusCompleted).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&tonDeposits)
-	r.db.WithContext(ctx).Model(&domain.PaymentIntent{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.PaymentIntent{})).
 		Where("status = ?", domain.PaymentStatusPaid).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&altDeposits)
 	summary.DepositsNanoton = tonDeposits + altDeposits
 
-	r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.TonTransfer{})).
 		Where("direction = ? AND status = ?", domain.TonDirectionWithdraw, domain.TonStatusCompleted).
 		Select("COALESCE(SUM(amount_nanoton - fee_nanoton), 0)").Scan(&summary.WithdrawalsNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.GiftWithdrawal{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.GiftWithdrawal{})).
 		Select("COALESCE(SUM(cost_nanoton), 0)").Scan(&summary.GiftWithdrawalsNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.TonTransfer{})).
 		Where("direction = ? AND status = ?", domain.TonDirectionWithdraw, domain.TonStatusCompleted).
 		Select("COALESCE(SUM(fee_nanoton), 0)").Scan(&summary.WithdrawalFeesNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.TonTransfer{})).
 		Where("direction = ? AND status IN ?", domain.TonDirectionWithdraw,
 			[]domain.TonTransferStatus{domain.TonStatusQueued, domain.TonStatusPendingReview, domain.TonStatusApproved, domain.TonStatusBroadcasting}).
 		Select("COALESCE(SUM(amount_nanoton - fee_nanoton), 0)").Scan(&summary.PendingLiabilityNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.InventoryItem{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.InventoryItem{})).
 		Where("status = ? AND source = ?", domain.InvWithdrawPending, domain.NFTSourceTelegramGift).
 		Select("COALESCE(SUM(floor_price_nanoton), 0)").Scan(&summary.PendingGiftLiabilityNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.GameBet{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.GameBet{})).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&summary.GameBetsNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.GameBet{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.GameBet{})).
 		Where("status IN ?", []domain.BetStatus{domain.BetWon, domain.BetCashedOut}).
 		Select("COALESCE(SUM(payout_nanoton), 0)").Scan(&summary.GameWinsNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.BalanceLedger{})).
 		Where("type = ?", domain.LedgerReferralBonus).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&summary.ReferralExpenseNanoton)
 
-	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.BalanceLedger{})).
 		Where("type = ?", domain.LedgerStakeYield).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&summary.StakingExpenseNanoton)
 
 	var marketBuyAbs, marketSellSum int64
-	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.BalanceLedger{})).
 		Where("type = ?", domain.LedgerMarketBuy).
 		Select("COALESCE(SUM(ABS(amount_nanoton)), 0)").Scan(&marketBuyAbs)
-	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.BalanceLedger{})).
 		Where("type = ?", domain.LedgerMarketSell).
 		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&marketSellSum)
 	summary.MarketFeesNanoton = marketBuyAbs - marketSellSum
@@ -80,9 +93,10 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 	}
 
 	var pvpFees int64
-	r.db.WithContext(ctx).Model(&domain.PvPRoom{}).
-		Where("status = ? AND payout_nanoton IS NOT NULL", "finished").
-		Select("COALESCE(SUM(bet_amount_nanoton * max_players * platform_fee_bps / 10000), 0)").Scan(&pvpFees)
+	pvpQ := r.db.WithContext(ctx).Model(&domain.PvPRoom{}).
+		Where("status = ? AND payout_nanoton IS NOT NULL", "finished")
+	pvpQ = applyExcludeAdminUsers(pvpQ, "creator_id", r.excludeAdminTelegramIDs)
+	pvpQ.Select("COALESCE(SUM(bet_amount_nanoton * max_players * platform_fee_bps / 10000), 0)").Scan(&pvpFees)
 	summary.PvPFeesNanoton = pvpFees
 
 	summary.GGRNanoton = summary.GameBetsNanoton - summary.GameWinsNanoton
@@ -93,7 +107,7 @@ func (r *AdminRepo) RevenueSummary(ctx context.Context) (*domain.RevenueSummary,
 	summary.HotWalletExposureNanoton = summary.PendingLiabilityNanoton + summary.PendingGiftLiabilityNanoton
 
 	since := time.Now().UTC().Add(-24 * time.Hour)
-	r.db.WithContext(ctx).Model(&domain.BalanceLedger{}).
+	r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.BalanceLedger{})).
 		Where("created_at >= ?", since).
 		Distinct("user_id").
 		Count(&summary.ActiveUsers24h)
@@ -177,53 +191,53 @@ func (r *AdminRepo) RevenueTimeseries(ctx context.Context, days int) ([]domain.R
 
 	// Fetch daily aggregates using GROUP BY (fast even for "all time").
 	tonDepositRows := make([]daySumRow, 0, dayCount)
-	if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+	tonDepositQ := r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.TonTransfer{})).
 		Select("DATE_TRUNC('day', confirmed_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
 		Where("direction = ? AND status = ? AND confirmed_at >= ? AND confirmed_at < ?",
 			domain.TonDirectionDeposit, domain.TonStatusCompleted, start, end).
 		Group("DATE_TRUNC('day', confirmed_at)").
-		Order("day").
-		Scan(&tonDepositRows).Error; err != nil {
+		Order("day")
+	if err := tonDepositQ.Scan(&tonDepositRows).Error; err != nil {
 		return nil, err
 	}
 	altDepositRows := make([]daySumRow, 0, dayCount)
-	if err := r.db.WithContext(ctx).Model(&domain.PaymentIntent{}).
+	altDepositQ := r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.PaymentIntent{})).
 		Select("DATE_TRUNC('day', paid_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
 		Where("status = ? AND paid_at >= ? AND paid_at < ?", domain.PaymentStatusPaid, start, end).
 		Group("DATE_TRUNC('day', paid_at)").
-		Order("day").
-		Scan(&altDepositRows).Error; err != nil {
+		Order("day")
+	if err := altDepositQ.Scan(&altDepositRows).Error; err != nil {
 		return nil, err
 	}
 
 	withdrawalsRows := make([]daySumRow, 0, dayCount)
-	if err := r.db.WithContext(ctx).Model(&domain.TonTransfer{}).
+	withdrawalsQ := r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.TonTransfer{})).
 		Select("DATE_TRUNC('day', confirmed_at) AS day, COALESCE(SUM(amount_nanoton - fee_nanoton), 0) AS sum").
 		Where("direction = ? AND status = ? AND confirmed_at >= ? AND confirmed_at < ?",
 			domain.TonDirectionWithdraw, domain.TonStatusCompleted, start, end).
 		Group("DATE_TRUNC('day', confirmed_at)").
-		Order("day").
-		Scan(&withdrawalsRows).Error; err != nil {
+		Order("day")
+	if err := withdrawalsQ.Scan(&withdrawalsRows).Error; err != nil {
 		return nil, err
 	}
 
 	betsRows := make([]daySumRow, 0, dayCount)
-	if err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+	betsQ := r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.GameBet{})).
 		Select("DATE_TRUNC('day', created_at) AS day, COALESCE(SUM(amount_nanoton), 0) AS sum").
 		Where("created_at >= ? AND created_at < ?", start, end).
 		Group("DATE_TRUNC('day', created_at)").
-		Order("day").
-		Scan(&betsRows).Error; err != nil {
+		Order("day")
+	if err := betsQ.Scan(&betsRows).Error; err != nil {
 		return nil, err
 	}
 
 	giftWithdrawRows := make([]daySumRow, 0, dayCount)
-	if err := r.db.WithContext(ctx).Model(&domain.GiftWithdrawal{}).
+	giftWithdrawQ := r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.GiftWithdrawal{})).
 		Select("DATE_TRUNC('day', withdrawn_at) AS day, COALESCE(SUM(cost_nanoton), 0) AS sum").
 		Where("withdrawn_at >= ? AND withdrawn_at < ?", start, end).
 		Group("DATE_TRUNC('day', withdrawn_at)").
-		Order("day").
-		Scan(&giftWithdrawRows).Error; err != nil {
+		Order("day")
+	if err := giftWithdrawQ.Scan(&giftWithdrawRows).Error; err != nil {
 		return nil, err
 	}
 
@@ -877,59 +891,59 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 	nowMSK := time.Now().In(msk)
 	todayStart := time.Date(nowMSK.Year(), nowMSK.Month(), nowMSK.Day(), 0, 0, 0, 0, msk).UTC()
 
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).Where("telegram_id > 0").Count(&out.TotalUsers).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).Where("telegram_id > 0 AND is_banned = ?", true).Count(&out.BannedUsers).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).Where("telegram_id > 0").Count(&out.TotalUsers).Error
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).Where("telegram_id > 0 AND is_banned = ?", true).Count(&out.BannedUsers).Error
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND last_login_at >= ?", dayAgo).
 		Count(&out.ActiveUsers24h).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND last_login_at >= ?", weekAgo).
 		Count(&out.ActiveUsers7d).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND created_at >= ?", todayStart).
 		Count(&out.NewUsersToday).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND created_at >= ?", dayAgo).
 		Count(&out.NewUsers24h).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND created_at >= ?", weekAgo).
 		Count(&out.NewUsers7d).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND referrer_id IS NOT NULL").
 		Count(&out.ReferredUsers).Error
 	out.OrganicUsers = out.TotalUsers - out.ReferredUsers
 	if out.OrganicUsers < 0 {
 		out.OrganicUsers = 0
 	}
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND referrer_id IS NOT NULL AND created_at >= ?", todayStart).
 		Count(&out.ReferredToday).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND referrer_id IS NOT NULL AND created_at >= ?", weekAgo).
 		Count(&out.Referred7d).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND betting_balance > 0").
 		Count(&out.WithBalance).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND ton_wallet <> ''").
 		Count(&out.WithWallet).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0 AND staking_tier = ?", domain.TierBoost).
 		Count(&out.BoostTierUsers).Error
-	_ = r.db.WithContext(ctx).Model(&domain.User{}).
+	_ = r.withoutAdminUsers(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("telegram_id > 0").
 		Select("COALESCE(SUM(betting_balance), 0)").
 		Scan(&out.BalancesNanoton).Error
 
-	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+	_ = r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.StakingPosition{})).
 		Where("is_active = ?", true).
 		Distinct("user_id").
 		Count(&out.WithStaking).Error
-	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+	_ = r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.StakingPosition{})).
 		Where("is_active = ?", true).
 		Select("COALESCE(SUM(principal_nanoton), 0)").
 		Scan(&out.StakingTVLNanoton).Error
-	_ = r.db.WithContext(ctx).Model(&domain.StakingPosition{}).
+	_ = r.withoutAdmins(r.db.WithContext(ctx).Model(&domain.StakingPosition{})).
 		Where("is_active = ?", true).
 		Select("COALESCE(SUM(accrued_yield_nanoton), 0)").
 		Scan(&out.StakingAccruedYieldNanoton).Error
@@ -939,12 +953,12 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 		Principal int64              `gorm:"column:principal"`
 	}
 	var byTier []tierPrincipal
-	_ = r.db.WithContext(ctx).Table("staking_positions AS sp").
+	byTierQ := r.db.WithContext(ctx).Table("staking_positions AS sp").
 		Select("u.staking_tier, COALESCE(SUM(sp.principal_nanoton), 0) AS principal").
 		Joins("JOIN users u ON u.id = sp.user_id AND u.deleted_at IS NULL").
-		Where("sp.is_active = ?", true).
-		Group("u.staking_tier").
-		Scan(&byTier)
+		Where("sp.is_active = ?", true)
+	byTierQ = applyExcludeAdminTelegram(byTierQ, "u.telegram_id", r.excludeAdminTelegramIDs)
+	_ = byTierQ.Group("u.staking_tier").Scan(&byTier)
 
 	basePct, boostPct := 3.0, 4.0
 	var yieldSettings domain.PlatformYieldSettings
@@ -971,7 +985,7 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 		Week       int64     `gorm:"column:week"`
 	}
 	var top []topRefRow
-	_ = r.db.WithContext(ctx).Raw(`
+	topSQL := `
 		SELECT
 			r.id,
 			r.telegram_id,
@@ -983,10 +997,13 @@ func (r *AdminRepo) UserAudience(ctx context.Context) (*domain.AdminUserAudience
 		FROM users u
 		JOIN users r ON r.id = u.referrer_id AND r.deleted_at IS NULL
 		WHERE u.deleted_at IS NULL AND u.telegram_id > 0 AND u.referrer_id IS NOT NULL
+			AND ` + adminTelegramNotInExpr("u.telegram_id", r.excludeAdminTelegramIDs) + `
+			AND ` + adminTelegramNotInExpr("r.telegram_id", r.excludeAdminTelegramIDs) + `
 		GROUP BY r.id, r.telegram_id, r.username, r.first_name
 		ORDER BY total DESC
 		LIMIT 12
-	`, todayStart, weekAgo).Scan(&top)
+	`
+	_ = r.db.WithContext(ctx).Raw(topSQL, todayStart, weekAgo).Scan(&top)
 	out.TopReferrers = make([]domain.AdminReferrerStat, 0, len(top))
 	for _, row := range top {
 		out.TopReferrers = append(out.TopReferrers, domain.AdminReferrerStat{

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -12,11 +13,28 @@ import (
 )
 
 type AnalyticsRepo struct {
-	db *gorm.DB
+	db                      *gorm.DB
+	excludeAdminTelegramIDs []int64
 }
 
 func NewAnalyticsRepo(db *gorm.DB) *AnalyticsRepo {
 	return &AnalyticsRepo{db: db}
+}
+
+func (r *AnalyticsRepo) SetExcludeAdminTelegramIDs(ids []int64) {
+	r.excludeAdminTelegramIDs = append([]int64(nil), ids...)
+}
+
+func (r *AnalyticsRepo) eventsWithoutAdmins(q *gorm.DB) *gorm.DB {
+	return applyExcludeAdminTelegram(q, "telegram_id", r.excludeAdminTelegramIDs)
+}
+
+func (r *AnalyticsRepo) usersWithoutAdmins(q *gorm.DB) *gorm.DB {
+	return applyExcludeAdminTelegram(q, "telegram_id", r.excludeAdminTelegramIDs)
+}
+
+func (r *AnalyticsRepo) adminEventsSQL() string {
+	return adminTelegramNotInExpr("telegram_id", r.excludeAdminTelegramIDs)
 }
 
 func (r *AnalyticsRepo) RecordEvents(ctx context.Context, events []domain.AnalyticsEventCreate) error {
@@ -72,21 +90,21 @@ func (r *AnalyticsRepo) GetOverview(ctx context.Context, since time.Time, filter
 		SessionsByDay:      []domain.AnalyticsDailyPoint{},
 	}
 
-	r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+	r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).
 		Where("occurred_at >= ? AND user_id IS NOT NULL", since).
 		Distinct("user_id").
 		Count(&overview.DAU)
 
-	r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+	r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).
 		Where("occurred_at >= ? AND user_id IS NOT NULL", now.Add(-7*24*time.Hour)).
 		Distinct("user_id").
 		Count(&overview.WAU)
 
-	r.db.WithContext(ctx).Model(&domain.User{}).
+	r.usersWithoutAdmins(r.db.WithContext(ctx).Model(&domain.User{})).
 		Where("created_at >= ?", since).
 		Count(&overview.NewUsers)
 
-	r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+	r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).
 		Where("occurred_at >= ?", since).
 		Count(&overview.TotalEvents24h)
 
@@ -337,7 +355,7 @@ func (r *AnalyticsRepo) GetOverview(ctx context.Context, since time.Time, filter
 }
 
 func (r *AnalyticsRepo) filteredEvents(ctx context.Context, since time.Time, filter domain.AnalyticsOverviewFilter) ([]domain.AnalyticsTimelineEvent, int64, error) {
-	query := r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).Where("occurred_at >= ?", since)
+	query := r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).Where("occurred_at >= ?", since)
 	if filter.ErrorCode != "" {
 		query = query.Where(
 			"(error_code = ? OR properties->>'last_error_code' = ? OR (status = 'error' AND event_name = ?))",
@@ -499,12 +517,14 @@ func (r *AnalyticsRepo) GetUserDrilldown(ctx context.Context, userID uuid.UUID, 
 }
 
 func (r *AnalyticsRepo) fillVisitStats(ctx context.Context, overview *domain.AnalyticsOverview, since time.Time) error {
-	_ = r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+	adminSQL := r.adminEventsSQL()
+
+	_ = r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).
 		Where("occurred_at >= ? AND event_name = ? AND user_id IS NOT NULL", since, "session_started").
 		Count(&overview.SessionsTotal).Error
 
 	var sessionUsers int64
-	_ = r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+	_ = r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).
 		Where("occurred_at >= ? AND event_name = ? AND user_id IS NOT NULL", since, "session_started").
 		Distinct("user_id").
 		Count(&sessionUsers).Error
@@ -517,6 +537,7 @@ func (r *AnalyticsRepo) fillVisitStats(ctx context.Context, overview *domain.Ana
 			AND e.event_name = 'session_started'
 			AND e.user_id IS NOT NULL
 			AND u.created_at < ?
+			AND `+adminTelegramNotInExpr("e.telegram_id", r.excludeAdminTelegramIDs)+`
 	`, since, since).Scan(&overview.ReturningUsers).Error
 
 	if sessionUsers > 0 && overview.SessionsTotal > 0 {
@@ -535,6 +556,7 @@ func (r *AnalyticsRepo) fillVisitStats(ctx context.Context, overview *domain.Ana
 		WHERE occurred_at >= ?
 			AND event_name = 'session_started'
 			AND user_id IS NOT NULL
+			AND `+adminSQL+`
 		GROUP BY 1
 		ORDER BY 1
 	`, since).Scan(&hours).Error; err != nil {
@@ -562,6 +584,7 @@ func (r *AnalyticsRepo) fillVisitStats(ctx context.Context, overview *domain.Ana
 		WHERE occurred_at >= ?
 			AND event_name = 'session_started'
 			AND user_id IS NOT NULL
+			AND `+adminSQL+`
 		GROUP BY 1
 		ORDER BY 1
 	`, since).Scan(&weekdays).Error; err != nil {
@@ -591,6 +614,7 @@ func (r *AnalyticsRepo) fillVisitStats(ctx context.Context, overview *domain.Ana
 			WHERE occurred_at >= ?
 				AND event_name = 'session_started'
 				AND user_id IS NOT NULL
+				AND `+adminSQL+`
 			GROUP BY 1, 2
 		)
 		SELECT
@@ -621,6 +645,7 @@ func (r *AnalyticsRepo) fillVisitStats(ctx context.Context, overview *domain.Ana
 		WHERE occurred_at >= ?
 			AND event_name = 'session_started'
 			AND user_id IS NOT NULL
+			AND `+adminSQL+`
 		GROUP BY 1
 		ORDER BY 1
 	`, since).Scan(&days).Error; err != nil {
@@ -783,9 +808,22 @@ func (r *AnalyticsRepo) userSessions(ctx context.Context, userID uuid.UUID, limi
 	return sessions, nil
 }
 
+func (r *AnalyticsRepo) injectAdminEventsFilter(query string) string {
+	expr := r.adminEventsSQL()
+	if expr == "TRUE" {
+		return query
+	}
+	// Cover both plain and CTE-scoped analytics_events WHERE clauses.
+	replacer := strings.NewReplacer(
+		"FROM analytics_events\n\t\tWHERE ", "FROM analytics_events\n\t\tWHERE "+expr+" AND ",
+		"FROM analytics_events\n\t\t\tWHERE ", "FROM analytics_events\n\t\t\tWHERE "+expr+" AND ",
+	)
+	return replacer.Replace(query)
+}
+
 func (r *AnalyticsRepo) topBuckets(ctx context.Context, query string, args ...any) ([]domain.AnalyticsBucket, error) {
 	var items []domain.AnalyticsBucket
-	err := r.db.WithContext(ctx).Raw(query, args...).Scan(&items).Error
+	err := r.db.WithContext(ctx).Raw(r.injectAdminEventsFilter(query), args...).Scan(&items).Error
 	return items, err
 }
 
@@ -794,7 +832,7 @@ func (r *AnalyticsRepo) funnelCounts(ctx context.Context, since time.Time, names
 	var previousCount int64
 	for i, name := range names {
 		var count int64
-		r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+		r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).
 			Where("occurred_at >= ? AND event_name = ?", since, name).
 			Distinct("COALESCE(user_id::text, telegram_id::text, NULLIF(anonymous_id, ''), NULLIF(session_id, ''))").
 			Count(&count)
@@ -822,7 +860,7 @@ func (r *AnalyticsRepo) funnelMixedCounts(ctx context.Context, since time.Time, 
 	result := make([]domain.AnalyticsFunnelStep, 0, len(steps))
 	var previousCount int64
 	for i, step := range steps {
-		query := r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).Where("occurred_at >= ?", since)
+		query := r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).Where("occurred_at >= ?", since)
 		name := step.EventName
 		if step.Screen != "" {
 			query = query.Where("event_name = ? AND screen = ?", step.EventName, step.Screen)
@@ -854,6 +892,7 @@ func (r *AnalyticsRepo) eventsByDay(ctx context.Context, since time.Time) ([]dom
 		SELECT to_char(date_trunc('day', occurred_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date, COUNT(*) AS count
 		FROM analytics_events
 		WHERE occurred_at >= ?
+			AND `+r.adminEventsSQL()+`
 		GROUP BY 1
 		ORDER BY date ASC
 	`, since).Scan(&items).Error
@@ -862,7 +901,7 @@ func (r *AnalyticsRepo) eventsByDay(ctx context.Context, since time.Time) ([]dom
 
 func (r *AnalyticsRepo) countDistinctSessions(ctx context.Context, since time.Time, eventName string) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{}).
+	err := r.eventsWithoutAdmins(r.db.WithContext(ctx).Model(&domain.AnalyticsEvent{})).
 		Where("occurred_at >= ? AND event_name = ?", since, eventName).
 		Distinct("COALESCE(NULLIF(session_id, ''), anonymous_id)").
 		Count(&count).Error
@@ -870,18 +909,19 @@ func (r *AnalyticsRepo) countDistinctSessions(ctx context.Context, since time.Ti
 }
 
 func (r *AnalyticsRepo) screenExitRates(ctx context.Context, since time.Time) ([]domain.AnalyticsScreenMetric, error) {
+	adminSQL := r.adminEventsSQL()
 	var items []domain.AnalyticsScreenMetric
 	err := r.db.WithContext(ctx).Raw(`
 		WITH enters AS (
 			SELECT COALESCE(NULLIF(screen, ''), 'unknown') AS screen, COUNT(*) AS enters
 			FROM analytics_events
-			WHERE occurred_at >= ? AND event_name = 'screen_enter'
+			WHERE occurred_at >= ? AND event_name = 'screen_enter' AND `+adminSQL+`
 			GROUP BY 1
 		),
 		exits AS (
 			SELECT COALESCE(NULLIF(screen, ''), 'unknown') AS screen, COUNT(*) AS exits
 			FROM analytics_events
-			WHERE occurred_at >= ? AND event_name IN ('screen_abandon', 'screen_leave')
+			WHERE occurred_at >= ? AND event_name IN ('screen_abandon', 'screen_leave') AND `+adminSQL+`
 			GROUP BY 1
 		)
 		SELECT
@@ -909,6 +949,7 @@ func (r *AnalyticsRepo) avgTimeOnScreen(ctx context.Context, since time.Time) ([
 		WHERE occurred_at >= ?
 			AND event_name IN ('screen_leave', 'screen_abandon')
 			AND properties ? 'time_on_screen_ms'
+			AND `+r.adminEventsSQL()+`
 		GROUP BY 1
 		HAVING COUNT(*) >= 3
 		ORDER BY count DESC

@@ -12,28 +12,23 @@ import {
   getAdminGameStats,
   getAdminRiskSettings,
   getAdminSocialSimSettings,
-  getAdminWheelSegments,
   rotateAdminGameSeed,
   updateAdminGameConfig,
   updateAdminRiskSettings,
   updateAdminSocialSimSettings,
-  updateAdminWheelSegment,
   type AdminGameConfig,
   type AdminGameStat,
   type AdminRiskSettings,
   type AdminSocialSimSettings,
-  type AdminWheelSegment,
 } from "@/lib/api";
 
 const MODE_LABELS: Record<string, string> = {
-  wheel: "Лаки страйк",
   crash: "Crash",
   roulette: "Рулетка",
   pvp: "Комнаты",
 };
 
-const MODE_ORDER = ["wheel", "crash", "roulette", "pvp"] as const;
-const NON_WHEEL_GAME_TYPES = ["crash", "roulette", "pvp"] as const;
+const GAME_TYPES = ["crash", "roulette", "pvp"] as const;
 
 function previewOnline(sim: AdminSocialSimSettings | null): number {
   if (!sim?.enabled || !sim.lobby_enabled) return 0;
@@ -51,38 +46,28 @@ export default function GamesSection() {
   const [configs, setConfigs] = useState<AdminGameConfig[]>([]);
   const [risk, setRisk] = useState<AdminRiskSettings | null>(null);
   const [sim, setSim] = useState<AdminSocialSimSettings | null>(null);
-  const [wheelSegments, setWheelSegments] = useState<AdminWheelSegment[]>([]);
-  const [wheelDrafts, setWheelDrafts] = useState<Record<string, AdminWheelSegment>>({});
   const [loading, setLoading] = useState(true);
   const [savingMode, setSavingMode] = useState<string | null>(null);
-  const [savingSegmentId, setSavingSegmentId] = useState<string | null>(null);
   const onlinePreview = useMemo(() => previewOnline(sim), [sim]);
-  const wheelChanceTotal = wheelSegments.reduce((sum, seg) => {
-    const draftSeg = wheelDrafts[seg.id] ?? seg;
-    return draftSeg.active ? sum + Math.max(0, draftSeg.chance_percent) : sum;
-  }, 0);
 
   async function load() {
     setLoading(true);
     try {
-      const [statsData, configsData, riskData, simData, wheelData] = await loadCached(
-        "admin:games:v4",
+      const [statsData, configsData, riskData, simData] = await loadCached(
+        "admin:games:v5",
         () =>
           Promise.all([
             getAdminGameStats(),
             getAdminGameConfigs(),
             getAdminRiskSettings(),
             getAdminSocialSimSettings(),
-            getAdminWheelSegments(),
           ]),
       );
       setStats(statsData);
       setConfigs(configsData);
       setRisk(riskData);
       setSim(simData);
-      setWheelSegments(wheelData);
-      setWheelDrafts(Object.fromEntries(wheelData.map((seg) => [seg.id, { ...seg }])));
-      primeCache("admin:games:v3", [statsData, configsData, riskData, simData, wheelData]);
+      primeCache("admin:games:v5", [statsData, configsData, riskData, simData]);
     } finally {
       setLoading(false);
     }
@@ -110,51 +95,16 @@ export default function GamesSection() {
     }
   }
 
-  function patchWheelDraft(id: string, patch: Partial<AdminWheelSegment>) {
-    setWheelDrafts((prev) => {
-      const base = prev[id] ?? wheelSegments.find((s) => s.id === id);
-      if (!base) return prev;
-      return { ...prev, [id]: { ...base, ...patch } };
-    });
-  }
-
-  async function handleSaveSegment(id: string) {
-    const draftSeg = wheelDrafts[id];
-    if (!draftSeg) return;
-    setSavingSegmentId(id);
-    try {
-      const updated = await updateAdminWheelSegment(id, {
-        label: draftSeg.label.trim(),
-        amount_nanoton: draftSeg.amount_nanoton,
-        chance_percent: draftSeg.chance_percent,
-        sort_order: draftSeg.sort_order,
-        active: draftSeg.active,
-      });
-      setWheelDrafts((prev) => ({ ...prev, [id]: updated }));
-      await load();
-      showToast({ variant: "success", title: "Приз сохранён" });
-    } catch (error) {
-      showToast({
-        variant: "error",
-        title: error instanceof Error ? error.message : "Не удалось сохранить приз",
-      });
-    } finally {
-      setSavingSegmentId(null);
-    }
-  }
-
   useEffect(() => {
     runAfterFirstPaint(() => {
       const cached = readCached<
-        [AdminGameStat[], AdminGameConfig[], AdminRiskSettings, AdminSocialSimSettings, AdminWheelSegment[]]
-      >("admin:games:v3");
+        [AdminGameStat[], AdminGameConfig[], AdminRiskSettings, AdminSocialSimSettings]
+      >("admin:games:v5");
       if (cached) {
         setStats(cached[0]);
         setConfigs(cached[1]);
         setRisk(cached[2]);
         setSim(cached[3]);
-        setWheelSegments(cached[4]);
-        setWheelDrafts(Object.fromEntries(cached[4].map((seg) => [seg.id, { ...seg }])));
       }
       load().catch(() => {});
     });
@@ -163,7 +113,7 @@ export default function GamesSection() {
   return (
     <AdminPage
       title="Игры"
-      description="Игровой домен: обзор режимов, конфигурация игр, Лаки страйк, social sim и anti-whale лимиты."
+      description="Игровой домен: обзор режимов, конфигурация игр, social sim и anti-whale лимиты."
     >
       <AdminPanel title="Статистика игр" description="Фактический RTP и GGR по режимам.">
         {stats.length === 0 && loading ? (
@@ -196,7 +146,7 @@ export default function GamesSection() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {NON_WHEEL_GAME_TYPES.map((gameType) => {
+          {GAME_TYPES.map((gameType) => {
             const cfg = configs.find((c) => c.game_type === gameType);
             if (!cfg) return null;
             const saving = savingMode === gameType;
@@ -291,68 +241,6 @@ export default function GamesSection() {
           })}
         </div>
       )}
-
-      <AdminPanel title="Призы Лаки страйк" description={`Сумма активных шансов: ${wheelChanceTotal.toFixed(2)}%`}>
-        {loading && wheelSegments.length === 0 ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="h-24 animate-pulse rounded-xl bg-surface-raised/50" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {wheelSegments.map((seg) => {
-              const row = wheelDrafts[seg.id] ?? seg;
-              const saving = savingSegmentId === seg.id;
-              return (
-                <div key={seg.id} className="space-y-2 rounded-xl bg-surface-raised/50 px-3 py-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                    <label className="text-xs text-muted">
-                      Название
-                      <input
-                        className="mt-1 w-full rounded-lg border border-white/10 bg-surface px-3 py-2 text-sm text-foreground"
-                        value={row.label}
-                        onChange={(e) => patchWheelDraft(seg.id, { label: e.target.value })}
-                      />
-                    </label>
-                    <AdminTonField
-                      label="Приз (TON)"
-                      valueNanoton={row.amount_nanoton}
-                      onChangeNanoton={(v) => patchWheelDraft(seg.id, { amount_nanoton: v })}
-                    />
-                    <AdminFloatField
-                      label="Шанс %"
-                      min={0.01}
-                      step={0.01}
-                      value={row.chance_percent}
-                      onChange={(v) => patchWheelDraft(seg.id, { chance_percent: v })}
-                    />
-                    <AdminIntField
-                      label="Порядок"
-                      min={0}
-                      value={row.sort_order}
-                      onChange={(v) => patchWheelDraft(seg.id, { sort_order: v })}
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label className="inline-flex items-center gap-2 text-sm text-muted">
-                      <input
-                        type="checkbox"
-                        checked={row.active}
-                        onChange={(e) => patchWheelDraft(seg.id, { active: e.target.checked })}
-                      />
-                      Активен
-                    </label>
-                    <AdminButton disabled={saving} onClick={() => void handleSaveSegment(seg.id)}>
-                      {saving ? "…" : "Сохранить"}
-                    </AdminButton>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </AdminPanel>
 
       {sim ? (
         <AdminPanel title="Соц. симуляция" description={`Сейчас визуальный онлайн ≈ ${onlinePreview}`}>

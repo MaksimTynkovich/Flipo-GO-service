@@ -793,14 +793,18 @@ func (s *Simulator) maybePlaceRouletteBetLocked(ctx context.Context, now time.Ti
 }
 
 func (s *Simulator) pickRouletteColorLocked() string {
-	r := s.rng.Float64()
-	if r < s.cfg.RouletteRedWeight {
+	// Match x50 wheel segment frequencies: 20 blue / 20 red / 9 green / 1 yellow.
+	r := s.rng.Float64() * 50
+	switch {
+	case r < 20:
+		return "blue"
+	case r < 40:
 		return "red"
+	case r < 49:
+		return "green"
+	default:
+		return "yellow"
 	}
-	if r < s.cfg.RouletteRedWeight+s.cfg.RouletteBlackWeight {
-		return "black"
-	}
-	return "green"
 }
 
 func (s *Simulator) sampleStakeLocked(_ context.Context, gameType domain.GameType) int64 {

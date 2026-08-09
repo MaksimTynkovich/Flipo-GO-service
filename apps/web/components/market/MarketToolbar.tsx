@@ -163,7 +163,7 @@ export function MarketToolbar({
               className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[84dvh] flex-col"
             >
               <div className="shrink-0 px-4 pt-2">
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+                <div className="sheet-handle" />
                 <div className="relative flex items-center justify-center pb-4">
                   {draftCollections.length > 0 ? (
                     <button

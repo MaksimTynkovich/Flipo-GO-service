@@ -240,7 +240,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
     <div className="space-y-4">
       <section className="panel space-y-3 p-4">
         <div className="flex items-start gap-3">
-          <div className="icon-box h-10 w-10 rounded-xl">
+          <div className="icon-box h-12 w-12 rounded-2xl">
             <Icon className="h-5 w-5" />
           </div>
           <div className="min-w-0">
@@ -257,7 +257,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
           <div className="h-24 animate-pulse rounded-2xl bg-surface-raised" />
         ) : !enabled ? (
           <p className="rounded-2xl bg-surface-raised/70 px-4 py-3 text-xs text-muted">
-            Способ временно недоступен. Проверьте настройки API.
+            Способ временно недоступен. Попробуйте позже или выберите другой способ.
           </p>
         ) : (
           <>

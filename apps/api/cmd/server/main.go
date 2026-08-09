@@ -34,6 +34,7 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
 	casesuc "github.com/flipo/flipo/apps/api/internal/usecase/cases"
+	"github.com/flipo/flipo/apps/api/internal/usecase/quests"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
@@ -50,7 +51,6 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
 	"github.com/flipo/flipo/apps/api/internal/usecase/wallet"
-	"github.com/flipo/flipo/apps/api/internal/usecase/wheel"
 	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	casesworker "github.com/flipo/flipo/apps/api/internal/worker/cases"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
@@ -112,10 +112,13 @@ func main() {
 	tonTransferRepo := postgres.NewTonTransferRepo(db)
 	paymentIntentRepo := postgres.NewPaymentIntentRepo(db)
 	gameRepo := postgres.NewGameRepo(db)
+	gameRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
 	pvpRepo := postgres.NewPvPRepo(db)
 	platformRepo := postgres.NewPlatformRepo(db)
 	adminRepo := postgres.NewAdminRepo(db)
+	adminRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
 	analyticsRepo := postgres.NewAnalyticsRepo(db)
+	analyticsRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
 	outcomeRepo := postgres.NewOutcomeOverrideRepo(db)
 	outcomeSvc := outcome.NewService(outcomeRepo)
 
@@ -149,7 +152,6 @@ func main() {
 	riskSvc := risk.NewService(platformRepo, gameRepo, userRepo)
 	walletSvc.SetRiskEvaluator(risk.WalletEvaluator{Service: riskSvc})
 	walletSvc.SetAnalytics(analyticsSvc)
-	walletSvc.SetPlatform(platformRepo)
 	fairnessSvc := fairness.NewService(platformRepo, gameRepo)
 	giftTraitRepo := postgres.NewGiftTraitPriceRepo(db)
 	adminSvc := admin.NewService(adminRepo, platformRepo, gameRepo, marketRepo, userRepo, tonTransferRepo, giftTraitRepo)
@@ -183,20 +185,6 @@ func main() {
 	)
 	riskSvc.SetAdminChecker(authSvc.IsAdmin)
 	balanceSvc := balance.NewService(userRepo)
-	wheelRepo := postgres.NewWheelRepo(db)
-	wheelSvc := wheel.NewService(wheelRepo, userRepo, balanceSvc)
-	wheelSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
-	wheelSvc.SetAdminChecker(authSvc.IsAdmin)
-	wheelBot := telegram.NewBotNotifier(cfg.BotToken)
-	wheelBot.SetOpenApp(telegram.OpenAppButtonOptions{
-		WebAppURL:       cfg.WebAppURL,
-		BotUsername:     cfg.BotUsername,
-		WebAppShortName: cfg.WebAppShortName,
-		StartPayload:    "wheel",
-	})
-	wheelSvc.SetUserNotifier(wheelBot)
-	wheelSvc.SetAdminNotifier(adminNotifier)
-	referralSvc.SetWheelBonusGranter(wheelSvc)
 	promoSvc := promo.NewService(platformRepo, userRepo, balanceSvc)
 	promoSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 	promoSvc.SetAdminNotifier(adminNotifier)
@@ -230,9 +218,12 @@ func main() {
 	marketSvc.SetValuator(giftValuator)
 	invSvc := inventory.NewService(invRepo, userRepo, depositSvc, giftTransfer, giftValuator, marketSvc)
 	invSvc.SetWithdrawHoldChecker(riskSvc)
-	invSvc.SetPlatform(platformRepo)
 	caseRepo := postgres.NewCaseRepo(db)
+	caseRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
 	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
+	dailyQuestRepo := postgres.NewDailyQuestRepo(db)
+	questSvc := quests.NewService(dailyQuestRepo, caseRepo, userRepo, invRepo, balanceSvc)
+	caseSvc.SetEntitlements(dailyQuestRepo)
 	caseSvc.SetPreparedShareBot(botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
 	caseSvc.SetAdminChecker(authSvc.IsAdmin)
 	caseSvc.SetValuator(giftValuator)
@@ -290,6 +281,7 @@ func main() {
 
 	rouletteSvc := roulette.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.RouletteBettingSeconds, cfg.RouletteSpinSeconds)
 	rouletteSvc.SetPlatform(platformRepo)
+	rouletteSvc.SetTickNotifier(hub)
 	crashSvc := crash.NewService(gameRepo, balanceSvc, betFundingSvc, invRepo, cacheIface, cfg.CrashTickMs)
 	crashSvc.SetTickNotifier(hub)
 	pvpSvc := pvp.NewService(pvpRepo, gameRepo, userRepo, balanceSvc, betFundingSvc, invRepo, cfg.PlatformFeeBps)
@@ -408,8 +400,8 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminSvc, analyticsSvc, fairnessSvc, outcomeSvc, treasurySvc, telegramAdminSvc, cfg.TonDepositAddress)
 	adminHandler.SetBotGiftSync(botSyncSvc)
 	adminHandler.SetMarketService(marketSvc)
-	adminHandler.SetWheelService(wheelSvc)
 	adminHandler.SetCasesService(caseSvc)
+	adminHandler.SetQuestsService(questSvc)
 	adminHandler.SetCasesUploadDir(cfg.CasesUploadDir)
 	adminHandler.SetInventoryService(invSvc)
 	adminHandler.SetOnlineCounter(func() int {
@@ -449,8 +441,8 @@ func main() {
 		MarketHandler:      handlers.NewMarketHandler(marketSvc, analyticsSvc),
 		ReferralHandler:    handlers.NewReferralHandler(referralSvc, authSvc, adminNotifier),
 		PromoHandler:       handlers.NewPromoHandler(promoSvc, analyticsSvc),
-		WheelHandler:       handlers.NewWheelHandler(wheelSvc, riskSvc),
 		CasesHandler:       handlers.NewCasesHandler(caseSvc),
+		QuestsHandler:      handlers.NewQuestsHandler(questSvc),
 		WalletHandler:      handlers.NewWalletHandler(walletSvc, analyticsSvc),
 		PaymentsHandler:    handlers.NewPaymentsHandler(paymentsSvc),
 		TelegramHandler:    handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
@@ -525,8 +517,14 @@ func (p *caseLiveDropPublisher) PublishCaseLiveDrop(ctx context.Context, drop do
 	if err != nil {
 		return
 	}
+	// Real Redis: publish once and let RedisBridge fan out to this process + peers.
+	// noopCache.Publish succeeds without subscribers — fall through to local hub.
 	if p.cache != nil {
-		_ = p.cache.Publish(ctx, "pubsub:cases:live", data)
+		if err := p.cache.Publish(ctx, "pubsub:cases:live", data); err == nil {
+			if _, isNoop := p.cache.(*noopCache); !isNoop {
+				return
+			}
+		}
 	}
 	if p.hub != nil {
 		p.hub.Broadcast("cases", websocket.JSONMessage("drop", json.RawMessage(data)))

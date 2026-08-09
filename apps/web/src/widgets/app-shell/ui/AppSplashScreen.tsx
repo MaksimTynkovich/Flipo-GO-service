@@ -23,21 +23,29 @@ export function AppSplashScreen({ showRecovery = false, slowMs = 8000 }: AppSpla
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-background px-6 pt-[var(--app-safe-top)] pb-[var(--app-safe-bottom)]"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-background px-6 pt-[var(--app-safe-top)] pb-[var(--app-safe-bottom)]"
       role="status"
       aria-live="polite"
       aria-label="Загрузка"
     >
       {!slow ? (
-        <div className="splash-spinner" aria-hidden />
+        <div className="splash-brand">
+          <div className="splash-loader" aria-hidden>
+            <span className="splash-loader__ring" />
+            <span className="splash-loader__ring splash-loader__ring--delayed" />
+            <span className="splash-loader__core" />
+          </div>
+          <p className="splash-brand__mark">Flipo</p>
+          <p className="splash-brand__hint">Загрузка…</p>
+        </div>
       ) : (
         <>
-          <p className="max-w-[280px] text-center text-sm leading-relaxed text-muted">
+          <p className="max-w-[280px] text-center text-[0.9375rem] leading-relaxed text-muted">
             Приложение долго загружается. Обычно помогает перезапуск.
           </p>
           <button
             type="button"
-            className="rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground"
+            className="min-h-12 rounded-2xl bg-accent px-6 py-3.5 text-[0.9375rem] font-semibold text-accent-foreground"
             onClick={() => {
               reportBootHang("splash_reload_clicked", { surface: "splash", action: "reload" });
               window.location.reload();

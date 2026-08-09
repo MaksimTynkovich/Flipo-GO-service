@@ -1,38 +1,110 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import Link from "next/link";
-import { Gift } from "lucide-react";
+import { ChevronRight, Gift } from "lucide-react";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { formatCasePrice } from "@/components/cases/case-ui";
-import { resolveAsset, type CaseView } from "@/lib/api";
+import { candyTileBackgroundForLoot, formatCasePrice, getCatalogAccent } from "@/components/cases/case-ui";
+import { formatTON, resolveAsset, type CaseLootPreview, type CaseView } from "@/lib/api";
+import { giftImageUrl } from "@/lib/gifts";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { cn } from "@/lib/utils";
 
-function priceLabel(caseItem: CaseView): { text: string; free: boolean; muted?: boolean } {
-  const isDaily = caseItem.kind === "daily";
-  const isPromo = caseItem.kind === "promo";
-  const isFree = isDaily || isPromo || caseItem.price_nanoton <= 0;
-  if (isPromo) {
+const LOOT_PREVIEW_LIMIT = 4;
+
+function isFreeCase(caseItem: CaseView): boolean {
+  return (
+    caseItem.kind === "daily" ||
+    caseItem.kind === "promo" ||
+    caseItem.price_nanoton <= 0
+  );
+}
+
+function priceLabel(caseItem: CaseView): { text: string; free: boolean } {
+  if (caseItem.kind === "promo") {
     return { text: "Промокод", free: true };
   }
-  if (isFree) {
-    return {
-      text: "Бесплатно",
-      free: true,
-    };
+  if (isFreeCase(caseItem)) {
+    return { text: "Бесплатно", free: true };
   }
-  return { text: `${formatCasePrice(caseItem.price_nanoton)} TON`, free: false };
+  return { text: formatCasePrice(caseItem.price_nanoton), free: false };
+}
+
+function lootValueNanoton(entry: CaseLootPreview): number {
+  if (entry.prize_type === "ton") {
+    return entry.amount_nanoton || entry.floor_price_nanoton || 0;
+  }
+  return entry.floor_price_nanoton || 0;
+}
+
+/** Top N most expensive gift prizes for catalog card preview. */
+export function topCaseLootGifts(
+  loot: CaseLootPreview[] | undefined,
+  limit = LOOT_PREVIEW_LIMIT,
+): CaseLootPreview[] {
+  if (!loot?.length || limit <= 0) return [];
+  return loot
+    .filter((entry) => entry.prize_type !== "ton")
+    .slice()
+    .sort((a, b) => {
+      const byValue = lootValueNanoton(b) - lootValueNanoton(a);
+      if (byValue !== 0) return byValue;
+      return a.sort_order - b.sort_order;
+    })
+    .slice(0, limit);
+}
+
+function CaseCardLootPreview({ items }: { items: CaseLootPreview[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <ul className="cases-card__loot" aria-hidden>
+      {items.map((entry) => {
+        const value = lootValueNanoton(entry);
+        return (
+          <li
+            key={entry.id}
+            className="cases-card__loot-tile"
+            style={{ background: candyTileBackgroundForLoot(entry) }}
+            title={
+              value > 0
+                ? `${entry.display_name} · ${formatTON(value)} TON`
+                : entry.display_name
+            }
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={giftImageUrl(entry.collection_slug, entry.image_url)}
+              alt=""
+              className="cases-card__loot-img"
+              draggable={false}
+            />
+            {value > 0 ? (
+              <span className="cases-card__loot-price">
+                {formatTON(value)}
+                <TonIcon
+                  variant="brand"
+                  className="cases-card__loot-price-icon"
+                  title=""
+                />
+              </span>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function CaseCard({
   caseItem,
-  layout,
+  layout = "tile",
   interactive = true,
   selected = false,
   onClick,
 }: {
   caseItem: CaseView;
-  layout: "wide" | "tile";
+  layout?: "wide" | "tile";
   interactive?: boolean;
   selected?: boolean;
   onClick?: () => void;
@@ -40,66 +112,62 @@ export function CaseCard({
   const href = `${APP_ROUTES.cases}/${caseItem.slug}`;
   const cover = resolveAsset(caseItem.image_url?.trim()) || "";
   const price = priceLabel(caseItem);
+  const lootPreview = topCaseLootGifts(caseItem.loot);
+  const accent = getCatalogAccent(caseItem);
+  const kindTone =
+    caseItem.kind === "daily"
+      ? "daily"
+      : caseItem.kind === "promo"
+        ? "promo"
+        : caseItem.kind === "featured"
+          ? "featured"
+          : "default";
 
   const className = cn(
-    "group relative block overflow-hidden rounded-2xl border bg-[#101820]",
-    layout === "wide" ? "aspect-[5/4]" : "aspect-[4/5]",
-    selected ? "border-accent/60 ring-1 ring-accent/35" : "border-white/[0.07]",
+    "cases-card group app-control",
+    layout === "wide" ? "cases-card--wide" : "cases-card--tile",
+    `cases-card--${kindTone}`,
+    lootPreview.length > 0 && "cases-card--loot",
+    selected && "cases-card--selected",
     onClick && "cursor-pointer",
   );
 
+  const cardStyle = {
+    "--case-accent": accent.from,
+    "--case-glow": accent.glow,
+  } as CSSProperties;
+
   const body = (
     <>
-      {cover ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={cover}
-          alt=""
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-active:scale-[1.02]"
-          draggable={false}
-        />
-      ) : (
-        <div
-          className="pointer-events-none absolute inset-0 bg-[#101820]"
-          aria-hidden
-        />
-      )}
+      <div className="cases-card__media" aria-hidden>
+        <div className="cases-card__glow" />
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt="" className="cases-card__art" draggable={false} />
+        ) : (
+          <div className="cases-card__art-fallback">
+            <Gift className="h-8 w-8 opacity-40" strokeWidth={1.5} />
+          </div>
+        )}
+        <div className="cases-card__shade" />
+      </div>
 
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(4,8,14,0.05) 0%, rgba(4,8,14,0.08) 42%, rgba(4,8,14,0.72) 72%, rgba(4,8,14,0.96) 100%)",
-        }}
-        aria-hidden
-      />
-
-      <div className="absolute inset-x-0 bottom-0 z-[1] flex items-baseline justify-between gap-2 p-2.5">
-        <h3
-          className={cn(
-            "min-w-0 flex-1 truncate font-bold leading-none tracking-[-0.02em] text-white",
-            "drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
-            layout === "wide" ? "text-[16px]" : "text-[14px]",
-          )}
-        >
-          {caseItem.title}
-        </h3>
-        <span
-          className={cn(
-            "inline-flex shrink-0 max-w-[55%] items-baseline gap-1 truncate px-0.5 font-bold leading-none tabular-nums",
-            "drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]",
-            layout === "wide" ? "text-[16px]" : "text-[14px]",
-            price.muted
-              ? "text-white/70"
-              : price.free
-                ? "text-emerald-200"
-                : "text-white",
-          )}
-        >
-          {!price.free && !price.muted ? (
-            <TonIcon variant="brand" className="relative top-[0.05em] h-[0.95em] w-[0.95em] shrink-0" />
-          ) : null}
-          <span className="truncate">{price.text}</span>
+      <div className="cases-card__panel">
+        <h3 className="cases-card__title">{caseItem.title}</h3>
+        <CaseCardLootPreview items={lootPreview} />
+        <span className="cases-card__cta">
+          <span className="cases-card__cta-label">
+            <span className="cases-card__cta-text">{price.text}</span>
+            {!price.free ? (
+              <TonIcon
+                variant="brand"
+                size="sm"
+                className="cases-card__cta-ton"
+                title="TON"
+              />
+            ) : null}
+          </span>
+          <ChevronRight className="cases-card__cta-chevron" strokeWidth={2.75} aria-hidden />
         </span>
       </div>
     </>
@@ -111,6 +179,7 @@ export function CaseCard({
         role="button"
         tabIndex={0}
         className={className}
+        style={cardStyle}
         onClick={onClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -126,13 +195,17 @@ export function CaseCard({
 
   if (interactive) {
     return (
-      <Link href={href} className={className}>
+      <Link href={href} className={className} style={cardStyle}>
         {body}
       </Link>
     );
   }
 
-  return <div className={className}>{body}</div>;
+  return (
+    <div className={className} style={cardStyle}>
+      {body}
+    </div>
+  );
 }
 
 export function splitCasesForCatalog(params: {
@@ -159,7 +232,6 @@ export function splitCasesForCatalog(params: {
     };
   }
 
-  // Flat grid in sort_order — matches admin reorder list.
   return {
     featuredRow: [],
     catalog: [...active].sort(byOrder),
@@ -171,6 +243,8 @@ export function CasesCatalogScreen({
   bannersEnabled = false,
   /** Force one grid in given order (admin reorder preview). */
   flatOrder = false,
+  /** Equal grid for all cases (user lobby). */
+  equalGrid = false,
   interactive = true,
   selectedId = null,
   onCaseClick,
@@ -179,6 +253,7 @@ export function CasesCatalogScreen({
   cases: CaseView[];
   bannersEnabled?: boolean;
   flatOrder?: boolean;
+  equalGrid?: boolean;
   interactive?: boolean;
   selectedId?: string | null;
   onCaseClick?: (caseItem: CaseView) => void;
@@ -186,14 +261,19 @@ export function CasesCatalogScreen({
 }) {
   const { featuredRow, catalog } = flatOrder
     ? { featuredRow: [] as CaseView[], catalog: cases }
-    : splitCasesForCatalog({ cases, bannersEnabled });
+    : equalGrid
+      ? {
+          featuredRow: [] as CaseView[],
+          catalog: splitCasesForCatalog({ cases, bannersEnabled: false }).catalog,
+        }
+      : splitCasesForCatalog({ cases, bannersEnabled });
 
-  const showBanners = !flatOrder && bannersEnabled && featuredRow.length > 0;
+  const showBanners = !flatOrder && !equalGrid && bannersEnabled && featuredRow.length > 0;
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("cases-catalog", className)}>
       {showBanners ? (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="cases-catalog__featured">
           {featuredRow.map((item) => (
             <CaseCard
               key={item.id}
@@ -207,19 +287,15 @@ export function CasesCatalogScreen({
         </div>
       ) : null}
 
-      <section>
-        {showBanners ? (
-          <h2 className="mb-2 text-[13px] font-medium tracking-tight text-white/55">
-            Каталог
-          </h2>
-        ) : null}
+      <section className="cases-catalog__section">
+        {showBanners ? <h2 className="cases-catalog__heading">Каталог</h2> : null}
         {catalog.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-surface/60 py-12 text-muted">
+          <div className="cases-catalog__empty">
             <Gift className="h-7 w-7 opacity-35" />
-            <p className="text-sm">Пока нет кейсов</p>
+            <p>Пока нет кейсов</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="cases-catalog__grid">
             {catalog.map((item) => (
               <CaseCard
                 key={item.id}

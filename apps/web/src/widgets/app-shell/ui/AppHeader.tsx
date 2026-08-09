@@ -15,30 +15,27 @@ export function AppHeader() {
   const haptics = useTelegramHaptics();
 
   return (
-    <header className="app-header absolute left-0 right-0 top-0 z-50 bg-background pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)] hairline-bottom">
-      <div className="app-container relative flex h-14 items-center justify-between gap-3">
+    <header className="app-header absolute left-0 right-0 top-0 z-50 pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] pt-[var(--app-safe-top)]">
+      <div className="app-container relative flex h-[3.75rem] items-center justify-between gap-3">
         <Link
           href={APP_ROUTES.profile}
           aria-label="Профиль"
           onClick={() => haptics.impactOccurred("light")}
           className="app-control relative z-10 flex shrink-0 items-center rounded-full active:opacity-80"
         >
-          <UserAvatar user={user} size={34} />
+          <UserAvatar user={user} size={36} className="app-header__avatar-img ring-0" />
         </Link>
 
-        <div
-          className="pointer-events-none absolute inset-x-0 flex items-center justify-center"
-          aria-live="polite"
-        >
-          <BalanceGainFx />
-        </div>
+        <div className="app-header__balance relative z-10 min-w-0">
+          <div className="app-header__gain" aria-live="polite">
+            <BalanceGainFx />
+          </div>
 
-        <div className="relative z-10 flex min-w-0 items-center overflow-visible">
           <div className="balance-pill">
             <div className="balance-pill__amount">
-              <TonIcon className="balance-pill__ton h-6 w-6 shrink-0" />
+              <TonIcon variant="brand" className="balance-pill__ton h-4 w-4 shrink-0" />
               <span className="balance-pill__value truncate">
-                {loading ? "…" : user ? `${formatTON(user.betting_balance)}` : "—"}
+                {loading ? "…" : user ? formatTON(user.betting_balance) : "—"}
               </span>
             </div>
 

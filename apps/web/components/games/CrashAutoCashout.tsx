@@ -55,7 +55,7 @@ export function CrashAutoCashout({
         <ModalOverlay onClose={() => setOpen(false)} analyticsModalId="crash_auto_cashout">
           {(close) => (
             <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
-              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+              <div className="sheet-handle" />
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[15px] font-semibold text-foreground">Автовывод</p>

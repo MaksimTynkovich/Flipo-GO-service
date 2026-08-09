@@ -24,9 +24,7 @@ import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimePr
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Gift, ArrowUpRight } from "lucide-react";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
-import { giftWagerValueNanoton } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
-import { formatWagerBlockedMessage, formatWagerIncompleteError } from "@/lib/wager-messages";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { Button } from "@/components/ui/button";
 import { GIFT_DEPOSIT_ENABLED, MARKET_ENABLED } from "@/src/shared/config/features";
@@ -113,22 +111,11 @@ export function InventorySection() {
     setWithdrawing(true);
     setListError(null);
     try {
-      const remaining = Math.max(0, user?.wager_remaining_nanoton ?? 0);
-      if (remaining > 0) {
-        const giftValue = giftWagerValueNanoton(selected);
-        const progress = user?.wager_progress_nanoton ?? 0;
-        if (progress < giftValue) {
-          setListError(
-            formatWagerBlockedMessage(user ?? {}, { giftValueNanoton: giftValue }),
-          );
-          return;
-        }
-      }
       const result = await withdrawGiftItem(selected.id);
       try {
         setUser(await getMe());
       } catch {
-        // best-effort wager refresh
+        // best-effort session refresh
       }
       markModalCompleted("inventory_gift_detail");
       if (result.pending) {
@@ -142,11 +129,7 @@ export function InventorySection() {
         load();
       }
     } catch (e) {
-      setListError(
-        formatWagerIncompleteError(e, user, {
-          giftValueNanoton: giftWagerValueNanoton(selected),
-        }) || formatUserError(e, "Не удалось вывести подарок"),
-      );
+      setListError(formatUserError(e, "Не удалось вывести подарок"));
     } finally {
       setWithdrawing(false);
     }
@@ -176,7 +159,7 @@ export function InventorySection() {
           {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}
         </div>
 
-        <div className="grid grid-cols-3 gap-x-2.5 gap-y-3.5">
+        <div className="grid grid-cols-3 gap-x-3 gap-y-4">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => <InventoryGiftCardSkeleton key={i} />)
             : visibleItems.map((item) => {
@@ -194,7 +177,7 @@ export function InventorySection() {
 
         {!loading && visibleItems.length === 0 && (
           <div className="panel flex flex-col items-center gap-3 py-8 text-center">
-            <div className="icon-box h-11 w-11 rounded-xl">
+            <div className="icon-box h-12 w-12 rounded-2xl">
               <Gift className="h-5 w-5" />
             </div>
             <div className="space-y-1">

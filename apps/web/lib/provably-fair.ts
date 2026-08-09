@@ -1,4 +1,5 @@
 import type { RoundProof } from "@/lib/api";
+import { ROULETTE_SEGMENTS, numberColor } from "@/lib/roulette";
 
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -11,14 +12,6 @@ async function sha256Hex(input: string): Promise<string> {
 function hexToInt(hexStr: string): number {
   const parsed = Number.parseInt(hexStr, 16);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-const WHEEL_ORDER = [0, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14];
-
-function rouletteColor(n: number): string {
-  if (n === 0) return "green";
-  if (n >= 1 && n <= 7) return "red";
-  return "black";
 }
 
 async function crashPointFromHash(hash: string): Promise<number> {
@@ -36,8 +29,8 @@ export async function verifyRoundProof(proof: RoundProof): Promise<boolean> {
 
   if (proof.game_type === "roulette") {
     const h = await sha256Hex(`${proof.server_seed}:${proof.nonce}`);
-    const idx = hexToInt(h.slice(0, 8)) % 15;
-    const color = rouletteColor(WHEEL_ORDER[idx]);
+    const idx = hexToInt(h.slice(0, 8)) % ROULETTE_SEGMENTS;
+    const color = numberColor(idx);
     return color === proof.result;
   }
 

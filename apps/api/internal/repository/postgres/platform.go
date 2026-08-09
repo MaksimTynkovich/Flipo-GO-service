@@ -206,11 +206,9 @@ func (r *PlatformRepo) GetWithdrawalSettings(ctx context.Context) (*domain.Platf
 	err := r.db.WithContext(ctx).First(&settings, "id = ?", 1).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		defaults := domain.PlatformWithdrawalSettings{
-			ID:                  1,
-			Enabled:             false,
-			DepositWagerEnabled: true,
-			CrashWagerTarget:    domain.DefaultCrashWagerTarget,
-			UpdatedAt:           time.Now().UTC(),
+			ID:        1,
+			Enabled:   false,
+			UpdatedAt: time.Now().UTC(),
 		}
 		if createErr := r.db.WithContext(ctx).Create(&defaults).Error; createErr != nil {
 			return nil, createErr
@@ -223,7 +221,6 @@ func (r *PlatformRepo) GetWithdrawalSettings(ctx context.Context) (*domain.Platf
 func (r *PlatformRepo) UpdateWithdrawalSettings(ctx context.Context, settings *domain.PlatformWithdrawalSettings) error {
 	settings.ID = 1
 	settings.UpdatedAt = time.Now().UTC()
-	settings.CrashWagerTarget = domain.NormalizeCrashWagerTarget(settings.CrashWagerTarget)
 	return r.db.WithContext(ctx).Save(settings).Error
 }
 
@@ -278,11 +275,9 @@ func (r *PlatformRepo) UpdateYieldSettings(ctx context.Context, settings *domain
 
 func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	defaults := []domain.GameConfig{
-		{GameType: domain.GameRoulette, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 50_000_000_000, MaxPayoutNanoton: 700_000_000_000, HouseEdgeBps: 667, RTPBps: 9333},
+		{GameType: domain.GameRoulette, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 50_000_000_000, MaxPayoutNanoton: 2_500_000_000_000, HouseEdgeBps: 400, RTPBps: 9600},
 		{GameType: domain.GameCrash, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 30_000_000_000, MaxPayoutNanoton: 500_000_000_000, HouseEdgeBps: 100, RTPBps: 9900},
 		{GameType: domain.GamePvP, Enabled: true, MinBetNanoton: 100_000_000, MaxBetNanoton: 20_000_000_000, MaxPayoutNanoton: 400_000_000_000, HouseEdgeBps: 0, RTPBps: 9500, PlatformFeeBps: 500},
-		// Wheel has no bets; limits are placeholders so the row fits game_configs.
-		{GameType: domain.GameWheel, Enabled: true, MinBetNanoton: 0, MaxBetNanoton: 0, MaxPayoutNanoton: 0, HouseEdgeBps: 0, RTPBps: 10000},
 	}
 	for i := range defaults {
 		var existing domain.GameConfig
@@ -335,11 +330,9 @@ func (r *PlatformRepo) EnsureDefaults(ctx context.Context) error {
 	var withdrawalHold domain.PlatformWithdrawalSettings
 	if err := r.db.WithContext(ctx).First(&withdrawalHold, "id = ?", 1).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 		if err := r.db.WithContext(ctx).Create(&domain.PlatformWithdrawalSettings{
-			ID:                  1,
-			Enabled:             false,
-			DepositWagerEnabled: true,
-			CrashWagerTarget:    domain.DefaultCrashWagerTarget,
-			UpdatedAt:           time.Now().UTC(),
+			ID:        1,
+			Enabled:   false,
+			UpdatedAt: time.Now().UTC(),
 		}).Error; err != nil {
 			return err
 		}

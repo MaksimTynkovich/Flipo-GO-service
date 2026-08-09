@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { Coins, Megaphone, Users, type LucideIcon } from "lucide-react";
+import { ChevronRight, Send } from "lucide-react";
 import { promoChannelMention, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { openTelegramLink } from "@/src/shared/lib/twa";
@@ -15,12 +16,12 @@ type PromoSlide = {
   title: string;
   subtitle: string;
   cta: string;
-  icon: LucideIcon;
   href?: string;
   external?: boolean;
+  coverSrc: string;
 };
 
-const AUTO_MS = 4500;
+const AUTO_MS = 4000;
 
 function buildSlides(): PromoSlide[] {
   const slides: PromoSlide[] = [];
@@ -36,9 +37,9 @@ function buildSlides(): PromoSlide[] {
         ? `Новости и промо в ${channelLabel}`
         : "Новости, розыгрыши и промокоды",
       cta: "Подписаться",
-      icon: Megaphone,
       href: channelUrl,
       external: true,
+      coverSrc: "/games/covers/promo-channel.webp",
     });
   }
 
@@ -47,19 +48,19 @@ function buildSlides(): PromoSlide[] {
       id: "staking",
       tone: "staking",
       title: "Стейкинг подарков",
-      subtitle: "До 48% APR — пассивный доход без лишних действий",
+      subtitle: "До 48% APR — пассивный доход",
       cta: "К стейкингу",
-      icon: Coins,
       href: APP_ROUTES.profileStaking,
+      coverSrc: "/games/covers/promo-staking.webp",
     },
     {
       id: "referrals",
       tone: "referrals",
-      title: "Приглашай друзей",
-      subtitle: "Получай долю от их стейкинга каждый день",
-      cta: "Рефералы",
-      icon: Users,
+      title: "Приглашайте друзей",
+      subtitle: "Доля от их стейкинга каждый день",
+      cta: "Пригласить",
       href: APP_ROUTES.profileReferrals,
+      coverSrc: "/games/covers/promo-referrals.webp",
     },
   );
 
@@ -123,19 +124,33 @@ export function GamesPromoBanner() {
         className="games-promo__track"
         style={{ transform: `translate3d(-${index * 100}%, 0, 0)` }}
       >
-        {slides.map((slide) => {
-          const Icon = slide.icon;
+        {slides.map((slide, slideIndex) => {
           const body = (
             <>
-              <div className="games-promo__glow" aria-hidden />
-              <div className="games-promo__icon">
-                <Icon className="h-5 w-5" strokeWidth={2} />
+              <div className="games-promo__cover" aria-hidden>
+                <Image
+                  src={slide.coverSrc}
+                  alt=""
+                  fill
+                  sizes="(max-width: 480px) 100vw, 420px"
+                  draggable={false}
+                  priority={slideIndex === 0}
+                />
+                <div className="games-promo__cover-fade" />
               </div>
               <div className="games-promo__copy">
                 <p className="games-promo__title">{slide.title}</p>
                 <p className="games-promo__subtitle">{slide.subtitle}</p>
+                <span className="games-promo__cta">
+                  {slide.tone === "channel" ? (
+                    <Send className="games-promo__cta-icon" strokeWidth={2.4} aria-hidden />
+                  ) : null}
+                  {slide.cta}
+                  {slide.tone !== "channel" ? (
+                    <ChevronRight className="games-promo__cta-icon" strokeWidth={2.75} aria-hidden />
+                  ) : null}
+                </span>
               </div>
-              <span className="games-promo__cta">{slide.cta}</span>
             </>
           );
 

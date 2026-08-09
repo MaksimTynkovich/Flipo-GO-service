@@ -19,6 +19,20 @@ function adminToView(c: AdminCase): CaseView {
     require_channel: c.require_channel,
     required_name_tag: c.required_name_tag,
     require_share: c.require_share,
+    loot: (c.loot ?? []).map((entry, index) => ({
+      id: entry.id || `${c.id}-loot-${index}`,
+      prize_type: entry.prize_type,
+      collection_slug: entry.collection_slug,
+      model_name: entry.model_name,
+      backdrop: entry.backdrop,
+      display_name: entry.display_name,
+      image_url: entry.image_url ?? "",
+      rarity_label: entry.rarity_label,
+      tile_background_color: entry.tile_background_color,
+      sort_order: entry.sort_order,
+      floor_price_nanoton: entry.floor_price_nanoton,
+      amount_nanoton: entry.amount_nanoton,
+    })),
   };
 }
 

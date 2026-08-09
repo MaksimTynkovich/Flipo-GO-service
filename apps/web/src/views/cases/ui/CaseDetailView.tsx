@@ -8,7 +8,7 @@ import { CaseDetailPlayerPreview } from "@/components/cases/CaseDetailPlayerPrev
 import { CaseQuestSheet, type CaseQuestStep } from "@/components/cases/CaseQuestSheet";
 import { CaseWinModal } from "@/components/cases/CaseWinModal";
 import { formatCasePrice } from "@/components/cases/case-ui";
-import { WheelChannelSheet } from "@/components/games/WheelChannelSheet";
+import { ChannelSubscribeSheet } from "@/components/ui/ChannelSubscribeSheet";
 import {
   ApiRequestError,
   confirmCaseShare,
@@ -335,7 +335,7 @@ export function CaseDetailView() {
       const fresh = await getCase(idOrSlug);
       setCaseItem(fresh);
       if (fresh.required_name_tag?.trim() && fresh.name_tag_ok !== true) {
-        notifyError("Тег в имени не найден — обновите имя в Telegram и зайдите снова");
+        notifyError("Тег в имени не найден — обновите имя в Telegram и откройте приложение снова");
         setQuestStep("name");
         return;
       }
@@ -502,7 +502,7 @@ export function CaseDetailView() {
       ) : null}
 
       {channelSheetOpen ? (
-        <WheelChannelSheet
+        <ChannelSubscribeSheet
           channel={channel}
           channelUrl={channelUrl}
           description="Чтобы открыть этот кейс, подпишитесь на наш канал"

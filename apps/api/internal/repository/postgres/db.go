@@ -75,10 +75,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.ReferralPerk{},
 		&domain.ReferralMilestone{},
 		&domain.GameOutcomeOverride{},
-		&domain.WheelSegment{},
-		&domain.UserWheelState{},
-		&domain.WheelSpin{},
-		&domain.WheelSpinOverride{},
 		&domain.Case{},
 		&domain.CaseLootEntry{},
 		&domain.CaseOpen{},
@@ -92,6 +88,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.CaseLiveFeedSettings{},
 		&domain.PaymentIntent{},
 		&domain.GiftWithdrawal{},
+		&domain.DailyQuest{},
+		&domain.DailyQuestBoardSettings{},
+		&domain.DailyQuestClaim{},
+		&domain.UserCaseEntitlement{},
 	); err != nil {
 		return err
 	}
@@ -114,9 +114,6 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 	if err := migrateReferralV2(db); err != nil {
-		return err
-	}
-	if err := migrateDailyWheel(db); err != nil {
 		return err
 	}
 	if err := migrateInventoryGiftHistory(db); err != nil {

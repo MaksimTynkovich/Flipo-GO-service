@@ -6,11 +6,9 @@ import { Button } from "@/components/ui/button";
 import { formatTON, InventoryItem, MarketListing } from "@/lib/api";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { formatCollectionSlug, giftBuyPriceNanoton, giftImageUrl, giftWagerValueNanoton, traitValue } from "@/lib/gifts";
+import { formatCollectionSlug, giftBuyPriceNanoton, giftImageUrl, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
-import { useAuth } from "@/components/providers/AuthProvider";
-import { formatWagerBlockedMessage } from "@/lib/wager-messages";
 
 type Props = {
   item: InventoryItem;
@@ -44,7 +42,6 @@ export function InventoryGiftDetailSheet({
   onWithdraw,
   onCancelListing,
 }: Props) {
-  const { user } = useAuth();
   const [imgError, setImgError] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showWithdrawHint, setShowWithdrawHint] = useState(false);
@@ -52,11 +49,6 @@ export function InventoryGiftDetailSheet({
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
   const buyPrice = giftBuyPriceNanoton(item);
   const displayPrice = marketListing?.price_nanoton ?? buyPrice;
-  const giftValue = giftWagerValueNanoton(item);
-  const wagerRemaining = Math.max(0, user?.wager_remaining_nanoton ?? 0);
-  const wagerProgress = user?.wager_progress_nanoton ?? 0;
-  const giftWithdrawLocked =
-    item.status === "available" && wagerRemaining > 0 && wagerProgress < giftValue;
 
   useEffect(() => {
     setImgError(false);
@@ -84,7 +76,7 @@ export function InventoryGiftDetailSheet({
         className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-full min-h-0 flex-col overflow-hidden"
       >
         <div className="shrink-0 px-4 pt-2">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+          <div className="sheet-handle" />
 
           <div className="relative flex items-center justify-center pb-2">
             <p className="text-[15px] font-semibold text-foreground">Подарок</p>
@@ -139,12 +131,6 @@ export function InventoryGiftDetailSheet({
             <TraitRow label="Узор" value={traitValue(item.backdrop)} />
             <TraitRow label="Символ" value={traitValue(item.symbol)} />
           </div>
-
-          {!listError && giftWithdrawLocked && user && (
-            <p className="mb-3 text-center text-xs leading-relaxed text-muted">
-              {formatWagerBlockedMessage(user, { giftValueNanoton: giftValue })}
-            </p>
-          )}
         </div>
 
         <div className="relative shrink-0 border-t border-[var(--border)] px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">

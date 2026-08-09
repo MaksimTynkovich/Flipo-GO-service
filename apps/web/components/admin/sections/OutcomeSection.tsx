@@ -17,9 +17,10 @@ type GameType = "roulette" | "crash" | "pvp";
 type Mode = "force" | "bias";
 
 const ROULETTE_COLORS = [
-  { value: "red", label: "Красное" },
-  { value: "black", label: "Чёрное" },
-  { value: "green", label: "Зелёное" },
+  { value: "blue", label: "Синее ×2" },
+  { value: "red", label: "Красное ×2" },
+  { value: "green", label: "Зелёное ×5" },
+  { value: "yellow", label: "Жёлтое ×50" },
 ];
 
 export default function OutcomeSection() {
@@ -166,7 +167,7 @@ export default function OutcomeSection() {
                   </select>
                 </AdminField>
                 <AdminField label="Число (необязательно)">
-                  <input className="input-field" type="number" min="0" max="14" value={rouletteNumber} onChange={(e) => setRouletteNumber(e.target.value)} placeholder="любое" />
+                  <input className="input-field" type="number" min="0" max="49" value={rouletteNumber} onChange={(e) => setRouletteNumber(e.target.value)} placeholder="любое" />
                 </AdminField>
               </div>
             )}

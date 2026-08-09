@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProofModal } from "@/components/provably-fair/ProofModal";
-import { RouletteColorBetButton } from "@/components/games/RouletteColorBetButton";
 import { RouletteHistory } from "@/components/games/RouletteHistory";
 import { RouletteRoundBets } from "@/components/games/RouletteRoundBets";
 import { BetFundingControl } from "@/components/games/BetFundingControl";
@@ -22,12 +21,36 @@ import {
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
 import { formatGameBetError, roulettePhaseBetMessage } from "@/lib/game-errors";
-import { numberColor, RESULT_DISPLAY_MS, RouletteRoundState } from "@/lib/roulette";
+import {
+  numberColor,
+  RESULT_DISPLAY_MS,
+  RouletteColor,
+  RouletteRoundState,
+} from "@/lib/roulette";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
+
+function rouletteStateEqual(
+  a: RouletteRoundState | null,
+  b: RouletteRoundState | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.round_id === b.round_id &&
+    a.phase === b.phase &&
+    a.ends_at === b.ends_at &&
+    a.spin_ends_at === b.spin_ends_at &&
+    a.result_number === b.result_number &&
+    a.result === b.result &&
+    a.result_index === b.result_index &&
+    a.round_number === b.round_number &&
+    a.server_seed_hash === b.server_seed_hash
+  );
+}
 
 export default function RoulettePage() {
   return (
@@ -74,23 +97,36 @@ function RoulettePageContent() {
         .then((s) => setState(s as RouletteRoundState))
         .catch(() => {});
     };
+    const resync = () => {
+      refreshState();
+      loadRoundBets();
+    };
 
-    refreshState();
+    resync();
     loadHistory();
-    loadRoundBets();
     const disconnect = connectGameWS(
       "roulette",
       (msg) => {
-        if (msg.event === "tick") setState(msg.payload as RouletteRoundState);
-        if (msg.event === "bets") setRoundBets(msg.payload as RouletteRoundBetsData);
+        if (msg.event === "tick") {
+          const next = msg.payload as RouletteRoundState;
+          setState((prev) => (rouletteStateEqual(prev, next) ? prev : next));
+        }
+        if (msg.event === "bets") {
+          const payload = msg.payload as RouletteRoundBetsData | null;
+          if (payload && typeof payload === "object") {
+            setRoundBets(payload);
+          }
+        }
       },
-      { onOpen: refreshState },
+      { onOpen: resync },
     );
     return disconnect;
   }, [loadHistory, loadRoundBets]);
 
-  // HTTP fallback when WS drops mid-round. Spin/result/next-betting only arrive on WS
-  // ticks — without polling after each deadline the UI freezes until a full refresh.
+  useEffect(() => {
+    if (state?.round_id) loadRoundBets();
+  }, [state?.round_id, loadRoundBets]);
+
   useEffect(() => {
     if (!state?.phase) return;
 
@@ -101,7 +137,9 @@ function RoulettePageContent() {
     const poll = () => {
       getRouletteState()
         .then((s) => {
-          if (!cancelled) setState(s as RouletteRoundState);
+          if (cancelled) return;
+          const next = s as RouletteRoundState;
+          setState((prev) => (rouletteStateEqual(prev, next) ? prev : next));
         })
         .catch(() => {});
     };
@@ -128,7 +166,6 @@ function RoulettePageContent() {
       if (!Number.isFinite(endsAtMs)) return;
       armAfter(endsAtMs - Date.now(), 1000);
     } else if (state.phase === "result") {
-      // Result state has no ends_at; engine sleeps RESULT_DISPLAY then opens betting.
       armAfter(RESULT_DISPLAY_MS - 500, 1000);
     } else {
       return;
@@ -149,30 +186,6 @@ function RoulettePageContent() {
     if (!user?.id) return [];
     return (roundBets?.bets ?? []).filter((bet) => bet.user_id === user.id);
   }, [roundBets?.bets, user?.id]);
-
-  const myColors = useMemo(() => {
-    const set = new Set<"red" | "green" | "black">();
-    for (const bet of myBets) {
-      if (bet.color === "red" || bet.color === "green" || bet.color === "black") {
-        set.add(bet.color);
-      }
-    }
-    return set;
-  }, [myBets]);
-
-  const myStakeByColor = useMemo(() => {
-    const map: Record<"red" | "green" | "black", number> = {
-      red: 0,
-      green: 0,
-      black: 0,
-    };
-    for (const bet of myBets) {
-      if (bet.color === "red" || bet.color === "green" || bet.color === "black") {
-        map[bet.color] += bet.amount_nanoton;
-      }
-    }
-    return map;
-  }, [myBets]);
 
   useEffect(() => {
     const phase = state?.phase ?? null;
@@ -203,87 +216,113 @@ function RoulettePageContent() {
 
   const canBet = acceptBets && state?.phase === "betting" && !betting;
   const canEditBet = !betting;
-  const roundTotals = roundBets?.totals ?? { red: 0, green: 0, black: 0 };
 
-  async function bet(color: string) {
-    if (!acceptBets) {
-      showToast({
-        variant: "error",
-        title: "Ставки временно не принимаются",
-      });
-      haptics.notificationOccurred("error");
-      return;
-    }
-    if (!canBet) {
-      showToast({
-        variant: "error",
-        title: roulettePhaseBetMessage(state?.phase),
-      });
-      haptics.notificationOccurred("error");
-      return;
-    }
-
-    const giftIds = selectedGiftIds.filter((id) => !excludedGiftIds.includes(id));
-    const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
-
-    if (nanotons <= 0 && giftIds.length === 0) {
-      showToast({ variant: "error", title: "Укажите сумму TON или выберите подарок." });
-      haptics.notificationOccurred("error");
-      return;
-    }
-    if (nanotons > 0 && user && user.betting_balance < nanotons) {
-      showToast({ variant: "error", title: "Недостаточно средств на балансе." });
-      haptics.notificationOccurred("error");
-      return;
-    }
-
-    setBetting(true);
-    betAmountInput.complete();
-    try {
-      if (nanotons > 0) {
-        await placeRouletteBet(color, crypto.randomUUID(), {
-          mode: "balance",
-          amountNanoton: nanotons,
+  const bet = useCallback(
+    async (color: RouletteColor) => {
+      if (!acceptBets) {
+        showToast({
+          variant: "error",
+          title: "Ставки временно не принимаются",
         });
+        haptics.notificationOccurred("error");
+        return;
       }
-      for (const giftId of giftIds) {
-        await placeRouletteBet(color, crypto.randomUUID(), {
-          mode: "gift",
-          inventoryItemId: giftId,
+      if (!(acceptBets && state?.phase === "betting" && !betting)) {
+        showToast({
+          variant: "error",
+          title: roulettePhaseBetMessage(state?.phase),
         });
+        haptics.notificationOccurred("error");
+        return;
       }
-      if (giftIds.length > 0) {
-        setSelectedGiftIds([]);
-        notifyBettableGiftsChanged();
+
+      const giftIds = selectedGiftIds.filter((id) => !excludedGiftIds.includes(id));
+      const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
+
+      if (nanotons <= 0 && giftIds.length === 0) {
+        showToast({ variant: "error", title: "Укажите сумму TON или выберите подарок." });
+        haptics.notificationOccurred("error");
+        return;
       }
-      haptics.notificationOccurred("success");
-      loadRoundBets();
-    } catch (e) {
-      showToast({
-        variant: "error",
-        title: formatGameBetError(e),
-      });
-      haptics.notificationOccurred("error");
-    } finally {
-      setBetting(false);
-    }
-  }
+      if (nanotons > 0 && user && user.betting_balance < nanotons) {
+        showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+        haptics.notificationOccurred("error");
+        return;
+      }
+
+      setBetting(true);
+      betAmountInput.complete();
+      try {
+        if (nanotons > 0) {
+          await placeRouletteBet(color, crypto.randomUUID(), {
+            mode: "balance",
+            amountNanoton: nanotons,
+          });
+        }
+        for (const giftId of giftIds) {
+          await placeRouletteBet(color, crypto.randomUUID(), {
+            mode: "gift",
+            inventoryItemId: giftId,
+          });
+        }
+        if (giftIds.length > 0) {
+          setSelectedGiftIds([]);
+          notifyBettableGiftsChanged();
+        }
+        haptics.notificationOccurred("success");
+        loadRoundBets();
+      } catch (e) {
+        showToast({
+          variant: "error",
+          title: formatGameBetError(e),
+        });
+        haptics.notificationOccurred("error");
+      } finally {
+        setBetting(false);
+      }
+    },
+    [
+      acceptBets,
+      amountTon,
+      betAmountInput,
+      betting,
+      excludedGiftIds,
+      haptics,
+      loadRoundBets,
+      selectedGiftIds,
+      showToast,
+      state?.phase,
+      user,
+    ],
+  );
 
   return (
     <PageShell flush>
       <div className="roulette-page flex flex-col gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="roulette-page__aurora" aria-hidden>
-          <span className="roulette-page__blob roulette-page__blob--a" />
-          <span className="roulette-page__blob roulette-page__blob--b" />
-          <span className="roulette-page__blob roulette-page__blob--c" />
-        </div>
-
         <RouletteWheel state={state} />
 
         <RouletteHistory
           history={history}
           onSelectRound={(entry) => entry.round_id && setProofRoundId(entry.round_id)}
         />
+
+        {(state?.round_number || state?.server_seed_hash) && (
+          <div className="roulette-meta">
+            <span>
+              {state.round_number != null ? `Раунд #${state.round_number}` : null}
+            </span>
+            {state.server_seed_hash ? (
+              <button
+                type="button"
+                className="roulette-meta__hash transition hover:text-foreground/70 active:opacity-70"
+                title="Проверить честность"
+                onClick={() => state.round_id && setProofRoundId(state.round_id)}
+              >
+                Hash: {state.server_seed_hash.slice(0, 4)}…{state.server_seed_hash.slice(-4)}
+              </button>
+            ) : null}
+          </div>
+        )}
 
         <div className="roulette-controls panel space-y-3 !rounded-[1.35rem] !p-3.5">
           <BetFundingControl
@@ -302,48 +341,18 @@ function RoulettePageContent() {
             })}
           />
 
-          <div className="grid grid-cols-3 gap-2">
-            <RouletteColorBetButton
-              color="red"
-              multiplier="×2"
-              roundTotal={roundTotals.red}
-              myStake={myStakeByColor.red}
-              disabled={!canBet}
-              active={myColors.has("red")}
-              onClick={() => bet("red")}
-            />
-            <RouletteColorBetButton
-              color="green"
-              multiplier="×14"
-              roundTotal={roundTotals.green}
-              myStake={myStakeByColor.green}
-              disabled={!canBet}
-              active={myColors.has("green")}
-              onClick={() => bet("green")}
-            />
-            <RouletteColorBetButton
-              color="black"
-              multiplier="×2"
-              roundTotal={roundTotals.black}
-              myStake={myStakeByColor.black}
-              disabled={!canBet}
-              active={myColors.has("black")}
-              onClick={() => bet("black")}
-            />
-          </div>
-
-          <div className="hairline-top pt-3">
-            <RouletteRoundBets
-              data={roundBets}
-              currentUserId={user?.id}
-              resultColor={
-                state?.phase === "result"
-                  ? state.result ||
-                    (state.result_number != null ? numberColor(state.result_number) : null)
-                  : null
-              }
-            />
-          </div>
+          <RouletteRoundBets
+            data={roundBets}
+            currentUserId={user?.id}
+            canBet={canBet}
+            onBetColor={bet}
+            resultColor={
+              state?.phase === "result"
+                ? state.result ||
+                  (state.result_number != null ? numberColor(state.result_number) : null)
+                : null
+            }
+          />
         </div>
       </div>
 

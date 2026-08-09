@@ -194,3 +194,8 @@ func JSONMessage(event string, payload interface{}) []byte {
 func (h *Hub) NotifyGameTick(gameType string, data []byte) {
 	h.Broadcast(gameType, JSONMessage("tick", json.RawMessage(data)))
 }
+
+// NotifyGameBets pushes round bet feeds to connected WS clients without a Redis hop.
+func (h *Hub) NotifyGameBets(gameType string, data []byte) {
+	h.Broadcast(gameType, JSONMessage("bets", json.RawMessage(data)))
+}

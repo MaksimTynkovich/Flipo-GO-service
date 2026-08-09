@@ -58,8 +58,8 @@ func (h *ReferralHandler) ShareEvent(c *gin.Context) {
 		return
 	}
 	source := strings.ToLower(strings.TrimSpace(req.Source))
-	if source != "" && source != "referral" && source != "wheel" {
-		respondBadRequest(c, nil, "source должен быть referral или wheel", "invalid_source")
+	if source != "" && source != "referral" {
+		respondBadRequest(c, nil, "source должен быть referral", "invalid_source")
 		return
 	}
 
@@ -77,11 +77,7 @@ func (h *ReferralHandler) ShareEvent(c *gin.Context) {
 			FirstName:  user.FirstName,
 			LastName:   user.LastName,
 		}
-		if source == "wheel" {
-			h.adminNotifier.NotifyWheelShare(c.Request.Context(), actor, action)
-		} else {
-			h.adminNotifier.NotifyReferralShare(c.Request.Context(), actor, action)
-		}
+		h.adminNotifier.NotifyReferralShare(c.Request.Context(), actor, action)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

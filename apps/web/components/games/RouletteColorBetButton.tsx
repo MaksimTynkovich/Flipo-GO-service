@@ -2,18 +2,20 @@
 
 import { formatTON } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { ROULETTE_COLOR_STYLES, rouletteFillStyle } from "@/lib/roulette";
+import {
+  ROULETTE_COLOR_STYLES,
+  RouletteColor,
+  rouletteFillStyle,
+} from "@/lib/roulette";
 import { cn } from "@/lib/utils";
 import { trackDisabledClick } from "@/lib/analytics";
 
 type Props = {
-  color: "red" | "green" | "black";
+  color: RouletteColor;
   multiplier: string;
   roundTotal: number;
-  /** Current user's stake on this color in the round. */
   myStake?: number;
   disabled?: boolean;
-  /** User already has a stake on this color in the round. */
   active?: boolean;
   onClick: () => void;
 };
@@ -49,7 +51,7 @@ export function RouletteColorBetButton({
       style={rouletteFillStyle(color)}
       className={cn(
         "roulette-bet-btn app-control transition-[filter,transform,opacity] duration-200",
-        color === "black" && "ring-1 ring-inset ring-white/10",
+        (color === "green" || color === "yellow") && "ring-1 ring-inset ring-white/10",
         active && "roulette-bet-btn--active",
         disabled ? "cursor-default saturate-[0.55] brightness-[0.72]" : "hover:brightness-110",
       )}

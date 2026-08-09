@@ -3,26 +3,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   alignRotationToIndex,
-  colorLabel,
   easeSpinRoulette,
+  indexAtPointer,
   isLandingPause,
   jitterForRound,
   numberColor,
   ROULETTE_SEGMENTS,
+  RouletteColor,
   RouletteRoundState,
   resolveWheelIndex,
   ROULETTE_WHEEL_COLORS,
+  rouletteMultiplier,
   SEGMENT_ANGLE,
   SPIN_DURATION_MS,
   spinTargetRotation,
-  WHEEL_ORDER,
+  WHEEL_COLORS,
 } from "@/lib/roulette";
 import { cn } from "@/lib/utils";
 
-const SEGMENT_COLORS: Record<"green" | "red" | "black", string> = ROULETTE_WHEEL_COLORS;
 const CATCHUP_MS = 250;
-/** Keep result number visible in the hub at least this long. */
 const RESULT_HOLD_MS = 2500;
+
+function pointerColorForRotation(rotationDeg: number): string {
+  const idx = indexAtPointer(rotationDeg);
+  return ROULETTE_WHEEL_COLORS[WHEEL_COLORS[idx]];
+}
 
 function animateSpin(
   from: number,
@@ -88,16 +93,18 @@ type Props = {
 
 export function RouletteWheel({ state }: Props) {
   const wheelRef = useRef<HTMLDivElement>(null);
+  const pointerRef = useRef<HTMLSpanElement>(null);
   const lastSpinRound = useRef<string | null>(null);
   const roundJitter = useRef(0);
   const rotationRef = useRef(0);
+  const pointerColorRef = useRef(ROULETTE_WHEEL_COLORS.yellow);
   const cancelSpin = useRef<(() => void) | null>(null);
   const resultHoldTimer = useRef<number | null>(null);
   const landTimer = useRef<number | null>(null);
   const [spinLanded, setSpinLanded] = useState(false);
   const [heldResult, setHeldResult] = useState<{
     number: number;
-    color: "green" | "red" | "black";
+    color: RouletteColor;
   } | null>(null);
 
   const phase = state?.phase;
@@ -105,8 +112,6 @@ export function RouletteWheel({ state }: Props) {
   const countdown = Math.max(1, Math.ceil(rawCountdown));
   const awaitingStart = phase === "betting" && rawCountdown <= 0;
   const winIndex = state ? resolveWheelIndex(state) : undefined;
-  // Result number is already in spinning state — show it once the wheel has stopped,
-  // even if the `result` WS tick was missed / delayed.
   const landingDone =
     spinLanded ||
     (!!state && phase === "spinning" && isLandingPause(state) && state.result_number != null);
@@ -118,15 +123,27 @@ export function RouletteWheel({ state }: Props) {
     (phase === "result" || landingDone || isLandingPause(state) || showHeldResult);
   const resultColor = heldResult?.color
     ?? (state?.result_number != null ? numberColor(state.result_number) : null);
-  const displayResultNumber = heldResult?.number ?? state?.result_number ?? null;
+  const displayMult =
+    resultColor != null ? rouletteMultiplier(resultColor) : null;
 
-  const applyRotation = useCallback((value: number) => {
-    rotationRef.current = value;
-    const el = wheelRef.current;
-    if (el) {
-      el.style.transform = `rotate3d(0, 0, 1, ${value}deg)`;
-    }
+  const applyPointerColor = useCallback((hex: string) => {
+    if (pointerColorRef.current === hex) return;
+    pointerColorRef.current = hex;
+    const pin = pointerRef.current;
+    if (pin) pin.style.borderTopColor = hex;
   }, []);
+
+  const applyRotation = useCallback(
+    (value: number) => {
+      rotationRef.current = value;
+      const el = wheelRef.current;
+      if (el) {
+        el.style.transform = `rotate3d(0, 0, 1, ${value}deg)`;
+      }
+      applyPointerColor(pointerColorForRotation(value));
+    },
+    [applyPointerColor],
+  );
 
   const markLanded = useCallback(() => {
     setSpinLanded(true);
@@ -201,52 +218,34 @@ export function RouletteWheel({ state }: Props) {
         landTimer.current = null;
       }
       lastSpinRound.current = null;
-      roundJitter.current = 0;
       return;
     }
 
-    if (wheelIndex === undefined) return;
+    if (wheelIndex === undefined || !state.round_id) return;
 
     if (state.phase === "result") {
       cancelSpin.current?.();
       snapToIndex(wheelIndex, state.round_id);
-      setSpinLanded(true);
       return;
     }
 
     if (state.phase !== "spinning") return;
 
-    const spinEndRaw = state.spin_ends_at || state.ends_at;
-    const spinEndMs = spinEndRaw ? new Date(spinEndRaw).getTime() : NaN;
-    const remaining = Number.isNaN(spinEndMs)
-      ? SPIN_DURATION_MS
-      : Math.min(SPIN_DURATION_MS, Math.max(0, spinEndMs - Date.now()));
-
     if (lastSpinRound.current === state.round_id) {
+      if (isLandingPause(state)) {
+        snapToIndex(wheelIndex, state.round_id);
+        markLanded();
+      }
       return;
     }
-
     lastSpinRound.current = state.round_id;
-    setSpinLanded(false);
-    roundJitter.current = jitterForRound(state.round_id);
 
-    if (landTimer.current) window.clearTimeout(landTimer.current);
-    if (!Number.isNaN(spinEndMs)) {
-      landTimer.current = window.setTimeout(markLanded, Math.max(0, spinEndMs - Date.now()));
-    }
-
-    const fromMod = ((rotationRef.current % 360) + 360) % 360;
-    const target = spinTargetRotation(
-      rotationRef.current,
-      wheelIndex,
-      10,
-      roundJitter.current,
-    );
+    const jitter = jitterForRound(state.round_id);
+    roundJitter.current = jitter;
+    const from = rotationRef.current;
+    const target = spinTargetRotation(from, wheelIndex, 8, jitter);
     const progress = spinProgress(state);
-    const from =
-      progress > 0 && progress < 1
-        ? fromMod + (target - fromMod) * easeSpinRoulette(progress)
-        : fromMod;
+    const remaining = Math.round(SPIN_DURATION_MS * (1 - progress));
 
     if (remaining <= 0 || progress >= 1) {
       const diff = Math.abs(target - from);
@@ -264,121 +263,103 @@ export function RouletteWheel({ state }: Props) {
 
   const cx = 110;
   const cy = 110;
-  const rOuter = 100;
-  const rInner = 52;
+  // Tangential dashes along the ring (not radial spokes), with gaps between colors.
+  const r = 96;
+  const dashHalf = ((SEGMENT_ANGLE * Math.PI) / 180) * r * 0.34;
+  const stroke = 3;
+  const strokeWin = 3.8;
 
   return (
     <div
       className={cn(
-        "roulette-stage",
+        "roulette-stage roulette-stage--x50",
         phase === "betting" && "roulette-stage--betting",
         phase === "spinning" && "roulette-stage--spinning",
         phase === "result" && "roulette-stage--result",
         phase === "waiting" && "roulette-stage--waiting",
       )}
     >
-      <div className="roulette-stage__glow" aria-hidden />
-
-      <div className="roulette-wheel relative mx-auto aspect-square w-full max-w-[min(88vw,340px)]">
-        <div className="roulette-pointer" aria-hidden>
-          <span className="roulette-pointer__pin" />
+      <div className="roulette-wheel relative mx-auto aspect-square w-[min(86%,360px)]">
+        <div className="roulette-pointer roulette-pointer--x50" aria-hidden>
+          <span
+            ref={pointerRef}
+            className="roulette-pointer__pin"
+            style={{ borderTopColor: pointerColorRef.current }}
+          />
         </div>
 
-        <div className="roulette-wheel__rim">
-          <div className="roulette-wheel__inner">
-            <div
-              ref={wheelRef}
-              className="roulette-wheel__disk relative h-full w-full overflow-hidden rounded-full will-change-transform"
-              style={{
-                transform: "rotate3d(0, 0, 1, 0deg)",
-                backfaceVisibility: "hidden",
-              }}
-            >
-              <svg viewBox="0 0 220 220" className="h-full w-full">
-                {Array.from({ length: ROULETTE_SEGMENTS }).map((_, i) => {
-                  const num = WHEEL_ORDER[i];
-                  const color = numberColor(num);
-                  const startAngle = (i * SEGMENT_ANGLE - 90) * (Math.PI / 180);
-                  const endAngle = ((i + 1) * SEGMENT_ANGLE - 90) * (Math.PI / 180);
-                  const x1 = cx + rOuter * Math.cos(startAngle);
-                  const y1 = cy + rOuter * Math.sin(startAngle);
-                  const x2 = cx + rOuter * Math.cos(endAngle);
-                  const y2 = cy + rOuter * Math.sin(endAngle);
-                  const ix1 = cx + rInner * Math.cos(startAngle);
-                  const iy1 = cy + rInner * Math.sin(startAngle);
-                  const ix2 = cx + rInner * Math.cos(endAngle);
-                  const iy2 = cy + rInner * Math.sin(endAngle);
-                  const largeArc = SEGMENT_ANGLE > 180 ? 1 : 0;
+        <div
+          ref={wheelRef}
+          className="roulette-wheel__disk absolute inset-0 will-change-transform"
+          style={{
+            transform: "rotate3d(0, 0, 1, 0deg)",
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <svg viewBox="0 0 220 220" className="h-full w-full overflow-visible">
+            {Array.from({ length: ROULETTE_SEGMENTS }).map((_, i) => {
+              const color = WHEEL_COLORS[i];
+              const mid = ((i + 0.5) * SEGMENT_ANGLE - 90) * (Math.PI / 180);
+              const tx = -Math.sin(mid);
+              const ty = Math.cos(mid);
+              const mx = cx + r * Math.cos(mid);
+              const my = cy + r * Math.sin(mid);
+              const x1 = mx - tx * dashHalf;
+              const y1 = my - ty * dashHalf;
+              const x2 = mx + tx * dashHalf;
+              const y2 = my + ty * dashHalf;
+              const isWin = highlightWin && i === winIndex;
 
-                  const midAngle = ((i + 0.5) * SEGMENT_ANGLE - 90) * (Math.PI / 180);
-                  const tx = cx + 76 * Math.cos(midAngle);
-                  const ty = cy + 76 * Math.sin(midAngle);
-                  const textRotate = (i + 0.5) * SEGMENT_ANGLE;
-                  const isWin = highlightWin && i === winIndex;
-
-                  return (
-                    <g
-                      key={`${num}-${i}`}
-                      className={cn(
-                        "roulette-seg",
-                        highlightWin && !isWin && "roulette-seg--dim",
-                        isWin && "roulette-seg--win",
-                      )}
-                    >
-                      <path
-                        d={`M ${ix1} ${iy1} L ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${rInner} ${rInner} 0 ${largeArc} 0 ${ix1} ${iy1} Z`}
-                        fill={SEGMENT_COLORS[color]}
-                        stroke="var(--background)"
-                        strokeWidth={isWin ? 1.6 : 0.75}
-                      />
-                      <text
-                        x={tx}
-                        y={ty}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fill="rgba(255,255,255,0.95)"
-                        fontSize="11"
-                        fontWeight="700"
-                        fontFamily="system-ui, -apple-system, sans-serif"
-                        transform={`rotate(${textRotate}, ${tx}, ${ty})`}
-                      >
-                        {num}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-          </div>
+              return (
+                <line
+                  key={i}
+                  className={cn(
+                    "roulette-seg",
+                    highlightWin && !isWin && "roulette-seg--dim",
+                    isWin && "roulette-seg--win",
+                  )}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke={ROULETTE_WHEEL_COLORS[color]}
+                  strokeWidth={isWin ? strokeWin : stroke}
+                  strokeLinecap="round"
+                />
+              );
+            })}
+          </svg>
         </div>
 
         <div
           className={cn(
-            "roulette-hub pointer-events-none absolute left-1/2 top-1/2 z-20 flex aspect-square w-[44%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center",
+            "roulette-hub roulette-hub--minimal pointer-events-none absolute left-1/2 top-1/2 z-20 flex w-[56%] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center",
             phase === "betting" && countdown <= 3 && countdown > 0 && "roulette-hub--urgent",
             ((phase === "spinning" && !landingDone) || awaitingStart) && "roulette-hub--spinning",
             showResultHub && resultColor && `roulette-hub--${resultColor}`,
           )}
         >
-          <div className="roulette-hub__ring" aria-hidden />
           {phase === "betting" && !awaitingStart ? (
-            <>
-              <span className="roulette-hub__value tabular-nums">
+            <div
+              key={countdown}
+              className={cn(
+                "roulette-countdown",
+                countdown <= 3 && "roulette-countdown--urgent",
+              )}
+            >
+              <span className="roulette-countdown__value tabular-nums">
                 {countdown.toString().padStart(2, "0")}
               </span>
-              <span className="roulette-hub__label">Ставки</span>
-            </>
+            </div>
           ) : null}
           {(phase === "spinning" && !landingDone) || awaitingStart ? (
             <span className="roulette-hub__spin">Крутим</span>
           ) : null}
-          {showResultHub && displayResultNumber != null ? (
-            <>
-              <span className="roulette-hub__value tabular-nums">{displayResultNumber}</span>
-              <span className="roulette-hub__label">
-                {resultColor ? colorLabel(resultColor) : "Результат"}
-              </span>
-            </>
+          {showResultHub && displayMult != null ? (
+            <span className="roulette-hub__value tabular-nums">
+              <span className="roulette-hub__x">×</span>
+              {displayMult}
+            </span>
           ) : null}
           {phase === "waiting" && !showHeldResult && !awaitingStart ? (
             <span className="roulette-hub__idle">Скоро</span>

@@ -50,6 +50,7 @@ type Service struct {
 	inventory       domain.InventoryRepository
 	users           domain.UserRepository
 	balance         *balance.Service
+	entitlements    domain.DailyQuestRepository
 	valuator        *gifts.Valuator
 	bot             BotUserResolver
 	deposits        DepositSummer
@@ -101,6 +102,10 @@ func NewService(
 	}
 	s.liveSim = NewLiveSim(s)
 	return s
+}
+
+func (s *Service) SetEntitlements(repo domain.DailyQuestRepository) {
+	s.entitlements = repo
 }
 
 func (s *Service) SetValuator(v *gifts.Valuator)               { s.valuator = v }
@@ -377,7 +382,28 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 
 	source := domain.CaseOpenSourcePaid
 	price := c.PriceNanoton
+	var usedEntitlement *domain.UserCaseEntitlement
+	releaseEntitlement := func() {
+		if usedEntitlement != nil && s.entitlements != nil {
+			_ = s.entitlements.ReleaseEntitlement(ctx, usedEntitlement.ID)
+			usedEntitlement = nil
+		}
+	}
+
+	// Quest free-open entitlement takes priority over paid debit.
+	if s.entitlements != nil && c.Kind != domain.CaseKindPromo && c.Kind != domain.CaseKindDaily {
+		if ent, eErr := s.entitlements.ClaimEntitlementForOpen(ctx, userID, c.ID); eErr == nil && ent != nil {
+			usedEntitlement = ent
+			source = domain.CaseOpenSourceQuest
+			price = 0
+		} else if eErr != nil && !errors.Is(eErr, domain.ErrCaseEntitlementMissing) {
+			return nil, eErr
+		}
+	}
+
 	switch {
+	case usedEntitlement != nil:
+		// already set source/price above
 	case c.Kind == domain.CaseKindPromo:
 		source = domain.CaseOpenSourcePromo
 		price = 0
@@ -411,6 +437,7 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 		if cooldownClaimed {
 			_ = s.cases.ReleaseCaseCooldown(ctx, userID, c.ID)
 		}
+		releaseEntitlement()
 	}
 
 	if c.RequireChannel {
@@ -424,6 +451,9 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	}
 
 	poolKind := domain.CasePoolForKind(c.Kind)
+	if source == domain.CaseOpenSourceQuest {
+		poolKind = domain.CasePoolPromo
+	}
 	var pool domain.CasePoolSnapshot
 	var catalogSettings *domain.CaseCatalogSettings
 	if settings, err := s.cases.GetCatalogSettings(ctx); err == nil && settings != nil {
@@ -492,9 +522,6 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 				adminFunded = price
 			}
 			organicPrice = price - adminFunded
-		}
-		if s.users != nil {
-			_ = s.users.AddWagerProgress(ctx, userID, price)
 		}
 		// Only live (non-admin) spend tops up the paid/daily/promo pool.
 		if pool.Enabled && organicPrice > 0 {
@@ -756,7 +783,10 @@ func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]
 		return nil, err
 	}
 	if limit <= 0 {
-		limit = 6
+		limit = 24
+	}
+	if limit > 48 {
+		limit = 48
 	}
 	rows, err := s.cases.ListRecentOpens(ctx, limit)
 	if err != nil {
@@ -1155,12 +1185,15 @@ func (s *Service) AdminCaseOpenStats(ctx context.Context, since *time.Time) (*do
 type AdminCaseOpenDetailedView struct {
 	Today             AdminCaseOpenPeriodView      `json:"today"`
 	Last7Days         AdminCaseOpenPeriodView      `json:"last_7_days"`
+	Last30Days        AdminCaseOpenPeriodView      `json:"last_30_days"`
 	AllTime           AdminCaseOpenPeriodView      `json:"all_time"`
 	SourcesToday      AdminCaseOpenSourceBreakdown `json:"sources_today"`
 	SourcesAllTime    AdminCaseOpenSourceBreakdown `json:"sources_all_time"`
 	PrizeTypes7d      []AdminCaseOpenPrizeTypeView `json:"prize_types_7d"`
 	PrizeTypesAllTime []AdminCaseOpenPrizeTypeView `json:"prize_types_all_time"`
+	ByCaseToday       []AdminCaseOpenCaseView      `json:"by_case_today"`
 	ByCase7d          []AdminCaseOpenCaseView      `json:"by_case_7d"`
+	ByCase30d         []AdminCaseOpenCaseView      `json:"by_case_30d"`
 	ByCaseAllTime     []AdminCaseOpenCaseView      `json:"by_case_all_time"`
 	TopPrizes7d       []AdminCaseOpenPrizeHitView  `json:"top_prizes_7d"`
 	OpensByDay        []AdminCaseOpenDailyView     `json:"opens_by_day"`
@@ -1203,6 +1236,11 @@ type AdminCaseOpenCaseView struct {
 	CaseID            string `json:"case_id"`
 	Title             string `json:"title"`
 	Slug              string `json:"slug"`
+	ImageURL          string `json:"image_url,omitempty"`
+	Kind              string `json:"kind,omitempty"`
+	PriceNanoton      int64  `json:"price_nanoton"`
+	SortOrder         int    `json:"sort_order"`
+	Active            bool   `json:"active"`
 	Opens             int64  `json:"opens"`
 	SpentNanoton      int64  `json:"spent_nanoton"`
 	PrizeTotalNanoton int64  `json:"prize_total_nanoton"`
@@ -1231,6 +1269,7 @@ func (s *Service) AdminCaseOpenStatsDetailed(ctx context.Context) (*AdminCaseOpe
 	now := time.Now().UTC()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	since7d := today.AddDate(0, 0, -6)
+	since30d := today.AddDate(0, 0, -29)
 	since14d := today.AddDate(0, 0, -13)
 
 	todayStats, err := s.cases.CaseOpenPeriodStats(ctx, today)
@@ -1238,6 +1277,10 @@ func (s *Service) AdminCaseOpenStatsDetailed(ctx context.Context) (*AdminCaseOpe
 		return nil, err
 	}
 	weekStats, err := s.cases.CaseOpenPeriodStats(ctx, since7d)
+	if err != nil {
+		return nil, err
+	}
+	monthStats, err := s.cases.CaseOpenPeriodStats(ctx, since30d)
 	if err != nil {
 		return nil, err
 	}
@@ -1264,11 +1307,20 @@ func (s *Service) AdminCaseOpenStatsDetailed(ctx context.Context) (*AdminCaseOpe
 		return nil, err
 	}
 
-	byCase7d, err := s.cases.CaseOpenByCaseStats(ctx, since7d, 15)
+	// limit 0 = all cases with opens in the period (catalog overlay).
+	byCaseToday, err := s.cases.CaseOpenByCaseStats(ctx, today, 0)
 	if err != nil {
 		return nil, err
 	}
-	byCaseAll, err := s.cases.CaseOpenByCaseStats(ctx, time.Time{}, 15)
+	byCase7d, err := s.cases.CaseOpenByCaseStats(ctx, since7d, 0)
+	if err != nil {
+		return nil, err
+	}
+	byCase30d, err := s.cases.CaseOpenByCaseStats(ctx, since30d, 0)
+	if err != nil {
+		return nil, err
+	}
+	byCaseAll, err := s.cases.CaseOpenByCaseStats(ctx, time.Time{}, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -1325,12 +1377,15 @@ func (s *Service) AdminCaseOpenStatsDetailed(ctx context.Context) (*AdminCaseOpe
 	return &AdminCaseOpenDetailedView{
 		Today:             mapCaseOpenPeriod(todayStats),
 		Last7Days:         mapCaseOpenPeriod(weekStats),
+		Last30Days:        mapCaseOpenPeriod(monthStats),
 		AllTime:           mapCaseOpenPeriod(allStats),
 		SourcesToday:      mapCaseOpenSources(sourcesToday),
 		SourcesAllTime:    mapCaseOpenSources(sourcesAll),
 		PrizeTypes7d:      mapCaseOpenPrizeTypes(prizeTypes7d),
 		PrizeTypesAllTime: mapCaseOpenPrizeTypes(prizeTypesAll),
+		ByCaseToday:       mapCaseOpenCases(byCaseToday),
 		ByCase7d:          mapCaseOpenCases(byCase7d),
+		ByCase30d:         mapCaseOpenCases(byCase30d),
 		ByCaseAllTime:     mapCaseOpenCases(byCaseAll),
 		TopPrizes7d:       prizeHits,
 		OpensByDay:        opensByDay,
@@ -1401,6 +1456,11 @@ func mapCaseOpenCases(rows []domain.CaseOpenCaseStats) []AdminCaseOpenCaseView {
 			CaseID:            row.CaseID.String(),
 			Title:             row.Title,
 			Slug:              row.Slug,
+			ImageURL:          row.ImageURL,
+			Kind:              row.Kind,
+			PriceNanoton:      row.PriceNanoton,
+			SortOrder:         row.SortOrder,
+			Active:            row.Active,
 			Opens:             row.Opens,
 			SpentNanoton:      row.SpentNanoton,
 			PrizeTotalNanoton: row.PrizeTotalNanoton,

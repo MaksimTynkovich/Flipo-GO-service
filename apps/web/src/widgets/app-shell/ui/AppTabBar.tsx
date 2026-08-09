@@ -18,7 +18,7 @@ export function AppTabBar() {
       aria-label="Основная навигация"
       className="app-tabbar absolute bottom-0 left-0 right-0 z-50 bg-background pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] hairline-top"
     >
-      <div className="app-container flex h-[3.25rem] items-stretch">
+      <div className="app-container flex h-[3.75rem] items-stretch">
         {tabs.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname);
 
@@ -29,23 +29,23 @@ export function AppTabBar() {
               aria-current={active ? "page" : undefined}
               onClick={() => haptics.selectionChanged()}
               className={cn(
-                "app-control flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl",
+                "app-control flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl",
                 active ? "text-accent" : "text-muted",
               )}
             >
-              <span className="tab-icon-wrap flex h-7 w-7 items-center justify-center">
+              <span className="tab-icon-wrap flex h-8 w-8 items-center justify-center">
                 <Icon
-                  size={20}
-                  strokeWidth={active ? 2.4 : 1.75}
+                  size={24}
+                  strokeWidth={active ? 2.4 : 1.85}
                   className={cn(
                     "transition-[transform] duration-base ease-out",
-                    active && "scale-105",
+                    active && "scale-110",
                   )}
                 />
               </span>
               <span
                 className={cn(
-                  "truncate text-[10px] transition-colors duration-base ease-out",
+                  "truncate text-[11px] leading-none transition-colors duration-base ease-out",
                   active ? "font-semibold" : "font-medium",
                 )}
               >

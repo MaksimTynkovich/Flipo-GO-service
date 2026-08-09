@@ -26,8 +26,8 @@ type Deps struct {
 	PaymentsHandler    *handlers.PaymentsHandler
 	TelegramHandler    *handlers.TelegramHandler
 	PromoHandler       *handlers.PromoHandler
-	WheelHandler       *handlers.WheelHandler
 	CasesHandler       *handlers.CasesHandler
+	QuestsHandler      *handlers.QuestsHandler
 	AdminHandler       *handlers.AdminHandler
 	AnalyticsHandler   *handlers.AnalyticsHandler
 	PresenceHandler    *handlers.PresenceHandler
@@ -132,9 +132,11 @@ func NewRouter(deps Deps) *gin.Engine {
 
 			authed.POST("/promos/activate", deps.PromoHandler.Activate)
 			authed.GET("/promos/status", deps.PromoHandler.Status)
-
-			authed.GET("/wheel/status", deps.WheelHandler.Status)
-			authed.POST("/wheel/spin", deps.WheelHandler.Spin)
+			if deps.QuestsHandler != nil {
+				authed.GET("/quests/daily", deps.QuestsHandler.ListDaily)
+				authed.POST("/quests/daily/bonus/claim", deps.QuestsHandler.ClaimBonus)
+				authed.POST("/quests/daily/:id/claim", deps.QuestsHandler.ClaimTask)
+			}
 
 			authed.GET("/cases/features", deps.CasesHandler.Features)
 			authed.GET("/cases", deps.CasesHandler.Catalog)
@@ -236,13 +238,11 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/staking/activity", deps.AdminHandler.ListStakingActivity)
 			adminAuthed.PUT("/marketing/promos", deps.AdminHandler.UpsertPromoCode)
 			adminAuthed.DELETE("/marketing/promos/:code", deps.AdminHandler.DeletePromoCode)
-			adminAuthed.GET("/marketing/wheel", deps.AdminHandler.WheelStats)
-			adminAuthed.GET("/marketing/wheel/segments", deps.AdminHandler.ListWheelSegments)
-			adminAuthed.PUT("/marketing/wheel/segments/:id", deps.AdminHandler.UpdateWheelSegment)
-			adminAuthed.GET("/marketing/wheel/overrides", deps.AdminHandler.ListWheelSpinOverrides)
-			adminAuthed.POST("/marketing/wheel/overrides", deps.AdminHandler.CreateWheelSpinOverride)
-			adminAuthed.DELETE("/marketing/wheel/overrides/:id", deps.AdminHandler.DeleteWheelSpinOverride)
-			adminAuthed.POST("/marketing/wheel/grant-spins", deps.AdminHandler.GrantWheelBonusSpins)
+			adminAuthed.GET("/quests", deps.AdminHandler.ListDailyQuests)
+			adminAuthed.PUT("/quests", deps.AdminHandler.UpsertDailyQuest)
+			adminAuthed.DELETE("/quests/:id", deps.AdminHandler.DeleteDailyQuest)
+			adminAuthed.GET("/quests/board", deps.AdminHandler.GetDailyQuestBoard)
+			adminAuthed.PUT("/quests/board", deps.AdminHandler.UpdateDailyQuestBoard)
 			adminAuthed.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
 			adminAuthed.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
 			adminAuthed.GET("/maintenance", deps.AdminHandler.GetMaintenanceSettings)

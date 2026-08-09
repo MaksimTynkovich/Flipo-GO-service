@@ -32,7 +32,7 @@ export function PvpStakeDetailSheet({ player, stakeNanoton, onClose }: Props) {
         className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(92dvh,100%)] flex-col"
       >
         <div className="shrink-0 px-4 pt-2">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+          <div className="sheet-handle" />
 
           <div className="relative flex items-center justify-center pb-2">
             <p className="text-center text-[15px] font-semibold">Ставка</p>

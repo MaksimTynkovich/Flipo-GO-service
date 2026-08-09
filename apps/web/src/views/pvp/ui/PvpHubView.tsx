@@ -339,7 +339,7 @@ export function PvpHubView() {
           <ModalOverlay onClose={() => setJoinRoomId(null)} analyticsModalId="pvp_join_room">
             {(close) => (
               <div className="sheet-panel relative mx-auto w-full max-w-lg px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2">
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-surface-raised" />
+                <div className="sheet-handle" />
                 <p className="mb-1 text-center text-[15px] font-semibold">Войти в комнату</p>
 
                 <BetFundingPanel
@@ -374,7 +374,7 @@ export function PvpHubView() {
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Button
                     variant="outline"
-                    className="h-11 rounded-xl"
+                    className="h-12 rounded-2xl"
                     onClick={close}
                     disabled={!!joiningId}
                   >
@@ -382,7 +382,7 @@ export function PvpHubView() {
                   </Button>
                   <Button
                     variant="accent"
-                    className="h-11 rounded-xl"
+                    className="h-12 rounded-2xl"
                     onClick={confirmJoin}
                     disabled={!!joiningId || !joinInRange || !acceptBets}
                   >

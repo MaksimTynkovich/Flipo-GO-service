@@ -20,14 +20,14 @@ func JWTAuth(authSvc *auth.Service) gin.HandlerFunc {
 		header := c.GetHeader("Authorization")
 		if header == "" {
 			logAuthFailure(c, "missing_authorization", nil)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Требуется авторизация", "code": "missing_authorization"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Войдите в приложение снова.", "code": "missing_authorization"})
 			return
 		}
 		token := strings.TrimPrefix(header, "Bearer ")
 		claims, err := authSvc.ParseToken(token)
 		if err != nil {
 			logAuthFailure(c, "invalid_token", err)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Недействительный токен", "code": "invalid_token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Сессия истекла. Откройте приложение снова.", "code": "invalid_token"})
 			return
 		}
 		c.Set(UserIDKey, claims.UserID)

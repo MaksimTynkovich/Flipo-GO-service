@@ -84,16 +84,6 @@ func TestNotifyGiftInventoryAllowsAdminActor(t *testing.T) {
 	}
 }
 
-func TestNotifyWheelShareAllowsAdminActor(t *testing.T) {
-	store := &countingStore{}
-	n := NewAdminNotifier(store, nil, []int64{111})
-	n.NotifyWheelShare(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, "share")
-	waitPersist()
-	if store.getCount() != 1 {
-		t.Fatalf("expected wheel share to notify for admin actor, got %d", store.getCount())
-	}
-}
-
 func TestFormatActor(t *testing.T) {
 	got := FormatActor(AdminActor{TelegramID: 42, Username: "bob", FirstName: "Bob", LastName: "Lee"})
 	want := "Bob Lee (@bob, id=42)"

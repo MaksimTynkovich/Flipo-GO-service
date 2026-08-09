@@ -27,7 +27,7 @@ export const Button = forwardRef<
         onPointerDown?.(event);
       }}
       className={cn(
-        "app-control relative overflow-hidden inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-40",
+        "app-control relative overflow-hidden inline-flex min-h-12 items-center justify-center rounded-2xl px-5 py-3 text-[0.9375rem] font-semibold disabled:pointer-events-none disabled:opacity-40",
         variants[variant],
         className,
       )}

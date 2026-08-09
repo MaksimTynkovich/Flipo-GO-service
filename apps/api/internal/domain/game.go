@@ -13,11 +13,10 @@ const (
 	GameRoulette GameType = "roulette"
 	GameCrash    GameType = "crash"
 	GamePvP      GameType = "pvp"
-	GameWheel    GameType = "wheel"
 )
 
 // AllGameModes is the ordered list of user-facing game modes.
-var AllGameModes = []GameType{GameWheel, GameCrash, GameRoulette, GamePvP}
+var AllGameModes = []GameType{GameCrash, GameRoulette, GamePvP}
 
 type GameRound struct {
 	ID              uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
@@ -138,7 +137,7 @@ const (
 	LedgerStakeYield    LedgerType = "stake_yield"
 	LedgerReferralBonus LedgerType = "referral_bonus"
 	LedgerPromoBonus    LedgerType = "promo_bonus"
-	LedgerWheelPrize    LedgerType = "wheel_prize"
+	LedgerQuestReward   LedgerType = "quest_reward"
 	LedgerCaseOpen      LedgerType = "case_open"
 	LedgerCasePrize     LedgerType = "case_prize"
 	LedgerWithdraw      LedgerType = "withdraw"

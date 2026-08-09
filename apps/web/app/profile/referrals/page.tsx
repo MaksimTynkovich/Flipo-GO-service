@@ -21,7 +21,7 @@ import {
 } from "@/lib/referral";
 import { openTelegramShare } from "@/src/shared/lib/twa";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { Copy, Gamepad2, Gift, Link2, RotateCw, Send } from "lucide-react";
+import { Copy, Gamepad2, Gift, Link2, Send } from "lucide-react";
 
 export default function ProfileReferralsPage() {
   const { user } = useAuth();
@@ -31,7 +31,10 @@ export default function ProfileReferralsPage() {
   const [loading, setLoading] = useState(true);
 
   const referralLink = user ? referralTelegramUrl(user.telegram_id) : "";
-  const shareText = ["🚀 Присоединяйся ко мне в Flipo!","💎 Стейкай подарки напрямую без передачи боту — твои активы остаются только у тебя! По моей ссылке ты получишь повышенный доход от стейкинга и бесплатное вращение рулетки! ☘️",].join("\n");
+  const shareText = [
+    "🚀 Присоединяйтесь ко мне в Flipo!",
+    "💎 Стейкайте подарки напрямую без передачи боту — ваши активы остаются только у вас! По моей ссылке вы получите повышенный доход от стейкинга! ☘️",
+  ].join("\n");
 
   useEffect(() => {
     Promise.all([getReferralStats(), getReferralInviteeStatus()])
@@ -125,12 +128,6 @@ export default function ProfileReferralsPage() {
             title={`${gamesPercent}% от игр`}
             hint="Доля от игры друзей"
             value={loading ? "…" : `${formatTON(stats?.ggr_earned_nanoton ?? 0)} TON`}
-          />
-          <InfoCard
-            icon={<RotateCw className="h-4 w-4" />}
-            title="Бесплатное вращение Лаки страйк"
-            hint="За друга, не более 5 в сутки"
-            value={loading ? "…" : `×${stats?.referral_count ?? 0}`}
           />
         </div>
       </section>

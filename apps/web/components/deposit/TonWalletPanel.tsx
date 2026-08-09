@@ -25,7 +25,6 @@ import {
   walletStatusLabel,
   type WalletMessage,
 } from "@/lib/wallet-errors";
-import { formatWagerBlockedMessage, withdrawableDebitCap } from "@/lib/wager-messages";
 import {
   encodeTonCommentPayload,
   formatTonWalletAddress,
@@ -226,7 +225,7 @@ export function TonWalletPanel() {
       if (failedWithdraw) {
         setMessage({
           type: "error",
-          text: "Вывод не выполнен — средства возвращены на баланс. Попробуй позже.",
+          text: "Вывод не выполнен — средства возвращены на баланс. Попробуйте позже.",
         });
       } else if (completedWithdraw) {
         setMessage({
@@ -248,7 +247,7 @@ export function TonWalletPanel() {
     setMessage(null);
     const amountNanoton = nanotonFromTonInput(depositAmount);
     if (amountNanoton <= 0) {
-      setMessage({ type: "error", text: "Введи сумму пополнения." });
+      setMessage({ type: "error", text: "Введите сумму пополнения." });
       return;
     }
     if (amountNanoton < MIN_TRANSFER_NANOTON) {
@@ -256,7 +255,7 @@ export function TonWalletPanel() {
       return;
     }
     if (!isWalletConnected) {
-      setMessage({ type: "error", text: "Сначала подключи TON-кошелёк." });
+      setMessage({ type: "error", text: "Сначала подключите TON-кошелёк." });
       return;
     }
 
@@ -290,7 +289,7 @@ export function TonWalletPanel() {
           text: "Платёж отправлен. Зачисление появится в течение минуты — статус обновится в истории пополнений.",
         });
       } else if (confirm.transfer.status === "expired") {
-        setMessage({ type: "error", text: "Время на оплату истекло. Создай новое пополнение." });
+        setMessage({ type: "error", text: "Время на оплату истекло. Создайте новое пополнение." });
       } else {
         setMessage({
           type: "info",
@@ -309,7 +308,7 @@ export function TonWalletPanel() {
     setMessage(null);
     const receiveNanoton = nanotonFromTonInput(withdrawAmount);
     if (receiveNanoton <= 0) {
-      setMessage({ type: "error", text: "Введи сумму, которую хочешь получить на кошелёк." });
+      setMessage({ type: "error", text: "Введите сумму, которую хотите получить на кошелёк." });
       return;
     }
     if (receiveNanoton < MIN_TRANSFER_NANOTON) {
@@ -317,7 +316,7 @@ export function TonWalletPanel() {
       return;
     }
     if (!isWalletConnected) {
-      setMessage({ type: "error", text: "Сначала подключи TON-кошелёк." });
+      setMessage({ type: "error", text: "Сначала подключите TON-кошелёк." });
       return;
     }
     const debitNanoton = withdrawDebitNanoton(receiveNanoton);
@@ -325,20 +324,6 @@ export function TonWalletPanel() {
       setMessage({
         type: "error",
         text: `Недостаточно средств. Нужно ${formatTON(debitNanoton)} с учётом комиссии ${formatTON(WITHDRAW_FEE_NANOTON)}.`,
-      });
-      return;
-    }
-    const withdrawable =
-      user?.withdrawable_nanoton ??
-      withdrawableDebitCap(
-        user?.betting_balance ?? 0,
-        user?.wager_required_nanoton ?? 0,
-        user?.wager_progress_nanoton ?? 0,
-      );
-    if (user && debitNanoton > withdrawable) {
-      setMessage({
-        type: "error",
-        text: formatWagerBlockedMessage(user, { withdrawFeeNanoton: WITHDRAW_FEE_NANOTON }),
       });
       return;
     }
@@ -366,7 +351,7 @@ export function TonWalletPanel() {
       }
       await refreshTransfers();
     } catch (e) {
-      setMessage({ type: "error", text: formatWalletError(e, "withdraw", user) });
+      setMessage({ type: "error", text: formatWalletError(e, "withdraw") });
     } finally {
       setLoading(false);
     }
@@ -381,7 +366,7 @@ export function TonWalletPanel() {
               <span className="chip chip-accent">TON Wallet</span>
               <div className="space-y-2">
                 <p className="text-[1.4rem] font-semibold leading-tight text-foreground">
-                  Пополняй и выводи TON напрямую
+                  Пополняйте и выводите TON напрямую
                 </p>
                 <p className="text-sm leading-relaxed text-muted">
                   Подключите свой TON Wallet для доступа ко всем возможностям пополнения и вывода средств. Баланс и история операций будут отображаться здесь после подключения.
@@ -405,12 +390,6 @@ export function TonWalletPanel() {
                   iconClassName="h-5 w-5"
                 />
               </div>
-              {user && (user.wager_remaining_nanoton ?? 0) > 0 ? (
-                <p className="mt-1 text-[11px] leading-snug text-muted">
-                  К выводу: {formatTON(Math.max(0, (user.withdrawable_nanoton ?? 0) - WITHDRAW_FEE_NANOTON))} · отыграть{" "}
-                  {formatTON(user.wager_remaining_nanoton ?? 0)}
-                </p>
-              ) : null}
             </div>
             <div className="rounded-2xl bg-surface-raised/80 p-3">
               <p className="text-[11px] text-muted">Кошелёк</p>

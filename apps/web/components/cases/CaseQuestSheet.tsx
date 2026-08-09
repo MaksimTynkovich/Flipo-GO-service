@@ -56,7 +56,7 @@ export function CaseQuestSheet({
             } as CSSProperties
           }
         >
-          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/10" />
+          <div className="sheet-handle" />
 
           <button
             type="button"

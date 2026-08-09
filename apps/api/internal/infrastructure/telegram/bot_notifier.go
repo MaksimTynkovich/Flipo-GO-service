@@ -52,27 +52,6 @@ func (n *BotNotifier) SendDailyStakingSettled(ctx context.Context, telegramUserI
 	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, strings.Join(parts, "\n\n"), nil, ""))
 }
 
-func (n *BotNotifier) SendWheelBonusSpins(ctx context.Context, telegramUserID int64, count int) error {
-	if !n.Enabled() || telegramUserID == 0 || count <= 0 {
-		return nil
-	}
-	text := fmt.Sprintf(
-		"🎡 Вам поступили бесплатные вращения!\n\nНачислено: %d %s Лаки страйк.\nОткройте игру и испытайте удачу.",
-		count,
-		russianSpinWord(count),
-	)
-	opts := n.openApp
-	opts.ButtonText = "🚀 Играть"
-	if payload := strings.TrimSpace(opts.StartPayload); payload == "" {
-		opts.StartPayload = "wheel"
-	}
-	if webURL := strings.TrimRight(strings.TrimSpace(opts.WebAppURL), "/"); webURL != "" && !isTelegramDeepLink(webURL) {
-		opts.WebAppURL = webURL + "/games/wheel"
-	}
-	markup := OpenAppButtonMarkup(opts)
-	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, text, markup, ""))
-}
-
 func (n *BotNotifier) SendCaseDailyReady(ctx context.Context, telegramUserID int64, caseTitle, caseSlug string) error {
 	if !n.Enabled() || telegramUserID == 0 {
 		return nil
@@ -106,21 +85,6 @@ func ignoreUnavailable(err error) error {
 		return nil
 	}
 	return err
-}
-
-func russianSpinWord(n int) string {
-	n = n % 100
-	if n >= 11 && n <= 14 {
-		return "вращений"
-	}
-	switch n % 10 {
-	case 1:
-		return "вращение"
-	case 2, 3, 4:
-		return "вращения"
-	default:
-		return "вращений"
-	}
 }
 
 func formatTON(nanoton int64) string {

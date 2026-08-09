@@ -243,6 +243,11 @@ type CaseOpenCaseStats struct {
 	CaseID            uuid.UUID
 	Title             string
 	Slug              string
+	ImageURL          string
+	Kind              string
+	PriceNanoton      int64
+	SortOrder         int
+	Active            bool
 	Opens             int64
 	SpentNanoton      int64
 	PrizeTotalNanoton int64
@@ -648,9 +653,12 @@ type CaseLiveFeedSettings struct {
 
 func (CaseLiveFeedSettings) TableName() string { return "case_live_feed_settings" }
 
-// IsCaseClaimItem — inventory row created by opening a case.
+// IsCaseClaimItem — inventory row from a case open or quest gift grant (guaranteed cashout / unbacked fulfill).
 func IsCaseClaimItem(item InventoryItem) bool {
 	if strings.HasPrefix(item.TelegramTxRef, CaseClaimTxRefPrefix) {
+		return true
+	}
+	if strings.HasPrefix(item.TelegramTxRef, QuestClaimTxRefPrefix) {
 		return true
 	}
 	return hasCaseClaimMetadata(item.Metadata)
@@ -668,6 +676,9 @@ func hasCaseClaimMetadata(meta datatypes.JSON) bool {
 		return true
 	}
 	if _, ok := raw[CaseClaimMetaLootEntryID]; ok {
+		return true
+	}
+	if _, ok := raw[QuestClaimMetaClaimID]; ok {
 		return true
 	}
 	return false

@@ -33,11 +33,12 @@ const config: Config = {
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.22, 1, 0.36, 1)",
+        spring: "cubic-bezier(0.34, 1.2, 0.64, 1)",
       },
       transitionDuration: {
-        fast: "150ms",
-        base: "200ms",
-        slow: "300ms",
+        fast: "160ms",
+        base: "220ms",
+        slow: "360ms",
       },
     },
   },

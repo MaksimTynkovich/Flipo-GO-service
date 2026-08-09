@@ -287,50 +287,6 @@ func (n *AdminNotifier) NotifyReferralShare(ctx context.Context, actor AdminActo
 	)
 }
 
-func (n *AdminNotifier) NotifyWheelShare(ctx context.Context, actor AdminActor, action string) {
-	label := shareActionLabel(action)
-	n.persist(ctx, false, actor, "wheel_share", "referral", "info",
-		"Лаки страйк — реф.ссылка",
-		fmt.Sprintf("%s · %s", FormatActor(actor), label),
-		fmt.Sprintf("%s\nДействие: %s", FormatActor(actor), label),
-		nil,
-		map[string]any{"action": action, "action_label": label},
-	)
-}
-
-func (n *AdminNotifier) NotifyWheelSpin(ctx context.Context, actor AdminActor, prizeNanoton int64, segmentLabel, spinSource string) {
-	label := strings.TrimSpace(segmentLabel)
-	if label == "" {
-		label = "приз"
-	}
-	source := wheelSpinSourceLabel(spinSource)
-	amount := prizeNanoton
-	n.persist(ctx, true, actor, "wheel_spin", "games", "info",
-		"Лаки страйк — вращение",
-		fmt.Sprintf("%s · %s TON · %s", FormatActor(actor), formatTON(prizeNanoton), label),
-		fmt.Sprintf("%s\nВыигрыш: %s TON\nСектор: %s\nСпин: %s",
-			FormatActor(actor), formatTON(prizeNanoton), label, source),
-		&amount,
-		map[string]any{"segment": label, "spin_source": spinSource, "spin_source_label": source},
-	)
-}
-
-func wheelSpinSourceLabel(source string) string {
-	switch strings.ToLower(strings.TrimSpace(source)) {
-	case "daily":
-		return "ежедневный"
-	case "bonus":
-		return "бонусный"
-	case "admin":
-		return "админ"
-	default:
-		if source == "" {
-			return "—"
-		}
-		return source
-	}
-}
-
 func shareActionLabel(action string) string {
 	switch strings.ToLower(strings.TrimSpace(action)) {
 	case "share", "send":
@@ -597,8 +553,6 @@ func gameLabel(game string) string {
 		return "Roulette"
 	case "pvp":
 		return "PvP"
-	case "wheel":
-		return "Лаки страйк"
 	default:
 		return game
 	}

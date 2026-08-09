@@ -122,7 +122,7 @@ func writeWalletError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidAmount):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
-			"error": "Укажи корректную сумму. Проверь минимальный лимит операции.",
+			"error": "Укажите корректную сумму. Проверьте минимальный лимит операции.",
 			"code":  "invalid_amount",
 		})
 	case errors.Is(err, domain.ErrInsufficientFunds):
@@ -130,21 +130,19 @@ func writeWalletError(c *gin.Context, err error) {
 			"error": "Недостаточно средств на балансе.",
 			"code":  "insufficient_funds",
 		})
-	case errors.Is(err, domain.ErrWagerIncomplete):
-		respondWagerIncomplete(c, err)
 	case errors.Is(err, domain.ErrWalletNotLinked):
 		httperr.Respond(c, http.StatusBadRequest, err, gin.H{
-			"error": "Сначала подключи TON-кошелёк.",
+			"error": "Сначала подключите TON-кошелёк.",
 			"code":  "wallet_not_linked",
 		})
 	case errors.Is(err, domain.ErrTransferPending):
 		httperr.Respond(c, http.StatusConflict, err, gin.H{
-			"error": "У тебя уже есть активная операция. Дождись её завершения.",
+			"error": "У вас уже есть активная операция. Дождитесь её завершения.",
 			"code":  "transfer_pending",
 		})
 	case errors.Is(err, domain.ErrTransferExpired):
 		httperr.Respond(c, http.StatusGone, err, gin.H{
-			"error": "Время на оплату истекло. Создай новое пополнение.",
+			"error": "Время на оплату истекло. Создайте новое пополнение.",
 			"code":  "transfer_expired",
 		})
 	case errors.Is(err, domain.ErrTransferNotFound):
@@ -159,12 +157,12 @@ func writeWalletError(c *gin.Context, err error) {
 		})
 	case errors.Is(err, domain.ErrChainUnavailable):
 		httperr.Respond(c, http.StatusServiceUnavailable, err, gin.H{
-			"error": "Сервис TON временно недоступен. Попробуй через пару минут.",
+			"error": "Сервис TON временно недоступен. Попробуйте через пару минут.",
 			"code":  "chain_unavailable",
 		})
 	default:
 		httperr.Respond(c, http.StatusInternalServerError, err, gin.H{
-			"error": "Не удалось выполнить операцию. Попробуй ещё раз.",
+			"error": "Не удалось выполнить операцию. Попробуйте ещё раз.",
 			"code":  "internal_error",
 		})
 	}

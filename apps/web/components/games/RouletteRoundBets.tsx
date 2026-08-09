@@ -1,22 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   BetGiftView,
   formatTON,
   RouletteBetEntry,
   RouletteRoundBets as RouletteRoundBetsData,
 } from "@/lib/api";
-import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
 import { TonIcon } from "@/components/icons/TonIcon";
-import { rouletteFillStyle, roulettePlayerName } from "@/lib/roulette";
+import {
+  ROULETTE_COLORS,
+  ROULETTE_COLOR_STYLES,
+  RouletteColor,
+  rouletteMultiplier,
+  roulettePlayerName,
+} from "@/lib/roulette";
 import { cn } from "@/lib/utils";
 
 type Props = {
   data: RouletteRoundBetsData | null;
   currentUserId?: string | null;
-  /** Winning color once the round result is known (spinning / result). */
   resultColor?: string | null;
+  onBetColor?: (color: RouletteColor) => void;
+  canBet?: boolean;
+  myStakeByColor?: Record<RouletteColor, number>;
 };
 
 type AggregatedBet = {
@@ -33,6 +40,41 @@ type AggregatedBet = {
 };
 
 type Outcome = "pending" | "won" | "lost";
+
+const VISIBLE_PER_COL = 3;
+
+const ACCENT: Record<RouletteColor, string> = {
+  blue: "#3390ec",
+  red: "#e56555",
+  green: "#3ecf8e",
+  yellow: "#f0d060",
+};
+
+function IconPlayers({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      className={cn("h-3.5 w-3.5 shrink-0", className)}
+    >
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M3.5 19c.5-2.8 2.8-4.5 5.5-4.5s5 1.7 5.5 4.5"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <circle cx="17" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M14.5 19c.4-1.8 1.8-3 3.5-3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 function aggregateBets(bets: RouletteBetEntry[]): AggregatedBet[] {
   const map = new Map<string, AggregatedBet>();
@@ -80,47 +122,64 @@ function betOutcome(color: string, resultColor?: string | null): Outcome {
   return color === resultColor ? "won" : "lost";
 }
 
-function winMultiplier(color: string): number {
-  return color === "green" ? 14 : 2;
-}
-
 function winProfitNanoton(amount: number, color: string, fundingType?: string): number {
-  const payout = amount * winMultiplier(color);
+  const payout = amount * rouletteMultiplier(color);
   const isGift = fundingType === "gift" || fundingType === "mixed";
   return isGift ? payout : Math.max(0, payout - amount);
 }
 
-function BetRow({
+function initialsOf(bet: AggregatedBet): string {
+  const name = (bet.first_name || bet.username || "").trim();
+  if (!name) return "?";
+  return name[0]!.toUpperCase();
+}
+
+function PlayerRow({
   bet,
   mine,
   outcome,
   flash,
+  accent,
+  featured,
 }: {
   bet: AggregatedBet;
   mine?: boolean;
   outcome: Outcome;
   flash?: boolean;
+  accent: string;
+  featured?: boolean;
 }) {
   const [imgError, setImgError] = useState(false);
   const name = roulettePlayerName(bet);
-  const initial = (bet.first_name?.[0] || bet.username?.[0] || "?").toUpperCase();
+  const initials = initialsOf(bet);
   const isWon = outcome === "won";
   const isLost = outcome === "lost";
-  const profit = isWon
-    ? winProfitNanoton(bet.amount_nanoton, bet.color, bet.funding_type)
-    : 0;
+  const profit = isWon ? winProfitNanoton(bet.amount_nanoton, bet.color, bet.funding_type) : 0;
+  const amountText =
+    isWon && profit > 0
+      ? `+${formatTON(profit)}`
+      : isLost
+        ? `−${formatTON(bet.amount_nanoton)}`
+        : formatTON(bet.amount_nanoton);
 
   return (
     <div
       className={cn(
-        "crash-player-row flex items-center gap-2.5 rounded-lg px-2 py-1.5",
-        isWon && "crash-player-row--won",
+        "roulette-col-row flex min-w-0 items-center gap-1 overflow-hidden",
+        featured ? "mx-0.5 rounded-md px-1 py-1" : "px-0.5 py-1",
         isWon && flash && "crash-bet-flash",
-        isLost && "crash-player-row--lost",
-        mine && !isWon && !isLost && "roulette-player-row--mine",
+        isLost && "opacity-50",
+        mine && !featured && !isWon && !isLost && "rounded-md bg-white/[0.04]",
       )}
+      style={featured ? { backgroundColor: accent } : undefined}
+      title={`${name}: ${amountText} TON`}
     >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface text-[10px] font-medium text-muted">
+      <span
+        className={cn(
+          "flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full text-[8px] font-semibold",
+          featured ? "bg-black/20 text-white" : "bg-surface text-muted ring-1 ring-white/10",
+        )}
+      >
         {bet.photo_url && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -130,77 +189,59 @@ function BetRow({
             onError={() => setImgError(true)}
           />
         ) : (
-          initial
+          initials
         )}
       </span>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-foreground/90">
-          {name}
-          {mine ? <span className="ml-1.5 text-[10px] font-medium text-accent">вы</span> : null}
-        </p>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2">
-        <span
-          style={rouletteFillStyle(bet.color)}
-          className="h-2 w-2 rounded-full ring-1 ring-inset ring-white/10"
-          aria-hidden
-        />
-
-        {isWon ? (
-          <div className="crash-cashout-result">
-            {profit > 0 ? (
-              <p className="crash-cashout-result__profit">
-                <span className="tabular-nums">+{formatTON(profit)}</span>
-                <TonIcon variant="brand" size="xs" className="text-success" />
-              </p>
-            ) : (
-              <p className="crash-cashout-result__mult">Победа</p>
-            )}
-          </div>
-        ) : isLost ? (
-          <div className="crash-crash-result">
-            <p className="crash-crash-result__loss">
-              <span className="tabular-nums">−{formatTON(bet.amount_nanoton)}</span>
-              <TonIcon variant="brand" size="xs" className="text-danger" />
-            </p>
-          </div>
-        ) : bet.gifts.length > 1 ? (
-          <GiftStakeIcons gifts={bet.gifts} size="xs" amountNanoton={bet.amount_nanoton} />
-        ) : (
-          <BetStakeLabel
-            amountNanoton={bet.amount_nanoton}
-            fundingType={bet.funding_type === "mixed" ? "gift" : bet.funding_type}
-            gift={bet.gift}
-            iconSize="sm"
-            className="text-sm font-medium"
-          />
+      <span
+        className={cn(
+          "min-w-0 flex-1 whitespace-nowrap text-[10px] font-bold leading-none tabular-nums tracking-tight",
+          featured && "text-white",
+          isWon && !featured && "text-success",
+          isLost && "text-danger",
         )}
-      </div>
+        style={!featured && !isWon && !isLost ? { color: accent } : undefined}
+      >
+        {amountText}
+      </span>
     </div>
   );
 }
 
-export function RouletteRoundBets({ data, currentUserId, resultColor = null }: Props) {
+function colorStat(
+  color: RouletteColor,
+  bag: Record<string, number> | undefined,
+  fallback: number,
+): number {
+  if (!bag) return fallback;
+  return bag[color] ?? fallback;
+}
+
+export const RouletteRoundBets = memo(function RouletteRoundBets({
+  data,
+  currentUserId,
+  resultColor = null,
+  onBetColor,
+  canBet = false,
+}: Props) {
   const rows = useMemo(() => aggregateBets(data?.bets ?? []), [data?.bets]);
   const [flashKeys, setFlashKeys] = useState<Set<string>>(() => new Set());
+  const [expanded, setExpanded] = useState<RouletteColor | null>(null);
   const seenResultRef = useRef<string | null>(null);
   const flashTimers = useRef<Map<string, number>>(new Map());
 
-  const orderedRows = useMemo(() => {
-    const withOutcome = rows.map((row) => ({
-      row,
-      outcome: betOutcome(row.color, resultColor),
-    }));
-
-    // Keep players in their original positions after the result — no
-    // winner/loser reordering or separation.
-    if (!currentUserId) return withOutcome;
-    const mine = withOutcome.filter((item) => item.row.user_id === currentUserId);
-    const others = withOutcome.filter((item) => item.row.user_id !== currentUserId);
-    return [...mine, ...others];
-  }, [rows, currentUserId, resultColor]);
+  const byColor = useMemo(() => {
+    const map = Object.fromEntries(ROULETTE_COLORS.map((c) => [c, [] as AggregatedBet[]])) as Record<
+      RouletteColor,
+      AggregatedBet[]
+    >;
+    for (const row of rows) {
+      if (row.color in map) {
+        map[row.color as RouletteColor].push(row);
+      }
+    }
+    return map;
+  }, [rows]);
 
   useEffect(() => {
     return () => {
@@ -245,24 +286,108 @@ export function RouletteRoundBets({ data, currentUserId, resultColor = null }: P
     setFlashKeys(new Set());
   }, [resultColor, data?.round_id]);
 
-  if (orderedRows.length === 0) {
-    return <p className="text-center text-xs text-muted">Пока нет ставок</p>;
-  }
+  useEffect(() => {
+    setExpanded(null);
+  }, [data?.round_id]);
+
+  const totals = data?.totals as Record<string, number> | undefined;
+  const counts = data?.counts as Record<string, number> | undefined;
 
   return (
-    <div className="space-y-2">
-      <p className="section-label">Игроки</p>
-      <div className="space-y-0.5">
-        {orderedRows.map(({ row, outcome }) => (
-          <BetRow
-            key={row.key}
-            bet={row}
-            mine={!!currentUserId && row.user_id === currentUserId}
-            outcome={outcome}
-            flash={flashKeys.has(row.key)}
-          />
-        ))}
-      </div>
+    <div className="roulette-cols grid grid-cols-4 gap-1.5">
+      {ROULETTE_COLORS.map((color) => {
+        const style = ROULETTE_COLOR_STYLES[color];
+        const accent = ACCENT[color];
+        const list = byColor[color];
+        const count = colorStat(color, counts, list.length);
+        const total = colorStat(color, totals, 0);
+        const won = resultColor === color;
+        const lost = !!resultColor && resultColor !== color;
+        const isOpen = expanded === color;
+        const visible = isOpen ? list : list.slice(0, VISIBLE_PER_COL);
+        const hidden = Math.max(0, list.length - VISIBLE_PER_COL);
+
+        return (
+          <div
+            key={color}
+            className={cn(
+              "roulette-col flex min-w-0 flex-col overflow-hidden rounded-lg",
+              won && "roulette-col--won",
+              lost && "roulette-col--lost",
+            )}
+            style={{
+              backgroundColor: "rgba(255,255,255,0.035)",
+              boxShadow: won
+                ? `inset 0 0 0 1.5px ${accent}`
+                : "inset 0 0 0 1px rgba(255,255,255,0.06)",
+            }}
+          >
+            <button
+              type="button"
+              disabled={!canBet || !onBetColor}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onBetColor?.(color)}
+              className={cn(
+                "roulette-col__head flex flex-col gap-1.5 px-2 py-2.5 text-left outline-none ring-0",
+                canBet && onBetColor && "hover:brightness-110",
+                !canBet && "cursor-default",
+              )}
+              style={{ backgroundColor: `${accent}20` }}
+              aria-label={`${style.label} ${style.multiplier}`}
+            >
+              <span
+                className="flex min-w-0 items-center gap-0.5 text-[11px] font-bold tabular-nums"
+                style={{ color: accent }}
+              >
+                <IconPlayers className="opacity-90" />
+                <span className="shrink-0">{count}</span>
+                <span className="ml-auto shrink-0 text-[10px] font-extrabold">{style.multiplier}</span>
+              </span>
+              <span
+                className="flex min-w-0 items-center gap-0.5 text-[11px] font-bold tabular-nums"
+                style={{ color: accent }}
+              >
+                <TonIcon variant="mono" size="xs" className="shrink-0" />
+                <span className="min-w-0 truncate">{formatTON(total)}</span>
+              </span>
+            </button>
+
+            <div className="hairline-top mx-1.5" />
+
+            <div className="roulette-col__body flex flex-col px-0.5 pb-1 pt-0.5">
+              {visible.map((bet, index) => (
+                <PlayerRow
+                  key={bet.key}
+                  bet={bet}
+                  mine={!!currentUserId && bet.user_id === currentUserId}
+                  outcome={betOutcome(bet.color, resultColor)}
+                  flash={flashKeys.has(bet.key)}
+                  accent={accent}
+                  featured={index === 0}
+                />
+              ))}
+
+              {list.length === 0 ? (
+                <p className="flex flex-1 items-center justify-center text-[12px] text-muted/45">—</p>
+              ) : null}
+
+              {hidden > 0 || isOpen ? (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setExpanded(isOpen ? null : color)}
+                  className="mt-auto px-1 py-1.5 text-center text-[10px] font-semibold outline-none"
+                  style={{ color: accent }}
+                >
+                  {isOpen ? "свернуть" : `Все (${list.length})`}
+                </button>
+              ) : (
+                <div className="mt-auto h-[1.75rem]" aria-hidden />
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
-}
+});

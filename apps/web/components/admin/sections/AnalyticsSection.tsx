@@ -2,21 +2,34 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  formatDurationMs,
-  humanizeAnalyticsName,
-  humanizeAnalyticsStatus,
-  humanizeJourneyPath,
-} from "@/components/admin/analytics-labels";
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { humanizeAnalyticsName } from "@/components/admin/analytics-labels";
 import {
-  AdminPage,
   AdminChip,
+  AdminEmpty,
   AdminMetric,
+  AdminPage,
   AdminPanel,
-  AdminRankList,
   AdminToolbar,
 } from "@/components/admin/admin-ui";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
-import { getAdminAnalyticsOverview, type AdminAnalyticsOverview, type AnalyticsDailyPoint, type AnalyticsHourPoint, type AnalyticsTimelineEvent } from "@/lib/api";
+import {
+  getAdminAnalyticsOverview,
+  type AdminAnalyticsOverview,
+  type AnalyticsBucket,
+  type AnalyticsFunnel,
+} from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const PERIOD_OPTIONS = [
   { value: 1, label: "24ч" },
@@ -24,37 +37,30 @@ const PERIOD_OPTIONS = [
   { value: 30, label: "30д" },
 ];
 
+const CHART_ACCENT = "#2dd4bf";
+const CHART_MUTED = "#8b98a8";
+const CHART_GRID = "rgba(255,255,255,0.06)";
+
+function formatCount(n: number): string {
+  return new Intl.NumberFormat("ru-RU").format(n);
+}
+
+function formatDayLabel(date: string): string {
+  const parts = date.split("-");
+  if (parts.length < 3) return date;
+  return `${parts[2]}.${parts[1]}`;
+}
+
 export default function AnalyticsSection() {
   const [days, setDays] = useState(7);
-  const [errorCode, setErrorCode] = useState("");
-  const [inputId, setInputId] = useState("");
   const [analytics, setAnalytics] = useState<AdminAnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const errorOptions = useMemo(() => {
-    if (!analytics) return [];
-    const names = new Set<string>();
-    for (const item of analytics.top_failures ?? []) {
-      if (item.name) names.add(item.name);
-    }
-    return Array.from(names);
-  }, [analytics]);
-
-  const inputOptions = useMemo(() => {
-    if (!analytics) return [];
-    return (analytics.top_input_abandons ?? []).map((item) => item.name).filter(Boolean);
-  }, [analytics]);
-
-  async function load(nextDays = days, nextErrorCode = errorCode, nextInputId = inputId) {
+  async function load(nextDays = days) {
     setLoading(true);
     try {
-      const cacheKey = `admin:analytics:v3:${nextDays}:${nextErrorCode}:${nextInputId}`;
-      const data = await loadCached(cacheKey, () =>
-        getAdminAnalyticsOverview(nextDays, {
-          errorCode: nextErrorCode || undefined,
-          inputId: nextInputId || undefined,
-        }),
-      );
+      const cacheKey = `admin:analytics:v4:${nextDays}`;
+      const data = await loadCached(cacheKey, () => getAdminAnalyticsOverview(nextDays));
       setAnalytics(data);
       primeCache(cacheKey, data);
     } finally {
@@ -64,58 +70,55 @@ export default function AnalyticsSection() {
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cacheKey = `admin:analytics:v3:${days}:${errorCode}:${inputId}`;
+      const cacheKey = `admin:analytics:v4:${days}`;
       const cached = readCached<AdminAnalyticsOverview>(cacheKey);
-      if (cached) setAnalytics(cached);
-      load(days, errorCode, inputId).catch(() => {});
+      if (cached) {
+        setAnalytics(cached);
+        setLoading(false);
+      }
+      load(days).catch(() => {});
     });
-  }, [days, errorCode, inputId]);
+  }, [days]);
+
+  const sessionsByDay = useMemo(() => {
+    const points = analytics?.sessions_by_day ?? [];
+    return points.map((p) => ({
+      date: p.date,
+      label: formatDayLabel(p.date),
+      sessions: p.count,
+    }));
+  }, [analytics]);
+
+  const visitsByHour = useMemo(() => {
+    const points = analytics?.visits_by_hour ?? [];
+    return points.map((p) => ({
+      hour: `${String(p.hour).padStart(2, "0")}`,
+      visits: p.count,
+    }));
+  }, [analytics]);
+
+  const onboardingFunnel = useMemo(() => {
+    const funnels = analytics?.funnels ?? [];
+    return (
+      funnels.find((f) => f.name === "onboarding") ??
+      funnels.find((f) => f.name === "acquisition") ??
+      funnels[0] ??
+      null
+    );
+  }, [analytics]);
 
   return (
-    <AdminPage
-      title="Аналитика"
-      description="Где пользователи действуют, ошибаются и уходят. Детали по пользователю — в «Пользователи»."
-    >
+    <AdminPage description="Активность игроков за период. Без админских аккаунтов. Детали по человеку — в «Пользователи».">
       <AdminToolbar>
         {PERIOD_OPTIONS.map((option) => (
-          <AdminChip key={option.value} active={days === option.value} onClick={() => setDays(option.value)}>
+          <AdminChip
+            key={option.value}
+            active={days === option.value}
+            onClick={() => setDays(option.value)}
+          >
             {option.label}
           </AdminChip>
         ))}
-        <select
-          value={errorCode}
-          onChange={(e) => setErrorCode(e.target.value)}
-          className="input-field h-9 min-w-[160px] py-0 text-sm"
-        >
-          <option value="">Все ошибки</option>
-          {errorOptions.map((name) => (
-            <option key={name} value={name}>
-              {humanizeAnalyticsName(name)}
-            </option>
-          ))}
-        </select>
-        <select
-          value={inputId}
-          onChange={(e) => setInputId(e.target.value)}
-          className="input-field h-9 min-w-[160px] py-0 text-sm"
-        >
-          <option value="">Все поля ввода</option>
-          {inputOptions.map((name) => (
-            <option key={name} value={name}>
-              {humanizeAnalyticsName(name)}
-            </option>
-          ))}
-        </select>
-        {(errorCode || inputId) && (
-          <AdminChip
-            onClick={() => {
-              setErrorCode("");
-              setInputId("");
-            }}
-          >
-            Сбросить
-          </AdminChip>
-        )}
       </AdminToolbar>
 
       {loading && !analytics ? (
@@ -129,279 +132,274 @@ export default function AnalyticsSection() {
       {analytics ? (
         <>
           <section className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-            <AdminMetric label="DAU" value={String(analytics.dau)} />
-            <AdminMetric label="WAU" value={String(analytics.wau)} />
-            <AdminMetric label="Новых" value={String(analytics.new_users)} />
-            <AdminMetric
-              label="Ушли после ошибки"
-              value={String(analytics.sessions_ended_after_error)}
-              hint="Сессии, закрытые в течение 30 мин после ошибки"
-            />
+            <AdminMetric label="DAU" value={formatCount(analytics.dau)} hint="Уникальные за период" accent />
+            <AdminMetric label="Новых" value={formatCount(analytics.new_users)} hint="Регистрации за период" />
             <AdminMetric
               label="Заходов"
-              value={String(analytics.sessions_total ?? 0)}
-              hint="session_started за период"
-              accent
+              value={formatCount(analytics.sessions_total ?? 0)}
+              hint="Открытия Mini App"
             />
             <AdminMetric
-              label="Вернувшиеся"
-              value={String(analytics.returning_users ?? 0)}
-              hint="Заходили, но зарегистрированы раньше"
-              accent
-            />
-            <AdminMetric
-              label="Заходов / юзер"
-              value={
-                analytics.avg_sessions_per_user
-                  ? analytics.avg_sessions_per_user.toFixed(2)
-                  : "0"
-              }
-              hint="Среднее число открытий Mini App"
-            />
-            <AdminMetric
-              label="Событий"
-              value={String(analytics.total_events_24h)}
+              label="Вернулись"
+              value={formatCount(analytics.returning_users ?? 0)}
+              hint="Заходили, но созданы раньше"
             />
           </section>
 
-          <AdminPanel
-            title="Повторные заходы"
-            description="Когда открывают Mini App (время MSK) и сколько раз за день."
-          >
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted">По часам (MSK)</p>
-                <HourBars points={analytics.visits_by_hour ?? []} />
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">По дням недели</p>
-                  <AdminRankList
-                    items={analytics.visits_by_weekday ?? []}
-                    emptyText="Нет данных."
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">Сколько раз за день</p>
-                  <AdminRankList
-                    items={(analytics.sessions_per_user_day ?? []).map((item) => ({
-                      name: `${item.name}× в день`,
-                      count: item.count,
-                    }))}
-                    emptyText="Нет данных."
-                  />
-                  <p className="mt-1 text-[11px] text-muted">
-                    Счётчик — пользователь-дни: сколько раз людям хватило 1 / 2 / 3 / 4+ заходов за сутки.
-                  </p>
-                </div>
-              </div>
-            </div>
-            {(analytics.sessions_by_day?.length ?? 0) > 0 ? (
-              <div className="mt-4">
-                <p className="mb-2 text-xs font-medium text-muted">Заходы по дням</p>
-                <DayBars points={analytics.sessions_by_day ?? []} />
-              </div>
-            ) : null}
-          </AdminPanel>
-
-          {(errorCode || inputId) && (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
             <AdminPanel
-              title="События по фильтру"
-              description={`Найдено: ${analytics.filtered_count ?? 0}`}
+              title="Заходы по дням"
+              description="Сколько раз открывали Mini App."
+              className="xl:col-span-3"
             >
-              <FilteredTimeline events={analytics.filtered_events ?? []} />
-            </AdminPanel>
-          )}
-
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <AdminPanel title="Что делают" description="Успешные действия и популярные экраны.">
-              <div className="space-y-4">
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">Действия</p>
-                  <AdminRankList
-                    items={analytics.top_actions ?? []}
-                    emptyText="Пока нет данных."
-                    formatName={humanizeAnalyticsName}
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">Экраны</p>
-                  <AdminRankList
-                    items={analytics.top_screens ?? []}
-                    emptyText="Пока нет данных."
-                    formatName={humanizeAnalyticsName}
-                  />
-                </div>
-              </div>
+              <SessionsDayChart points={sessionsByDay} />
             </AdminPanel>
 
-            <AdminPanel title="Где ломается" description="Частые ошибки и экраны с ошибками.">
-              <div className="space-y-4">
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">Ошибки (текст)</p>
-                  <AdminRankList
-                    items={analytics.top_failures ?? []}
-                    emptyText="Ошибок нет."
-                    formatName={humanizeAnalyticsName}
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">По экранам</p>
-                  <AdminRankList
-                    items={analytics.errors_by_screen ?? []}
-                    emptyText="Ошибок по экранам нет."
-                    formatName={humanizeAnalyticsName}
-                  />
-                </div>
-              </div>
+            <AdminPanel
+              title="По часам (MSK)"
+              description="Когда чаще заходят."
+              className="xl:col-span-2"
+            >
+              <HourChart points={visitsByHour} />
+            </AdminPanel>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <AdminPanel
+              title="Воронка"
+              description="От бота до первой ставки / депозита."
+            >
+              <FunnelChart funnel={onboardingFunnel} />
             </AdminPanel>
 
-            <AdminPanel title="Где теряем" description="Отток, брошенный ввод и пути перед уходом.">
-              <div className="space-y-4">
-                <ExitRatesList items={analytics.screen_exit_rates ?? []} />
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">Брошенный ввод</p>
-                  <AdminRankList
-                    items={analytics.top_input_abandons ?? []}
-                    emptyText="Нет брошенного ввода."
-                    formatName={humanizeAnalyticsName}
-                  />
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted">Пути перед уходом</p>
-                  <AdminRankList
-                    items={analytics.exit_paths ?? []}
-                    emptyText="Нет данных."
-                    formatName={humanizeJourneyPath}
-                  />
-                </div>
-              </div>
-            </AdminPanel>
-
-            <AdminPanel title="Воронки" description="Сколько людей доходит до следующего шага.">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {(analytics.funnels ?? []).map((funnel) => (
-                  <div key={funnel.name} className="rounded-lg bg-surface-raised/40 px-2.5 py-2">
-                    <p className="text-sm font-semibold">{humanizeAnalyticsName(funnel.name)}</p>
-                    <div className="mt-2 space-y-1 text-xs">
-                      {(funnel.steps ?? []).map((step) => (
-                        <div key={step.name} className="flex items-center justify-between gap-2 text-muted">
-                          <span className="truncate">{humanizeAnalyticsName(step.name)}</span>
-                          <span className="shrink-0 font-semibold text-foreground">
-                            {step.count}
-                            {step.drop_off_pct != null && step.drop_off_pct > 0 ? (
-                              <span className="ml-1 font-normal text-red-400">−{step.drop_off_pct.toFixed(0)}%</span>
-                            ) : null}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+            <AdminPanel title="Что смотрят и где ломается">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <CompactRank
+                  title="Экраны"
+                  items={analytics.top_screens ?? []}
+                  empty="Пока нет просмотров."
+                />
+                <CompactRank
+                  title="Ошибки"
+                  items={analytics.top_failures ?? []}
+                  empty="Ошибок нет."
+                  danger
+                />
               </div>
             </AdminPanel>
           </div>
         </>
+      ) : !loading ? (
+        <AdminEmpty>Не удалось загрузить аналитику.</AdminEmpty>
       ) : null}
     </AdminPage>
   );
 }
 
-function HourBars({ points }: { points: AnalyticsHourPoint[] }) {
-  const max = Math.max(1, ...points.map((p) => p.count));
-  if (!points.length || points.every((p) => p.count === 0)) {
-    return <p className="text-sm text-muted">Нет заходов за период.</p>;
-  }
-  return (
-    <div className="flex h-28 items-end gap-0.5">
-      {points.map((point) => (
-        <div key={point.hour} className="group relative flex min-w-0 flex-1 flex-col items-center justify-end">
-          <div
-            className="w-full rounded-sm bg-accent/70 transition-colors group-hover:bg-accent"
-            style={{ height: `${Math.max(4, (point.count / max) * 100)}%` }}
-            title={`${point.hour}:00 — ${point.count}`}
-          />
-          {point.hour % 3 === 0 ? (
-            <span className="mt-1 text-[9px] tabular-nums text-muted">{point.hour}</span>
-          ) : (
-            <span className="mt-1 text-[9px] text-transparent">0</span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function DayBars({ points }: { points: AnalyticsDailyPoint[] }) {
-  const max = Math.max(1, ...points.map((p) => p.count));
-  return (
-    <div className="space-y-1">
-      {points.map((point) => (
-        <div key={point.date} className="flex items-center gap-2 text-xs">
-          <span className="w-20 shrink-0 tabular-nums text-muted">{point.date.slice(5)}</span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-raised">
-            <div
-              className="h-full rounded-full bg-accent/80"
-              style={{ width: `${Math.max(4, (point.count / max) * 100)}%` }}
-            />
-          </div>
-          <span className="w-8 shrink-0 text-right tabular-nums font-medium">{point.count}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ExitRatesList({
-  items,
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  valueLabel,
 }: {
-  items: Array<{ name: string; count: number; secondary_count?: number; rate_percent?: number }>;
+  active?: boolean;
+  payload?: Array<{ value?: number }>;
+  label?: string;
+  valueLabel: string;
 }) {
-  if (!items.length) {
-    return <p className="text-sm text-muted">Нет данных об оттоке.</p>;
+  if (!active || !payload?.length) return null;
+  const value = payload[0]?.value ?? 0;
+  return (
+    <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+      <p className="text-xs text-[var(--admin-muted)]">{label}</p>
+      <p className="mt-1 text-sm font-semibold tabular-nums text-[var(--admin-fg)]">
+        {valueLabel}: {formatCount(Number(value))}
+      </p>
+    </div>
+  );
+}
+
+function SessionsDayChart({
+  points,
+}: {
+  points: Array<{ date: string; label: string; sessions: number }>;
+}) {
+  if (!points.length || points.every((p) => p.sessions === 0)) {
+    return <p className="py-10 text-center text-sm text-[var(--admin-muted)]">Нет заходов за период.</p>;
   }
+
+  return (
+    <div className="h-56 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="analyticsSessionsFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_ACCENT} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={CHART_ACCENT} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke={CHART_GRID} vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fill: CHART_MUTED, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            minTickGap={24}
+          />
+          <YAxis
+            tick={{ fill: CHART_MUTED, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={36}
+            allowDecimals={false}
+          />
+          <Tooltip
+            content={<ChartTooltip valueLabel="Заходы" />}
+            cursor={{ stroke: CHART_ACCENT, strokeOpacity: 0.35 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="sessions"
+            stroke={CHART_ACCENT}
+            strokeWidth={2}
+            fill="url(#analyticsSessionsFill)"
+            activeDot={{ r: 4, fill: CHART_ACCENT }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function HourChart({ points }: { points: Array<{ hour: string; visits: number }> }) {
+  if (!points.length || points.every((p) => p.visits === 0)) {
+    return <p className="py-10 text-center text-sm text-[var(--admin-muted)]">Нет заходов за период.</p>;
+  }
+
+  const peak = Math.max(...points.map((p) => p.visits));
+
+  return (
+    <div className="h-56 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={points} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={CHART_GRID} vertical={false} />
+          <XAxis
+            dataKey="hour"
+            tick={{ fill: CHART_MUTED, fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            interval={2}
+          />
+          <YAxis
+            tick={{ fill: CHART_MUTED, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={28}
+            allowDecimals={false}
+          />
+          <Tooltip
+            content={<ChartTooltip valueLabel="Заходы" />}
+            cursor={{ fill: "rgba(255,255,255,0.04)" }}
+          />
+          <Bar dataKey="visits" radius={[3, 3, 0, 0]} maxBarSize={14}>
+            {points.map((point) => (
+              <Cell
+                key={point.hour}
+                fill={point.visits === peak && peak > 0 ? CHART_ACCENT : "rgba(45,212,191,0.45)"}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function FunnelChart({ funnel }: { funnel: AnalyticsFunnel | null }) {
+  const steps = funnel?.steps ?? [];
+  if (!steps.length) {
+    return <p className="py-8 text-center text-sm text-[var(--admin-muted)]">Нет данных по воронке.</p>;
+  }
+
+  const max = Math.max(1, ...steps.map((s) => s.count));
+
+  return (
+    <div className="space-y-2.5">
+      {steps.map((step, index) => {
+        const width = Math.max(8, (step.count / max) * 100);
+        const drop = step.drop_off_pct ?? 0;
+        return (
+          <div key={`${step.name}-${index}`} className="space-y-1">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="truncate text-[var(--admin-muted)]">
+                {humanizeAnalyticsName(step.name)}
+              </span>
+              <span className="shrink-0 tabular-nums text-[var(--admin-fg)]">
+                {formatCount(step.count)}
+                {index > 0 && drop > 0 ? (
+                  <span className="ml-1.5 text-rose-400">−{drop.toFixed(0)}%</span>
+                ) : null}
+              </span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-black/25">
+              <div
+                className="h-full rounded-full bg-[var(--admin-accent)]/80 transition-[width]"
+                style={{ width: `${width}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CompactRank({
+  title,
+  items,
+  empty,
+  danger = false,
+}: {
+  title: string;
+  items: AnalyticsBucket[];
+  empty: string;
+  danger?: boolean;
+}) {
+  const rows = items.slice(0, 6);
+  const max = Math.max(1, ...rows.map((item) => item.count));
+
   return (
     <div>
-      <p className="mb-2 text-xs font-medium text-muted">Отток с экранов</p>
-      <div className="space-y-1.5">
-        {items.map((item) => (
-          <div
-            key={item.name}
-            className="flex items-center justify-between gap-3 rounded-lg bg-surface-raised/40 px-2.5 py-2 text-sm"
-          >
-            <span className="truncate text-muted">{humanizeAnalyticsName(item.name)}</span>
-            <span className="shrink-0 font-semibold tabular-nums">
-              {item.rate_percent != null ? `${item.rate_percent}%` : item.count}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FilteredTimeline({ events }: { events: AnalyticsTimelineEvent[] }) {
-  if (!events.length) {
-    return <p className="text-sm text-muted">Нет событий за выбранный период.</p>;
-  }
-  return (
-    <div className="max-h-72 space-y-1.5 overflow-auto text-xs">
-      {events.map((event) => (
-        <div key={event.id} className="rounded-lg bg-surface-raised/40 px-2.5 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-medium">{humanizeAnalyticsName(event.event_name)}</span>
-            <span className="text-muted">{new Date(event.occurred_at).toLocaleString()}</span>
-          </div>
-          <p className="mt-0.5 text-muted">
-            {humanizeAnalyticsName(event.screen || event.path || event.source)}
-            {event.status ? ` · ${humanizeAnalyticsStatus(event.status)}` : ""}
-            {event.error_code ? ` · ${humanizeAnalyticsName(event.error_code)}` : ""}
-          </p>
-          {event.error_message ? (
-            <p className="mt-1 text-[11px] leading-relaxed text-red-300/90">{event.error_message}</p>
-          ) : null}
+      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--admin-muted)]">
+        {title}
+      </p>
+      {!rows.length ? (
+        <p className="text-sm text-[var(--admin-muted)]">{empty}</p>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((item) => (
+            <div key={item.name} className="space-y-1">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="min-w-0 truncate text-[var(--admin-muted)]">
+                  {humanizeAnalyticsName(item.name)}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-[var(--admin-fg)]">
+                  {formatCount(item.count)}
+                </span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-black/25">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    danger ? "bg-rose-400/70" : "bg-[var(--admin-accent)]/70",
+                  )}
+                  style={{ width: `${Math.max(6, (item.count / max) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }

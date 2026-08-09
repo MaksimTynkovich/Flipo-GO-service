@@ -119,7 +119,7 @@ func (h *CasesHandler) Opens(c *gin.Context) {
 
 func (h *CasesHandler) Live(c *gin.Context) {
 	telegramID := middleware.GetTelegramID(c)
-	out, err := h.cases.LiveFeed(c.Request.Context(), telegramID, 6)
+	out, err := h.cases.LiveFeed(c.Request.Context(), telegramID, 24)
 	if err != nil {
 		if errors.Is(err, domain.ErrCasesDisabled) {
 			c.JSON(http.StatusOK, []domain.CaseLiveDrop{})

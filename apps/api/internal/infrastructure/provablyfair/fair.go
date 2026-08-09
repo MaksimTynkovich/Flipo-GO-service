@@ -27,13 +27,56 @@ func HashChain(seed string, length int) []string {
 	return chain
 }
 
-// WheelOrder — порядок чисел на колесе (по часовой от 0).
-var WheelOrder = []int{0, 1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14}
+// x50 wheel: 50 segments — blue×2 (20), red×2 (20), green×5 (9), yellow×50 (1).
+const RouletteSegmentCount = 50
 
-// RouletteResultIndex: 0–14 (индекс сектора на колесе).
+// WheelOrder — индекс сектора = номер (0..49).
+var WheelOrder = func() []int {
+	out := make([]int, RouletteSegmentCount)
+	for i := range out {
+		out[i] = i
+	}
+	return out
+}()
+
+// WheelColors — interleaved (синхрон с apps/web/lib/roulette.ts).
+var WheelColors = []string{
+	"yellow", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+	"red", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+	"red", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+	"red", "blue", "red", "green", "blue", "red", "blue", "red", "green", "blue",
+	"red", "blue", "red", "green", "blue", "red", "blue", "red", "blue", "red",
+}
+
+// RouletteColors — допустимые цвета ставки.
+var RouletteColors = []string{"blue", "red", "green", "yellow"}
+
+func ValidRouletteColor(color string) bool {
+	switch color {
+	case "blue", "red", "green", "yellow":
+		return true
+	default:
+		return false
+	}
+}
+
+func RouletteMultiplier(color string) int64 {
+	switch color {
+	case "blue", "red":
+		return 2
+	case "green":
+		return 5
+	case "yellow":
+		return 50
+	default:
+		return 0
+	}
+}
+
+// RouletteResultIndex: 0–49 (индекс сектора на колесе).
 func RouletteResultIndex(serverSeed string, nonce int64) int {
 	h := HashSHA256(fmt.Sprintf("%s:%d", serverSeed, nonce))
-	return int(hexToInt(h[:8]) % 15)
+	return int(hexToInt(h[:8]) % int64(RouletteSegmentCount))
 }
 
 func RouletteWheelNumber(index int) int {
@@ -43,16 +86,12 @@ func RouletteWheelNumber(index int) int {
 	return WheelOrder[index]
 }
 
-// RouletteNumberColor: 0=green, 1–7=red, 8–14=black.
+// RouletteNumberColor maps segment number → color.
 func RouletteNumberColor(n int) string {
-	switch {
-	case n == 0:
-		return "green"
-	case n >= 1 && n <= 7:
-		return "red"
-	default:
-		return "black"
+	if n < 0 || n >= len(WheelColors) || WheelColors[n] == "" {
+		return "blue"
 	}
+	return WheelColors[n]
 }
 
 func RouletteResult(serverSeed string, nonce int64) string {
@@ -61,14 +100,11 @@ func RouletteResult(serverSeed string, nonce int64) string {
 }
 
 func RoulettePayout(color string, amount int64) int64 {
-	switch color {
-	case "green":
-		return amount * 14
-	case "red", "black":
-		return amount * 2
-	default:
+	mult := RouletteMultiplier(color)
+	if mult <= 0 || amount <= 0 {
 		return 0
 	}
+	return amount * mult
 }
 
 // CrashPoint from hash with ~1% house edge
