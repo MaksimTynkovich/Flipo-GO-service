@@ -7709,14 +7709,14 @@ body::-webkit-scrollbar,
 
 .quests-bonus-card__case-stage {
   position: absolute;
-  right: 3rem;
+  right: 1rem;
   top: 50%;
   z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 6rem;
-  height: 6rem;
+  width: 9rem;
+  height: 9rem;
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -7757,6 +7757,24 @@ body::-webkit-scrollbar,
   display: block;
 }
 
+.quests-bonus-card__card-plate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: visible;
+}
+
+.quests-bonus-card__card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .quests-bonus-card__fade {
   position: absolute;
   inset: 0;
@@ -7773,7 +7791,8 @@ body::-webkit-scrollbar,
 }
 
 .quests-bonus-card--gift .quests-bonus-card__fade,
-.quests-bonus-card--case .quests-bonus-card__fade {
+.quests-bonus-card--case .quests-bonus-card__fade,
+.quests-bonus-card--card-art .quests-bonus-card__fade {
   background:
     linear-gradient(
       90deg,
@@ -8014,14 +8033,61 @@ body::-webkit-scrollbar,
   min-height: 0;
   padding: 0;
   border-radius: 1.2rem;
-  background: #122033;
+  background: #0b1522;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   overflow: hidden;
   isolation: isolate;
 }
 
+.quests-task-row--none {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .quests-task-row--claimed {
   opacity: 0.8;
+}
+
+.quests-task-row__wash {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.quests-task-row__ambient {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 78% center;
+  display: block;
+}
+
+.quests-task-row__fade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(8, 14, 28, 0.94) 0%,
+      rgba(8, 14, 28, 0.82) 34%,
+      rgba(8, 14, 28, 0.28) 62%,
+      transparent 82%
+    ),
+    linear-gradient(180deg, transparent 45%, rgba(8, 14, 28, 0.28) 100%);
+}
+
+.quests-task-row--none .quests-task-row__fade {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(8, 14, 28, 0.88) 0%,
+      rgba(8, 14, 28, 0.55) 48%,
+      rgba(8, 14, 28, 0.28) 100%
+    ),
+    linear-gradient(180deg, transparent 40%, rgba(8, 14, 28, 0.32) 100%);
 }
 
 .quests-task-row__accent {
@@ -8144,39 +8210,25 @@ body::-webkit-scrollbar,
 
 .quests-task-row__art {
   position: relative;
-  z-index: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   align-self: stretch;
-  padding: 0.55rem 0.55rem 0.55rem 0.1rem;
-  background:
-    radial-gradient(ellipse 90% 80% at 70% 45%, rgba(45, 212, 191, 0.14) 0%, transparent 62%),
-    linear-gradient(100deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
+  padding: 0.55rem 0.05rem 0.55rem 0;
+  background: transparent;
 }
 
-.quests-task-row--blue .quests-task-row__art {
-  background:
-    radial-gradient(ellipse 90% 80% at 70% 45%, rgba(77, 163, 255, 0.16) 0%, transparent 62%),
-    linear-gradient(100deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
-}
-
-.quests-task-row--green .quests-task-row__art {
-  background:
-    radial-gradient(ellipse 90% 80% at 70% 45%, rgba(52, 211, 153, 0.14) 0%, transparent 62%),
-    linear-gradient(100deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
-}
-
+.quests-task-row--blue .quests-task-row__art,
+.quests-task-row--green .quests-task-row__art,
 .quests-task-row--cyan .quests-task-row__art {
-  background:
-    radial-gradient(ellipse 90% 80% at 70% 45%, rgba(34, 211, 238, 0.14) 0%, transparent 62%),
-    linear-gradient(100deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
+  background: transparent;
 }
 
 .quests-task-row__plate {
   position: relative;
   width: 100%;
-  max-width: 6.35rem;
+  max-width: 7rem;
   aspect-ratio: 1;
   border-radius: 0.9rem;
   overflow: hidden;
@@ -8186,6 +8238,7 @@ body::-webkit-scrollbar,
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.1),
     0 8px 16px rgba(0, 0, 0, 0.28);
+  transform: translateX(5px);
 }
 
 .quests-task-row__plate--ton {
@@ -8194,6 +8247,18 @@ body::-webkit-scrollbar,
 
 .quests-task-row__plate--case {
   background: #0b1522;
+}
+
+.quests-task-row__plate--card {
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.quests-task-row__plate--card .quests-task-row__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .quests-task-row__img {

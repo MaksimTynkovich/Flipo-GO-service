@@ -2402,6 +2402,8 @@ export type DailyQuestTask = {
   objective_case_id?: string;
   objective_case_slug?: string;
   objective_case_title?: string;
+  /** Optional lobby art override (admin-uploaded). */
+  card_image_url?: string;
   reward: DailyQuestReward;
 };
 
@@ -2411,6 +2413,8 @@ export type DailyQuestBonus = {
   completed_count: number;
   total_count: number;
   status: "disabled" | "locked" | "ready" | "claimed" | string;
+  /** Optional lobby art override (admin-uploaded). */
+  card_image_url?: string;
   reward: DailyQuestReward;
 };
 
@@ -2464,6 +2468,8 @@ export type AdminDailyQuest = {
   reward_model_name?: string;
   reward_gift_name?: string;
   reward_gift_image_url?: string;
+  /** Optional art shown on the quests lobby card (overrides reward preview). */
+  card_image_url?: string;
 };
 
 export type DailyQuestPromoSlide = {
@@ -2506,6 +2512,8 @@ export type AdminDailyQuestBoard = {
   bonus_reward_model_name?: string;
   bonus_reward_gift_name?: string;
   bonus_reward_gift_image_url?: string;
+  /** Optional art shown on the bonus lobby card (overrides reward preview). */
+  bonus_card_image_url?: string;
   bonus_active: boolean;
   promo_slides?: DailyQuestPromoSlide[];
 };

@@ -1,0 +1,2 @@
+ALTER TABLE daily_quests
+    ADD COLUMN IF NOT EXISTS card_image_url TEXT NOT NULL DEFAULT '';

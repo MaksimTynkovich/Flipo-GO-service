@@ -282,9 +282,16 @@ function rewardCaseImage(reward: DailyQuestReward): string | undefined {
   return resolveAsset(reward.case_image_url?.trim());
 }
 
-function BonusWash({ reward }: { reward: DailyQuestReward }) {
-  const caseSrc = rewardCaseImage(reward);
-  const giftSrc = bonusGiftImage(reward);
+function BonusWash({
+  reward,
+  cardImageUrl,
+}: {
+  reward: DailyQuestReward;
+  cardImageUrl?: string;
+}) {
+  const cardSrc = resolveAsset(cardImageUrl?.trim());
+  const caseSrc = !cardSrc ? rewardCaseImage(reward) : undefined;
+  const giftSrc = !cardSrc ? bonusGiftImage(reward) : undefined;
 
   return (
     <div className="quests-bonus-card__art" aria-hidden>
@@ -296,7 +303,7 @@ function BonusWash({ reward }: { reward: DailyQuestReward }) {
         alt=""
         draggable={false}
       />
-      {reward.type === "balance_nanoton" ? (
+      {!cardSrc && reward.type === "balance_nanoton" ? (
         <div className="quests-bonus-card__ton-badge">
           <TonIcon variant="brand" className="quests-bonus-card__ton-icon" title="TON" />
         </div>
@@ -328,6 +335,14 @@ function BonusWash({ reward }: { reward: DailyQuestReward }) {
           </div>
         </div>
       ) : null}
+      {cardSrc ? (
+        <div className="quests-bonus-card__case-stage">
+          <div className="quests-bonus-card__card-plate">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="quests-bonus-card__card-img" src={cardSrc} alt="" draggable={false} />
+          </div>
+        </div>
+      ) : null}
       <div className="quests-bonus-card__fade" />
     </div>
   );
@@ -345,25 +360,27 @@ function BonusCard({
   const ready = bonus.status === "ready";
   const claimed = bonus.status === "claimed";
   const pct = progressPct(bonus.completed_count, bonus.total_count);
-  const caseSrc = rewardCaseImage(bonus.reward);
-  const giftSrc = bonusGiftImage(bonus.reward);
+  const cardSrc = resolveAsset(bonus.card_image_url?.trim());
+  const caseSrc = !cardSrc ? rewardCaseImage(bonus.reward) : undefined;
+  const giftSrc = !cardSrc ? bonusGiftImage(bonus.reward) : undefined;
   const giftPrice =
-    bonus.reward.type === "gift" && bonus.reward.nanoton && bonus.reward.nanoton > 0
+    !cardSrc && bonus.reward.type === "gift" && bonus.reward.nanoton && bonus.reward.nanoton > 0
       ? bonus.reward.nanoton
       : 0;
-  const rewardThumb = giftSrc || caseSrc;
+  const rewardThumb = cardSrc || giftSrc || caseSrc;
 
   return (
     <article
       className={cn(
         "quests-bonus-card",
+        Boolean(cardSrc) && "quests-bonus-card--card-art",
         Boolean(caseSrc) && "quests-bonus-card--case",
         Boolean(giftSrc) && "quests-bonus-card--gift",
         claimed && "quests-bonus-card--claimed",
         ready && "quests-bonus-card--ready",
       )}
     >
-      <BonusWash reward={bonus.reward} />
+      <BonusWash reward={bonus.reward} cardImageUrl={bonus.card_image_url} />
       <div className="quests-bonus-card__copy">
         <h2 className="quests-bonus-card__title">{bonus.title}</h2>
         <p className="quests-bonus-card__reward">
@@ -453,18 +470,22 @@ function TaskRow({
             : null;
   const isTon = task.reward.type === "balance_nanoton";
   const noReward = !hasQuestReward(task.reward);
+  const cardThumb = resolveAsset(task.card_image_url?.trim());
   const giftThumb =
-    !noReward && task.reward.type === "gift" ? bonusGiftImage(task.reward) : undefined;
-  const caseThumb = !noReward ? rewardCaseImage(task.reward) : undefined;
+    !cardThumb && !noReward && task.reward.type === "gift"
+      ? bonusGiftImage(task.reward)
+      : undefined;
+  const caseThumb = !cardThumb && !noReward ? rewardCaseImage(task.reward) : undefined;
   const giftPrice =
     !noReward && task.reward.type === "gift" && task.reward.nanoton && task.reward.nanoton > 0
       ? task.reward.nanoton
       : 0;
   const rewardText = rewardLabel(task.reward);
   const giftPlateBg =
-    !noReward && task.reward.type === "gift"
+    !cardThumb && !noReward && task.reward.type === "gift"
       ? giftGradient(task.reward.collection_slug?.trim() || task.reward.gift_name || "gift")
       : undefined;
+  const showArt = Boolean(cardThumb) || !noReward;
 
   let action: ReactNode;
   if (claimed) {
@@ -501,12 +522,23 @@ function TaskRow({
         `quests-task-row--${tone}`,
         claimed && "quests-task-row--claimed",
         ready && "quests-task-row--ready",
-        isTon && !noReward && "quests-task-row--ton",
-        noReward && "quests-task-row--none",
+        isTon && !noReward && !cardThumb && "quests-task-row--ton",
+        noReward && !cardThumb && "quests-task-row--none",
+        Boolean(cardThumb) && "quests-task-row--card-art",
         Boolean(giftThumb) && "quests-task-row--gift",
         Boolean(caseThumb) && "quests-task-row--case",
       )}
     >
+      <div className="quests-task-row__wash" aria-hidden>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="quests-task-row__ambient"
+          src="/quests/task-ambient-blue-pop.webp"
+          alt=""
+          draggable={false}
+        />
+        <div className="quests-task-row__fade" />
+      </div>
       <span className="quests-task-row__accent" aria-hidden />
 
       <div className="quests-task-row__copy">
@@ -538,18 +570,22 @@ function TaskRow({
         {action}
       </div>
 
-      {!noReward ? (
+      {showArt ? (
         <div className="quests-task-row__art" aria-hidden>
           <div
             className={cn(
               "quests-task-row__plate",
-              isTon && "quests-task-row__plate--ton",
+              Boolean(cardThumb) && "quests-task-row__plate--card",
+              !cardThumb && isTon && "quests-task-row__plate--ton",
               Boolean(giftThumb) && "quests-task-row__plate--gift",
               Boolean(caseThumb) && "quests-task-row__plate--case",
             )}
             style={giftPlateBg ? { background: giftPlateBg } : undefined}
           >
-            {isTon ? (
+            {cardThumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="quests-task-row__img" src={cardThumb} alt="" draggable={false} />
+            ) : isTon ? (
               <CaseTonPrizeArt className="quests-task-row__ton" />
             ) : giftThumb ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -560,12 +596,12 @@ function TaskRow({
             ) : (
               <span className="quests-task-row__dot" />
             )}
-            {isTon && (task.reward.nanoton ?? 0) > 0 ? (
+            {!cardThumb && isTon && (task.reward.nanoton ?? 0) > 0 ? (
               <span className="quests-task-row__price">
                 <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
                 <span className="tabular-nums">{formatTON(task.reward.nanoton ?? 0)}</span>
               </span>
-            ) : giftPrice > 0 ? (
+            ) : !cardThumb && giftPrice > 0 ? (
               <span className="quests-task-row__price">
                 <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
                 <span className="tabular-nums">{formatTON(giftPrice)}</span>

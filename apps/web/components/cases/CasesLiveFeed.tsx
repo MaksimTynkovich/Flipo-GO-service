@@ -115,7 +115,7 @@ export function CasesLiveFeed({
   freshOpenId?: string | null;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const visible = items.slice(0, 24);
+  const visible = items.slice(0, 10);
   const hasFresh = Boolean(freshOpenId && visible.some((d) => d.open_id === freshOpenId));
 
   useEffect(() => {

@@ -85,6 +85,7 @@ type TaskView struct {
 	ObjectiveCaseID    *uuid.UUID `json:"objective_case_id,omitempty"`
 	ObjectiveCaseSlug  string     `json:"objective_case_slug,omitempty"`
 	ObjectiveCaseTitle string     `json:"objective_case_title,omitempty"`
+	CardImageURL       string     `json:"card_image_url,omitempty"`
 	Reward             RewardView `json:"reward"`
 }
 
@@ -94,6 +95,7 @@ type BonusView struct {
 	CompletedCount int        `json:"completed_count"`
 	TotalCount     int        `json:"total_count"`
 	Status         string     `json:"status"` // disabled | locked | ready | claimed
+	CardImageURL   string     `json:"card_image_url,omitempty"`
 	Reward         RewardView `json:"reward"`
 }
 
@@ -168,15 +170,16 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 			return nil, err
 		}
 		view := TaskView{
-			ID:          q.ID,
-			Title:       q.Title,
-			Description: q.Description,
-			Objective:   q.ObjectiveType,
-			Target:      q.ObjectiveTarget,
-			Progress:    minInt64(progress, q.ObjectiveTarget),
-			Status:      status,
-			Action:      action,
-			Reward:      reward,
+			ID:           q.ID,
+			Title:        q.Title,
+			Description:  q.Description,
+			Objective:    q.ObjectiveType,
+			Target:       q.ObjectiveTarget,
+			Progress:     minInt64(progress, q.ObjectiveTarget),
+			Status:       status,
+			Action:       action,
+			CardImageURL: strings.TrimSpace(q.CardImageURL),
+			Reward:       reward,
 		}
 		if isCaseObjective(q.ObjectiveType) && q.ObjectiveCaseID != nil {
 			view.ObjectiveCaseID = q.ObjectiveCaseID
@@ -198,6 +201,7 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 		CompletedCount: completed,
 		TotalCount:     len(tasks),
 		Status:         "disabled",
+		CardImageURL:   strings.TrimSpace(board.BonusCardImageURL),
 	}
 	if board.BonusActive {
 		bonus.Reward, err = s.rewardView(ctx, rewardSpecFromBoard(board))
@@ -802,6 +806,7 @@ func normalizeBoardRewardFields(settings *domain.DailyQuestBoardSettings) {
 	settings.BonusRewardModelName = strings.TrimSpace(settings.BonusRewardModelName)
 	settings.BonusRewardGiftName = strings.TrimSpace(settings.BonusRewardGiftName)
 	settings.BonusRewardGiftImageURL = strings.TrimSpace(settings.BonusRewardGiftImageURL)
+	settings.BonusCardImageURL = strings.TrimSpace(settings.BonusCardImageURL)
 	switch settings.BonusRewardType {
 	case domain.DailyQuestRewardBalance:
 		settings.BonusRewardCaseID = nil
@@ -860,6 +865,7 @@ type AdminQuestUpsert struct {
 	RewardModelName      string     `json:"reward_model_name"`
 	RewardGiftName       string     `json:"reward_gift_name"`
 	RewardGiftImageURL   string     `json:"reward_gift_image_url"`
+	CardImageURL         string     `json:"card_image_url"`
 }
 
 func (s *Service) AdminUpsertQuest(ctx context.Context, req AdminQuestUpsert) (*domain.DailyQuest, error) {
@@ -880,6 +886,7 @@ func (s *Service) AdminUpsertQuest(ctx context.Context, req AdminQuestUpsert) (*
 		RewardModelName:      req.RewardModelName,
 		RewardGiftName:       req.RewardGiftName,
 		RewardGiftImageURL:   req.RewardGiftImageURL,
+		CardImageURL:         strings.TrimSpace(req.CardImageURL),
 	}
 	from, err := parseDatePtr(req.ActiveFrom)
 	if err != nil {

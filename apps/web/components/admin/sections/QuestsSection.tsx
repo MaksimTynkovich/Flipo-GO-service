@@ -151,6 +151,7 @@ const EMPTY_QUEST: AdminDailyQuest = {
   reward_model_name: "",
   reward_gift_name: "",
   reward_gift_image_url: "",
+  card_image_url: "",
 };
 
 const EMPTY_BOARD: AdminDailyQuestBoard = {
@@ -162,6 +163,7 @@ const EMPTY_BOARD: AdminDailyQuestBoard = {
   bonus_reward_model_name: "",
   bonus_reward_gift_name: "",
   bonus_reward_gift_image_url: "",
+  bonus_card_image_url: "",
   bonus_active: false,
   promo_slides: DEFAULT_PROMO_SLIDES,
 };
@@ -218,6 +220,8 @@ export default function QuestsSection() {
   const [resetTelegramId, setResetTelegramId] = useState<number | null>(null);
   const [giftPickerTarget, setGiftPickerTarget] = useState<"quest" | "board" | null>(null);
   const [uploadingCoverIndex, setUploadingCoverIndex] = useState<number | null>(null);
+  const [uploadingCardImage, setUploadingCardImage] = useState(false);
+  const [uploadingBonusCardImage, setUploadingBonusCardImage] = useState(false);
 
   const caseOptions = useMemo(
     () => cases.filter((c) => c.active !== false).sort((a, b) => a.title.localeCompare(b.title)),
@@ -309,6 +313,7 @@ export default function QuestsSection() {
         reward_gift_name: draft.reward_type === "gift" ? draft.reward_gift_name || "" : "",
         reward_gift_image_url:
           draft.reward_type === "gift" ? draft.reward_gift_image_url || "" : "",
+        card_image_url: draft.card_image_url?.trim() || "",
       };
       await upsertAdminDailyQuest(payload);
       showToast({ variant: "success", title: "Задание сохранено" });
@@ -353,6 +358,7 @@ export default function QuestsSection() {
           board.bonus_reward_type === "gift" ? board.bonus_reward_gift_name || "" : "",
         bonus_reward_gift_image_url:
           board.bonus_reward_type === "gift" ? board.bonus_reward_gift_image_url || "" : "",
+        bonus_card_image_url: board.bonus_card_image_url?.trim() || "",
         promo_slides: board.promo_slides ?? [],
       };
       const next = await updateAdminDailyQuestBoard(payload);
@@ -454,6 +460,56 @@ export default function QuestsSection() {
       slides[index] = { ...current, ...patch };
       return { ...prev, promo_slides: slides };
     });
+  }
+
+  async function onPickBonusCardImage(file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast({ variant: "error", title: "Нужен файл изображения" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast({ variant: "error", title: "Максимум 5 МБ" });
+      return;
+    }
+    setUploadingBonusCardImage(true);
+    try {
+      const res = await uploadAdminCaseImage(file);
+      setBoard((prev) => ({ ...prev, bonus_card_image_url: res.image_url || res.url }));
+      showToast({ variant: "success", title: "Картинка загружена" });
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось загрузить картинку",
+      });
+    } finally {
+      setUploadingBonusCardImage(false);
+    }
+  }
+
+  async function onPickQuestCardImage(file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast({ variant: "error", title: "Нужен файл изображения" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast({ variant: "error", title: "Максимум 5 МБ" });
+      return;
+    }
+    setUploadingCardImage(true);
+    try {
+      const res = await uploadAdminCaseImage(file);
+      setDraft((prev) => ({ ...prev, card_image_url: res.image_url || res.url }));
+      showToast({ variant: "success", title: "Картинка загружена" });
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось загрузить картинку",
+      });
+    } finally {
+      setUploadingCardImage(false);
+    }
   }
 
   async function onPickPromoCover(index: number, file: File | null) {
@@ -666,6 +722,50 @@ export default function QuestsSection() {
               />
             </>
           ) : null}
+          <div className="space-y-2 sm:col-span-2">
+            <span className="text-sm text-muted">Картинка на карточке бонуса</span>
+            <p className="text-xs text-muted">
+              Опционально. Если не задана — берётся превью награды (кейс / подарок / TON).
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              {board.bonus_card_image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={board.bonus_card_image_url}
+                  alt=""
+                  className="h-14 w-14 rounded-xl object-cover bg-black/30"
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted">
+                  —
+                </div>
+              )}
+              <label className="inline-flex cursor-pointer items-center">
+                <span className="rounded-lg border border-border bg-background px-3 py-2 text-sm hover:bg-surface">
+                  {uploadingBonusCardImage ? "Загрузка…" : "Загрузить"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingBonusCardImage}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    e.target.value = "";
+                    void onPickBonusCardImage(file);
+                  }}
+                />
+              </label>
+              {board.bonus_card_image_url ? (
+                <AdminButton
+                  variant="secondary"
+                  onClick={() => setBoard({ ...board, bonus_card_image_url: "" })}
+                >
+                  Убрать
+                </AdminButton>
+              ) : null}
+            </div>
+          </div>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -1142,6 +1242,50 @@ export default function QuestsSection() {
               />
             </>
           ) : null}
+          <div className="space-y-2 sm:col-span-2">
+            <span className="text-sm text-muted">Картинка на карточке задания</span>
+            <p className="text-xs text-muted">
+              Опционально. Если не задана — берётся превью награды (кейс / подарок / TON).
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              {draft.card_image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={draft.card_image_url}
+                  alt=""
+                  className="h-14 w-14 rounded-xl object-cover bg-black/30"
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted">
+                  —
+                </div>
+              )}
+              <label className="inline-flex cursor-pointer items-center">
+                <span className="rounded-lg border border-border bg-background px-3 py-2 text-sm hover:bg-surface">
+                  {uploadingCardImage ? "Загрузка…" : "Загрузить"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingCardImage}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    e.target.value = "";
+                    void onPickQuestCardImage(file);
+                  }}
+                />
+              </label>
+              {draft.card_image_url ? (
+                <AdminButton
+                  variant="secondary"
+                  onClick={() => setDraft({ ...draft, card_image_url: "" })}
+                >
+                  Убрать
+                </AdminButton>
+              ) : null}
+            </div>
+          </div>
           <AdminIntField
             label="Порядок"
             value={draft.sort_order}

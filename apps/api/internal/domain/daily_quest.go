@@ -61,6 +61,8 @@ type DailyQuest struct {
 	RewardModelName      string     `gorm:"size:128;not null;default:''" json:"reward_model_name"`
 	RewardGiftName       string     `gorm:"size:256;not null;default:''" json:"reward_gift_name"`
 	RewardGiftImageURL   string     `gorm:"type:text;not null;default:''" json:"reward_gift_image_url"`
+	// CardImageURL — optional art for the quests lobby card (overrides reward preview).
+	CardImageURL         string     `gorm:"type:text;not null;default:''" json:"card_image_url"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 }
@@ -79,6 +81,8 @@ type DailyQuestBoardSettings struct {
 	BonusRewardModelName       string     `gorm:"size:128;not null;default:''" json:"bonus_reward_model_name"`
 	BonusRewardGiftName        string     `gorm:"size:256;not null;default:''" json:"bonus_reward_gift_name"`
 	BonusRewardGiftImageURL    string     `gorm:"type:text;not null;default:''" json:"bonus_reward_gift_image_url"`
+	// BonusCardImageURL — optional art for the bonus lobby card (overrides reward preview).
+	BonusCardImageURL          string     `gorm:"type:text;not null;default:''" json:"bonus_card_image_url"`
 	BonusActive                bool       `gorm:"not null;default:false" json:"bonus_active"`
 	// ProgressEpoch — admin global reset: count progress only after this instant (if after day start).
 	ProgressEpoch *time.Time `json:"progress_epoch,omitempty"`
