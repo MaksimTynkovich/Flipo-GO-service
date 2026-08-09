@@ -8,11 +8,21 @@ import (
 
 const (
 	DailyQuestObjectiveOpenCases       = "open_cases"
+	DailyQuestObjectiveOpenCasesSpend  = "open_cases_spend"
 	DailyQuestObjectiveInviteReferrals = "invite_referrals"
+	DailyQuestObjectiveWagerRoulette   = "wager_roulette"
+	DailyQuestObjectiveWagerCrash      = "wager_crash"
+	// RouletteWinMult — count roulette wins whose color multiplier >= ObjectiveParam/100 (e.g. 5000 = ×50).
+	DailyQuestObjectiveRouletteWinMult = "roulette_win_mult"
+	// CrashCashoutMult — count crash cashouts with cashout_multiplier >= ObjectiveParam/100 (e.g. 200 = ×2).
+	DailyQuestObjectiveCrashCashoutMult = "crash_cashout_mult"
+	// RouletteColorStreak — max consecutive correct roulette rounds (ObjectiveTarget = streak length).
+	DailyQuestObjectiveRouletteColorStreak = "roulette_color_streak"
 
 	DailyQuestRewardBalance  = "balance_nanoton"
 	DailyQuestRewardFreeCase = "free_case_open"
 	DailyQuestRewardGift     = "gift"
+	DailyQuestRewardNone     = "none"
 
 	DailyQuestClaimTask  = "task"
 	DailyQuestClaimBonus = "bonus"
@@ -39,8 +49,10 @@ type DailyQuest struct {
 	Active          bool       `gorm:"not null;default:true" json:"active"`
 	ActiveFrom      *time.Time `gorm:"type:date" json:"active_from,omitempty"`
 	ActiveTo        *time.Time `gorm:"type:date" json:"active_to,omitempty"`
-	ObjectiveType   string     `gorm:"size:32;not null" json:"objective_type"`
-	ObjectiveTarget int        `gorm:"not null" json:"objective_target"`
+	ObjectiveType   string     `gorm:"size:48;not null" json:"objective_type"`
+	ObjectiveTarget int64      `gorm:"not null" json:"objective_target"`
+	// ObjectiveParam — type-specific threshold (multiplier in hundredths for *_mult objectives).
+	ObjectiveParam  int64      `gorm:"not null;default:0" json:"objective_param"`
 	ObjectiveCaseID *uuid.UUID `gorm:"type:uuid" json:"objective_case_id,omitempty"`
 	RewardType           string     `gorm:"size:32;not null" json:"reward_type"`
 	RewardNanoton        int64      `gorm:"not null;default:0" json:"reward_nanoton"`
@@ -68,10 +80,75 @@ type DailyQuestBoardSettings struct {
 	BonusRewardGiftName        string     `gorm:"size:256;not null;default:''" json:"bonus_reward_gift_name"`
 	BonusRewardGiftImageURL    string     `gorm:"type:text;not null;default:''" json:"bonus_reward_gift_image_url"`
 	BonusActive                bool       `gorm:"not null;default:false" json:"bonus_active"`
-	UpdatedAt                  time.Time  `json:"updated_at"`
+	// ProgressEpoch — admin global reset: count progress only after this instant (if after day start).
+	ProgressEpoch *time.Time `json:"progress_epoch,omitempty"`
+	// PromoSlides — cases-page quest promo carousel (admin-editable).
+	PromoSlides []DailyQuestPromoSlide `gorm:"type:jsonb;serializer:json;not null;default:'[]'" json:"promo_slides"`
+	UpdatedAt   time.Time              `json:"updated_at"`
 }
 
 func (DailyQuestBoardSettings) TableName() string { return "daily_quest_board_settings" }
+
+// DailyQuestPromoSlide — one slide in the cases catalog quest banner.
+type DailyQuestPromoSlide struct {
+	ID       string `json:"id"`
+	Tone     string `json:"tone"`
+	Eyebrow  string `json:"eyebrow"`
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle"`
+	CTA      string `json:"cta"`
+	// CTAColor — hex text color for the white pill CTA.
+	CTAColor string `json:"cta_color,omitempty"`
+	CTABold  bool   `json:"cta_bold,omitempty"`
+	// Per-line text colors (hex). Empty = CSS tone defaults.
+	EyebrowColor  string `json:"eyebrow_color,omitempty"`
+	TitleColor    string `json:"title_color,omitempty"`
+	SubtitleColor string `json:"subtitle_color,omitempty"`
+	// AccentColor — color for **marked** spans inside title/subtitle/eyebrow.
+	AccentColor string `json:"accent_color,omitempty"`
+	EyebrowBold  bool `json:"eyebrow_bold,omitempty"`
+	TitleBold    bool `json:"title_bold,omitempty"`
+	SubtitleBold bool `json:"subtitle_bold,omitempty"`
+	// TitleSize — sm | md | lg (empty = md).
+	TitleSize string `json:"title_size,omitempty"`
+	CoverURL  string `json:"cover_url"`
+	Active    bool   `json:"active"`
+}
+
+// DefaultDailyQuestPromoSlides — seed content matching historical hardcoded banner.
+func DefaultDailyQuestPromoSlides() []DailyQuestPromoSlide {
+	return []DailyQuestPromoSlide{
+		{
+			ID:       "duo",
+			Tone:     "duo",
+			Eyebrow:  "Супер-акция",
+			Title:    "1+1 на кейсы",
+			Subtitle: "Открой кейс — второй бесплатно",
+			CTA:      "К заданиям",
+			CoverURL: "/cases/covers/quest-promo-2x.webp",
+			Active:   true,
+		},
+		{
+			ID:       "open",
+			Tone:     "open",
+			Eyebrow:  "Задание дня",
+			Title:    "Открой кейс",
+			Subtitle: "Выполни цель и забери награду",
+			CTA:      "Смотреть",
+			CoverURL: "/cases/covers/quest-promo-open.webp",
+			Active:   true,
+		},
+	}
+}
+
+// DailyQuestProgressBaseline — per-user progress watermark for an MSK day (admin reset).
+type DailyQuestProgressBaseline struct {
+	UserID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
+	DayMSK         time.Time `gorm:"type:date;primaryKey" json:"day_msk"`
+	ProgressSince  time.Time `gorm:"not null" json:"progress_since"`
+}
+
+func (DailyQuestProgressBaseline) TableName() string { return "daily_quest_progress_baselines" }
 
 // DailyQuestClaim — one claim per task (or board bonus) per MSK day.
 type DailyQuestClaim struct {

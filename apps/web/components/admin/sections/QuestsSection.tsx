@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Upload } from "lucide-react";
 import { GiftPickerModal } from "@/components/admin/GiftPickerModal";
 import { AdminUserPicker } from "@/components/admin/AdminUserPicker";
 import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
@@ -14,12 +15,126 @@ import {
   getAdminDailyQuests,
   resetAdminDailyQuestClaims,
   updateAdminDailyQuestBoard,
+  uploadAdminCaseImage,
   upsertAdminDailyQuest,
   type AdminCase,
   type AdminDailyQuest,
   type AdminDailyQuestBoard,
+  type DailyQuestPromoSlide,
 } from "@/lib/api";
 import type { GiftPickerSelection } from "@/lib/changes-gifts";
+import { CASE_ACCENT_COLOR_OPTIONS } from "@/components/cases/case-ui";
+import { CasesQuestBannerPreview } from "@/components/cases/CasesQuestBanner";
+
+const PROMO_TEXT_COLOR_OPTIONS = [
+  "#ffffff",
+  "#ff4eb1",
+  "#ff6bcb",
+  "#7dd3fc",
+  "#9ec9ff",
+  "#3390ec",
+  "#0f9f7a",
+  "#5ee0c0",
+  "#7c5cff",
+  "#ffb44a",
+  "#e11d48",
+  "#111827",
+  ...CASE_ACCENT_COLOR_OPTIONS,
+] as const;
+
+function uniqueColors(colors: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of colors) {
+    const key = c.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
+const PROMO_PALETTE = uniqueColors(PROMO_TEXT_COLOR_OPTIONS);
+
+function PromoColorPicker({
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  fallback: string;
+  onChange: (color: string) => void;
+}) {
+  const current = /^#[0-9a-fA-F]{6}$/.test(value || "") ? value! : fallback;
+  return (
+    <div className="space-y-1.5 text-sm">
+      <span className="text-muted">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {PROMO_PALETTE.map((color) => {
+          const selected = (value || "").trim().toLowerCase() === color.toLowerCase();
+          return (
+            <button
+              key={color}
+              type="button"
+              title={color}
+              aria-label={color}
+              className={
+                selected
+                  ? "h-6 w-6 rounded-md ring-2 ring-[var(--admin-accent,#3390ec)] ring-offset-1 ring-offset-[var(--admin-panel,#0c141c)]"
+                  : "h-6 w-6 rounded-md ring-1 ring-white/15 hover:ring-white/35"
+              }
+              style={{ backgroundColor: color }}
+              onClick={() => onChange(color)}
+            />
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          className="h-8 w-9 cursor-pointer rounded-md border border-border bg-transparent"
+          value={current}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <input
+          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={fallback}
+        />
+      </div>
+    </div>
+  );
+}
+
+const DEFAULT_PROMO_SLIDES: DailyQuestPromoSlide[] = [
+  {
+    id: "duo",
+    tone: "duo",
+    eyebrow: "Супер-акция",
+    title: "1+1 на кейсы",
+    subtitle: "Открой кейс — второй бесплатно",
+    cta: "К заданиям",
+    cta_color: "#7c5cff",
+    cta_bold: false,
+    cover_url: "/cases/covers/quest-promo-2x.webp",
+    active: true,
+  },
+  {
+    id: "open",
+    tone: "open",
+    eyebrow: "Задание дня",
+    title: "Открой кейс",
+    subtitle: "Выполни цель и забери награду",
+    cta: "Смотреть",
+    cta_color: "#0f9f7a",
+    cta_bold: false,
+    cover_url: "/cases/covers/quest-promo-open.webp",
+    active: true,
+  },
+];
 
 const EMPTY_QUEST: AdminDailyQuest = {
   title: "",
@@ -28,6 +143,7 @@ const EMPTY_QUEST: AdminDailyQuest = {
   active: true,
   objective_type: "open_cases",
   objective_target: 1,
+  objective_param: 0,
   objective_case_id: null,
   reward_type: "balance_nanoton",
   reward_nanoton: 1_000_000_000,
@@ -39,7 +155,7 @@ const EMPTY_QUEST: AdminDailyQuest = {
 
 const EMPTY_BOARD: AdminDailyQuestBoard = {
   bonus_title: "Бонус дня",
-  bonus_description: "Выполни все задания",
+  bonus_description: "",
   bonus_reward_type: "balance_nanoton",
   bonus_reward_nanoton: 1_000_000_000,
   bonus_reward_collection_slug: "",
@@ -47,6 +163,7 @@ const EMPTY_BOARD: AdminDailyQuestBoard = {
   bonus_reward_gift_name: "",
   bonus_reward_gift_image_url: "",
   bonus_active: false,
+  promo_slides: DEFAULT_PROMO_SLIDES,
 };
 
 function dateOnly(value?: string | null): string {
@@ -57,6 +174,36 @@ function dateOnly(value?: string | null): string {
 function giftRewardLabel(name?: string, slug?: string, model?: string): string {
   const title = name?.trim() || model?.trim() || slug?.trim();
   return title ? `Подарок: ${title}` : "Подарок";
+}
+
+const NANOTON_OBJECTIVES = new Set([
+  "open_cases_spend",
+  "wager_roulette",
+  "wager_crash",
+]);
+
+const MULT_OBJECTIVES = new Set(["roulette_win_mult", "crash_cashout_mult"]);
+
+function isNanotonObjective(type: string): boolean {
+  return NANOTON_OBJECTIVES.has(type);
+}
+
+function isMultObjective(type: string): boolean {
+  return MULT_OBJECTIVES.has(type);
+}
+
+function isCaseObjective(type: string): boolean {
+  return type === "open_cases" || type === "open_cases_spend";
+}
+
+function multFromParam(param?: number): number {
+  const p = Number(param) || 0;
+  if (p < 100) return 2;
+  return p / 100;
+}
+
+function paramFromMult(mult: number): number {
+  return Math.max(100, Math.round(mult * 100));
 }
 
 export default function QuestsSection() {
@@ -70,6 +217,7 @@ export default function QuestsSection() {
   const [resetting, setResetting] = useState(false);
   const [resetTelegramId, setResetTelegramId] = useState<number | null>(null);
   const [giftPickerTarget, setGiftPickerTarget] = useState<"quest" | "board" | null>(null);
+  const [uploadingCoverIndex, setUploadingCoverIndex] = useState<number | null>(null);
 
   const caseOptions = useMemo(
     () => cases.filter((c) => c.active !== false).sort((a, b) => a.title.localeCompare(b.title)),
@@ -85,7 +233,13 @@ export default function QuestsSection() {
         getAdminCases().catch(() => [] as AdminCase[]),
       ]);
       setQuests(items);
-      setBoard(boardRes);
+      setBoard({
+        ...boardRes,
+        promo_slides:
+          boardRes.promo_slides && boardRes.promo_slides.length > 0
+            ? boardRes.promo_slides
+            : DEFAULT_PROMO_SLIDES,
+      });
       setCases(caseRes);
     } catch (e) {
       showToast({
@@ -135,11 +289,15 @@ export default function QuestsSection() {
       const payload: AdminDailyQuest = {
         ...draft,
         title: draft.title.trim(),
-        description: draft.description.trim(),
+        description: "",
         active_from: draft.active_from || null,
         active_to: draft.active_to || null,
-        objective_case_id:
-          draft.objective_type === "open_cases" ? draft.objective_case_id || null : null,
+        objective_case_id: isCaseObjective(draft.objective_type)
+          ? draft.objective_case_id || null
+          : null,
+        objective_param: isMultObjective(draft.objective_type)
+          ? Math.max(100, Math.floor(draft.objective_param || 0))
+          : 0,
         reward_case_id: draft.reward_type === "free_case_open" ? draft.reward_case_id || null : null,
         reward_nanoton:
           draft.reward_type === "balance_nanoton" || draft.reward_type === "gift"
@@ -180,7 +338,7 @@ export default function QuestsSection() {
       const payload: AdminDailyQuestBoard = {
         ...board,
         bonus_title: board.bonus_title.trim() || "Бонус дня",
-        bonus_description: board.bonus_description.trim(),
+        bonus_description: "",
         bonus_reward_case_id:
           board.bonus_reward_type === "free_case_open" ? board.bonus_reward_case_id || null : null,
         bonus_reward_nanoton:
@@ -195,9 +353,16 @@ export default function QuestsSection() {
           board.bonus_reward_type === "gift" ? board.bonus_reward_gift_name || "" : "",
         bonus_reward_gift_image_url:
           board.bonus_reward_type === "gift" ? board.bonus_reward_gift_image_url || "" : "",
+        promo_slides: board.promo_slides ?? [],
       };
       const next = await updateAdminDailyQuestBoard(payload);
-      setBoard(next);
+      setBoard({
+        ...next,
+        promo_slides:
+          next.promo_slides && next.promo_slides.length > 0
+            ? next.promo_slides
+            : board.promo_slides ?? DEFAULT_PROMO_SLIDES,
+      });
       showToast({ variant: "success", title: "Бонус сохранён" });
     } catch (e) {
       showToast({
@@ -257,8 +422,8 @@ export default function QuestsSection() {
         variant: "success",
         title:
           result.deleted_claims > 0
-            ? `Сброшено клеймов: ${result.deleted_claims} (${result.day_msk})`
-            : `Клеймов за ${result.day_msk} не найдено`,
+            ? `Сброшены прогресс и клеймы: ${result.deleted_claims} (${result.day_msk})`
+            : `Прогресс сброшен за ${result.day_msk} (клеймов не было)`,
       });
       if (scope === "user") setResetTelegramId(null);
     } catch (e) {
@@ -271,7 +436,81 @@ export default function QuestsSection() {
     }
   }
 
+  function updatePromoSlide(index: number, patch: Partial<DailyQuestPromoSlide>) {
+    setBoard((prev) => {
+      const slides = [...(prev.promo_slides ?? DEFAULT_PROMO_SLIDES)];
+      const current = slides[index] ?? {
+        id: `slide-${index + 1}`,
+        tone: "open",
+        eyebrow: "",
+        title: "",
+        subtitle: "",
+        cta: "К заданиям",
+        cta_color: "#0f9f7a",
+        cta_bold: false,
+        cover_url: "",
+        active: true,
+      };
+      slides[index] = { ...current, ...patch };
+      return { ...prev, promo_slides: slides };
+    });
+  }
+
+  async function onPickPromoCover(index: number, file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast({ variant: "error", title: "Нужен файл изображения" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast({ variant: "error", title: "Максимум 5 МБ" });
+      return;
+    }
+    setUploadingCoverIndex(index);
+    try {
+      const res = await uploadAdminCaseImage(file);
+      updatePromoSlide(index, { cover_url: res.image_url || res.url });
+      showToast({ variant: "success", title: "Картинка загружена" });
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: e instanceof Error ? e.message : "Не удалось загрузить картинку",
+      });
+    } finally {
+      setUploadingCoverIndex(null);
+    }
+  }
+
+  function addPromoSlide() {
+    setBoard((prev) => ({
+      ...prev,
+      promo_slides: [
+        ...(prev.promo_slides ?? []),
+        {
+          id: `slide-${Date.now()}`,
+          tone: "open",
+          eyebrow: "",
+          title: "",
+          subtitle: "",
+          cta: "К заданиям",
+          cta_color: "#0f9f7a",
+          cta_bold: false,
+          cover_url: "",
+          active: true,
+        },
+      ],
+    }));
+  }
+
+  function removePromoSlide(index: number) {
+    setBoard((prev) => ({
+      ...prev,
+      promo_slides: (prev.promo_slides ?? []).filter((_, i) => i !== index),
+    }));
+  }
+
   function rewardLabel(q: AdminDailyQuest): string {
+    if (q.reward_type === "none") return "Без награды";
     if (q.reward_type === "free_case_open") {
       const c = caseOptions.find((x) => x.id === q.reward_case_id);
       return c ? `Кейс: ${c.title}` : "Кейс";
@@ -284,7 +523,26 @@ export default function QuestsSection() {
 
   function objectiveLabel(q: AdminDailyQuest): string {
     if (q.objective_type === "invite_referrals") return `Рефералы ×${q.objective_target}`;
+    if (q.objective_type === "wager_roulette") {
+      return `Рулетка ${formatTON(q.objective_target)} TON`;
+    }
+    if (q.objective_type === "wager_crash") {
+      return `Crash ${formatTON(q.objective_target)} TON`;
+    }
+    if (q.objective_type === "roulette_win_mult") {
+      return `Рулетка ≥×${multFromParam(q.objective_param)} ×${q.objective_target}`;
+    }
+    if (q.objective_type === "crash_cashout_mult") {
+      return `Crash cashout ≥×${multFromParam(q.objective_param)} ×${q.objective_target}`;
+    }
+    if (q.objective_type === "roulette_color_streak") {
+      return `Рулетка серия цвета ×${q.objective_target}`;
+    }
     const caseTitle = caseOptions.find((x) => x.id === q.objective_case_id)?.title;
+    if (q.objective_type === "open_cases_spend") {
+      const amount = `${formatTON(q.objective_target)} TON`;
+      return caseTitle ? `Кейс «${caseTitle}» ${amount}` : `Кейсы ${amount}`;
+    }
     if (caseTitle) return `Кейс «${caseTitle}» ×${q.objective_target}`;
     return `Любые кейсы ×${q.objective_target}`;
   }
@@ -326,20 +584,12 @@ export default function QuestsSection() {
       <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
         <h3 className="text-sm font-semibold">Бонус за все задания</h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-sm">
+          <label className="space-y-1 text-sm sm:col-span-2">
             <span className="text-muted">Заголовок</span>
             <input
               className="w-full rounded-lg border border-border bg-background px-3 py-2"
               value={board.bonus_title}
               onChange={(e) => setBoard({ ...board, bonus_title: e.target.value })}
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-muted">Описание</span>
-            <input
-              className="w-full rounded-lg border border-border bg-background px-3 py-2"
-              value={board.bonus_description}
-              onChange={(e) => setBoard({ ...board, bonus_description: e.target.value })}
             />
           </label>
           <label className="space-y-1 text-sm">
@@ -433,6 +683,263 @@ export default function QuestsSection() {
       </section>
 
       <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
+        <h3 className="text-sm font-semibold">Баннер на странице кейсов</h3>
+        <p className="text-xs text-muted">
+          Слайды карусели над каталогом. Текст, картинка и кнопка ведут в задания.
+        </p>
+        {(board.promo_slides ?? []).map((slide, index) => {
+          return (
+          <div
+            key={slide.id || `slide-${index}`}
+            className="space-y-3 rounded-lg border border-border bg-background/40 p-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium">Слайд {index + 1}</p>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={slide.active}
+                    onChange={(e) => updatePromoSlide(index, { active: e.target.checked })}
+                  />
+                  Показывать
+                </label>
+                <AdminButton
+                  variant="secondary"
+                  onClick={() => removePromoSlide(index)}
+                  disabled={(board.promo_slides?.length ?? 0) <= 1}
+                >
+                  Удалить
+                </AdminButton>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted">Предпросмотр</p>
+              <div className="rounded-2xl bg-[#0c141c] p-3">
+                <CasesQuestBannerPreview slide={slide} />
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted">
+                В текстах: <code className="text-foreground/80">**акцент**</code> для цветного
+                фрагмента, <code className="text-foreground/80">\n</code> для переноса строки.
+                Пример заголовка: <code className="text-foreground/80">Кейс в **подарок**</code>
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <span className="text-muted">Надзаголовок</span>
+                <input
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                  value={slide.eyebrow}
+                  onChange={(e) => updatePromoSlide(index, { eyebrow: e.target.value })}
+                  placeholder="1 + 1"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(slide.eyebrow_bold)}
+                  onChange={(e) => updatePromoSlide(index, { eyebrow_bold: e.target.checked })}
+                />
+                <span className="text-muted">Жирный надзаголовок</span>
+              </label>
+              <PromoColorPicker
+                label="Цвет надзаголовка"
+                value={slide.eyebrow_color}
+                fallback="#ff4eb1"
+                onChange={(color) => updatePromoSlide(index, { eyebrow_color: color })}
+              />
+
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <span className="text-muted">Заголовок</span>
+                <textarea
+                  className="min-h-[4.5rem] w-full rounded-lg border border-border bg-background px-3 py-2"
+                  value={slide.title}
+                  onChange={(e) => updatePromoSlide(index, { title: e.target.value })}
+                  placeholder={"Кейс в **подарок**"}
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted">Размер заголовка</span>
+                <select
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                  value={slide.title_size === "sm" || slide.title_size === "lg" ? slide.title_size : "md"}
+                  onChange={(e) => updatePromoSlide(index, { title_size: e.target.value })}
+                >
+                  <option value="sm">Маленький</option>
+                  <option value="md">Обычный</option>
+                  <option value="lg">Крупный</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(slide.title_bold)}
+                  onChange={(e) => updatePromoSlide(index, { title_bold: e.target.checked })}
+                />
+                <span className="text-muted">Жирный заголовок</span>
+              </label>
+              <PromoColorPicker
+                label="Цвет заголовка"
+                value={slide.title_color}
+                fallback="#ffffff"
+                onChange={(color) => updatePromoSlide(index, { title_color: color })}
+              />
+              <PromoColorPicker
+                label="Цвет акцента (**…**)"
+                value={slide.accent_color}
+                fallback="#ff4eb1"
+                onChange={(color) => updatePromoSlide(index, { accent_color: color })}
+              />
+
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <span className="text-muted">Подзаголовок</span>
+                <input
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                  value={slide.subtitle}
+                  onChange={(e) => updatePromoSlide(index, { subtitle: e.target.value })}
+                  placeholder="Второй открывается бесплатно"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(slide.subtitle_bold)}
+                  onChange={(e) => updatePromoSlide(index, { subtitle_bold: e.target.checked })}
+                />
+                <span className="text-muted">Жирный подзаголовок</span>
+              </label>
+              <PromoColorPicker
+                label="Цвет подзаголовка"
+                value={slide.subtitle_color}
+                fallback="#9ec9ff"
+                onChange={(color) => updatePromoSlide(index, { subtitle_color: color })}
+              />
+
+              <label className="space-y-1 text-sm">
+                <span className="text-muted">Текст кнопки</span>
+                <input
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                  value={slide.cta}
+                  onChange={(e) => updatePromoSlide(index, { cta: e.target.value })}
+                  placeholder="Участвовать"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(slide.cta_bold)}
+                  onChange={(e) => updatePromoSlide(index, { cta_bold: e.target.checked })}
+                />
+                <span className="text-muted">Жирный шрифт кнопки</span>
+              </label>
+              <div className="sm:col-span-2">
+                <PromoColorPicker
+                  label="Цвет кнопки (текст на белой pill)"
+                  value={slide.cta_color}
+                  fallback={slide.tone === "duo" ? "#7c5cff" : "#3390ec"}
+                  onChange={(color) => updatePromoSlide(index, { cta_color: color })}
+                />
+              </div>
+
+              <div className="space-y-1 text-sm sm:col-span-2">
+                <span className="text-muted">
+                  Картинка — с компьютера (JPEG/PNG/WebP/GIF, до 5 МБ) или URL
+                </span>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="sr-only"
+                        disabled={uploadingCoverIndex !== null || saving}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          e.target.value = "";
+                          void onPickPromoCover(index, f);
+                        }}
+                      />
+                      <span
+                        className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm ${
+                          uploadingCoverIndex !== null
+                            ? "pointer-events-none opacity-50"
+                            : "hover:bg-white/5"
+                        }`}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        {uploadingCoverIndex === index ? "Загрузка…" : "С компьютера"}
+                      </span>
+                    </label>
+                    {slide.cover_url ? (
+                      <AdminButton
+                        variant="secondary"
+                        disabled={uploadingCoverIndex !== null || saving}
+                        onClick={() => updatePromoSlide(index, { cover_url: "" })}
+                      >
+                        Убрать
+                      </AdminButton>
+                    ) : null}
+                  </div>
+                  <input
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                    value={slide.cover_url}
+                    onChange={(e) => updatePromoSlide(index, { cover_url: e.target.value })}
+                    placeholder="/static/cases/… или https://…"
+                  />
+                </div>
+              </div>
+              <label className="space-y-1 text-sm">
+                <span className="text-muted">Стиль фона (fade)</span>
+                <select
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                  value={slide.tone === "duo" ? "duo" : "open"}
+                  onChange={(e) => updatePromoSlide(index, { tone: e.target.value })}
+                >
+                  <option value="open">Задание</option>
+                  <option value="duo">Акция</option>
+                </select>
+              </label>
+              <div className="flex items-end">
+                <AdminButton
+                  variant="secondary"
+                  onClick={() =>
+                    updatePromoSlide(index, {
+                      eyebrow: "1 + 1",
+                      eyebrow_color: "#ff4eb1",
+                      eyebrow_bold: true,
+                      title: "Кейс в **подарок**",
+                      title_color: "#ffffff",
+                      title_bold: true,
+                      title_size: "lg",
+                      accent_color: "#ff4eb1",
+                      subtitle: "Второй открывается бесплатно",
+                      subtitle_color: "#9ec9ff",
+                      subtitle_bold: false,
+                      cta: "Участвовать",
+                      cta_color: "#3390ec",
+                      cta_bold: true,
+                      tone: "duo",
+                    })
+                  }
+                >
+                  Пример как на макете 1+1
+                </AdminButton>
+              </div>
+            </div>
+          </div>
+          );
+        })}
+        <AdminToolbar>
+          <AdminButton variant="secondary" onClick={addPromoSlide} disabled={saving || loading}>
+            Добавить слайд
+          </AdminButton>
+          <AdminButton onClick={() => void saveBoard()} disabled={saving || loading}>
+            Сохранить баннер
+          </AdminButton>
+        </AdminToolbar>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
         <h3 className="text-sm font-semibold">
           {draft.id ? "Редактирование задания" : "Новое задание"}
         </h3>
@@ -445,40 +952,107 @@ export default function QuestsSection() {
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
             />
           </label>
-          <label className="space-y-1 text-sm sm:col-span-2">
-            <span className="text-muted">Описание</span>
-            <input
-              className="w-full rounded-lg border border-border bg-background px-3 py-2"
-              value={draft.description}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            />
-          </label>
           <label className="space-y-1 text-sm">
             <span className="text-muted">Цель</span>
             <select
               className="w-full rounded-lg border border-border bg-background px-3 py-2"
               value={draft.objective_type}
-              onChange={(e) =>
+              onChange={(e) => {
+                const nextType = e.target.value;
+                const wasNanoton = isNanotonObjective(draft.objective_type);
+                const nextNanoton = isNanotonObjective(nextType);
+                let nextTarget = draft.objective_target;
+                let nextParam = draft.objective_param ?? 0;
+                if (!wasNanoton && nextNanoton) {
+                  nextTarget = 1_000_000_000;
+                } else if (wasNanoton && !nextNanoton) {
+                  nextTarget = 1;
+                }
+                if (nextType === "roulette_win_mult") {
+                  nextTarget = 1;
+                  nextParam = 5000;
+                } else if (nextType === "crash_cashout_mult") {
+                  nextTarget = 1;
+                  nextParam = 200;
+                } else if (nextType === "roulette_color_streak") {
+                  nextTarget = 5;
+                  nextParam = 0;
+                } else if (!isMultObjective(nextType)) {
+                  nextParam = 0;
+                }
                 setDraft({
                   ...draft,
-                  objective_type: e.target.value,
-                  objective_case_id:
-                    e.target.value === "open_cases" ? draft.objective_case_id ?? null : null,
-                })
-              }
+                  objective_type: nextType,
+                  objective_target: Math.max(1, nextTarget),
+                  objective_param: nextParam,
+                  objective_case_id: isCaseObjective(nextType)
+                    ? draft.objective_case_id ?? null
+                    : null,
+                });
+              }}
             >
-              <option value="open_cases">Открыть кейсы</option>
+              <option value="open_cases">Открыть кейсы (шт.)</option>
+              <option value="open_cases_spend">Отыграть в кейсах (TON)</option>
+              <option value="wager_roulette">Отыграть в рулетке (TON)</option>
+              <option value="wager_crash">Отыграть в Crash (TON)</option>
+              <option value="roulette_win_mult">Рулетка: выбей множитель</option>
+              <option value="crash_cashout_mult">Crash: додержи до множителя</option>
+              <option value="roulette_color_streak">Рулетка: угадай цвет подряд</option>
               <option value="invite_referrals">Пригласить рефералов</option>
             </select>
           </label>
-          <AdminIntField
-            label="Сколько раз"
-            value={draft.objective_target}
-            onChange={(v) => setDraft({ ...draft, objective_target: Math.max(1, v) })}
-          />
-          {draft.objective_type === "open_cases" ? (
+          {isNanotonObjective(draft.objective_type) ? (
+            <AdminTonField
+              label="Сумма TON"
+              valueNanoton={draft.objective_target}
+              onChangeNanoton={(v) =>
+                setDraft({ ...draft, objective_target: Math.max(1, Math.floor(v)) })
+              }
+              min={0.001}
+              hint="Сколько нужно отыграть за день"
+            />
+          ) : draft.objective_type === "roulette_color_streak" ? (
+            <AdminIntField
+              label="Длина серии"
+              value={draft.objective_target}
+              onChange={(v) => setDraft({ ...draft, objective_target: Math.max(1, v) })}
+              hint="Сколько правильных цветов подряд"
+            />
+          ) : (
+            <AdminIntField
+              label={isMultObjective(draft.objective_type) ? "Сколько раз" : "Сколько раз"}
+              value={draft.objective_target}
+              onChange={(v) => setDraft({ ...draft, objective_target: Math.max(1, v) })}
+            />
+          )}
+          {isMultObjective(draft.objective_type) ? (
+            <AdminIntField
+              label={
+                draft.objective_type === "crash_cashout_mult"
+                  ? "Мин. множитель cashout"
+                  : "Мин. множитель выигрыша"
+              }
+              value={Math.round(multFromParam(draft.objective_param))}
+              onChange={(v) =>
+                setDraft({
+                  ...draft,
+                  objective_param: paramFromMult(Math.max(1, v)),
+                })
+              }
+              hint={
+                draft.objective_type === "roulette_win_mult"
+                  ? "×2 синий/красный, ×5 зелёный, ×50 жёлтый"
+                  : "Например 2 = додержать до ×2 и забрать"
+              }
+            />
+          ) : null}
+          {isCaseObjective(draft.objective_type) ? (
             <label className="space-y-1 text-sm sm:col-span-2">
-              <span className="text-muted">Какой кейс открыть</span>
+              <span className="text-muted">
+                {draft.objective_type === "open_cases_spend"
+                  ? "Какой кейс учитывать"
+                  : "Какой кейс открыть"}
+              </span>
               <select
                 className="w-full rounded-lg border border-border bg-background px-3 py-2"
                 value={draft.objective_case_id ?? ""}
@@ -505,6 +1079,7 @@ export default function QuestsSection() {
               <option value="balance_nanoton">TON на баланс</option>
               <option value="free_case_open">Бесплатный кейс</option>
               <option value="gift">Подарок в инвентарь</option>
+              <option value="none">Без награды (к бонусу дня)</option>
             </select>
           </label>
           {draft.reward_type === "balance_nanoton" ? (

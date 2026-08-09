@@ -30,12 +30,10 @@ type Deps struct {
 	QuestsHandler      *handlers.QuestsHandler
 	AdminHandler       *handlers.AdminHandler
 	AnalyticsHandler   *handlers.AnalyticsHandler
-	PresenceHandler    *handlers.PresenceHandler
 	MaintenanceHandler *handlers.MaintenanceHandler
 	MaintenanceState   *middleware.MaintenanceState
 	AdminTelegramIDs   []int64
 	Hub                *websocket.Hub
-	BotsDataDir        string
 	CasesUploadDir     string
 	GiftImageHandler   *handlers.GiftImageHandler
 	CORSOrigins        []string
@@ -51,12 +49,6 @@ func NewRouter(deps Deps) *gin.Engine {
 		r.Use(middleware.MaintenanceGate(deps.MaintenanceState, deps.Auth))
 	}
 
-	// Curated bot roster (assets/bots) for the live-online overlay avatars.
-	if deps.BotsDataDir != "" {
-		if abs, err := filepath.Abs(deps.BotsDataDir); err == nil {
-			r.Static("/static/bots", abs)
-		}
-	}
 	if deps.CasesUploadDir != "" {
 		if abs, err := filepath.Abs(deps.CasesUploadDir); err == nil {
 			_ = os.MkdirAll(abs, 0o755)
@@ -100,7 +92,6 @@ func NewRouter(deps Deps) *gin.Engine {
 		v1.GET("/market/listings", deps.MarketHandler.List)
 		v1.GET("/market/listings/:id", deps.MarketHandler.Get)
 		v1.GET("/games/:game/rounds/:id/proof", deps.GameHandler.RoundProof)
-		v1.GET("/presence", deps.PresenceHandler.Get)
 
 		authed := v1.Group("")
 		authed.Use(middleware.JWTAuth(deps.Auth), middleware.UserBanGate(deps.Auth))
@@ -135,6 +126,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			authed.GET("/promos/status", deps.PromoHandler.Status)
 			if deps.QuestsHandler != nil {
 				authed.GET("/quests/daily", deps.QuestsHandler.ListDaily)
+				authed.GET("/quests/promo", deps.QuestsHandler.ListPromo)
 				authed.POST("/quests/daily/bonus/claim", deps.QuestsHandler.ClaimBonus)
 				authed.POST("/quests/daily/:id/claim", deps.QuestsHandler.ClaimTask)
 			}
@@ -191,8 +183,6 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/games/stats", deps.AdminHandler.GameStats)
 			adminAuthed.GET("/games/configs", deps.AdminHandler.ListGameConfigs)
 			adminAuthed.PATCH("/games/configs", deps.AdminHandler.UpdateGameConfig)
-			adminAuthed.GET("/social-sim", deps.AdminHandler.GetSocialSimSettings)
-			adminAuthed.PATCH("/social-sim", deps.AdminHandler.UpdateSocialSimSettings)
 			adminAuthed.POST("/games/:game/rotate-seed", deps.AdminHandler.RotateSeed)
 			adminAuthed.GET("/games/:game/seeds", deps.AdminHandler.SeedHistory)
 			adminAuthed.GET("/outcome/overrides", deps.AdminHandler.ListOutcomeOverrides)

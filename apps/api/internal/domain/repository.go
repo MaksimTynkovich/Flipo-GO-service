@@ -88,6 +88,8 @@ type CaseRepository interface {
 	ListOpensByUser(ctx context.Context, userID uuid.UUID, limit int) ([]CaseOpen, error)
 	// CountPaidOpensSince counts paid case opens for progress (optional case filter).
 	CountPaidOpensSince(ctx context.Context, userID uuid.UUID, since time.Time, caseID *uuid.UUID) (int64, error)
+	// SumPaidOpensSince sums price_paid_nanoton for paid opens (optional case filter).
+	SumPaidOpensSince(ctx context.Context, userID uuid.UUID, since time.Time, caseID *uuid.UUID) (int64, error)
 	ListRecentOpens(ctx context.Context, limit int) ([]CaseLiveDrop, error)
 	GetCatalogSettings(ctx context.Context) (*CaseCatalogSettings, error)
 	UpdateCatalogSettings(ctx context.Context, settings *CaseCatalogSettings) error
@@ -227,6 +229,14 @@ type GameRepository interface {
 	ListRecentFinishedRounds(ctx context.Context, gameType GameType, limit int) ([]GameRound, error)
 	SumUserWinsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumUserBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
+	// SumWagerByGameSince sums bet stakes for a game since watermark (excludes refunded).
+	SumWagerByGameSince(ctx context.Context, userID uuid.UUID, gameType GameType, since time.Time) (int64, error)
+	// CountRouletteWinsWithMultSince counts won roulette bets whose color mult >= minMult (e.g. 50).
+	CountRouletteWinsWithMultSince(ctx context.Context, userID uuid.UUID, since time.Time, minMult int64) (int64, error)
+	// CountCrashCashoutsSince counts crash cashouts with cashout_multiplier >= minMult.
+	CountCrashCashoutsSince(ctx context.Context, userID uuid.UUID, since time.Time, minMult float64) (int64, error)
+	// MaxRouletteColorStreakSince returns the longest run of correct roulette rounds since watermark.
+	MaxRouletteColorStreakSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumUserSettledBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumUserRefundsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	SumRoundBets(ctx context.Context, roundID uuid.UUID) (int64, error)
@@ -277,8 +287,6 @@ type PlatformRepository interface {
 	ListBroadcastDeliveries(ctx context.Context, broadcastID uuid.UUID, status string, limit, offset int) ([]TelegramBroadcastDelivery, int64, error)
 	CreateSweep(ctx context.Context, sweep *TreasurySweep) error
 	ListSweeps(ctx context.Context, limit int) ([]TreasurySweep, error)
-	GetSocialSimSettings(ctx context.Context) (*SocialSimSettings, error)
-	UpdateSocialSimSettings(ctx context.Context, settings *SocialSimSettings) error
 	EnsureDefaults(ctx context.Context) error
 }
 
@@ -434,6 +442,11 @@ type DailyQuestRepository interface {
 	// entitlements granted by those claims. Returns deleted claim count.
 	ResetClaimsForDay(ctx context.Context, dayMSK time.Time, userID *uuid.UUID) (int64, error)
 	UpdateClaimEntitlement(ctx context.Context, claimID, entitlementID uuid.UUID) error
+
+	// UpsertProgressBaseline sets the per-user progress watermark for the MSK day.
+	UpsertProgressBaseline(ctx context.Context, userID uuid.UUID, dayMSK, progressSince time.Time) error
+	GetProgressBaseline(ctx context.Context, userID uuid.UUID, dayMSK time.Time) (*DailyQuestProgressBaseline, error)
+	SetBoardProgressEpoch(ctx context.Context, epoch time.Time) error
 
 	CreateEntitlement(ctx context.Context, e *UserCaseEntitlement) error
 	// ClaimEntitlementForOpen marks one available entitlement as used; returns it or ErrCaseEntitlementMissing.

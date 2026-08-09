@@ -25,8 +25,8 @@ function readAnchorPos(anchor: HTMLElement | null): Pos | null {
   const rect = anchor.getBoundingClientRect();
   if (rect.width <= 0 && rect.height <= 0) return null;
   return {
-    top: rect.top,
-    left: rect.left + rect.width / 2,
+    top: rect.top + rect.height / 2,
+    left: rect.left - 8,
   };
 }
 

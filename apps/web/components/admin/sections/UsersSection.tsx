@@ -551,8 +551,8 @@ export default function UsersSection() {
         variant: "success",
         title:
           result.deleted_claims > 0
-            ? `Сброшено клеймов: ${result.deleted_claims}`
-            : "Клеймов за сегодня не найдено",
+            ? `Сброшены прогресс и клеймы (${result.deleted_claims})`
+            : "Прогресс сброшен (клеймов за сегодня не было)",
       });
     } catch (err) {
       showToast({

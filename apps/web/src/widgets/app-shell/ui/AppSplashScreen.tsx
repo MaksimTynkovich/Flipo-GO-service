@@ -36,7 +36,6 @@ export function AppSplashScreen({ showRecovery = false, slowMs = 8000 }: AppSpla
             <span className="splash-loader__core" />
           </div>
           <p className="splash-brand__mark">Flipo</p>
-          <p className="splash-brand__hint">Загрузка…</p>
         </div>
       ) : (
         <>

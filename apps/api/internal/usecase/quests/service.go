@@ -31,6 +31,7 @@ type AdminQuestNotifier interface {
 type Service struct {
 	quests    domain.DailyQuestRepository
 	cases     domain.CaseRepository
+	games      domain.GameRepository
 	users     domain.UserRepository
 	inventory domain.InventoryRepository
 	balance   *balance.Service
@@ -40,11 +41,19 @@ type Service struct {
 func NewService(
 	quests domain.DailyQuestRepository,
 	cases domain.CaseRepository,
+	games domain.GameRepository,
 	users domain.UserRepository,
 	inventory domain.InventoryRepository,
 	balanceSvc *balance.Service,
 ) *Service {
-	return &Service{quests: quests, cases: cases, users: users, inventory: inventory, balance: balanceSvc}
+	return &Service{
+		quests:    quests,
+		cases:     cases,
+		games:      games,
+		users:     users,
+		inventory: inventory,
+		balance:   balanceSvc,
+	}
 }
 
 func (s *Service) SetAdminNotifier(notifier AdminQuestNotifier) {
@@ -69,10 +78,10 @@ type TaskView struct {
 	Title              string     `json:"title"`
 	Description        string     `json:"description"`
 	Objective          string     `json:"objective_type"`
-	Target             int        `json:"target"`
-	Progress           int        `json:"progress"`
+	Target             int64      `json:"target"`
+	Progress           int64      `json:"progress"`
 	Status             string     `json:"status"` // active | ready | claimed
-	Action             string     `json:"action"` // cases | referrals | claim | none
+	Action             string     `json:"action"` // cases | referrals | roulette | crash | claim | none
 	ObjectiveCaseID    *uuid.UUID `json:"objective_case_id,omitempty"`
 	ObjectiveCaseSlug  string     `json:"objective_case_slug,omitempty"`
 	ObjectiveCaseTitle string     `json:"objective_case_title,omitempty"`
@@ -124,8 +133,12 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 
 	views := make([]TaskView, 0, len(tasks))
 	completed := 0
+	since, err := s.progressSince(ctx, userID, dayStart)
+	if err != nil {
+		return nil, err
+	}
 	for _, q := range tasks {
-		progress, err := s.progress(ctx, userID, q, dayStart)
+		progress, err := s.progressAt(ctx, userID, q, since)
 		if err != nil {
 			return nil, err
 		}
@@ -140,8 +153,14 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 			action = "none"
 			completed++
 		} else if progress >= q.ObjectiveTarget {
-			status = "ready"
-			action = "claim"
+			// No-reward tasks complete automatically — they only unlock the board bonus.
+			if q.RewardType == domain.DailyQuestRewardNone {
+				status = "claimed"
+				action = "none"
+			} else {
+				status = "ready"
+				action = "claim"
+			}
 			completed++
 		}
 		reward, err := s.rewardView(ctx, rewardSpecFromQuest(q))
@@ -154,12 +173,12 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 			Description: q.Description,
 			Objective:   q.ObjectiveType,
 			Target:      q.ObjectiveTarget,
-			Progress:    minInt(progress, q.ObjectiveTarget),
+			Progress:    minInt64(progress, q.ObjectiveTarget),
 			Status:      status,
 			Action:      action,
 			Reward:      reward,
 		}
-		if q.ObjectiveType == domain.DailyQuestObjectiveOpenCases && q.ObjectiveCaseID != nil {
+		if isCaseObjective(q.ObjectiveType) && q.ObjectiveCaseID != nil {
 			view.ObjectiveCaseID = q.ObjectiveCaseID
 			if c, cErr := s.cases.FindByID(ctx, *q.ObjectiveCaseID); cErr == nil && c != nil {
 				view.ObjectiveCaseSlug = c.Slug
@@ -242,7 +261,9 @@ func (s *Service) ClaimTask(ctx context.Context, userID, questID uuid.UUID) (*Cl
 	if err != nil {
 		return nil, err
 	}
-	s.notifyClaim(ctx, userID, false, q.Title, result.Reward)
+	if q.RewardType != domain.DailyQuestRewardNone {
+		s.notifyClaim(ctx, userID, false, q.Title, result.Reward)
+	}
 	return result, nil
 }
 
@@ -272,8 +293,12 @@ func (s *Service) ClaimBonus(ctx context.Context, userID uuid.UUID) (*ClaimResul
 	if len(tasks) == 0 {
 		return nil, domain.ErrQuestBonusLocked
 	}
+	since, err := s.progressSince(ctx, userID, dayStart)
+	if err != nil {
+		return nil, err
+	}
 	for _, q := range tasks {
-		progress, err := s.progress(ctx, userID, q, dayStart)
+		progress, err := s.progressAt(ctx, userID, q, since)
 		if err != nil {
 			return nil, err
 		}
@@ -368,6 +393,8 @@ func (s *Service) grantClaim(
 			return nil, err
 		}
 		result.InventoryItemID = &item.ID
+	case domain.DailyQuestRewardNone:
+		// Claim marks progress toward the board bonus only — no payout.
 	default:
 		_ = s.quests.DeleteClaim(ctx, claimID)
 		return nil, domain.ErrInvalidAmount
@@ -469,6 +496,8 @@ func rewardLabelForNotify(reward RewardView) string {
 			return fmt.Sprintf("%s (%s TON)", name, formatQuestTON(reward.Nanoton))
 		}
 		return name
+	case domain.DailyQuestRewardNone:
+		return "без награды"
 	default:
 		return "награда"
 	}
@@ -485,17 +514,102 @@ func formatQuestTON(nanoton int64) string {
 	return s
 }
 
-func (s *Service) progress(ctx context.Context, userID uuid.UUID, q domain.DailyQuest, dayStartUTC time.Time) (int, error) {
+func (s *Service) progress(ctx context.Context, userID uuid.UUID, q domain.DailyQuest, dayStartUTC time.Time) (int64, error) {
+	since, err := s.progressSince(ctx, userID, dayStartUTC)
+	if err != nil {
+		return 0, err
+	}
+	return s.progressAt(ctx, userID, q, since)
+}
+
+func (s *Service) progressAt(ctx context.Context, userID uuid.UUID, q domain.DailyQuest, since time.Time) (int64, error) {
 	switch q.ObjectiveType {
 	case domain.DailyQuestObjectiveOpenCases:
-		n, err := s.cases.CountPaidOpensSince(ctx, userID, dayStartUTC, q.ObjectiveCaseID)
-		return int(n), err
+		return s.cases.CountPaidOpensSince(ctx, userID, since, q.ObjectiveCaseID)
+	case domain.DailyQuestObjectiveOpenCasesSpend:
+		return s.cases.SumPaidOpensSince(ctx, userID, since, q.ObjectiveCaseID)
 	case domain.DailyQuestObjectiveInviteReferrals:
-		n, err := s.users.CountReferralsSince(ctx, userID, dayStartUTC)
-		return int(n), err
+		return s.users.CountReferralsSince(ctx, userID, since)
+	case domain.DailyQuestObjectiveWagerRoulette:
+		if s.games == nil {
+			return 0, nil
+		}
+		return s.games.SumWagerByGameSince(ctx, userID, domain.GameRoulette, since)
+	case domain.DailyQuestObjectiveWagerCrash:
+		if s.games == nil {
+			return 0, nil
+		}
+		return s.games.SumWagerByGameSince(ctx, userID, domain.GameCrash, since)
+	case domain.DailyQuestObjectiveRouletteWinMult:
+		if s.games == nil {
+			return 0, nil
+		}
+		return s.games.CountRouletteWinsWithMultSince(ctx, userID, since, multFromParam(q.ObjectiveParam))
+	case domain.DailyQuestObjectiveCrashCashoutMult:
+		if s.games == nil {
+			return 0, nil
+		}
+		return s.games.CountCrashCashoutsSince(ctx, userID, since, floatMultFromParam(q.ObjectiveParam))
+	case domain.DailyQuestObjectiveRouletteColorStreak:
+		if s.games == nil {
+			return 0, nil
+		}
+		return s.games.MaxRouletteColorStreakSince(ctx, userID, since)
 	default:
 		return 0, nil
 	}
+}
+
+// multFromParam — ObjectiveParam stores multiplier ×100 (5000 = ×50). Fallback ×2.
+func multFromParam(param int64) int64 {
+	if param < 100 {
+		return 2
+	}
+	return param / 100
+}
+
+func floatMultFromParam(param int64) float64 {
+	if param < 100 {
+		return 2
+	}
+	return float64(param) / 100
+}
+
+func (s *Service) progressSince(ctx context.Context, userID uuid.UUID, dayStartUTC time.Time) (time.Time, error) {
+	since := dayStartUTC
+	if board, err := s.quests.GetBoardSettings(ctx); err == nil && board != nil && board.ProgressEpoch != nil {
+		if board.ProgressEpoch.After(since) {
+			since = *board.ProgressEpoch
+		}
+	} else if err != nil {
+		return time.Time{}, err
+	}
+
+	dayMSK := dayStartUTC.In(staking.MoscowLocation())
+	dayDate := time.Date(dayMSK.Year(), dayMSK.Month(), dayMSK.Day(), 0, 0, 0, 0, staking.MoscowLocation())
+	baseline, err := s.quests.GetProgressBaseline(ctx, userID, dayDate)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		// Missing migration / table must not break the quest board for players.
+		if !isUndefinedTableErr(err) {
+			return time.Time{}, err
+		}
+		baseline = nil
+		err = nil
+	}
+	if baseline != nil && baseline.ProgressSince.After(since) {
+		since = baseline.ProgressSince
+	}
+	return since, nil
+}
+
+func isUndefinedTableErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "undefined_table") ||
+		strings.Contains(msg, "no such table")
 }
 
 func (s *Service) rewardView(ctx context.Context, spec rewardSpec) (RewardView, error) {
@@ -555,13 +669,24 @@ func rewardSpecFromBoard(board *domain.DailyQuestBoardSettings) rewardSpec {
 
 func actionForObjective(objective string) string {
 	switch objective {
-	case domain.DailyQuestObjectiveOpenCases:
+	case domain.DailyQuestObjectiveOpenCases, domain.DailyQuestObjectiveOpenCasesSpend:
 		return "cases"
 	case domain.DailyQuestObjectiveInviteReferrals:
 		return "referrals"
+	case domain.DailyQuestObjectiveWagerRoulette,
+		domain.DailyQuestObjectiveRouletteWinMult,
+		domain.DailyQuestObjectiveRouletteColorStreak:
+		return "roulette"
+	case domain.DailyQuestObjectiveWagerCrash, domain.DailyQuestObjectiveCrashCashoutMult:
+		return "crash"
 	default:
 		return "none"
 	}
+}
+
+func isCaseObjective(objective string) bool {
+	return objective == domain.DailyQuestObjectiveOpenCases ||
+		objective == domain.DailyQuestObjectiveOpenCasesSpend
 }
 
 func questActiveOnDay(q domain.DailyQuest, dayDate time.Time) bool {
@@ -601,6 +726,8 @@ func validateReward(spec rewardSpec) error {
 			return domain.ErrInvalidAmount
 		}
 		return nil
+	case domain.DailyQuestRewardNone:
+		return nil
 	default:
 		return domain.ErrInvalidAmount
 	}
@@ -620,10 +747,23 @@ func validateQuest(q *domain.DailyQuest) error {
 		return domain.ErrInvalidAmount
 	}
 	switch q.ObjectiveType {
-	case domain.DailyQuestObjectiveOpenCases:
-		// ObjectiveCaseID optional: nil = any paid case open.
+	case domain.DailyQuestObjectiveOpenCases, domain.DailyQuestObjectiveOpenCasesSpend:
+		// ObjectiveCaseID optional: nil = any paid case open / spend.
+		q.ObjectiveParam = 0
 	case domain.DailyQuestObjectiveInviteReferrals:
 		q.ObjectiveCaseID = nil
+		q.ObjectiveParam = 0
+	case domain.DailyQuestObjectiveWagerRoulette, domain.DailyQuestObjectiveWagerCrash:
+		q.ObjectiveCaseID = nil
+		q.ObjectiveParam = 0
+	case domain.DailyQuestObjectiveRouletteWinMult, domain.DailyQuestObjectiveCrashCashoutMult:
+		q.ObjectiveCaseID = nil
+		if q.ObjectiveParam < 100 {
+			return domain.ErrInvalidAmount
+		}
+	case domain.DailyQuestObjectiveRouletteColorStreak:
+		q.ObjectiveCaseID = nil
+		q.ObjectiveParam = 0
 	default:
 		return domain.ErrInvalidAmount
 	}
@@ -647,6 +787,13 @@ func normalizeQuestRewardFields(q *domain.DailyQuest) {
 		q.RewardGiftImageURL = ""
 	case domain.DailyQuestRewardGift:
 		q.RewardCaseID = nil
+	case domain.DailyQuestRewardNone:
+		q.RewardNanoton = 0
+		q.RewardCaseID = nil
+		q.RewardCollectionSlug = ""
+		q.RewardModelName = ""
+		q.RewardGiftName = ""
+		q.RewardGiftImageURL = ""
 	}
 }
 
@@ -673,7 +820,7 @@ func normalizeBoardRewardFields(settings *domain.DailyQuestBoardSettings) {
 	}
 }
 
-func minInt(a, b int) int {
+func minInt64(a, b int64) int64 {
 	if a < b {
 		return a
 	}
@@ -703,7 +850,8 @@ type AdminQuestUpsert struct {
 	ActiveFrom           *string    `json:"active_from"`
 	ActiveTo             *string    `json:"active_to"`
 	ObjectiveType        string     `json:"objective_type"`
-	ObjectiveTarget      int        `json:"objective_target"`
+	ObjectiveTarget      int64      `json:"objective_target"`
+	ObjectiveParam       int64      `json:"objective_param"`
 	ObjectiveCaseID      *uuid.UUID `json:"objective_case_id"`
 	RewardType           string     `json:"reward_type"`
 	RewardNanoton        int64      `json:"reward_nanoton"`
@@ -723,6 +871,7 @@ func (s *Service) AdminUpsertQuest(ctx context.Context, req AdminQuestUpsert) (*
 		Active:               req.Active,
 		ObjectiveType:        req.ObjectiveType,
 		ObjectiveTarget:      req.ObjectiveTarget,
+		ObjectiveParam:       req.ObjectiveParam,
 		ObjectiveCaseID:      req.ObjectiveCaseID,
 		RewardType:           req.RewardType,
 		RewardNanoton:        req.RewardNanoton,
@@ -783,7 +932,37 @@ func (s *Service) AdminDeleteQuest(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *Service) AdminGetBoard(ctx context.Context) (*domain.DailyQuestBoardSettings, error) {
-	return s.quests.GetBoardSettings(ctx)
+	board, err := s.quests.GetBoardSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(board.PromoSlides) == 0 {
+		board.PromoSlides = domain.DefaultDailyQuestPromoSlides()
+	}
+	return board, nil
+}
+
+func (s *Service) ListPromoSlides(ctx context.Context) ([]domain.DailyQuestPromoSlide, error) {
+	board, err := s.quests.GetBoardSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	slides := board.PromoSlides
+	if len(slides) == 0 {
+		slides = domain.DefaultDailyQuestPromoSlides()
+	}
+	out := make([]domain.DailyQuestPromoSlide, 0, len(slides))
+	for _, slide := range slides {
+		if !slide.Active {
+			continue
+		}
+		normalized := normalizePromoSlide(slide)
+		if normalized.Title == "" && normalized.Eyebrow == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	return out, nil
 }
 
 func (s *Service) AdminUpdateBoard(ctx context.Context, settings *domain.DailyQuestBoardSettings) error {
@@ -793,7 +972,21 @@ func (s *Service) AdminUpdateBoard(ctx context.Context, settings *domain.DailyQu
 		settings.BonusTitle = "Бонус дня"
 	}
 	normalizeBoardRewardFields(settings)
+	if existing, err := s.quests.GetBoardSettings(ctx); err == nil && existing != nil {
+		settings.ProgressEpoch = existing.ProgressEpoch
+		if settings.PromoSlides == nil {
+			settings.PromoSlides = existing.PromoSlides
+		}
+	}
+	if settings.PromoSlides == nil {
+		settings.PromoSlides = []domain.DailyQuestPromoSlide{}
+	} else {
+		settings.PromoSlides = normalizePromoSlides(settings.PromoSlides)
+	}
 	if settings.BonusActive {
+		if settings.BonusRewardType == domain.DailyQuestRewardNone {
+			return domain.ErrInvalidAmount
+		}
 		if err := validateReward(rewardSpecFromBoard(settings)); err != nil {
 			return err
 		}
@@ -805,6 +998,74 @@ func (s *Service) AdminUpdateBoard(ctx context.Context, settings *domain.DailyQu
 		}
 	}
 	return s.quests.UpdateBoardSettings(ctx, settings)
+}
+
+func normalizePromoSlides(slides []domain.DailyQuestPromoSlide) []domain.DailyQuestPromoSlide {
+	if len(slides) == 0 {
+		return []domain.DailyQuestPromoSlide{}
+	}
+	out := make([]domain.DailyQuestPromoSlide, 0, len(slides))
+	for i, slide := range slides {
+		n := normalizePromoSlide(slide)
+		if n.ID == "" {
+			n.ID = fmt.Sprintf("slide-%d", i+1)
+		}
+		if n.Title == "" && n.Eyebrow == "" && n.Subtitle == "" && n.CoverURL == "" {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+func normalizePromoSlide(slide domain.DailyQuestPromoSlide) domain.DailyQuestPromoSlide {
+	slide.ID = strings.TrimSpace(slide.ID)
+	slide.Tone = strings.TrimSpace(slide.Tone)
+	if slide.Tone != "duo" && slide.Tone != "open" {
+		slide.Tone = "open"
+	}
+	slide.Eyebrow = strings.TrimSpace(slide.Eyebrow)
+	slide.Title = strings.TrimSpace(slide.Title)
+	slide.Subtitle = strings.TrimSpace(slide.Subtitle)
+	slide.CTA = strings.TrimSpace(slide.CTA)
+	if slide.CTA == "" {
+		slide.CTA = "К заданиям"
+	}
+	slide.CTAColor = normalizePromoCTAColor(slide.CTAColor)
+	slide.EyebrowColor = normalizePromoCTAColor(slide.EyebrowColor)
+	slide.TitleColor = normalizePromoCTAColor(slide.TitleColor)
+	slide.SubtitleColor = normalizePromoCTAColor(slide.SubtitleColor)
+	slide.AccentColor = normalizePromoCTAColor(slide.AccentColor)
+	slide.TitleSize = strings.ToLower(strings.TrimSpace(slide.TitleSize))
+	switch slide.TitleSize {
+	case "", "sm", "md", "lg":
+	default:
+		slide.TitleSize = "md"
+	}
+	slide.CoverURL = strings.TrimSpace(slide.CoverURL)
+	return slide
+}
+
+func normalizePromoCTAColor(raw string) string {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return ""
+	}
+	if !strings.HasPrefix(v, "#") {
+		v = "#" + v
+	}
+	if len(v) != 7 {
+		return ""
+	}
+	for i := 1; i < 7; i++ {
+		c := v[i]
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f', c >= 'A' && c <= 'F':
+		default:
+			return ""
+		}
+	}
+	return strings.ToLower(v)
 }
 
 type AdminResetClaimsRequest struct {
@@ -859,6 +1120,18 @@ func (s *Service) AdminResetClaims(ctx context.Context, req AdminResetClaimsRequ
 	if err != nil {
 		return nil, err
 	}
+
+	// Progress is derived from case opens / referrals since day start — shift the watermark
+	// so admin reset also zeroes counters, not only claim eligibility.
+	now := time.Now().UTC()
+	if userID != nil {
+		if err := s.quests.UpsertProgressBaseline(ctx, *userID, dayDate, now); err != nil {
+			return nil, err
+		}
+	} else if err := s.quests.SetBoardProgressEpoch(ctx, now); err != nil {
+		return nil, err
+	}
+
 	return &AdminResetClaimsResult{
 		DayMSK:        dayDate.Format("2006-01-02"),
 		UserID:        userID,

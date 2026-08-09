@@ -45,7 +45,6 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/flipo/flipo/apps/api/internal/usecase/risk"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
-	"github.com/flipo/flipo/apps/api/internal/usecase/socialsim"
 	"github.com/flipo/flipo/apps/api/internal/usecase/staking"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
@@ -220,7 +219,7 @@ func main() {
 	caseRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
 	caseSvc := casesuc.NewService(caseRepo, invRepo, userRepo, balanceSvc)
 	dailyQuestRepo := postgres.NewDailyQuestRepo(db)
-	questSvc := quests.NewService(dailyQuestRepo, caseRepo, userRepo, invRepo, balanceSvc)
+	questSvc := quests.NewService(dailyQuestRepo, caseRepo, gameRepo, userRepo, invRepo, balanceSvc)
 	questSvc.SetAdminNotifier(adminNotifier)
 	caseSvc.SetEntitlements(dailyQuestRepo)
 	caseSvc.SetPreparedShareBot(botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL)
@@ -293,24 +292,6 @@ func main() {
 	}
 	rouletteSvc.SetQualifyingBetHook(betHook)
 	crashSvc.SetQualifyingBetHook(betHook)
-
-	socialSim := socialsim.NewSimulator(platformRepo, platformRepo, func(ctx context.Context, snap domain.PresenceSnapshot) {
-		data := socialsim.MarshalPresence(snap)
-		_ = cacheIface.Publish(ctx, "pubsub:game:presence", data)
-		msg := websocket.JSONMessage("presence", data)
-		for _, game := range []string{"crash", "roulette"} {
-			hub.Broadcast(game, msg)
-		}
-	}, socialsim.WithBotData(cfg.BotsDataDir, cfg.BotsAssetsBaseURL))
-	socialSim.SetCrashRepublish(func(ctx context.Context, roundID uuid.UUID) {
-		_ = crashSvc.PublishBets(ctx, roundID)
-	})
-	socialSim.SetRouletteRepublish(func(ctx context.Context, roundID uuid.UUID) {
-		_ = rouletteSvc.PublishBets(ctx, roundID)
-	})
-	crashSvc.SetBetOverlay(socialsim.CrashBridge{Sim: socialSim})
-	rouletteSvc.SetBetOverlay(socialsim.RouletteBridge{Sim: socialSim})
-	socialSim.Start(ctx)
 
 	if cache != nil {
 		bridge := websocket.NewRedisBridge(cache, hub)
@@ -395,28 +376,18 @@ func main() {
 	adminHandler.SetOnlineCounter(func() int {
 		return hub.OnlineUserCount(authSvc.IsAdmin)
 	})
-	adminHandler.SetSocialSimUpdater(func(settings domain.SocialSimSettings) {
-		socialsim.Normalize(&settings)
-		socialSim.ApplySettings(settings)
-	})
 
 	maintenanceState := middleware.NewMaintenanceState()
 	if settings, err := platformRepo.GetMaintenanceSettings(ctx); err == nil {
 		maintenanceState.Load(settings)
-		socialSim.SetAcceptBets(settings.AcceptBets)
 	} else {
 		slog.Warn("failed to load maintenance settings", "error", err)
 	}
 	adminHandler.SetMaintenanceUpdater(func(settings domain.PlatformMaintenanceSettings) {
 		maintenanceState.Load(&settings)
-		socialSim.SetAcceptBets(settings.AcceptBets)
 	})
 	go middleware.RefreshMaintenanceState(maintenanceState, func() (*domain.PlatformMaintenanceSettings, error) {
-		settings, err := platformRepo.GetMaintenanceSettings(context.Background())
-		if err == nil && settings != nil {
-			socialSim.SetAcceptBets(settings.AcceptBets)
-		}
-		return settings, err
+		return platformRepo.GetMaintenanceSettings(context.Background())
 	}, 15*time.Second, ctx.Done())
 
 	router := httpx.NewRouter(httpx.Deps{
@@ -436,12 +407,10 @@ func main() {
 		TelegramHandler:    handlers.NewTelegramHandler(botUpdates, cfg.TelegramWebhookSecret),
 		AdminHandler:       adminHandler,
 		AnalyticsHandler:   handlers.NewAnalyticsHandler(authSvc, analyticsSvc),
-		PresenceHandler:    handlers.NewPresenceHandler(socialSim),
 		MaintenanceHandler: handlers.NewMaintenanceHandler(platformRepo, maintenanceState),
 		MaintenanceState:   maintenanceState,
 		AdminTelegramIDs:   cfg.AdminTelegramIDs,
 		Hub:                hub,
-		BotsDataDir:        cfg.BotsDataDir,
 		CasesUploadDir:     cfg.CasesUploadDir,
 		GiftImageHandler:   handlers.NewGiftImageHandler(giftimage.NewProxy(cfg.GiftsCacheDir)),
 		CORSOrigins:        cfg.CORSOrigins,

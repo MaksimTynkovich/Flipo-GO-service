@@ -416,6 +416,93 @@ func (r *GameRepo) SumUserBetsSince(ctx context.Context, userID uuid.UUID, since
 	return total, err
 }
 
+func (r *GameRepo) SumWagerByGameSince(ctx context.Context, userID uuid.UUID, gameType domain.GameType, since time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where(
+			"user_id = ? AND game_type = ? AND created_at >= ? AND status <> ?",
+			userID, gameType, since.UTC(), domain.BetRefunded,
+		).
+		Select("COALESCE(SUM(amount_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
+func (r *GameRepo) CountRouletteWinsWithMultSince(ctx context.Context, userID uuid.UUID, since time.Time, minMult int64) (int64, error) {
+	if minMult < 1 {
+		minMult = 1
+	}
+	var count int64
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM game_bets
+		WHERE user_id = ?
+		  AND game_type = ?
+		  AND status = ?
+		  AND settled_at >= ?
+		  AND CASE selection->>'color'
+		        WHEN 'blue' THEN 2
+		        WHEN 'red' THEN 2
+		        WHEN 'green' THEN 5
+		        WHEN 'yellow' THEN 50
+		        ELSE 0
+		      END >= ?`,
+		userID, domain.GameRoulette, domain.BetWon, since.UTC(), minMult,
+	).Scan(&count).Error
+	return count, err
+}
+
+func (r *GameRepo) CountCrashCashoutsSince(ctx context.Context, userID uuid.UUID, since time.Time, minMult float64) (int64, error) {
+	if minMult <= 0 {
+		minMult = 1
+	}
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).
+		Where(
+			"user_id = ? AND game_type = ? AND status = ? AND settled_at >= ? AND cashout_multiplier >= ?",
+			userID, domain.GameCrash, domain.BetCashedOut, since.UTC(), minMult,
+		).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *GameRepo) MaxRouletteColorStreakSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
+	type roundRow struct {
+		Correct   bool
+		SettledAt time.Time
+	}
+	var rows []roundRow
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT BOOL_OR(status = ?) AS correct, MIN(settled_at) AS settled_at
+		FROM game_bets
+		WHERE user_id = ?
+		  AND game_type = ?
+		  AND status IN (?, ?)
+		  AND settled_at >= ?
+		GROUP BY round_id
+		ORDER BY MIN(settled_at) ASC, round_id ASC`,
+		domain.BetWon,
+		userID,
+		domain.GameRoulette,
+		domain.BetWon,
+		domain.BetLost,
+		since.UTC(),
+	).Scan(&rows).Error
+	if err != nil {
+		return 0, err
+	}
+	var best, cur int64
+	for _, row := range rows {
+		if row.Correct {
+			cur++
+			if cur > best {
+				best = cur
+			}
+			continue
+		}
+		cur = 0
+	}
+	return best, nil
+}
+
 func (r *GameRepo) SumUserSettledBetsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
 	var total int64
 	err := r.db.WithContext(ctx).Model(&domain.GameBet{}).

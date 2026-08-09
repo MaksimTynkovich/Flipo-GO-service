@@ -30,7 +30,7 @@ Platform defaults that **remain** (product, not demo): game configs, staking que
 Push to `master` runs [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml):
 
 1. Build API binary (`linux/amd64`) in CI
-2. `rsync` code to the server (keeps `.env`, `data/`, `apps/api/assets/bots/`)
+2. `rsync` code to the server (keeps `.env`, `data/`)
 3. Upload `deploy/prebuilt/api`
 4. Run `deploy/deploy.sh` on the host
 
@@ -51,7 +51,7 @@ Manual deploy (same as CI):
 # from repo root, after building deploy/prebuilt/api for linux/amd64
 rsync -az --delete -e "ssh -i ~/.ssh/flipo_deploy" \
   --exclude '.git/' --exclude '.env' --exclude 'data/' --exclude 'deploy/prebuilt/' \
-  --exclude 'apps/api/assets/bots/' ./ root@5.252.155.209:/opt/flipo/
+  ./ root@5.252.155.209:/opt/flipo/
 scp -i ~/.ssh/flipo_deploy deploy/prebuilt/api root@5.252.155.209:/opt/flipo/deploy/prebuilt/api
 ssh -i ~/.ssh/flipo_deploy root@5.252.155.209 /opt/flipo/deploy/deploy.sh
 ```
@@ -105,7 +105,6 @@ ssh -i ~/.ssh/flipo_deploy root@5.252.155.209 /opt/flipo/deploy/deploy.sh
 - Logs: `LOG_FILE` must be writable (`deploy/docker-compose.yml` mounts `logs/`).
 - Health: `GET /health` (liveness), `GET /ready` (DB).
 - Migrations run automatically on API start (GORM AutoMigrate).
-- Social sim stays **off** until enabled in admin; leave off for real launch unless you want fake lobby activity.
 - Local-only: `scripts/*tunnel*`, ngrok, Makefile `dev-tunnel` — do not run in prod.
 
 ---

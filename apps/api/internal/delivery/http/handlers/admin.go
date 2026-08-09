@@ -42,7 +42,6 @@ type AdminHandler struct {
 	botSync             *market.BotSyncService
 	hotAddr             string
 	casesUploadDir      string
-	onSocialSimUpdate   func(domain.SocialSimSettings)
 	onMaintenanceUpdate func(domain.PlatformMaintenanceSettings)
 	onlineCounter       func() int
 }
@@ -57,10 +56,6 @@ func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service,
 		telegram:  telegramSvc,
 		hotAddr:   hotAddr,
 	}
-}
-
-func (h *AdminHandler) SetSocialSimUpdater(fn func(domain.SocialSimSettings)) {
-	h.onSocialSimUpdate = fn
 }
 
 func (h *AdminHandler) SetMaintenanceUpdater(fn func(domain.PlatformMaintenanceSettings)) {
@@ -1803,32 +1798,6 @@ func (h *AdminHandler) ListStakingStakers(c *gin.Context) {
 		"offset":                          offset,
 		"total_projected_payout_nanoton": totalProjectedPayout,
 	})
-}
-
-func (h *AdminHandler) GetSocialSimSettings(c *gin.Context) {
-	settings, err := h.admin.GetSocialSimSettings(c.Request.Context())
-	if err != nil {
-		respondInternal(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, settings)
-}
-
-func (h *AdminHandler) UpdateSocialSimSettings(c *gin.Context) {
-	adminID := middleware.GetUserID(c)
-	var settings domain.SocialSimSettings
-	if err := c.ShouldBindJSON(&settings); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := h.admin.UpdateSocialSimSettings(c.Request.Context(), adminID, settings); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if h.onSocialSimUpdate != nil {
-		h.onSocialSimUpdate(settings)
-	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (h *AdminHandler) UpdateYieldSettings(c *gin.Context) {

@@ -316,6 +316,17 @@ func (r *CaseRepo) CountPaidOpensSince(ctx context.Context, userID uuid.UUID, si
 	return count, err
 }
 
+func (r *CaseRepo) SumPaidOpensSince(ctx context.Context, userID uuid.UUID, since time.Time, caseID *uuid.UUID) (int64, error) {
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Where("user_id = ? AND source = ? AND created_at >= ?", userID, domain.CaseOpenSourcePaid, since.UTC())
+	if caseID != nil {
+		q = q.Where("case_id = ?", *caseID)
+	}
+	var total int64
+	err := q.Select("COALESCE(SUM(price_paid_nanoton), 0)").Scan(&total).Error
+	return total, err
+}
+
 func (r *CaseRepo) ListRecentOpens(ctx context.Context, limit int) ([]domain.CaseLiveDrop, error) {
 	if limit <= 0 {
 		limit = 24

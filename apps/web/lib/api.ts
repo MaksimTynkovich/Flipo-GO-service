@@ -1203,42 +1203,6 @@ export type AdminGameConfig = {
   platform_fee_bps: number;
 };
 
-export type AdminSocialSimSettings = {
-  id: number;
-  enabled: boolean;
-  crash_enabled: boolean;
-  roulette_enabled: boolean;
-  lobby_enabled: boolean;
-  online_base_min: number;
-  online_base_max: number;
-  online_jitter: number;
-  tod_multipliers: number[];
-  bet_intensity: number;
-  bet_spread: number;
-  bet_burst_chance: number;
-  idle_gap_ms_min: number;
-  idle_gap_ms_max: number;
-  stake_p50: number;
-  stake_p90: number;
-  crash_auto_cashout_share: number;
-  crash_cashout_min: number;
-  crash_cashout_max: number;
-  roulette_red_weight: number;
-  roulette_black_weight: number;
-  roulette_green_weight: number;
-  chaos: number;
-  updated_at?: string;
-};
-
-export type PresenceSnapshot = {
-  online: number;
-  by_game: {
-    crash?: number;
-    roulette?: number;
-  };
-  updated_at: string;
-};
-
 export type AdminRiskSettings = {
   max_daily_win_nanoton: number;
   max_round_exposure_nanoton: number;
@@ -1639,21 +1603,6 @@ export async function getGameModes() {
 
 export async function getAdminGameConfigs() {
   return api<AdminGameConfig[]>("/api/v1/admin/games/configs");
-}
-
-export async function getAdminSocialSimSettings() {
-  return api<AdminSocialSimSettings>("/api/v1/admin/social-sim");
-}
-
-export async function updateAdminSocialSimSettings(settings: AdminSocialSimSettings) {
-  return api<{ ok: boolean }>("/api/v1/admin/social-sim", {
-    method: "PATCH",
-    body: JSON.stringify(settings),
-  });
-}
-
-export async function getPresence() {
-  return api<PresenceSnapshot>("/api/v1/presence");
 }
 
 export async function updateAdminMarketListingPrice(id: string, priceNanoton: number) {
@@ -2429,7 +2378,7 @@ export async function getPromoStatus() {
 }
 
 export type DailyQuestReward = {
-  type: "balance_nanoton" | "free_case_open" | "gift" | string;
+  type: "balance_nanoton" | "free_case_open" | "gift" | "none" | string;
   nanoton?: number;
   case_id?: string;
   case_title?: string;
@@ -2449,7 +2398,7 @@ export type DailyQuestTask = {
   target: number;
   progress: number;
   status: "active" | "ready" | "claimed" | string;
-  action: "cases" | "referrals" | "claim" | "none" | string;
+  action: "cases" | "referrals" | "roulette" | "crash" | "claim" | "none" | string;
   objective_case_id?: string;
   objective_case_slug?: string;
   objective_case_title?: string;
@@ -2503,10 +2452,12 @@ export type AdminDailyQuest = {
   active: boolean;
   active_from?: string | null;
   active_to?: string | null;
-  objective_type: "open_cases" | "invite_referrals" | string;
+  objective_type: "open_cases" | "open_cases_spend" | "invite_referrals" | "wager_roulette" | "wager_crash" | "roulette_win_mult" | "crash_cashout_mult" | "roulette_color_streak" | string;
   objective_target: number;
+  /** Multiplier threshold ×100 for *_mult objectives (5000 = ×50). */
+  objective_param?: number;
   objective_case_id?: string | null;
-  reward_type: "balance_nanoton" | "free_case_open" | "gift" | string;
+  reward_type: "balance_nanoton" | "free_case_open" | "gift" | "none" | string;
   reward_nanoton: number;
   reward_case_id?: string | null;
   reward_collection_slug?: string;
@@ -2514,6 +2465,35 @@ export type AdminDailyQuest = {
   reward_gift_name?: string;
   reward_gift_image_url?: string;
 };
+
+export type DailyQuestPromoSlide = {
+  id: string;
+  tone: "duo" | "open" | string;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  cta: string;
+  /** Hex accent for CTA text on the white pill, e.g. #0f9f7a */
+  cta_color?: string;
+  cta_bold?: boolean;
+  eyebrow_color?: string;
+  title_color?: string;
+  subtitle_color?: string;
+  /** Color for **accent** spans in eyebrow/title/subtitle */
+  accent_color?: string;
+  eyebrow_bold?: boolean;
+  title_bold?: boolean;
+  subtitle_bold?: boolean;
+  /** sm | md | lg */
+  title_size?: "sm" | "md" | "lg" | string;
+  cover_url: string;
+  active: boolean;
+};
+
+export async function getDailyQuestPromo() {
+  const res = await api<{ items: DailyQuestPromoSlide[] }>("/api/v1/quests/promo");
+  return res.items ?? [];
+}
 
 export type AdminDailyQuestBoard = {
   id?: number;
@@ -2527,6 +2507,7 @@ export type AdminDailyQuestBoard = {
   bonus_reward_gift_name?: string;
   bonus_reward_gift_image_url?: string;
   bonus_active: boolean;
+  promo_slides?: DailyQuestPromoSlide[];
 };
 
 export async function getAdminDailyQuests() {

@@ -73,7 +73,6 @@ jobs:
             --exclude 'logs/' \
             --exclude 'data/' \
             --exclude 'deploy/prebuilt/' \
-            --exclude 'apps/api/assets/bots/' \
             ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
 
       - name: Upload API binary

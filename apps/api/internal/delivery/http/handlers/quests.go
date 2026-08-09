@@ -30,6 +30,15 @@ func (h *QuestsHandler) ListDaily(c *gin.Context) {
 	c.JSON(http.StatusOK, board)
 }
 
+func (h *QuestsHandler) ListPromo(c *gin.Context) {
+	slides, err := h.quests.ListPromoSlides(c.Request.Context())
+	if err != nil {
+		httperr.Respond(c, http.StatusInternalServerError, err, gin.H{"error": "не удалось загрузить баннер"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": slides})
+}
+
 func (h *QuestsHandler) ClaimTask(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	questID, err := uuid.Parse(c.Param("id"))

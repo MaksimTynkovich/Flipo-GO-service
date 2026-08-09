@@ -28,7 +28,7 @@ alwaysApply: false
 
 ## Workers
 
-`cmd/worker` запускает crash/roulette/pvp/staking/treasury/wallet/giftdeposit. Игровая логика раундов — в `internal/worker/*`, usecase — для ставок/баланса.
+`cmd/worker` запускает crash/roulette/staking/treasury/wallet/giftdeposit. Игровая логика раундов — в `internal/worker/*`, usecase — для ставок/баланса.
 
 ## Не делать
 

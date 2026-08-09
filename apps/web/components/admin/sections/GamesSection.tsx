@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AdminFloatField, AdminIntField, AdminPercentField, AdminTonField } from "@/components/admin/AdminInputs";
+import { useEffect, useState } from "react";
+import { AdminIntField, AdminPercentField, AdminTonField } from "@/components/admin/AdminInputs";
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { AdminButton, AdminPage, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
@@ -11,15 +11,12 @@ import {
   getAdminGameConfigs,
   getAdminGameStats,
   getAdminRiskSettings,
-  getAdminSocialSimSettings,
   rotateAdminGameSeed,
   updateAdminGameConfig,
   updateAdminRiskSettings,
-  updateAdminSocialSimSettings,
   type AdminGameConfig,
   type AdminGameStat,
   type AdminRiskSettings,
-  type AdminSocialSimSettings,
 } from "@/lib/api";
 
 const MODE_LABELS: Record<string, string> = {
@@ -29,44 +26,30 @@ const MODE_LABELS: Record<string, string> = {
 
 const GAME_TYPES = ["crash", "roulette"] as const;
 
-function previewOnline(sim: AdminSocialSimSettings | null): number {
-  if (!sim?.enabled || !sim.lobby_enabled) return 0;
-  const hour = new Date().getHours();
-  const tod =
-    Array.isArray(sim.tod_multipliers) && sim.tod_multipliers.length === 24
-      ? sim.tod_multipliers[hour]
-      : 1;
-  return Math.round(((sim.online_base_min + sim.online_base_max) / 2) * tod);
-}
-
 export default function GamesSection() {
   const { showToast } = useToast();
   const [stats, setStats] = useState<AdminGameStat[]>([]);
   const [configs, setConfigs] = useState<AdminGameConfig[]>([]);
   const [risk, setRisk] = useState<AdminRiskSettings | null>(null);
-  const [sim, setSim] = useState<AdminSocialSimSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingMode, setSavingMode] = useState<string | null>(null);
-  const onlinePreview = useMemo(() => previewOnline(sim), [sim]);
 
   async function load() {
     setLoading(true);
     try {
-      const [statsData, configsData, riskData, simData] = await loadCached(
-        "admin:games:v5",
+      const [statsData, configsData, riskData] = await loadCached(
+        "admin:games:v6",
         () =>
           Promise.all([
             getAdminGameStats(),
             getAdminGameConfigs(),
             getAdminRiskSettings(),
-            getAdminSocialSimSettings(),
           ]),
       );
       setStats(statsData);
       setConfigs(configsData);
       setRisk(riskData);
-      setSim(simData);
-      primeCache("admin:games:v5", [statsData, configsData, riskData, simData]);
+      primeCache("admin:games:v6", [statsData, configsData, riskData]);
     } finally {
       setLoading(false);
     }
@@ -96,14 +79,11 @@ export default function GamesSection() {
 
   useEffect(() => {
     runAfterFirstPaint(() => {
-      const cached = readCached<
-        [AdminGameStat[], AdminGameConfig[], AdminRiskSettings, AdminSocialSimSettings]
-      >("admin:games:v5");
+      const cached = readCached<[AdminGameStat[], AdminGameConfig[], AdminRiskSettings]>("admin:games:v6");
       if (cached) {
         setStats(cached[0]);
         setConfigs(cached[1]);
         setRisk(cached[2]);
-        setSim(cached[3]);
       }
       load().catch(() => {});
     });
@@ -112,7 +92,7 @@ export default function GamesSection() {
   return (
     <AdminPage
       title="Игры"
-      description="Игровой домен: обзор режимов, конфигурация игр, social sim и anti-whale лимиты."
+      description="Игровой домен: обзор режимов, конфигурация игр и anti-whale лимиты."
     >
       <AdminPanel title="Статистика игр" description="Фактический RTP и GGR по режимам.">
         {stats.length === 0 && loading ? (
@@ -240,41 +220,6 @@ export default function GamesSection() {
           })}
         </div>
       )}
-
-      {sim ? (
-        <AdminPanel title="Соц. симуляция" description={`Сейчас визуальный онлайн ≈ ${onlinePreview}`}>
-          <label className="flex items-center justify-between gap-3 text-sm">
-            <span className="inline-flex items-center gap-2">
-              Включено
-              <AdminInfoHint
-                label="Включено"
-                hint="Только визуальный оверлей, без влияния на реальные ставки и GGR."
-              />
-            </span>
-            <input
-              type="checkbox"
-              checked={sim.enabled}
-              onChange={(event) => setSim({ ...sim, enabled: event.target.checked })}
-            />
-          </label>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <AdminIntField label="Online min" value={sim.online_base_min} onChange={(v) => setSim({ ...sim, online_base_min: v })} />
-            <AdminIntField label="Online max" value={sim.online_base_max} onChange={(v) => setSim({ ...sim, online_base_max: v })} />
-            <AdminFloatField label="Jitter" value={sim.online_jitter} onChange={(v) => setSim({ ...sim, online_jitter: v })} />
-            <AdminFloatField label="Chaos" value={sim.chaos} onChange={(v) => setSim({ ...sim, chaos: v })} />
-          </div>
-          <AdminToolbar>
-            <AdminButton
-              onClick={async () => {
-                await updateAdminSocialSimSettings(sim);
-                showToast({ variant: "success", title: "Соц. симуляция сохранена" });
-              }}
-            >
-              Сохранить симуляцию
-            </AdminButton>
-          </AdminToolbar>
-        </AdminPanel>
-      ) : null}
 
       {risk ? (
         <AdminPanel title="Anti-whale лимиты" description="Глобальные лимиты риска.">

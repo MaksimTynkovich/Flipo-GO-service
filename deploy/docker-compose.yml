@@ -44,7 +44,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       DEBUG_AUTH_ENABLED: "false"
       TON_CHAIN_DEV_MODE: "false"
-      BOTS_DATA_DIR: /assets/bots
       GIFTS_CACHE_DIR: /data/gifts
       CASES_UPLOAD_DIR: /data/cases
       TELEGRAM_SESSION_PATH: /data/telegram/session.json

@@ -22,7 +22,6 @@ const nextConfig = {
       { source: "/health", destination: `${apiUpstream}/health` },
       { source: "/ready", destination: `${apiUpstream}/ready` },
       { source: "/ws/:path*", destination: `${apiUpstream}/ws/:path*` },
-      { source: "/static/bots/:path*", destination: `${apiUpstream}/static/bots/:path*` },
       { source: "/static/gifts/:path*", destination: `${apiUpstream}/static/gifts/:path*` },
       { source: "/static/cases/:path*", destination: `${apiUpstream}/static/cases/:path*` },
     ];

@@ -62,8 +62,6 @@ type Config struct {
 	// (and Telegram mirrors for important finance/ops events).
 	AdminNotifyEnabled bool
 	PromoRequiredChannel         string
-	BotsDataDir                  string
-	BotsAssetsBaseURL            string
 	GiftsCacheDir                string
 	CasesUploadDir               string
 	MRKTAPIToken                 string
@@ -131,8 +129,6 @@ func Load() *Config {
 		AdminPanelPassword:           getEnv("ADMIN_PANEL_PASSWORD", ""),
 		AdminNotifyEnabled:           getEnvBool("ADMIN_NOTIFY_ENABLED", true),
 		PromoRequiredChannel:         firstNonEmpty(getEnv("PROMO_REQUIRED_CHANNEL", ""), getEnv("NEXT_PUBLIC_PROMO_REQUIRED_CHANNEL", "")),
-		BotsDataDir:                  getEnv("BOTS_DATA_DIR", "assets/bots"),
-		BotsAssetsBaseURL:            getEnv("BOTS_ASSETS_BASE_URL", "/static/bots"),
 		GiftsCacheDir:                getEnv("GIFTS_CACHE_DIR", "data/gifts"),
 		CasesUploadDir:               getEnv("CASES_UPLOAD_DIR", "data/cases"),
 		MRKTAPIToken:                 getEnv("MRKT_API_TOKEN", ""),

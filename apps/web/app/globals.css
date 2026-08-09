@@ -138,6 +138,8 @@ label[for],
 .games-promo__slide,
 .games-promo__dot,
 .games-lobby__referral,
+.cases-quest-promo__slide,
+.cases-quest-promo__dot,
 .roulette-bet-btn,
 .roulette-history__chip,
 .gift-card,
@@ -2339,14 +2341,6 @@ body::-webkit-scrollbar,
   letter-spacing: -0.04em;
   color: var(--foreground);
   line-height: 1;
-}
-
-.splash-brand__hint {
-  margin-top: -0.35rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: -0.01em;
 }
 
 .splash-spinner {
@@ -5467,6 +5461,234 @@ body::-webkit-scrollbar,
   min-width: 0;
 }
 
+.cases-quest-promo {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.35rem;
+}
+
+.cases-quest-promo__track {
+  display: flex;
+  width: 100%;
+  transition: transform 0.55s var(--ease-out);
+  will-change: transform;
+}
+
+.cases-quest-promo--preview {
+  max-width: 390px;
+  margin: 0;
+  border-radius: 1.15rem;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.cases-quest-promo--preview .cases-quest-promo__track {
+  transition: none;
+}
+
+.cases-quest-promo__slide {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 100%;
+  width: 100%;
+  height: 170px;
+  min-height: 170px;
+  max-height: 170px;
+  padding: 0.75rem 1.1rem 1.2rem;
+  text-align: left;
+  overflow: hidden;
+  isolation: isolate;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  background: #122033;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.cases-quest-promo__cover {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.cases-quest-promo__cover img {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  object-fit: cover;
+  object-position: center right;
+}
+
+.cases-quest-promo__cover-fade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(10, 14, 28, 0.88) 0%, rgba(10, 14, 28, 0.55) 42%, rgba(10, 14, 28, 0.12) 68%, transparent 82%),
+    linear-gradient(180deg, transparent 38%, rgba(8, 12, 24, 0.42) 100%);
+}
+
+.cases-quest-promo__slide--open .cases-quest-promo__cover-fade {
+  background:
+    linear-gradient(90deg, rgba(8, 14, 20, 0.86) 0%, rgba(8, 14, 20, 0.48) 44%, rgba(8, 14, 20, 0.1) 70%, transparent 84%),
+    linear-gradient(180deg, transparent 40%, rgba(6, 12, 16, 0.4) 100%);
+}
+
+.cases-quest-promo__copy {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  max-width: 58%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+}
+
+.cases-quest-promo__eyebrow {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--quest-eyebrow-color, #ffb44a);
+}
+
+.cases-quest-promo__slide--open .cases-quest-promo__eyebrow {
+  color: var(--quest-eyebrow-color, #5ee0c0);
+}
+
+.cases-quest-promo__title {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  color: var(--quest-title-color, #ffffff);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+}
+
+.cases-quest-promo__title--sm {
+  font-size: 1.2rem;
+}
+
+.cases-quest-promo__title--md {
+  font-size: 1.45rem;
+}
+
+.cases-quest-promo__title--lg {
+  font-size: 1.7rem;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+}
+
+.cases-quest-promo__subtitle {
+  margin: 0.12rem 0 0;
+  max-width: 12.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--quest-subtitle-color, rgba(255, 255, 255, 0.82));
+}
+
+.cases-quest-promo__accent {
+  color: var(--quest-accent-color, #ff4eb1);
+  font-weight: inherit;
+}
+
+.cases-quest-promo__text--bold {
+  font-weight: 800;
+}
+
+.cases-quest-promo__eyebrow.cases-quest-promo__text--bold {
+  font-weight: 800;
+}
+
+.cases-quest-promo__subtitle.cases-quest-promo__text--bold {
+  font-weight: 700;
+}
+
+.cases-quest-promo__cta {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  margin-top: auto;
+  flex-shrink: 0;
+  min-height: 2.2rem;
+  padding: 0 0.95rem 0 1.05rem;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--quest-cta-color, #7c5cff);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+}
+
+.cases-quest-promo__cta--bold {
+  font-weight: 800;
+}
+
+.cases-quest-promo__slide--open .cases-quest-promo__cta {
+  color: var(--quest-cta-color, #0f9f7a);
+}
+
+.cases-quest-promo__cta-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  margin-right: -0.15rem;
+}
+
+.cases-quest-promo__dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.4rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.3rem;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cases-quest-promo__dot {
+  pointer-events: auto;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  border: 0;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.28);
+  transition:
+    width 0.25s var(--ease-out),
+    background-color 0.25s var(--ease-out);
+}
+
+.cases-quest-promo__dot--active {
+  width: 0.85rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cases-quest-promo__track {
+    transition: none;
+  }
+}
+
 .cases-catalog {
   display: flex;
   flex-direction: column;
@@ -7372,44 +7594,17 @@ body::-webkit-scrollbar,
 .quests-bonus-card__glow {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 85% 110% at 92% 48%, rgba(255, 154, 46, 0.55) 0%, transparent 58%),
-    linear-gradient(110deg, #101820 0%, #141c28 48%, #1c160c 100%);
+  background: #0b1522;
 }
 
-.quests-bonus-card--case .quests-bonus-card__glow {
-  background: #122033;
-}
-
-.quests-bonus-card__cover {
+.quests-bonus-card__ambient {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: 72% center;
-  transform: scale(1.04);
-  filter: saturate(0.88) brightness(0.92) contrast(1.02);
-}
-
-.quests-bonus-card__cover-tint {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, #122033 0%, rgba(18, 32, 51, 0.88) 36%, rgba(18, 32, 51, 0.28) 62%, transparent 78%),
-    linear-gradient(180deg, rgba(18, 32, 51, 0.18) 0%, transparent 35%, rgba(10, 18, 30, 0.45) 100%),
-    radial-gradient(ellipse 70% 80% at 82% 48%, rgba(255, 154, 46, 0.14) 0%, transparent 65%);
-}
-
-.quests-bonus-card__arcs {
-  position: absolute;
-  top: -18%;
-  right: -18%;
-  width: 78%;
-  height: 136%;
-  opacity: 0.95;
+  display: block;
 }
 
 .quests-bonus-card__ton-badge {
@@ -7512,21 +7707,54 @@ body::-webkit-scrollbar,
   flex-shrink: 0;
 }
 
-.quests-bonus-card--gift .quests-bonus-card__arcs {
-  opacity: 0.72;
-  transform: scale(0.92) translate(4%, -2%);
+.quests-bonus-card__case-stage {
+  position: absolute;
+  right: 3rem;
+  top: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 6rem;
+  height: 6rem;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
-.quests-bonus-card--gift .quests-bonus-card__fade {
+.quests-bonus-card__case-plate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 1.45rem;
+  overflow: hidden;
+  background: #0b1522;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 14px 32px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 176, 74, 0.12);
+}
+
+.quests-bonus-card__case-plate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   background:
-    linear-gradient(
-      90deg,
-      rgba(10, 18, 30, 0.96) 0%,
-      rgba(10, 18, 30, 0.82) 34%,
-      rgba(10, 18, 30, 0.22) 62%,
-      transparent 82%
-    ),
-    linear-gradient(180deg, transparent 55%, rgba(10, 18, 30, 0.28) 100%);
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.16) 0%, transparent 42%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.quests-bonus-card__case-img {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .quests-bonus-card__fade {
@@ -7536,18 +7764,25 @@ body::-webkit-scrollbar,
   background:
     linear-gradient(
       90deg,
-      rgba(10, 18, 30, 0.94) 0%,
-      rgba(10, 18, 30, 0.78) 28%,
-      rgba(10, 18, 30, 0.28) 58%,
-      rgba(10, 18, 30, 0.04) 78%,
-      transparent 100%
+      rgba(8, 14, 28, 0.92) 0%,
+      rgba(8, 14, 28, 0.72) 30%,
+      rgba(8, 14, 28, 0.22) 58%,
+      transparent 78%
     ),
-    linear-gradient(180deg, transparent 50%, rgba(10, 18, 30, 0.28) 100%);
+    linear-gradient(180deg, transparent 48%, rgba(8, 14, 28, 0.38) 100%);
 }
 
+.quests-bonus-card--gift .quests-bonus-card__fade,
 .quests-bonus-card--case .quests-bonus-card__fade {
-  /* Cover blend handled by cover-tint; keep only a light bottom vignette. */
-  background: linear-gradient(180deg, transparent 55%, rgba(10, 18, 30, 0.32) 100%);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(8, 14, 28, 0.94) 0%,
+      rgba(8, 14, 28, 0.78) 32%,
+      rgba(8, 14, 28, 0.18) 60%,
+      transparent 80%
+    ),
+    linear-gradient(180deg, transparent 52%, rgba(8, 14, 28, 0.32) 100%);
 }
 
 .quests-bonus-card__copy {
@@ -7705,11 +7940,14 @@ body::-webkit-scrollbar,
 .quests-progress__label {
   flex-shrink: 0;
   min-width: 1.6rem;
+  max-width: 9.5rem;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: rgba(255, 255, 255, 0.7);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .quests-pill {

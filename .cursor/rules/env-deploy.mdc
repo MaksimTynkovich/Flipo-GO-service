@@ -31,10 +31,9 @@ alwaysApply: false
 
 - Host: `flipo.rest`, путь `/opt/flipo`, Docker Compose + Caddy
 - CI: push `master` → `.github/workflows/deploy.yml` → prebuilt `deploy/prebuilt/api`
-- Не rsync'ить `.env`, `data/`, `apps/api/assets/bots/` с сервера
+- Не rsync'ить `.env`, `data/` с сервера
 
 ## Пути данных на диске
 
 - `data/telegram/session.json` — MTProto session
 - `data/gifts/` — кэш изображений подарков (`GIFTS_CACHE_DIR`)
-- `apps/api/assets/bots/` — аватары social-sim ботов

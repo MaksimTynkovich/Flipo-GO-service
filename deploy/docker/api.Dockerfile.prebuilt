@@ -1,10 +1,8 @@
 # Prebuilt binary deploy (avoids OOM on small VPS during go build).
-# Expects: deploy/prebuilt/api (linux/amd64) and apps/api/assets/bots
+# Expects: deploy/prebuilt/api (linux/amd64)
 
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates wget
 COPY deploy/prebuilt/api /api
-COPY apps/api/assets/bots /assets/bots
-ENV BOTS_DATA_DIR=/assets/bots
 EXPOSE 8080
 CMD ["/api"]

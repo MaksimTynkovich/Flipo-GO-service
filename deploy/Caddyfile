@@ -19,9 +19,6 @@ flipo.rest {
 	handle /ready {
 		reverse_proxy 127.0.0.1:8080
 	}
-	handle /static/bots* {
-		reverse_proxy 127.0.0.1:8080
-	}
 	handle /static/gifts* {
 		reverse_proxy 127.0.0.1:8080
 	}
@@ -47,9 +44,6 @@ http://flipo.rest {
 		reverse_proxy 127.0.0.1:8080
 	}
 	handle /ready {
-		reverse_proxy 127.0.0.1:8080
-	}
-	handle /static/bots* {
 		reverse_proxy 127.0.0.1:8080
 	}
 	handle /static/gifts* {

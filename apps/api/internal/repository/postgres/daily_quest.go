@@ -73,6 +73,7 @@ func (r *DailyQuestRepo) GetBoardSettings(ctx context.Context) (*domain.DailyQue
 			BonusRewardType:    domain.DailyQuestRewardBalance,
 			BonusRewardNanoton: 0,
 			BonusActive:        false,
+			PromoSlides:        domain.DefaultDailyQuestPromoSlides(),
 			UpdatedAt:          time.Now().UTC(),
 		}
 		if createErr := r.db.WithContext(ctx).Create(&row).Error; createErr != nil {
@@ -171,6 +172,38 @@ func (r *DailyQuestRepo) UpdateClaimEntitlement(ctx context.Context, claimID, en
 	return r.db.WithContext(ctx).Model(&domain.DailyQuestClaim{}).
 		Where("id = ?", claimID).
 		Update("entitlement_id", entitlementID).Error
+}
+
+func (r *DailyQuestRepo) UpsertProgressBaseline(ctx context.Context, userID uuid.UUID, dayMSK, progressSince time.Time) error {
+	row := domain.DailyQuestProgressBaseline{
+		UserID:        userID,
+		DayMSK:        dayMSK,
+		ProgressSince: progressSince.UTC(),
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "day_msk"}},
+		DoUpdates: clause.AssignmentColumns([]string{"progress_since"}),
+	}).Create(&row).Error
+}
+
+func (r *DailyQuestRepo) GetProgressBaseline(ctx context.Context, userID uuid.UUID, dayMSK time.Time) (*domain.DailyQuestProgressBaseline, error) {
+	var row domain.DailyQuestProgressBaseline
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND day_msk = ?::date", userID, dayMSK.Format("2006-01-02")).
+		First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *DailyQuestRepo) SetBoardProgressEpoch(ctx context.Context, epoch time.Time) error {
+	return r.db.WithContext(ctx).Model(&domain.DailyQuestBoardSettings{}).
+		Where("id = ?", 1).
+		Updates(map[string]any{
+			"progress_epoch": epoch.UTC(),
+			"updated_at":     time.Now().UTC(),
+		}).Error
 }
 
 func (r *DailyQuestRepo) CreateEntitlement(ctx context.Context, e *domain.UserCaseEntitlement) error {

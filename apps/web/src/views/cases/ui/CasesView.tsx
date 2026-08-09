@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { CasesCatalogScreen } from "@/components/cases/CasesCatalogScreen";
 import { CasesLiveFeed } from "@/components/cases/CasesLiveFeed";
+import { CasesQuestBanner } from "@/components/cases/CasesQuestBanner";
 import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -167,6 +168,8 @@ export function CasesView() {
             </div>
           </div>
         ) : null}
+
+        <CasesQuestBanner />
 
         {loading && !data ? (
           <div className="cases-catalog cases-catalog--loading">

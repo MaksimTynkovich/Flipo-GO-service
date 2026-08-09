@@ -37,9 +37,32 @@ type TaskTone = "teal" | "blue" | "green" | "cyan";
 
 const TONES: TaskTone[] = ["teal", "blue", "green", "cyan"];
 
+function isNanotonObjective(type: string): boolean {
+  return type === "open_cases_spend" || type === "wager_roulette" || type === "wager_crash";
+}
+
+function formatQuestProgress(progress: number, target: number, objectiveType: string): string {
+  if (isNanotonObjective(objectiveType)) {
+    return `${formatTON(progress)}/${formatTON(target)} TON`;
+  }
+  return `${progress}/${target}`;
+}
+
 function taskTone(task: DailyQuestTask, index: number): TaskTone {
   if (task.objective_type === "invite_referrals") return "blue";
-  if (task.objective_type === "open_cases") return index % 2 === 0 ? "teal" : "green";
+  if (
+    task.objective_type === "wager_roulette" ||
+    task.objective_type === "roulette_win_mult" ||
+    task.objective_type === "roulette_color_streak"
+  ) {
+    return "cyan";
+  }
+  if (task.objective_type === "wager_crash" || task.objective_type === "crash_cashout_mult") {
+    return "green";
+  }
+  if (task.objective_type === "open_cases" || task.objective_type === "open_cases_spend") {
+    return index % 2 === 0 ? "teal" : "green";
+  }
   return TONES[index % TONES.length]!;
 }
 
@@ -53,6 +76,9 @@ function giftTitle(reward: DailyQuestReward): string {
 }
 
 function rewardLabel(reward: DailyQuestReward): string {
+  if (reward.type === "none") {
+    return "К бонусу дня";
+  }
   if (reward.type === "free_case_open") {
     const title = reward.case_title?.trim();
     return title ? `Кейс «${title}»` : "Бесплатный кейс";
@@ -62,6 +88,14 @@ function rewardLabel(reward: DailyQuestReward): string {
   }
   if (reward.nanoton) return `${formatTON(reward.nanoton)} TON`;
   return "—";
+}
+
+function hasQuestReward(reward: DailyQuestReward): boolean {
+  const type = reward.type?.trim() || "";
+  if (!type || type === "none") return false;
+  if (type === "balance_nanoton") return (reward.nanoton ?? 0) > 0;
+  if (type === "free_case_open" || type === "gift") return true;
+  return rewardLabel(reward) !== "—";
 }
 
 function bonusRewardHeadline(reward: DailyQuestReward): string {
@@ -249,38 +283,19 @@ function rewardCaseImage(reward: DailyQuestReward): string | undefined {
 }
 
 function BonusWash({ reward }: { reward: DailyQuestReward }) {
-  const caseCover =
-    reward.type === "free_case_open" ? resolveAsset(reward.case_image_url?.trim()) : undefined;
+  const caseSrc = rewardCaseImage(reward);
   const giftSrc = bonusGiftImage(reward);
-  const showAmbient = !caseCover;
 
   return (
     <div className="quests-bonus-card__art" aria-hidden>
       <div className="quests-bonus-card__glow" />
-      {caseCover ? (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="quests-bonus-card__cover" src={caseCover} alt="" draggable={false} />
-          <div className="quests-bonus-card__cover-tint" />
-        </>
-      ) : null}
-      {showAmbient ? (
-        <svg className="quests-bonus-card__arcs" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice">
-          <defs>
-            <radialGradient id="questsBonusOrb" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#FFE08A" stopOpacity="0.95" />
-              <stop offset="35%" stopColor="#FF9A2E" stopOpacity="0.85" />
-              <stop offset="70%" stopColor="#FF7A18" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#FF7A18" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-          <circle cx="128" cy="96" r="78" fill="url(#questsBonusOrb)" />
-          <circle cx="128" cy="96" r="64" fill="none" stroke="rgba(255,200,100,0.35)" strokeWidth="10" />
-          <circle cx="128" cy="96" r="46" fill="none" stroke="rgba(255,170,60,0.45)" strokeWidth="8" />
-          <circle cx="128" cy="96" r="28" fill="none" stroke="rgba(255,220,140,0.55)" strokeWidth="6" />
-          <circle cx="128" cy="96" r="12" fill="rgba(255,236,180,0.75)" />
-        </svg>
-      ) : null}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className="quests-bonus-card__ambient"
+        src="/quests/bonus-ambient-blue-pop.webp"
+        alt=""
+        draggable={false}
+      />
       {reward.type === "balance_nanoton" ? (
         <div className="quests-bonus-card__ton-badge">
           <TonIcon variant="brand" className="quests-bonus-card__ton-icon" title="TON" />
@@ -305,6 +320,14 @@ function BonusWash({ reward }: { reward: DailyQuestReward }) {
           </div>
         </div>
       ) : null}
+      {caseSrc ? (
+        <div className="quests-bonus-card__case-stage">
+          <div className="quests-bonus-card__case-plate">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="quests-bonus-card__case-img" src={caseSrc} alt="" draggable={false} />
+          </div>
+        </div>
+      ) : null}
       <div className="quests-bonus-card__fade" />
     </div>
   );
@@ -322,20 +345,19 @@ function BonusCard({
   const ready = bonus.status === "ready";
   const claimed = bonus.status === "claimed";
   const pct = progressPct(bonus.completed_count, bonus.total_count);
-  const hasCaseCover =
-    bonus.reward.type === "free_case_open" &&
-    Boolean(resolveAsset(bonus.reward.case_image_url?.trim()));
+  const caseSrc = rewardCaseImage(bonus.reward);
   const giftSrc = bonusGiftImage(bonus.reward);
   const giftPrice =
     bonus.reward.type === "gift" && bonus.reward.nanoton && bonus.reward.nanoton > 0
       ? bonus.reward.nanoton
       : 0;
+  const rewardThumb = giftSrc || caseSrc;
 
   return (
     <article
       className={cn(
         "quests-bonus-card",
-        hasCaseCover && "quests-bonus-card--case",
+        Boolean(caseSrc) && "quests-bonus-card--case",
         Boolean(giftSrc) && "quests-bonus-card--gift",
         claimed && "quests-bonus-card--claimed",
         ready && "quests-bonus-card--ready",
@@ -345,9 +367,9 @@ function BonusCard({
       <div className="quests-bonus-card__copy">
         <h2 className="quests-bonus-card__title">{bonus.title}</h2>
         <p className="quests-bonus-card__reward">
-          {giftSrc ? (
+          {rewardThumb ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img className="quests-bonus-card__reward-thumb" src={giftSrc} alt="" draggable={false} />
+            <img className="quests-bonus-card__reward-thumb" src={rewardThumb} alt="" draggable={false} />
           ) : null}
           <span className="quests-bonus-card__reward-text">{bonusRewardHeadline(bonus.reward)}</span>
           {giftPrice > 0 ? (
@@ -365,9 +387,6 @@ function BonusCard({
             </span>
           ) : null}
         </p>
-        {bonus.description ? (
-          <p className="quests-bonus-card__desc">{bonus.description}</p>
-        ) : null}
         <div className="quests-bonus-card__progress">
           <div className="quests-progress">
             <div className="quests-progress__track">
@@ -427,24 +446,33 @@ function TaskRow({
       ? APP_ROUTES.profileReferrals
       : task.action === "cases"
         ? caseHref
-        : null;
+        : task.action === "roulette"
+          ? APP_ROUTES.roulette
+          : task.action === "crash"
+            ? APP_ROUTES.crash
+            : null;
   const isTon = task.reward.type === "balance_nanoton";
+  const noReward = !hasQuestReward(task.reward);
   const giftThumb =
-    task.reward.type === "gift" ? bonusGiftImage(task.reward) : undefined;
-  const caseThumb = rewardCaseImage(task.reward);
+    !noReward && task.reward.type === "gift" ? bonusGiftImage(task.reward) : undefined;
+  const caseThumb = !noReward ? rewardCaseImage(task.reward) : undefined;
   const giftPrice =
-    task.reward.type === "gift" && task.reward.nanoton && task.reward.nanoton > 0
+    !noReward && task.reward.type === "gift" && task.reward.nanoton && task.reward.nanoton > 0
       ? task.reward.nanoton
       : 0;
   const rewardText = rewardLabel(task.reward);
   const giftPlateBg =
-    task.reward.type === "gift"
+    !noReward && task.reward.type === "gift"
       ? giftGradient(task.reward.collection_slug?.trim() || task.reward.gift_name || "gift")
       : undefined;
 
   let action: ReactNode;
   if (claimed) {
-    action = <span className="quests-pill quests-pill--done">Получено</span>;
+    action = (
+      <span className="quests-pill quests-pill--done">
+        {noReward ? "Выполнено" : "Получено"}
+      </span>
+    );
   } else if (ready) {
     action = (
       <button
@@ -473,7 +501,8 @@ function TaskRow({
         `quests-task-row--${tone}`,
         claimed && "quests-task-row--claimed",
         ready && "quests-task-row--ready",
-        isTon && "quests-task-row--ton",
+        isTon && !noReward && "quests-task-row--ton",
+        noReward && "quests-task-row--none",
         Boolean(giftThumb) && "quests-task-row--gift",
         Boolean(caseThumb) && "quests-task-row--case",
       )}
@@ -482,20 +511,19 @@ function TaskRow({
 
       <div className="quests-task-row__copy">
         <p className="quests-task-row__title">{task.title}</p>
-        {task.objective_case_title?.trim() ? (
-          <p className="quests-task-row__hint">{task.objective_case_title.trim()}</p>
+        {!noReward ? (
+          <p className="quests-task-row__reward" title={rewardText}>
+            <span className="quests-task-row__reward-label">Награда:</span>
+            {isTon ? (
+              <span className="quests-task-row__reward-value">
+                <TonIcon variant="brand" size="sm" className="quests-task-row__reward-ton" title="TON" />
+                <span className="tabular-nums">{formatTON(task.reward.nanoton ?? 0)} TON</span>
+              </span>
+            ) : (
+              <span className="quests-task-row__reward-value">{rewardText}</span>
+            )}
+          </p>
         ) : null}
-        <p className="quests-task-row__reward" title={rewardText}>
-          <span className="quests-task-row__reward-label">Награда:</span>
-          {isTon ? (
-            <span className="quests-task-row__reward-value">
-              <TonIcon variant="brand" size="sm" className="quests-task-row__reward-ton" title="TON" />
-              <span className="tabular-nums">{formatTON(task.reward.nanoton ?? 0)} TON</span>
-            </span>
-          ) : (
-            <span className="quests-task-row__reward-value">{rewardText}</span>
-          )}
-        </p>
         <div className="quests-progress quests-progress--row">
           <div className="quests-progress__track">
             <div
@@ -504,46 +532,48 @@ function TaskRow({
             />
           </div>
           <span className="quests-progress__label">
-            {task.progress}/{task.target}
+            {formatQuestProgress(task.progress, task.target, task.objective_type)}
           </span>
         </div>
         {action}
       </div>
 
-      <div className="quests-task-row__art" aria-hidden>
-        <div
-          className={cn(
-            "quests-task-row__plate",
-            isTon && "quests-task-row__plate--ton",
-            Boolean(giftThumb) && "quests-task-row__plate--gift",
-            Boolean(caseThumb) && "quests-task-row__plate--case",
-          )}
-          style={giftPlateBg ? { background: giftPlateBg } : undefined}
-        >
-          {isTon ? (
-            <CaseTonPrizeArt className="quests-task-row__ton" />
-          ) : giftThumb ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="quests-task-row__img" src={giftThumb} alt="" draggable={false} />
-          ) : caseThumb ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="quests-task-row__img" src={caseThumb} alt="" draggable={false} />
-          ) : (
-            <span className="quests-task-row__dot" />
-          )}
-          {isTon && (task.reward.nanoton ?? 0) > 0 ? (
-            <span className="quests-task-row__price">
-              <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
-              <span className="tabular-nums">{formatTON(task.reward.nanoton ?? 0)}</span>
-            </span>
-          ) : giftPrice > 0 ? (
-            <span className="quests-task-row__price">
-              <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
-              <span className="tabular-nums">{formatTON(giftPrice)}</span>
-            </span>
-          ) : null}
+      {!noReward ? (
+        <div className="quests-task-row__art" aria-hidden>
+          <div
+            className={cn(
+              "quests-task-row__plate",
+              isTon && "quests-task-row__plate--ton",
+              Boolean(giftThumb) && "quests-task-row__plate--gift",
+              Boolean(caseThumb) && "quests-task-row__plate--case",
+            )}
+            style={giftPlateBg ? { background: giftPlateBg } : undefined}
+          >
+            {isTon ? (
+              <CaseTonPrizeArt className="quests-task-row__ton" />
+            ) : giftThumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="quests-task-row__img" src={giftThumb} alt="" draggable={false} />
+            ) : caseThumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="quests-task-row__img" src={caseThumb} alt="" draggable={false} />
+            ) : (
+              <span className="quests-task-row__dot" />
+            )}
+            {isTon && (task.reward.nanoton ?? 0) > 0 ? (
+              <span className="quests-task-row__price">
+                <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
+                <span className="tabular-nums">{formatTON(task.reward.nanoton ?? 0)}</span>
+              </span>
+            ) : giftPrice > 0 ? (
+              <span className="quests-task-row__price">
+                <TonIcon variant="brand" size="sm" className="quests-task-row__price-ton" title="TON" />
+                <span className="tabular-nums">{formatTON(giftPrice)}</span>
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
     </article>
   );
 }
