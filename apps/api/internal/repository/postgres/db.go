@@ -87,6 +87,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.DailyQuest{},
 		&domain.DailyQuestBoardSettings{},
 		&domain.DailyQuestClaim{},
+		&domain.DailyQuestProgressBaseline{},
 		&domain.UserCaseEntitlement{},
 	); err != nil {
 		return err
