@@ -659,7 +659,7 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	if s.live != nil {
 		cfg := s.liveFeedSettings(ctx)
 		drop := liveDropFromEntry(openID, entry, open.CreatedAt, cfg)
-		if liveDropAllowed(cfg, drop.PrizeType, drop.FloorPriceNanoton) {
+		if liveRealDropAllowed(cfg, drop.PrizeType, drop.FloorPriceNanoton) {
 			s.live.PublishCaseLiveDrop(ctx, drop)
 		}
 	}
@@ -805,13 +805,21 @@ func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]
 		return nil, err
 	}
 	cfg := s.liveFeedSettings(ctx)
+	realOpenIDs := make(map[uuid.UUID]struct{}, len(rows))
+	for _, row := range rows {
+		realOpenIDs[row.OpenID] = struct{}{}
+	}
 	out := make([]domain.CaseLiveDrop, 0, limit*2)
 	seen := make(map[uuid.UUID]struct{}, limit*2)
-	appendDrop := func(row domain.CaseLiveDrop) {
+	appendDrop := func(row domain.CaseLiveDrop, fromBuffer bool) {
 		if _, ok := seen[row.OpenID]; ok {
 			return
 		}
-		if !liveDropAllowed(cfg, row.PrizeType, row.FloorPriceNanoton) {
+		if fromBuffer {
+			if !liveBufferDropAllowed(cfg, row, realOpenIDs) {
+				return
+			}
+		} else if !liveRealDropAllowed(cfg, row.PrizeType, row.FloorPriceNanoton) {
 			return
 		}
 		seen[row.OpenID] = struct{}{}
@@ -827,11 +835,11 @@ func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]
 	}
 	if s.feedBuf != nil {
 		for _, row := range s.feedBuf.Snapshot() {
-			appendDrop(row)
+			appendDrop(row, true)
 		}
 	}
 	for _, row := range rows {
-		appendDrop(row)
+		appendDrop(row, false)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].CreatedAt.After(out[j].CreatedAt)

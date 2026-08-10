@@ -650,7 +650,7 @@ type CaseLiveFeedSettings struct {
 	FatMinFloorNanoton int64     `gorm:"not null;default:5000000000" json:"fat_min_floor_nanoton"`
 	// MaxGiftFloorNanoton — hide gift drops above this floor (0 = no cap).
 	MaxGiftFloorNanoton int64 `gorm:"not null;default:0" json:"max_gift_floor_nanoton"`
-	// HideTon — when true, TON prizes are excluded from the live feed (gifts only).
+	// HideTon — when true, fake live drops exclude TON prizes (real TON opens still show).
 	HideTon   bool      `gorm:"not null;default:false" json:"hide_ton"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

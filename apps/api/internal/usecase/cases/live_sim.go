@@ -198,7 +198,7 @@ func filterLiveSimPool(pool []domain.CaseLootEntry, cfg domain.CaseLiveFeedSetti
 	}
 	out := make([]domain.CaseLootEntry, 0, len(pool))
 	for _, e := range pool {
-		if liveDropAllowed(cfg, e.PrizeType, domain.CaseLootPrizeValueNanoton(e)) {
+		if liveFakeDropAllowed(cfg, e.PrizeType, domain.CaseLootPrizeValueNanoton(e)) {
 			out = append(out, e)
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/google/uuid"
 )
 
 func TestShouldInjectFakeDropIgnoresFakeBufferSaturation(t *testing.T) {
@@ -73,39 +74,59 @@ func TestNormalizeLiveFeedSettingsSortsIntervals(t *testing.T) {
 	}
 }
 
-func TestLiveGiftAllowedMaxFloor(t *testing.T) {
+func TestLiveRealDropAllowedMaxFloor(t *testing.T) {
 	cfg := DefaultLiveFeedSettings()
 	cfg.MaxGiftFloorNanoton = 0
-	if !liveDropAllowed(cfg, "gift", 50_000_000_000) {
+	if !liveRealDropAllowed(cfg, "gift", 50_000_000_000) {
 		t.Fatal("max=0 must allow any gift")
 	}
-	if !liveDropAllowed(cfg, "ton", 50_000_000_000) {
+	if !liveRealDropAllowed(cfg, "ton", 50_000_000_000) {
 		t.Fatal("max=0 must allow ton")
 	}
 
 	cfg.MaxGiftFloorNanoton = 10_000_000_000 // 10 TON
-	if !liveDropAllowed(cfg, "gift", 10_000_000_000) {
+	if !liveRealDropAllowed(cfg, "gift", 10_000_000_000) {
 		t.Fatal("gift at exact max must be allowed")
 	}
-	if liveDropAllowed(cfg, "gift", 10_000_000_001) {
+	if liveRealDropAllowed(cfg, "gift", 10_000_000_001) {
 		t.Fatal("gift above max must be blocked")
 	}
-	if !liveDropAllowed(cfg, "ton", 50_000_000_000) {
-		t.Fatal("ton prizes must ignore gift cap")
-	}
-	if !liveDropAllowed(cfg, "", 5_000_000_000) {
-		t.Fatal("empty prize_type (gift) under max must be allowed")
+	if !liveRealDropAllowed(cfg, "ton", 50_000_000_000) {
+		t.Fatal("real ton must ignore gift cap")
 	}
 }
 
-func TestLiveDropAllowedHideTon(t *testing.T) {
+func TestLiveFakeDropAllowedHideTon(t *testing.T) {
 	cfg := DefaultLiveFeedSettings()
 	cfg.HideTon = true
-	if liveDropAllowed(cfg, "ton", 1_000_000_000) {
-		t.Fatal("hide_ton must block ton prizes")
+	if liveFakeDropAllowed(cfg, "ton", 1_000_000_000) {
+		t.Fatal("hide_ton must block fake ton")
 	}
-	if !liveDropAllowed(cfg, "gift", 1_000_000_000) {
-		t.Fatal("hide_ton must still allow gifts")
+	if !liveFakeDropAllowed(cfg, "gift", 1_000_000_000) {
+		t.Fatal("hide_ton must still allow fake gifts")
+	}
+}
+
+func TestLiveRealDropAllowedHideTon(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cfg.HideTon = true
+	if !liveRealDropAllowed(cfg, "ton", 1_000_000_000) {
+		t.Fatal("hide_ton must not block real ton opens")
+	}
+}
+
+func TestLiveBufferDropAllowedHideTon(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cfg.HideTon = true
+	realID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	fakeID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	realOpenIDs := map[uuid.UUID]struct{}{realID: {}}
+
+	if !liveBufferDropAllowed(cfg, domain.CaseLiveDrop{OpenID: realID, PrizeType: "ton"}, realOpenIDs) {
+		t.Fatal("real ton in buffer must show when hide_ton")
+	}
+	if liveBufferDropAllowed(cfg, domain.CaseLiveDrop{OpenID: fakeID, PrizeType: "ton"}, realOpenIDs) {
+		t.Fatal("fake ton in buffer must be hidden when hide_ton")
 	}
 }
 

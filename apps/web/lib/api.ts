@@ -3072,7 +3072,7 @@ export type AdminCaseLiveFeedSettings = {
   fat_min_floor_nanoton: number;
   /** Hide gift drops above this floor (nanoton). 0 = no cap. */
   max_gift_floor_nanoton: number;
-  /** When true, TON prizes are excluded from the live feed. */
+  /** When true, fake live drops exclude TON (real TON opens still show). */
   hide_ton: boolean;
   updated_at?: string;
 };

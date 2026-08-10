@@ -1,6 +1,9 @@
 package cases
 
-import "github.com/flipo/flipo/apps/api/internal/domain"
+import (
+	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/google/uuid"
+)
 
 func DefaultLiveFeedSettings() domain.CaseLiveFeedSettings {
 	return domain.CaseLiveFeedSettings{
@@ -77,17 +80,38 @@ func NormalizeLiveFeedSettings(cfg *domain.CaseLiveFeedSettings) {
 	}
 }
 
-// liveDropAllowed reports whether a live-feed drop may be shown.
-// HideTon excludes TON prizes. MaxGiftFloorNanoton caps gift floor (0 = no cap).
-func liveDropAllowed(cfg domain.CaseLiveFeedSettings, prizeType string, valueNanoton int64) bool {
-	isTon := domain.NormalizeCasePrizeType(prizeType) == domain.CasePrizeTypeTon
-	if isTon {
+// liveRealDropAllowed filters real opens for the live feed (max gift floor only).
+func liveRealDropAllowed(cfg domain.CaseLiveFeedSettings, prizeType string, valueNanoton int64) bool {
+	if domain.NormalizeCasePrizeType(prizeType) == domain.CasePrizeTypeTon {
+		return true
+	}
+	if cfg.MaxGiftFloorNanoton <= 0 {
+		return true
+	}
+	return valueNanoton <= cfg.MaxGiftFloorNanoton
+}
+
+// liveFakeDropAllowed filters fake sim drops (hide_ton + max gift floor).
+func liveFakeDropAllowed(cfg domain.CaseLiveFeedSettings, prizeType string, valueNanoton int64) bool {
+	if domain.NormalizeCasePrizeType(prizeType) == domain.CasePrizeTypeTon {
 		return !cfg.HideTon
 	}
 	if cfg.MaxGiftFloorNanoton <= 0 {
 		return true
 	}
 	return valueNanoton <= cfg.MaxGiftFloorNanoton
+}
+
+// liveBufferDropAllowed filters in-memory buffer rows; TON may be real (in DB) or fake.
+func liveBufferDropAllowed(cfg domain.CaseLiveFeedSettings, drop domain.CaseLiveDrop, realOpenIDs map[uuid.UUID]struct{}) bool {
+	if domain.NormalizeCasePrizeType(drop.PrizeType) == domain.CasePrizeTypeTon {
+		if cfg.HideTon {
+			_, isReal := realOpenIDs[drop.OpenID]
+			return isReal
+		}
+		return true
+	}
+	return liveRealDropAllowed(cfg, drop.PrizeType, drop.FloorPriceNanoton)
 }
 
 func clampFloat(v, min, max float64) float64 {
