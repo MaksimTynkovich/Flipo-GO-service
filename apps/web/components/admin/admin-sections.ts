@@ -10,6 +10,7 @@ import MarketAdminSection from "./sections/MarketAdminSection";
 import MarketDisabledSection from "./sections/MarketDisabledSection";
 import MarketingSection from "./sections/MarketingSection";
 import QuestsSection from "./sections/QuestsSection";
+import QuestStatsSection from "./sections/QuestStatsSection";
 import NotificationsSection from "./sections/NotificationsSection";
 import SystemSection from "./sections/SystemSection";
 import TelegramSection from "./sections/TelegramSection";
@@ -31,6 +32,7 @@ export type AdminSectionId =
   | "finance"
   | "marketing"
   | "quests"
+  | "quest-stats"
   | "staking"
   | "settings"
   | "telegram"
@@ -58,6 +60,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: "staking", href: "/admin/staking", label: "Стейкинг" },
   { id: "marketing", href: "/admin/marketing", label: "Маркетинг" },
   { id: "quests", href: "/admin/quests", label: "Задания" },
+  { id: "quest-stats", href: "/admin/quest-stats", label: "Статистика заданий" },
   { id: "settings", href: "/admin/system", label: "Система" },
   { id: "telegram", href: "/admin/telegram", label: "Telegram" },
 ];
@@ -76,6 +79,7 @@ export const ADMIN_SECTIONS: Record<AdminSectionId, ComponentType> = {
   staking: StakingSection,
   marketing: MarketingSection,
   quests: QuestsSection,
+  "quest-stats": QuestStatsSection,
   settings: SystemSection,
   telegram: TelegramSection,
   outcome: OutcomeSection,
@@ -96,6 +100,7 @@ const PATH_TO_SECTION: Record<string, AdminSectionId> = {
   "/admin/staking": "staking",
   "/admin/marketing": "marketing",
   "/admin/quests": "quests",
+  "/admin/quest-stats": "quest-stats",
   "/admin/settings": "settings",
   "/admin/telegram": "telegram",
   "/admin/system": "settings",

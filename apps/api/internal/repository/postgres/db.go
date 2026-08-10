@@ -128,6 +128,24 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateAdminCreditCaseEconomy(db); err != nil {
 		return err
 	}
+	if err := migrateDailyQuestStatsIndexes(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func migrateDailyQuestStatsIndexes(db *gorm.DB) error {
+	statements := []string{
+		`CREATE INDEX IF NOT EXISTS idx_daily_quest_claims_day_msk ON daily_quest_claims(day_msk)`,
+		`CREATE INDEX IF NOT EXISTS idx_daily_quest_claims_claimed_at ON daily_quest_claims(claimed_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_case_entitlements_source_created ON user_case_entitlements(source, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_case_opens_source_created ON case_opens(source, created_at)`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("migrate daily quest stats indexes: %w", err)
+		}
+	}
 	return nil
 }
 

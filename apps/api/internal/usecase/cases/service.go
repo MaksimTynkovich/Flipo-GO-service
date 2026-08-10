@@ -659,7 +659,7 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	if s.live != nil {
 		cfg := s.liveFeedSettings(ctx)
 		drop := liveDropFromEntry(openID, entry, open.CreatedAt, cfg)
-		if liveGiftAllowed(cfg, drop.PrizeType, drop.FloorPriceNanoton) {
+		if liveDropAllowed(cfg, drop.PrizeType, drop.FloorPriceNanoton) {
 			s.live.PublishCaseLiveDrop(ctx, drop)
 		}
 	}
@@ -811,7 +811,7 @@ func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]
 		if _, ok := seen[row.OpenID]; ok {
 			return
 		}
-		if !liveGiftAllowed(cfg, row.PrizeType, row.FloorPriceNanoton) {
+		if !liveDropAllowed(cfg, row.PrizeType, row.FloorPriceNanoton) {
 			return
 		}
 		seen[row.OpenID] = struct{}{}

@@ -260,3 +260,225 @@ func (r *DailyQuestRepo) ListAvailableEntitlements(ctx context.Context, userID u
 		Find(&rows).Error
 	return rows, err
 }
+
+func claimSinceDay(sinceDayMSK time.Time) (string, bool) {
+	if sinceDayMSK.IsZero() {
+		return "", false
+	}
+	return sinceDayMSK.Format("2006-01-02"), true
+}
+
+func (r *DailyQuestRepo) ClaimPeriodStats(ctx context.Context, sinceDayMSK time.Time) (domain.DailyQuestClaimPeriodStats, error) {
+	type row struct {
+		TaskClaims           int64
+		BonusClaims          int64
+		UniqueClaimers       int64
+		TaskClaimers         int64
+		BonusClaimers        int64
+		RewardNanotonTotal   int64
+		BalanceRewardNanoton int64
+		GiftRewardNanoton    int64
+		FreeCaseClaims       int64
+	}
+	var out row
+	q := r.db.WithContext(ctx).Model(&domain.DailyQuestClaim{}).
+		Select(`
+			COUNT(*) FILTER (WHERE claim_kind = 'task') AS task_claims,
+			COUNT(*) FILTER (WHERE claim_kind = 'bonus') AS bonus_claims,
+			COUNT(DISTINCT user_id) AS unique_claimers,
+			COUNT(DISTINCT user_id) FILTER (WHERE claim_kind = 'task') AS task_claimers,
+			COUNT(DISTINCT user_id) FILTER (WHERE claim_kind = 'bonus') AS bonus_claimers,
+			COALESCE(SUM(reward_nanoton), 0) AS reward_nanoton_total,
+			COALESCE(SUM(reward_nanoton) FILTER (WHERE reward_type = 'balance_nanoton'), 0) AS balance_reward_nanoton,
+			COALESCE(SUM(reward_nanoton) FILTER (WHERE reward_type = 'gift'), 0) AS gift_reward_nanoton,
+			COUNT(*) FILTER (WHERE reward_type = 'free_case_open') AS free_case_claims`)
+	if day, ok := claimSinceDay(sinceDayMSK); ok {
+		q = q.Where("day_msk >= ?::date", day)
+	}
+	if err := q.Scan(&out).Error; err != nil {
+		return domain.DailyQuestClaimPeriodStats{}, err
+	}
+	return domain.DailyQuestClaimPeriodStats{
+		TaskClaims:           out.TaskClaims,
+		BonusClaims:          out.BonusClaims,
+		UniqueClaimers:       out.UniqueClaimers,
+		TaskClaimers:         out.TaskClaimers,
+		BonusClaimers:        out.BonusClaimers,
+		RewardNanotonTotal:   out.RewardNanotonTotal,
+		BalanceRewardNanoton: out.BalanceRewardNanoton,
+		GiftRewardNanoton:    out.GiftRewardNanoton,
+		FreeCaseClaims:       out.FreeCaseClaims,
+	}, nil
+}
+
+func (r *DailyQuestRepo) ClaimsByQuest(ctx context.Context, sinceDayMSK time.Time) ([]domain.DailyQuestClaimByQuestStats, error) {
+	type row struct {
+		QuestID            uuid.UUID
+		Title              string
+		Active             bool
+		SortOrder          int
+		TaskClaims         int64
+		UniqueUsers        int64
+		RewardNanotonTotal int64
+		RewardType         string
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).
+		Table("daily_quest_claims AS c").
+		Select(`
+			c.quest_id AS quest_id,
+			COALESCE(q.title, 'Удалённое задание') AS title,
+			COALESCE(q.active, false) AS active,
+			COALESCE(q.sort_order, 0) AS sort_order,
+			COUNT(*) AS task_claims,
+			COUNT(DISTINCT c.user_id) AS unique_users,
+			COALESCE(SUM(c.reward_nanoton), 0) AS reward_nanoton_total,
+			COALESCE(MAX(c.reward_type), '') AS reward_type`).
+		Joins("LEFT JOIN daily_quests q ON q.id = c.quest_id").
+		Where("c.claim_kind = ? AND c.quest_id IS NOT NULL", domain.DailyQuestClaimTask).
+		Group("c.quest_id, q.title, q.active, q.sort_order").
+		Order("task_claims DESC, sort_order ASC")
+	if day, ok := claimSinceDay(sinceDayMSK); ok {
+		q = q.Where("c.day_msk >= ?::date", day)
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.DailyQuestClaimByQuestStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.DailyQuestClaimByQuestStats{
+			QuestID:            item.QuestID,
+			Title:              item.Title,
+			Active:             item.Active,
+			SortOrder:          item.SortOrder,
+			TaskClaims:         item.TaskClaims,
+			UniqueUsers:        item.UniqueUsers,
+			RewardNanotonTotal: item.RewardNanotonTotal,
+			RewardType:         item.RewardType,
+		})
+	}
+	return out, nil
+}
+
+func (r *DailyQuestRepo) ClaimsByRewardType(ctx context.Context, sinceDayMSK time.Time) ([]domain.DailyQuestClaimByRewardStats, error) {
+	type row struct {
+		RewardType         string
+		Claims             int64
+		UniqueUsers        int64
+		RewardNanotonTotal int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).Model(&domain.DailyQuestClaim{}).
+		Select(`
+			reward_type,
+			COUNT(*) AS claims,
+			COUNT(DISTINCT user_id) AS unique_users,
+			COALESCE(SUM(reward_nanoton), 0) AS reward_nanoton_total`).
+		Group("reward_type").
+		Order("claims DESC")
+	if day, ok := claimSinceDay(sinceDayMSK); ok {
+		q = q.Where("day_msk >= ?::date", day)
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.DailyQuestClaimByRewardStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.DailyQuestClaimByRewardStats{
+			RewardType:         item.RewardType,
+			Claims:             item.Claims,
+			UniqueUsers:        item.UniqueUsers,
+			RewardNanotonTotal: item.RewardNanotonTotal,
+		})
+	}
+	return out, nil
+}
+
+func (r *DailyQuestRepo) ClaimsByDayMSK(ctx context.Context, sinceDayMSK time.Time) ([]domain.DailyQuestClaimsDailyStats, error) {
+	type row struct {
+		DayMSK             time.Time
+		TaskClaims         int64
+		BonusClaims        int64
+		UniqueClaimers     int64
+		RewardNanotonTotal int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).Model(&domain.DailyQuestClaim{}).
+		Select(`
+			day_msk,
+			COUNT(*) FILTER (WHERE claim_kind = 'task') AS task_claims,
+			COUNT(*) FILTER (WHERE claim_kind = 'bonus') AS bonus_claims,
+			COUNT(DISTINCT user_id) AS unique_claimers,
+			COALESCE(SUM(reward_nanoton), 0) AS reward_nanoton_total`).
+		Group("day_msk").
+		Order("day_msk ASC")
+	if day, ok := claimSinceDay(sinceDayMSK); ok {
+		q = q.Where("day_msk >= ?::date", day)
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.DailyQuestClaimsDailyStats, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, domain.DailyQuestClaimsDailyStats{
+			DayMSK:             item.DayMSK.Format("2006-01-02"),
+			TaskClaims:         item.TaskClaims,
+			BonusClaims:        item.BonusClaims,
+			UniqueClaimers:     item.UniqueClaimers,
+			RewardNanotonTotal: item.RewardNanotonTotal,
+		})
+	}
+	return out, nil
+}
+
+func (r *DailyQuestRepo) EntitlementStats(ctx context.Context, since time.Time) (domain.DailyQuestEntitlementStats, error) {
+	type row struct {
+		Granted   int64
+		Used      int64
+		Available int64
+	}
+	var out row
+	q := r.db.WithContext(ctx).Model(&domain.UserCaseEntitlement{}).
+		Where("source = ?", domain.CaseEntitlementSourceDailyQuest).
+		Select(`
+			COUNT(*) AS granted,
+			COUNT(*) FILTER (WHERE status = 'used') AS used,
+			COUNT(*) FILTER (WHERE status = 'available') AS available`)
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&out).Error; err != nil {
+		return domain.DailyQuestEntitlementStats{}, err
+	}
+	return domain.DailyQuestEntitlementStats{
+		Granted:   out.Granted,
+		Used:      out.Used,
+		Available: out.Available,
+	}, nil
+}
+
+func (r *DailyQuestRepo) QuestCaseOpenStats(ctx context.Context, since time.Time) (domain.DailyQuestCaseOpenStats, error) {
+	type row struct {
+		Opens             int64
+		UniqueUsers       int64
+		PrizeTotalNanoton int64
+	}
+	var out row
+	q := r.db.WithContext(ctx).Model(&domain.CaseOpen{}).
+		Where("source = ?", domain.CaseOpenSourceQuest).
+		Select(`
+			COUNT(*) AS opens,
+			COUNT(DISTINCT user_id) AS unique_users,
+			COALESCE(SUM(prize_nanoton), 0) AS prize_total_nanoton`)
+	if !since.IsZero() {
+		q = q.Where("created_at >= ?", since.UTC())
+	}
+	if err := q.Scan(&out).Error; err != nil {
+		return domain.DailyQuestCaseOpenStats{}, err
+	}
+	return domain.DailyQuestCaseOpenStats{
+		Opens:             out.Opens,
+		UniqueUsers:       out.UniqueUsers,
+		PrizeTotalNanoton: out.PrizeTotalNanoton,
+	}, nil
+}

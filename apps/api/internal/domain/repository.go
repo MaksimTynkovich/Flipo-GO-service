@@ -453,4 +453,12 @@ type DailyQuestRepository interface {
 	ClaimEntitlementForOpen(ctx context.Context, userID, caseID uuid.UUID) (*UserCaseEntitlement, error)
 	ReleaseEntitlement(ctx context.Context, id uuid.UUID) error
 	ListAvailableEntitlements(ctx context.Context, userID uuid.UUID) ([]UserCaseEntitlement, error)
+
+	// Admin analytics (sinceDayMSK empty = all time; otherwise day_msk >= since).
+	ClaimPeriodStats(ctx context.Context, sinceDayMSK time.Time) (DailyQuestClaimPeriodStats, error)
+	ClaimsByQuest(ctx context.Context, sinceDayMSK time.Time) ([]DailyQuestClaimByQuestStats, error)
+	ClaimsByRewardType(ctx context.Context, sinceDayMSK time.Time) ([]DailyQuestClaimByRewardStats, error)
+	ClaimsByDayMSK(ctx context.Context, sinceDayMSK time.Time) ([]DailyQuestClaimsDailyStats, error)
+	EntitlementStats(ctx context.Context, since time.Time) (DailyQuestEntitlementStats, error)
+	QuestCaseOpenStats(ctx context.Context, since time.Time) (DailyQuestCaseOpenStats, error)
 }

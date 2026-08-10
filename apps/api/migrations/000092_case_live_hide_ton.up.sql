@@ -1,0 +1,2 @@
+ALTER TABLE case_live_feed_settings
+    ADD COLUMN IF NOT EXISTS hide_ton BOOLEAN NOT NULL DEFAULT FALSE;

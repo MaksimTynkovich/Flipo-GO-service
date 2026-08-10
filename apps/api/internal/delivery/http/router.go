@@ -232,6 +232,7 @@ func NewRouter(deps Deps) *gin.Engine {
 			adminAuthed.GET("/quests/board", deps.AdminHandler.GetDailyQuestBoard)
 			adminAuthed.PUT("/quests/board", deps.AdminHandler.UpdateDailyQuestBoard)
 			adminAuthed.POST("/quests/reset", deps.AdminHandler.ResetDailyQuestClaims)
+			adminAuthed.GET("/quests/stats", deps.AdminHandler.GetDailyQuestStats)
 			adminAuthed.GET("/telegram/settings", deps.AdminHandler.GetBotSettings)
 			adminAuthed.PATCH("/telegram/settings", deps.AdminHandler.UpdateBotSettings)
 			adminAuthed.GET("/maintenance", deps.AdminHandler.GetMaintenanceSettings)

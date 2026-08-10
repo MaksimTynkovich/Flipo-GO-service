@@ -1145,3 +1145,237 @@ func (s *Service) AdminResetClaims(ctx context.Context, req AdminResetClaimsRequ
 		DeletedClaims: deleted,
 	}, nil
 }
+
+type AdminQuestPeriodView struct {
+	TaskClaims             int64   `json:"task_claims"`
+	BonusClaims            int64   `json:"bonus_claims"`
+	UniqueClaimers         int64   `json:"unique_claimers"`
+	TaskClaimers           int64   `json:"task_claimers"`
+	BonusClaimers          int64   `json:"bonus_claimers"`
+	BonusCompletionBPS     int     `json:"bonus_completion_bps"`
+	RewardNanotonTotal     int64   `json:"reward_nanoton_total"`
+	BalanceRewardNanoton   int64   `json:"balance_reward_nanoton"`
+	GiftRewardNanoton      int64   `json:"gift_reward_nanoton"`
+	FreeCaseClaims         int64   `json:"free_case_claims"`
+	EntitlementsGranted    int64   `json:"entitlements_granted"`
+	EntitlementsUsed       int64   `json:"entitlements_used"`
+	EntitlementsAvailable  int64   `json:"entitlements_available"`
+	EntitlementRedeemBPS   int     `json:"entitlement_redeem_bps"`
+	QuestOpens             int64   `json:"quest_opens"`
+	QuestOpenUsers         int64   `json:"quest_open_users"`
+	QuestPrizeTotalNanoton int64   `json:"quest_prize_total_nanoton"`
+	PlatformCostNanoton    int64   `json:"platform_cost_nanoton"`
+}
+
+type AdminQuestByQuestView struct {
+	QuestID            uuid.UUID `json:"quest_id"`
+	Title              string    `json:"title"`
+	Active             bool      `json:"active"`
+	SortOrder          int       `json:"sort_order"`
+	TaskClaims         int64     `json:"task_claims"`
+	UniqueUsers        int64     `json:"unique_users"`
+	RewardNanotonTotal int64     `json:"reward_nanoton_total"`
+	RewardType         string    `json:"reward_type"`
+}
+
+type AdminQuestByRewardView struct {
+	RewardType         string `json:"reward_type"`
+	Claims             int64  `json:"claims"`
+	UniqueUsers        int64  `json:"unique_users"`
+	RewardNanotonTotal int64  `json:"reward_nanoton_total"`
+}
+
+type AdminQuestDailyView struct {
+	DayMSK             string `json:"day_msk"`
+	TaskClaims         int64  `json:"task_claims"`
+	BonusClaims        int64  `json:"bonus_claims"`
+	UniqueClaimers     int64  `json:"unique_claimers"`
+	RewardNanotonTotal int64  `json:"reward_nanoton_total"`
+}
+
+type AdminQuestStatsView struct {
+	Timezone       string                   `json:"timezone"`
+	Today          AdminQuestPeriodView     `json:"today"`
+	Last7Days      AdminQuestPeriodView     `json:"last_7_days"`
+	Last30Days     AdminQuestPeriodView     `json:"last_30_days"`
+	AllTime        AdminQuestPeriodView     `json:"all_time"`
+	ByQuestToday   []AdminQuestByQuestView  `json:"by_quest_today"`
+	ByQuest7d      []AdminQuestByQuestView  `json:"by_quest_7d"`
+	ByQuest30d     []AdminQuestByQuestView  `json:"by_quest_30d"`
+	ByQuestAllTime []AdminQuestByQuestView  `json:"by_quest_all_time"`
+	ByReward7d     []AdminQuestByRewardView `json:"by_reward_7d"`
+	ByRewardAllTime []AdminQuestByRewardView `json:"by_reward_all_time"`
+	ClaimsByDay    []AdminQuestDailyView    `json:"claims_by_day"`
+}
+
+func (s *Service) AdminQuestStats(ctx context.Context) (*AdminQuestStatsView, error) {
+	msk := staking.MoscowLocation()
+	now := time.Now().In(msk)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, msk)
+	since7d := today.AddDate(0, 0, -6)
+	since30d := today.AddDate(0, 0, -29)
+	since14d := today.AddDate(0, 0, -13)
+
+	todayUTC := today.UTC()
+	since7dUTC := since7d.UTC()
+	since30dUTC := since30d.UTC()
+
+	todayPeriod, err := s.buildQuestPeriod(ctx, today, todayUTC)
+	if err != nil {
+		return nil, err
+	}
+	weekPeriod, err := s.buildQuestPeriod(ctx, since7d, since7dUTC)
+	if err != nil {
+		return nil, err
+	}
+	monthPeriod, err := s.buildQuestPeriod(ctx, since30d, since30dUTC)
+	if err != nil {
+		return nil, err
+	}
+	allPeriod, err := s.buildQuestPeriod(ctx, time.Time{}, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+
+	byToday, err := s.quests.ClaimsByQuest(ctx, today)
+	if err != nil {
+		return nil, err
+	}
+	by7d, err := s.quests.ClaimsByQuest(ctx, since7d)
+	if err != nil {
+		return nil, err
+	}
+	by30d, err := s.quests.ClaimsByQuest(ctx, since30d)
+	if err != nil {
+		return nil, err
+	}
+	byAll, err := s.quests.ClaimsByQuest(ctx, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+
+	reward7d, err := s.quests.ClaimsByRewardType(ctx, since7d)
+	if err != nil {
+		return nil, err
+	}
+	rewardAll, err := s.quests.ClaimsByRewardType(ctx, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+
+	dailyRows, err := s.quests.ClaimsByDayMSK(ctx, since14d)
+	if err != nil {
+		return nil, err
+	}
+	byDayMap := make(map[string]domain.DailyQuestClaimsDailyStats, len(dailyRows))
+	for _, row := range dailyRows {
+		byDayMap[row.DayMSK] = row
+	}
+	claimsByDay := make([]AdminQuestDailyView, 0, 14)
+	for i := 0; i < 14; i++ {
+		d := since14d.AddDate(0, 0, i)
+		key := d.Format("2006-01-02")
+		row := byDayMap[key]
+		claimsByDay = append(claimsByDay, AdminQuestDailyView{
+			DayMSK:             key,
+			TaskClaims:         row.TaskClaims,
+			BonusClaims:        row.BonusClaims,
+			UniqueClaimers:     row.UniqueClaimers,
+			RewardNanotonTotal: row.RewardNanotonTotal,
+		})
+	}
+
+	return &AdminQuestStatsView{
+		Timezone:        "Europe/Moscow",
+		Today:           todayPeriod,
+		Last7Days:       weekPeriod,
+		Last30Days:      monthPeriod,
+		AllTime:         allPeriod,
+		ByQuestToday:    mapQuestByQuest(byToday),
+		ByQuest7d:       mapQuestByQuest(by7d),
+		ByQuest30d:      mapQuestByQuest(by30d),
+		ByQuestAllTime:  mapQuestByQuest(byAll),
+		ByReward7d:      mapQuestByReward(reward7d),
+		ByRewardAllTime: mapQuestByReward(rewardAll),
+		ClaimsByDay:     claimsByDay,
+	}, nil
+}
+
+func (s *Service) buildQuestPeriod(ctx context.Context, sinceDayMSK, sinceUTC time.Time) (AdminQuestPeriodView, error) {
+	claims, err := s.quests.ClaimPeriodStats(ctx, sinceDayMSK)
+	if err != nil {
+		return AdminQuestPeriodView{}, err
+	}
+	ents, err := s.quests.EntitlementStats(ctx, sinceUTC)
+	if err != nil {
+		return AdminQuestPeriodView{}, err
+	}
+	opens, err := s.quests.QuestCaseOpenStats(ctx, sinceUTC)
+	if err != nil {
+		return AdminQuestPeriodView{}, err
+	}
+
+	bonusBPS := 0
+	if claims.TaskClaimers > 0 {
+		bonusBPS = int((claims.BonusClaimers * 10000) / claims.TaskClaimers)
+	}
+	redeemBPS := 0
+	if ents.Granted > 0 {
+		redeemBPS = int((ents.Used * 10000) / ents.Granted)
+	}
+
+	// Liability: TON/gift valuations on claims + prize value of quest case opens.
+	// Free-case claim rows usually have reward_nanoton=0; cost appears when opened.
+	platformCost := claims.BalanceRewardNanoton + claims.GiftRewardNanoton + opens.PrizeTotalNanoton
+
+	return AdminQuestPeriodView{
+		TaskClaims:             claims.TaskClaims,
+		BonusClaims:            claims.BonusClaims,
+		UniqueClaimers:         claims.UniqueClaimers,
+		TaskClaimers:           claims.TaskClaimers,
+		BonusClaimers:          claims.BonusClaimers,
+		BonusCompletionBPS:     bonusBPS,
+		RewardNanotonTotal:     claims.RewardNanotonTotal,
+		BalanceRewardNanoton:   claims.BalanceRewardNanoton,
+		GiftRewardNanoton:      claims.GiftRewardNanoton,
+		FreeCaseClaims:         claims.FreeCaseClaims,
+		EntitlementsGranted:    ents.Granted,
+		EntitlementsUsed:       ents.Used,
+		EntitlementsAvailable:  ents.Available,
+		EntitlementRedeemBPS:   redeemBPS,
+		QuestOpens:             opens.Opens,
+		QuestOpenUsers:         opens.UniqueUsers,
+		QuestPrizeTotalNanoton: opens.PrizeTotalNanoton,
+		PlatformCostNanoton:    platformCost,
+	}, nil
+}
+
+func mapQuestByQuest(rows []domain.DailyQuestClaimByQuestStats) []AdminQuestByQuestView {
+	out := make([]AdminQuestByQuestView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, AdminQuestByQuestView{
+			QuestID:            row.QuestID,
+			Title:              row.Title,
+			Active:             row.Active,
+			SortOrder:          row.SortOrder,
+			TaskClaims:         row.TaskClaims,
+			UniqueUsers:        row.UniqueUsers,
+			RewardNanotonTotal: row.RewardNanotonTotal,
+			RewardType:         row.RewardType,
+		})
+	}
+	return out
+}
+
+func mapQuestByReward(rows []domain.DailyQuestClaimByRewardStats) []AdminQuestByRewardView {
+	out := make([]AdminQuestByRewardView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, AdminQuestByRewardView{
+			RewardType:         row.RewardType,
+			Claims:             row.Claims,
+			UniqueUsers:        row.UniqueUsers,
+			RewardNanotonTotal: row.RewardNanotonTotal,
+		})
+	}
+	return out
+}

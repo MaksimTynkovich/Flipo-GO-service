@@ -183,3 +183,59 @@ type UserCaseEntitlement struct {
 }
 
 func (UserCaseEntitlement) TableName() string { return "user_case_entitlements" }
+
+// DailyQuestClaimPeriodStats — claim aggregates for a day_msk window (zero since = all time).
+type DailyQuestClaimPeriodStats struct {
+	TaskClaims           int64
+	BonusClaims          int64
+	UniqueClaimers       int64
+	TaskClaimers         int64
+	BonusClaimers        int64
+	RewardNanotonTotal   int64
+	BalanceRewardNanoton int64
+	GiftRewardNanoton    int64
+	FreeCaseClaims       int64
+}
+
+// DailyQuestClaimByQuestStats — per-task claim breakdown.
+type DailyQuestClaimByQuestStats struct {
+	QuestID            uuid.UUID
+	Title              string
+	Active             bool
+	SortOrder          int
+	TaskClaims         int64
+	UniqueUsers        int64
+	RewardNanotonTotal int64
+	RewardType         string
+}
+
+// DailyQuestClaimByRewardStats — claims grouped by reward_type.
+type DailyQuestClaimByRewardStats struct {
+	RewardType         string
+	Claims             int64
+	UniqueUsers        int64
+	RewardNanotonTotal int64
+}
+
+// DailyQuestClaimsDailyStats — one MSK calendar day.
+type DailyQuestClaimsDailyStats struct {
+	DayMSK             string
+	TaskClaims         int64
+	BonusClaims        int64
+	UniqueClaimers     int64
+	RewardNanotonTotal int64
+}
+
+// DailyQuestEntitlementStats — free-case entitlements granted by daily quests.
+type DailyQuestEntitlementStats struct {
+	Granted   int64
+	Used      int64
+	Available int64
+}
+
+// DailyQuestCaseOpenStats — case_opens with source=quest.
+type DailyQuestCaseOpenStats struct {
+	Opens             int64
+	UniqueUsers       int64
+	PrizeTotalNanoton int64
+}

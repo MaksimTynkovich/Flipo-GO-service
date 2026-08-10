@@ -76,25 +76,36 @@ func TestNormalizeLiveFeedSettingsSortsIntervals(t *testing.T) {
 func TestLiveGiftAllowedMaxFloor(t *testing.T) {
 	cfg := DefaultLiveFeedSettings()
 	cfg.MaxGiftFloorNanoton = 0
-	if !liveGiftAllowed(cfg, "gift", 50_000_000_000) {
+	if !liveDropAllowed(cfg, "gift", 50_000_000_000) {
 		t.Fatal("max=0 must allow any gift")
 	}
-	if !liveGiftAllowed(cfg, "ton", 50_000_000_000) {
+	if !liveDropAllowed(cfg, "ton", 50_000_000_000) {
 		t.Fatal("max=0 must allow ton")
 	}
 
 	cfg.MaxGiftFloorNanoton = 10_000_000_000 // 10 TON
-	if !liveGiftAllowed(cfg, "gift", 10_000_000_000) {
+	if !liveDropAllowed(cfg, "gift", 10_000_000_000) {
 		t.Fatal("gift at exact max must be allowed")
 	}
-	if liveGiftAllowed(cfg, "gift", 10_000_000_001) {
+	if liveDropAllowed(cfg, "gift", 10_000_000_001) {
 		t.Fatal("gift above max must be blocked")
 	}
-	if !liveGiftAllowed(cfg, "ton", 50_000_000_000) {
+	if !liveDropAllowed(cfg, "ton", 50_000_000_000) {
 		t.Fatal("ton prizes must ignore gift cap")
 	}
-	if !liveGiftAllowed(cfg, "", 5_000_000_000) {
+	if !liveDropAllowed(cfg, "", 5_000_000_000) {
 		t.Fatal("empty prize_type (gift) under max must be allowed")
+	}
+}
+
+func TestLiveDropAllowedHideTon(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cfg.HideTon = true
+	if liveDropAllowed(cfg, "ton", 1_000_000_000) {
+		t.Fatal("hide_ton must block ton prizes")
+	}
+	if !liveDropAllowed(cfg, "gift", 1_000_000_000) {
+		t.Fatal("hide_ton must still allow gifts")
 	}
 }
 
@@ -109,5 +120,18 @@ func TestFilterLiveSimPoolRespectsGiftCap(t *testing.T) {
 	out := filterLiveSimPool(pool, cfg)
 	if len(out) != 2 {
 		t.Fatalf("got %d entries, want 2 (cheap gift + ton)", len(out))
+	}
+}
+
+func TestFilterLiveSimPoolHideTon(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cfg.HideTon = true
+	pool := []domain.CaseLootEntry{
+		{PrizeType: "gift", FloorPriceNanoton: 1_000_000_000},
+		{PrizeType: "ton", AmountNanoton: 50_000_000_000},
+	}
+	out := filterLiveSimPool(pool, cfg)
+	if len(out) != 1 || out[0].PrizeType != "gift" {
+		t.Fatalf("expected only gift, got %+v", out)
 	}
 }

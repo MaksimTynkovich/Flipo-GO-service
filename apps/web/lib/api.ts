@@ -2564,6 +2564,72 @@ export async function resetAdminDailyQuestClaims(params?: {
   });
 }
 
+export type AdminQuestPeriodStats = {
+  task_claims: number;
+  bonus_claims: number;
+  unique_claimers: number;
+  task_claimers: number;
+  bonus_claimers: number;
+  bonus_completion_bps: number;
+  reward_nanoton_total: number;
+  balance_reward_nanoton: number;
+  gift_reward_nanoton: number;
+  free_case_claims: number;
+  entitlements_granted: number;
+  entitlements_used: number;
+  entitlements_available: number;
+  entitlement_redeem_bps: number;
+  quest_opens: number;
+  quest_open_users: number;
+  quest_prize_total_nanoton: number;
+  platform_cost_nanoton: number;
+};
+
+export type AdminQuestByQuestRow = {
+  quest_id: string;
+  title: string;
+  active: boolean;
+  sort_order: number;
+  task_claims: number;
+  unique_users: number;
+  reward_nanoton_total: number;
+  reward_type: string;
+};
+
+export type AdminQuestByRewardRow = {
+  reward_type: string;
+  claims: number;
+  unique_users: number;
+  reward_nanoton_total: number;
+};
+
+export type AdminQuestDailyPoint = {
+  day_msk: string;
+  task_claims: number;
+  bonus_claims: number;
+  unique_claimers: number;
+  reward_nanoton_total: number;
+};
+
+export type AdminQuestStats = {
+  timezone: string;
+  today: AdminQuestPeriodStats;
+  last_7_days: AdminQuestPeriodStats;
+  last_30_days: AdminQuestPeriodStats;
+  all_time: AdminQuestPeriodStats;
+  by_quest_today: AdminQuestByQuestRow[];
+  by_quest_7d: AdminQuestByQuestRow[];
+  by_quest_30d: AdminQuestByQuestRow[];
+  by_quest_all_time: AdminQuestByQuestRow[];
+  by_reward_7d: AdminQuestByRewardRow[];
+  by_reward_all_time: AdminQuestByRewardRow[];
+  claims_by_day: AdminQuestDailyPoint[];
+};
+
+export async function getAdminQuestStats() {
+  return api<AdminQuestStats>("/api/v1/admin/quests/stats");
+}
+
 export type CaseLootPreview = {
   id: string;
   prize_type?: "gift" | "ton" | string;
@@ -3004,8 +3070,10 @@ export type AdminCaseLiveFeedSettings = {
   epic_max_nanoton: number;
   fat_chance: number;
   fat_min_floor_nanoton: number;
-  /** Hide gift drops above this floor (nanoton). 0 = no cap. TON prizes ignored. */
+  /** Hide gift drops above this floor (nanoton). 0 = no cap. */
   max_gift_floor_nanoton: number;
+  /** When true, TON prizes are excluded from the live feed. */
+  hide_ton: boolean;
   updated_at?: string;
 };
 

@@ -2044,3 +2044,16 @@ func (h *AdminHandler) ResetDailyQuestClaims(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *AdminHandler) GetDailyQuestStats(c *gin.Context) {
+	if h.quests == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quests unavailable"})
+		return
+	}
+	stats, err := h.quests.AdminQuestStats(c.Request.Context())
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+

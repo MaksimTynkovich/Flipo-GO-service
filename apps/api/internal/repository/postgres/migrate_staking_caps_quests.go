@@ -35,21 +35,6 @@ func migrateStakingCapsQuests(db *gorm.DB) error {
 			ALTER TABLE platform_yield_settings
 			ALTER COLUMN staking_boost_monthly_percent SET DEFAULT 4
 		`).Error
-		// Daily redesign: bump TVL only from known previous defaults.
-		if err := db.Exec(`
-			UPDATE platform_yield_settings
-			SET staking_tvl_cap_nanoton = 500000000000
-			WHERE staking_tvl_cap_nanoton IN (200000000000, 1500000000000)
-		`).Error; err != nil {
-			return fmt.Errorf("update staking_tvl_cap_nanoton: %w", err)
-		}
-		if err := db.Exec(`
-			UPDATE platform_yield_settings
-			SET staking_personal_limit_nanoton = 50000000000
-			WHERE staking_personal_limit_nanoton IN (0, 100000000000)
-		`).Error; err != nil {
-			return fmt.Errorf("update staking_personal_limit_nanoton: %w", err)
-		}
 		// Referral quests no longer require the referred user to place a bet.
 		if err := db.Exec(`
 			UPDATE staking_quests

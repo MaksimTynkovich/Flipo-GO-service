@@ -191,14 +191,14 @@ func (s *LiveSim) sampleLoot(ctx context.Context, cfg domain.CaseLiveFeedSetting
 	return cands[len(cands)-1].entry, true
 }
 
-// filterLiveSimPool drops gift entries above MaxGiftFloorNanoton (TON prizes kept).
+// filterLiveSimPool applies hide_ton and max gift floor to the fake-drop loot pool.
 func filterLiveSimPool(pool []domain.CaseLootEntry, cfg domain.CaseLiveFeedSettings) []domain.CaseLootEntry {
-	if cfg.MaxGiftFloorNanoton <= 0 {
+	if cfg.MaxGiftFloorNanoton <= 0 && !cfg.HideTon {
 		return pool
 	}
 	out := make([]domain.CaseLootEntry, 0, len(pool))
 	for _, e := range pool {
-		if liveGiftAllowed(cfg, e.PrizeType, domain.CaseLootPrizeValueNanoton(e)) {
+		if liveDropAllowed(cfg, e.PrizeType, domain.CaseLootPrizeValueNanoton(e)) {
 			out = append(out, e)
 		}
 	}

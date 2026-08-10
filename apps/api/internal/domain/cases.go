@@ -648,9 +648,11 @@ type CaseLiveFeedSettings struct {
 	EpicMaxNanoton     int64     `gorm:"not null;default:5000000000" json:"epic_max_nanoton"`
 	FatChance          float64   `gorm:"type:decimal(6,4);not null;default:0.08" json:"fat_chance"`
 	FatMinFloorNanoton int64     `gorm:"not null;default:5000000000" json:"fat_min_floor_nanoton"`
-	// MaxGiftFloorNanoton — hide gift drops above this floor (0 = no cap). TON prizes ignored.
-	MaxGiftFloorNanoton int64     `gorm:"not null;default:0" json:"max_gift_floor_nanoton"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	// MaxGiftFloorNanoton — hide gift drops above this floor (0 = no cap).
+	MaxGiftFloorNanoton int64 `gorm:"not null;default:0" json:"max_gift_floor_nanoton"`
+	// HideTon — when true, TON prizes are excluded from the live feed (gifts only).
+	HideTon   bool      `gorm:"not null;default:false" json:"hide_ton"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (CaseLiveFeedSettings) TableName() string { return "case_live_feed_settings" }

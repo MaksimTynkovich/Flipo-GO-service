@@ -150,6 +150,7 @@ const DEFAULT_LIVE_SETTINGS: AdminCaseLiveFeedSettings = {
   fat_chance: 0.08,
   fat_min_floor_nanoton: 5_000_000_000,
   max_gift_floor_nanoton: 0,
+  hide_ton: false,
 };
 
 const CYR_TO_LAT: Record<string, string> = {
@@ -1683,6 +1684,22 @@ deposit_boost_tier4_bias_weight: 15
                 <AdminInfoHint
                   label="Доливать при редких реальных открытиях"
                   hint="Если включено — фейки появляются только когда за последние ~90 секунд мало реальных открытий (меньше Min visible). Если выключено — фейки идут постоянно с частотой Intensity, даже когда игроки активно открывают кейсы."
+                />
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={liveSettings.hide_ton}
+                onChange={(e) =>
+                  setLiveSettings((s) => ({ ...s, hide_ton: e.target.checked }))
+                }
+              />
+              <span className="inline-flex items-center gap-1.5">
+                Не показывать TON в ленте
+                <AdminInfoHint
+                  label="Не показывать TON в ленте"
+                  hint="Если включено — в LIVE попадают только подарки. TON-призы (реальные и фейк) скрываются. Полезно, когда лента должна выглядеть как лента гифтов."
                 />
               </span>
             </label>

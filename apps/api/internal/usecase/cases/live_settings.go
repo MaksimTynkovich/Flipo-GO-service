@@ -21,6 +21,7 @@ func DefaultLiveFeedSettings() domain.CaseLiveFeedSettings {
 		FatChance:           0.08,
 		FatMinFloorNanoton:  5_000_000_000,
 		MaxGiftFloorNanoton: 0,
+		HideTon:             false,
 	}
 }
 
@@ -76,13 +77,14 @@ func NormalizeLiveFeedSettings(cfg *domain.CaseLiveFeedSettings) {
 	}
 }
 
-// liveGiftAllowed reports whether a live-feed drop may be shown given the gift price cap.
-// TON prizes always pass. MaxGiftFloorNanoton == 0 disables the cap.
-func liveGiftAllowed(cfg domain.CaseLiveFeedSettings, prizeType string, valueNanoton int64) bool {
-	if cfg.MaxGiftFloorNanoton <= 0 {
-		return true
+// liveDropAllowed reports whether a live-feed drop may be shown.
+// HideTon excludes TON prizes. MaxGiftFloorNanoton caps gift floor (0 = no cap).
+func liveDropAllowed(cfg domain.CaseLiveFeedSettings, prizeType string, valueNanoton int64) bool {
+	isTon := domain.NormalizeCasePrizeType(prizeType) == domain.CasePrizeTypeTon
+	if isTon {
+		return !cfg.HideTon
 	}
-	if domain.NormalizeCasePrizeType(prizeType) == domain.CasePrizeTypeTon {
+	if cfg.MaxGiftFloorNanoton <= 0 {
 		return true
 	}
 	return valueNanoton <= cfg.MaxGiftFloorNanoton
