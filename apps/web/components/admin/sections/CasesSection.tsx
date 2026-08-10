@@ -149,6 +149,7 @@ const DEFAULT_LIVE_SETTINGS: AdminCaseLiveFeedSettings = {
   epic_max_nanoton: 5_000_000_000,
   fat_chance: 0.08,
   fat_min_floor_nanoton: 5_000_000_000,
+  max_gift_floor_nanoton: 0,
 };
 
 const CYR_TO_LAT: Record<string, string> = {
@@ -1715,6 +1716,14 @@ deposit_boost_tier4_bias_weight: 15
                 valueNanoton={liveSettings.fat_min_floor_nanoton}
                 onChangeNanoton={(v) =>
                   setLiveSettings((s) => ({ ...s, fat_min_floor_nanoton: v }))
+                }
+              />
+              <AdminTonField
+                label="Макс. цена подарка в ленте (TON)"
+                hint="0 = без лимита. Подарки дороже этого значения не показываются в LIVE (реальные открытия и фейк-дропы). TON-призы не затрагиваются."
+                valueNanoton={liveSettings.max_gift_floor_nanoton}
+                onChangeNanoton={(v) =>
+                  setLiveSettings((s) => ({ ...s, max_gift_floor_nanoton: v }))
                 }
               />
             </div>

@@ -1,6 +1,10 @@
 package cases
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/flipo/flipo/apps/api/internal/domain"
+)
 
 func TestShouldInjectFakeDropIgnoresFakeBufferSaturation(t *testing.T) {
 	cfg := DefaultLiveFeedSettings()
@@ -66,5 +70,44 @@ func TestNormalizeLiveFeedSettingsSortsIntervals(t *testing.T) {
 		cfg.UncommonMaxNanoton <= cfg.RareMaxNanoton &&
 		cfg.RareMaxNanoton <= cfg.EpicMaxNanoton) {
 		t.Fatalf("intervals not non-decreasing: %+v", cfg)
+	}
+}
+
+func TestLiveGiftAllowedMaxFloor(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cfg.MaxGiftFloorNanoton = 0
+	if !liveGiftAllowed(cfg, "gift", 50_000_000_000) {
+		t.Fatal("max=0 must allow any gift")
+	}
+	if !liveGiftAllowed(cfg, "ton", 50_000_000_000) {
+		t.Fatal("max=0 must allow ton")
+	}
+
+	cfg.MaxGiftFloorNanoton = 10_000_000_000 // 10 TON
+	if !liveGiftAllowed(cfg, "gift", 10_000_000_000) {
+		t.Fatal("gift at exact max must be allowed")
+	}
+	if liveGiftAllowed(cfg, "gift", 10_000_000_001) {
+		t.Fatal("gift above max must be blocked")
+	}
+	if !liveGiftAllowed(cfg, "ton", 50_000_000_000) {
+		t.Fatal("ton prizes must ignore gift cap")
+	}
+	if !liveGiftAllowed(cfg, "", 5_000_000_000) {
+		t.Fatal("empty prize_type (gift) under max must be allowed")
+	}
+}
+
+func TestFilterLiveSimPoolRespectsGiftCap(t *testing.T) {
+	cfg := DefaultLiveFeedSettings()
+	cfg.MaxGiftFloorNanoton = 2_000_000_000
+	pool := []domain.CaseLootEntry{
+		{PrizeType: "gift", FloorPriceNanoton: 1_000_000_000},
+		{PrizeType: "gift", FloorPriceNanoton: 5_000_000_000},
+		{PrizeType: "ton", AmountNanoton: 50_000_000_000},
+	}
+	out := filterLiveSimPool(pool, cfg)
+	if len(out) != 2 {
+		t.Fatalf("got %d entries, want 2 (cheap gift + ton)", len(out))
 	}
 }

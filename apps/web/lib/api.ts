@@ -3004,6 +3004,8 @@ export type AdminCaseLiveFeedSettings = {
   epic_max_nanoton: number;
   fat_chance: number;
   fat_min_floor_nanoton: number;
+  /** Hide gift drops above this floor (nanoton). 0 = no cap. TON prizes ignored. */
+  max_gift_floor_nanoton: number;
   updated_at?: string;
 };
 

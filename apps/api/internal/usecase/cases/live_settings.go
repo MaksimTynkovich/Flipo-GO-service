@@ -4,22 +4,23 @@ import "github.com/flipo/flipo/apps/api/internal/domain"
 
 func DefaultLiveFeedSettings() domain.CaseLiveFeedSettings {
 	return domain.CaseLiveFeedSettings{
-		ID:                 1,
-		Enabled:            false,
-		Intensity:          1,
-		FillWhenSparse:     true,
-		MinVisible:         6,
-		CommonWeight:       50,
-		UncommonWeight:     25,
-		RareWeight:         15,
-		EpicWeight:         7,
-		LegendaryWeight:    3,
-		CommonMaxNanoton:   500_000_000,   // < 0.5 TON
-		UncommonMaxNanoton: 1_500_000_000, // < 1.5 TON
-		RareMaxNanoton:     3_000_000_000, // < 3 TON
-		EpicMaxNanoton:     5_000_000_000, // < 5 TON; legendary ≥ 5
-		FatChance:          0.08,
-		FatMinFloorNanoton: 5_000_000_000,
+		ID:                  1,
+		Enabled:             false,
+		Intensity:           1,
+		FillWhenSparse:      true,
+		MinVisible:          6,
+		CommonWeight:        50,
+		UncommonWeight:      25,
+		RareWeight:          15,
+		EpicWeight:          7,
+		LegendaryWeight:     3,
+		CommonMaxNanoton:    500_000_000,   // < 0.5 TON
+		UncommonMaxNanoton:  1_500_000_000, // < 1.5 TON
+		RareMaxNanoton:      3_000_000_000, // < 3 TON
+		EpicMaxNanoton:      5_000_000_000, // < 5 TON; legendary ≥ 5
+		FatChance:           0.08,
+		FatMinFloorNanoton:  5_000_000_000,
+		MaxGiftFloorNanoton: 0,
 	}
 }
 
@@ -43,6 +44,9 @@ func NormalizeLiveFeedSettings(cfg *domain.CaseLiveFeedSettings) {
 	cfg.FatChance = clampFloat(cfg.FatChance, 0, 1)
 	if cfg.FatMinFloorNanoton < 0 {
 		cfg.FatMinFloorNanoton = 0
+	}
+	if cfg.MaxGiftFloorNanoton < 0 {
+		cfg.MaxGiftFloorNanoton = 0
 	}
 	if cfg.CommonMaxNanoton < 0 {
 		cfg.CommonMaxNanoton = 0
@@ -70,6 +74,18 @@ func NormalizeLiveFeedSettings(cfg *domain.CaseLiveFeedSettings) {
 		cfg.RareMaxNanoton = d.RareMaxNanoton
 		cfg.EpicMaxNanoton = d.EpicMaxNanoton
 	}
+}
+
+// liveGiftAllowed reports whether a live-feed drop may be shown given the gift price cap.
+// TON prizes always pass. MaxGiftFloorNanoton == 0 disables the cap.
+func liveGiftAllowed(cfg domain.CaseLiveFeedSettings, prizeType string, valueNanoton int64) bool {
+	if cfg.MaxGiftFloorNanoton <= 0 {
+		return true
+	}
+	if domain.NormalizeCasePrizeType(prizeType) == domain.CasePrizeTypeTon {
+		return true
+	}
+	return valueNanoton <= cfg.MaxGiftFloorNanoton
 }
 
 func clampFloat(v, min, max float64) float64 {

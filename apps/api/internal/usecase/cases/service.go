@@ -658,7 +658,10 @@ func (s *Service) Open(ctx context.Context, userID uuid.UUID, telegramID int64, 
 	}
 	if s.live != nil {
 		cfg := s.liveFeedSettings(ctx)
-		s.live.PublishCaseLiveDrop(ctx, liveDropFromEntry(openID, entry, open.CreatedAt, cfg))
+		drop := liveDropFromEntry(openID, entry, open.CreatedAt, cfg)
+		if liveGiftAllowed(cfg, drop.PrizeType, drop.FloorPriceNanoton) {
+			s.live.PublishCaseLiveDrop(ctx, drop)
+		}
 	}
 	if s.admin != nil {
 		actor := telegram.AdminActor{}
@@ -806,6 +809,9 @@ func (s *Service) LiveFeed(ctx context.Context, telegramID int64, limit int) ([]
 	seen := make(map[uuid.UUID]struct{}, limit*2)
 	appendDrop := func(row domain.CaseLiveDrop) {
 		if _, ok := seen[row.OpenID]; ok {
+			return
+		}
+		if !liveGiftAllowed(cfg, row.PrizeType, row.FloorPriceNanoton) {
 			return
 		}
 		seen[row.OpenID] = struct{}{}

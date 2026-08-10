@@ -145,6 +145,10 @@ func (s *LiveSim) sampleLoot(ctx context.Context, cfg domain.CaseLiveFeedSetting
 	if len(pool) == 0 {
 		return domain.CaseLootEntry{}, false
 	}
+	pool = filterLiveSimPool(pool, cfg)
+	if len(pool) == 0 {
+		return domain.CaseLootEntry{}, false
+	}
 
 	if cfg.FatChance > 0 && randFloat() < cfg.FatChance {
 		fat := make([]domain.CaseLootEntry, 0)
@@ -185,6 +189,20 @@ func (s *LiveSim) sampleLoot(ctx context.Context, cfg domain.CaseLiveFeedSetting
 		}
 	}
 	return cands[len(cands)-1].entry, true
+}
+
+// filterLiveSimPool drops gift entries above MaxGiftFloorNanoton (TON prizes kept).
+func filterLiveSimPool(pool []domain.CaseLootEntry, cfg domain.CaseLiveFeedSettings) []domain.CaseLootEntry {
+	if cfg.MaxGiftFloorNanoton <= 0 {
+		return pool
+	}
+	out := make([]domain.CaseLootEntry, 0, len(pool))
+	for _, e := range pool {
+		if liveGiftAllowed(cfg, e.PrizeType, domain.CaseLootPrizeValueNanoton(e)) {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func (s *LiveSim) lootPool(ctx context.Context) []domain.CaseLootEntry {
