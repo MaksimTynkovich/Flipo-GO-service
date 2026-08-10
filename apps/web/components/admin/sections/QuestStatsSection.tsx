@@ -140,7 +140,7 @@ export default function QuestStatsSection() {
       </AdminToolbar>
 
       {!stats && !loading ? (
-        <AdminEmpty title="Не удалось загрузить статистику" />
+        <AdminEmpty>Не удалось загрузить статистику</AdminEmpty>
       ) : null}
 
       {active ? (
