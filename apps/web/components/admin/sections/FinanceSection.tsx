@@ -5,6 +5,7 @@ import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-u
 import { AdminInfoHint } from "@/components/admin/AdminInfoHint";
 import { useToast } from "@/components/providers/ToastProvider";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
+import { formatUserError } from "@/lib/user-errors";
 import {
   formatTON,
   fulfillAdminGiftWithdrawal,
@@ -205,9 +206,16 @@ export default function FinanceSection() {
                             showToast({ variant: "error", title: "Укажите slug подарка" });
                             return;
                           }
-                          await fulfillAdminGiftWithdrawal(item.item_id, slug, reviewNote);
-                          showToast({ variant: "success", title: "Подарок выдан" });
-                          await load();
+                          try {
+                            await fulfillAdminGiftWithdrawal(item.item_id, slug, reviewNote);
+                            showToast({ variant: "success", title: "Подарок выдан" });
+                            await load();
+                          } catch (err) {
+                            showToast({
+                              variant: "error",
+                              title: formatUserError(err, "Не удалось выдать подарок"),
+                            });
+                          }
                         }}
                       >
                         Выдать
@@ -219,9 +227,16 @@ export default function FinanceSection() {
                   {!item.needs_purchase ? (
                     <AdminButton
                       onClick={async () => {
-                        await reviewAdminGiftWithdrawal(item.item_id, true, reviewNote);
-                        showToast({ variant: "success", title: "Подарок отправлен" });
-                        await load();
+                        try {
+                          await reviewAdminGiftWithdrawal(item.item_id, true, reviewNote);
+                          showToast({ variant: "success", title: "Подарок отправлен" });
+                          await load();
+                        } catch (err) {
+                          showToast({
+                            variant: "error",
+                            title: formatUserError(err, "Не удалось отправить подарок"),
+                          });
+                        }
                       }}
                     >
                       Отправить

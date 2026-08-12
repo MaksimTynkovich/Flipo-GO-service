@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/gotd/td/tg"
 )
@@ -13,6 +15,8 @@ var (
 	ErrGiftTransfer      = errors.New("gift transfer failed")
 	ErrInsufficientStars = errors.New("insufficient stars on deposit account")
 )
+
+const maxSavedGiftPages = 100
 
 type GiftTransferService struct {
 	cfg MTProtoConfig
@@ -29,16 +33,12 @@ func (s *GiftTransferService) SendGift(ctx context.Context, slug string, recipie
 	if !s.cfg.Enabled() {
 		return ErrMTProtoNotConfigured
 	}
+	slug = normalizeGiftSlug(slug)
 	if slug == "" {
 		return fmt.Errorf("%w: empty slug", ErrGiftTransfer)
 	}
 
 	return WithMTProtoAPI(ctx, s.cfg, func(ctx context.Context, api *tg.Client) error {
-		stargift, err := findOwnedGiftInput(ctx, api, slug)
-		if err != nil {
-			return err
-		}
-
 		resolved, err := resolveScanTarget(ctx, api, recipient)
 		if err != nil {
 			return fmt.Errorf("%w: resolve recipient: %v", ErrGiftTransfer, err)
@@ -49,7 +49,29 @@ func (s *GiftTransferService) SendGift(ctx context.Context, slug string, recipie
 			return fmt.Errorf("%w: recipient peer: %v", ErrGiftTransfer, err)
 		}
 
+		// Fast path: newly purchased gifts are often transferable by slug before they
+		// appear in a full payments.getSavedStarGifts scan of a large bank account.
+		slugInput := &tg.InputSavedStarGiftSlug{Slug: slug}
+		if err := transferStarGift(ctx, api, slugInput, toPeer); err == nil {
+			return nil
+		} else if !errors.Is(err, ErrGiftNotOnAccount) {
+			return err
+		}
+
+		stargift, err := findOwnedGiftInput(ctx, api, slug)
+		if err != nil {
+			slog.Warn("gift transfer slug lookup failed",
+				"slug", slug,
+				"error", err,
+			)
+			return ErrGiftNotOnAccount
+		}
+
 		if err := transferStarGift(ctx, api, stargift, toPeer); err != nil {
+			slog.Warn("gift transfer failed after inventory lookup",
+				"slug", slug,
+				"error", err,
+			)
 			return err
 		}
 		return nil
@@ -111,13 +133,53 @@ func paymentFormID(form tg.PaymentsPaymentFormClass) (int64, error) {
 }
 
 func mapGiftTransferRPCError(err error) error {
+	if err == nil {
+		return nil
+	}
 	if tg.IsBalanceTooLow(err) {
 		return ErrInsufficientStars
+	}
+	if isGiftNotOnAccountRPC(err) {
+		return ErrGiftNotOnAccount
 	}
 	return fmt.Errorf("%w: %v", ErrGiftTransfer, err)
 }
 
+func isGiftNotOnAccountRPC(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToUpper(err.Error())
+	for _, needle := range []string{
+		"STARGIFT_OWNER_INVALID",
+		"STARGIFT_NOT_FOUND",
+		"STARGIFT_SLUG_INVALID",
+		"STARGIFT_INVALID",
+		"GIFT_NOT_FOUND",
+		"GIFT_SLUG_INVALID",
+		"NOT_OWNER",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeGiftSlug(slug string) string {
+	return strings.TrimSpace(slug)
+}
+
+func giftSlugEqual(a, b string) bool {
+	return strings.EqualFold(normalizeGiftSlug(a), normalizeGiftSlug(b))
+}
+
 func findOwnedGiftInput(ctx context.Context, api *tg.Client, slug string) (tg.InputSavedStarGiftClass, error) {
+	slug = normalizeGiftSlug(slug)
+	if slug == "" {
+		return nil, fmt.Errorf("%w: empty slug", ErrGiftTransfer)
+	}
+
 	users, err := api.UsersGetUsers(ctx, []tg.InputUserClass{&tg.InputUserSelf{}})
 	if err != nil {
 		return nil, fmt.Errorf("users.getUsers self: %w", err)
@@ -136,7 +198,11 @@ func findOwnedGiftInput(ctx context.Context, api *tg.Client, slug string) (tg.In
 	}
 
 	offset := ""
-	for {
+	for page := 0; page < maxSavedGiftPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
 		resp, err := api.PaymentsGetSavedStarGifts(ctx, &tg.PaymentsGetSavedStarGiftsRequest{
 			Peer:   peer,
 			Offset: offset,
@@ -148,27 +214,35 @@ func findOwnedGiftInput(ctx context.Context, api *tg.Client, slug string) (tg.In
 
 		for _, saved := range resp.Gifts {
 			unique, ok := saved.Gift.(*tg.StarGiftUnique)
-			if !ok || unique.Slug != slug {
+			if !ok || unique.Slug == "" {
 				continue
 			}
-			if savedID, ok := saved.GetSavedID(); ok && savedID > 0 {
-				return &tg.InputSavedStarGiftChat{
-					Peer:    &tg.InputPeerSelf{},
-					SavedID: savedID,
-				}, nil
+			if !giftSlugEqual(unique.Slug, slug) {
+				continue
 			}
-			if msgID, ok := saved.GetMsgID(); ok && msgID > 0 {
-				return &tg.InputSavedStarGiftUser{MsgID: msgID}, nil
-			}
-			return &tg.InputSavedStarGiftSlug{Slug: slug}, nil
+			return ownedGiftInputFromSaved(unique.Slug, saved), nil
 		}
 
 		nextOffset, ok := resp.GetNextOffset()
-		if !ok || nextOffset == "" {
+		if !ok || nextOffset == "" || nextOffset == offset {
 			break
 		}
 		offset = nextOffset
 	}
 
 	return nil, ErrGiftNotOnAccount
+}
+
+func ownedGiftInputFromSaved(canonicalSlug string, saved tg.SavedStarGift) tg.InputSavedStarGiftClass {
+	canonicalSlug = normalizeGiftSlug(canonicalSlug)
+	if savedID, ok := saved.GetSavedID(); ok && savedID > 0 {
+		return &tg.InputSavedStarGiftChat{
+			Peer:    &tg.InputPeerSelf{},
+			SavedID: savedID,
+		}
+	}
+	if msgID, ok := saved.GetMsgID(); ok && msgID > 0 {
+		return &tg.InputSavedStarGiftUser{MsgID: msgID}
+	}
+	return &tg.InputSavedStarGiftSlug{Slug: canonicalSlug}
 }

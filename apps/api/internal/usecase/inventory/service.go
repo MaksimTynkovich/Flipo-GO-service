@@ -433,17 +433,6 @@ func (s *Service) FulfillPendingWithdrawal(ctx context.Context, itemID uuid.UUID
 		}
 	}
 
-	metaMap := map[string]any{}
-	if len(item.Metadata) > 0 {
-		_ = json.Unmarshal(item.Metadata, &metaMap)
-	}
-	metaMap[domain.CaseClaimMetaFulfillment] = domain.CaseFulfillmentBacked
-	metaMap[domain.CaseClaimMetaCollection] = item.CollectionSlug
-	meta, _ := json.Marshal(metaMap)
-	if err := s.inventory.BindTelegramGift(ctx, itemID, telegramGiftID, item.ImageURL, meta, domain.CaseFulfillmentBacked, ""); err != nil {
-		return err
-	}
-
 	user, err := s.users.FindByID(ctx, item.UserID)
 	if err != nil {
 		return err
@@ -465,6 +454,17 @@ func (s *Service) FulfillPendingWithdrawal(ctx context.Context, itemID uuid.UUID
 		if errors.Is(err, telegram.ErrInsufficientStars) {
 			return fmt.Errorf("недостаточно Stars на аккаунте депозита")
 		}
+		return err
+	}
+
+	metaMap := map[string]any{}
+	if len(item.Metadata) > 0 {
+		_ = json.Unmarshal(item.Metadata, &metaMap)
+	}
+	metaMap[domain.CaseClaimMetaFulfillment] = domain.CaseFulfillmentBacked
+	metaMap[domain.CaseClaimMetaCollection] = item.CollectionSlug
+	meta, _ := json.Marshal(metaMap)
+	if err := s.inventory.BindTelegramGift(ctx, itemID, telegramGiftID, item.ImageURL, meta, domain.CaseFulfillmentBacked, ""); err != nil {
 		return err
 	}
 	if err := s.inventory.UpdateStatus(ctx, itemID, domain.InvWithdrawPending, domain.InvWithdrawn); err != nil {

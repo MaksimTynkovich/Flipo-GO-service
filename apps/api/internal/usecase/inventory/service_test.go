@@ -2,7 +2,6 @@ package inventory
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -309,21 +308,8 @@ func TestFulfillPendingWithdrawalMergesClaimMetadata(t *testing.T) {
 	if err == nil || err.Error() != "вывод подарков временно недоступен" {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if repo.boundGiftID != "gift-slug" {
-		t.Fatalf("gift id %q", repo.boundGiftID)
-	}
-	var meta map[string]any
-	if err := json.Unmarshal(repo.boundMeta, &meta); err != nil {
-		t.Fatalf("unmarshal metadata: %v", err)
-	}
-	if meta["fulfillment"] != domain.CaseFulfillmentBacked {
-		t.Fatalf("fulfillment %#v", meta["fulfillment"])
-	}
-	if meta["collection"] != "plush-pepe" {
-		t.Fatalf("collection %#v", meta["collection"])
-	}
-	if int64(meta["case_cashout_nanoton"].(float64)) != 1500000000 {
-		t.Fatalf("case_cashout_nanoton %#v", meta["case_cashout_nanoton"])
+	if repo.boundGiftID != "" {
+		t.Fatalf("gift should not be bound before successful send, got %q", repo.boundGiftID)
 	}
 }
 
