@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -62,7 +63,7 @@ func TestAdminNotifierSkipsAdmins(t *testing.T) {
 		t.Fatal("expected 333 not to be admin")
 	}
 
-	n.NotifyBotStart(context.Background(), AdminActor{TelegramID: 111, Username: "admin"})
+	n.NotifyBotStart(context.Background(), AdminActor{TelegramID: 111, Username: "admin"}, BotStartAttribution{})
 	n.NotifyDeposit(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
 	n.NotifyDepositConfirmed(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000)
 	n.NotifyWithdrawAttempt(context.Background(), AdminActor{TelegramID: 111}, 1_000_000_000, true)
@@ -96,6 +97,42 @@ func TestAdminNotifierDisabledWithoutStore(t *testing.T) {
 	n := NewAdminNotifier(nil, nil, []int64{111})
 	if n.Enabled() {
 		t.Fatal("expected disabled without store")
+	}
+}
+
+func TestFormatBotStartNoticeCampaign(t *testing.T) {
+	actor := AdminActor{TelegramID: 42, Username: "ann", FirstName: "Анна"}
+	title, summary, body, meta := formatBotStartNotice(actor, BotStartAttribution{
+		Payload: "c_tgads_a",
+		Kind:    "campaign",
+		Name:    "TG Ads — креатив A",
+		Code:    "tgads_a",
+		Source:  domain.CampaignSourceTelegramAds,
+		Content: "A",
+	})
+	if title != "/start · Telegram Ads · A" {
+		t.Fatalf("title = %q", title)
+	}
+	if !strings.Contains(summary, "Telegram Ads") || !strings.Contains(summary, "TG Ads") {
+		t.Fatalf("summary = %q", summary)
+	}
+	if !strings.Contains(body, "Канал: Telegram Ads") || !strings.Contains(body, "Код: c_tgads_a") {
+		t.Fatalf("body = %q", body)
+	}
+	if meta["campaign_source_label"] != "Telegram Ads" || meta["campaign_code"] != "tgads_a" {
+		t.Fatalf("meta = %#v", meta)
+	}
+}
+
+func TestFormatBotStartNoticeReferralAndEmpty(t *testing.T) {
+	actor := AdminActor{TelegramID: 1, FirstName: "Bob"}
+	title, summary, _, _ := formatBotStartNotice(actor, BotStartAttribution{Payload: "ref_abc", Kind: "referral"})
+	if title != "/start · реферальная ссылка" || !strings.Contains(summary, "реферальная ссылка") {
+		t.Fatalf("referral title=%q summary=%q", title, summary)
+	}
+	title, _, _, _ = formatBotStartNotice(actor, BotStartAttribution{})
+	if title != "/start в боте" {
+		t.Fatalf("empty title=%q", title)
 	}
 }
 

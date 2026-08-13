@@ -45,7 +45,23 @@ export function takePendingReferral(): string | null {
   return code;
 }
 
-export function readReferralCodeFromTelegram(): string | undefined {
+export function readStartParamFromTelegram(): string | undefined {
   const webApp = window.Telegram?.WebApp as { initDataUnsafe?: { start_param?: string } } | undefined;
-  return webApp?.initDataUnsafe?.start_param || undefined;
+  const param = webApp?.initDataUnsafe?.start_param?.trim();
+  return param || undefined;
+}
+
+export function isReferralStartParam(param: string | undefined | null): boolean {
+  if (!param) return false;
+  const value = param.trim();
+  if (!value) return false;
+  const lower = value.toLowerCase();
+  if (lower.startsWith("ref_")) return true;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/** Referral payload only. Campaign / other start_param values are ignored. */
+export function readReferralCodeFromTelegram(): string | undefined {
+  const param = readStartParamFromTelegram();
+  return isReferralStartParam(param) ? param : undefined;
 }

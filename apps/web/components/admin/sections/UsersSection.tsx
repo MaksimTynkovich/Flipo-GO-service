@@ -1680,13 +1680,26 @@ function ActivityPanel({
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div className="rounded-md bg-surface-raised/40 px-2.5 py-2">
           <p className="text-[11px] text-muted">Откуда пришёл</p>
-          {selected.came_via_referral ? (
+          {selected.campaign_code || selected.campaign_name ? (
+            <>
+              <p className="mt-0.5 font-medium">Кампания</p>
+              <p className="mt-0.5 truncate text-xs text-muted">
+                {selected.campaign_name || "реклама"}
+                {selected.campaign_code ? ` · c_${selected.campaign_code}` : ""}
+              </p>
+            </>
+          ) : selected.came_via_referral ? (
             <>
               <p className="mt-0.5 font-medium">Реф.ссылка</p>
               <p className="mt-0.5 truncate text-xs text-muted">
                 {selected.referrer_first_name || selected.referrer_username || "реферер"}
                 {selected.referrer_code ? ` · ${selected.referrer_code}` : ""}
               </p>
+            </>
+          ) : selected.acquisition_payload ? (
+            <>
+              <p className="mt-0.5 font-medium">Стартовый payload</p>
+              <p className="mt-0.5 truncate text-xs text-muted">{selected.acquisition_payload}</p>
             </>
           ) : (
             <p className="mt-0.5 font-medium">Органика</p>

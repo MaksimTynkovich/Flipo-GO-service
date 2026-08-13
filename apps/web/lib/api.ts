@@ -230,8 +230,16 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
   return res.json();
 }
 
+export type AuthStartContext = {
+  param?: string;
+  kind?: "referral" | "campaign" | "other" | string;
+  campaign_id?: string;
+  campaign_code?: string;
+  landing?: string;
+};
+
 export async function authTelegram(initData: string, referralCode?: string) {
-  return api<{ token: string; user: User }>("/api/v1/auth/telegram", {
+  return api<{ token: string; user: User; start?: AuthStartContext }>("/api/v1/auth/telegram", {
     method: "POST",
     body: JSON.stringify({
       init_data: initData,
@@ -1322,6 +1330,10 @@ export type AdminUser = {
   referrer_username?: string;
   referrer_first_name?: string;
   referrer_code?: string;
+  campaign_id?: string;
+  campaign_name?: string;
+  campaign_code?: string;
+  acquisition_payload?: string;
 };
 
 export type AdminReferrerStat = {
@@ -1972,6 +1984,108 @@ export async function setAdminUserBalance(userId: string, balanceNanoton: number
 
 export async function getAdminUserAudience() {
   return api<AdminUserAudience>("/api/v1/admin/users/stats");
+}
+
+export type AdminCampaignSource =
+  | "telegram_ads"
+  | "channel"
+  | "stories"
+  | "influencer"
+  | "other";
+
+export type AdminCampaignLanding = "" | "cases" | "games" | "crash";
+
+export type AdminCampaignStats = {
+  id: string;
+  code: string;
+  name: string;
+  source: AdminCampaignSource | string;
+  content?: string;
+  landing?: string;
+  status: "active" | "archived" | string;
+  created_at: string;
+  updated_at?: string;
+  start_param: string;
+  mini_app_url: string;
+  bot_start_url: string;
+  clicks: number;
+  app_opens: number;
+  new_users: number;
+  depositors: number;
+  deposits_nanoton: number;
+  bettors: number;
+  bet_volume_nanoton: number;
+  ggr_nanoton: number;
+  click_to_reg_pct: number;
+  reg_to_deposit_pct: number;
+  reg_to_bet_pct: number;
+};
+
+export type AdminCampaignDailyPoint = {
+  date: string;
+  clicks: number;
+  app_opens: number;
+  new_users: number;
+  deposits_nanoton: number;
+};
+
+export type AdminCampaignDetail = AdminCampaignStats & {
+  daily: AdminCampaignDailyPoint[];
+};
+
+export type AdminCampaignCreateInput = {
+  name: string;
+  code?: string;
+  source: AdminCampaignSource | string;
+  content?: string;
+  landing?: string;
+};
+
+export async function getAdminCampaigns(params?: {
+  from?: string;
+  to?: string;
+  source?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from", params.from);
+  if (params?.to) qs.set("to", params.to);
+  if (params?.source) qs.set("source", params.source);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return api<AdminCampaignStats[]>(`/api/v1/admin/campaigns${suffix}`);
+}
+
+export async function getAdminCampaign(
+  id: string,
+  params?: { from?: string; to?: string },
+) {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from", params.from);
+  if (params?.to) qs.set("to", params.to);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return api<AdminCampaignDetail>(`/api/v1/admin/campaigns/${id}${suffix}`);
+}
+
+export async function createAdminCampaign(input: AdminCampaignCreateInput) {
+  return api<AdminCampaignStats>("/api/v1/admin/campaigns", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function patchAdminCampaign(
+  id: string,
+  input: {
+    name?: string;
+    source?: string;
+    content?: string;
+    landing?: string;
+    status?: string;
+  },
+) {
+  return api<AdminCampaignStats>(`/api/v1/admin/campaigns/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function getAdminUserBets(userId: string, period: AdminUserPeriod = "7d") {

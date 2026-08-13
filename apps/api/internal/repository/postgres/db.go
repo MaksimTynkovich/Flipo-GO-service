@@ -36,6 +36,7 @@ func NewDB(dsn string) (*gorm.DB, error) {
 func AutoMigrate(db *gorm.DB) error {
 	// Create/update schema first so fresh databases have tables before legacy ALTERs.
 	if err := db.AutoMigrate(
+		&domain.Campaign{},
 		&domain.User{},
 		&domain.InventoryItem{},
 		&domain.NFTFloorPrice{},

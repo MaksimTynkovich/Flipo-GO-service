@@ -13,6 +13,8 @@ const EVENT_LABELS: Record<string, string> = {
   telegram_access_denied: "Вход вне Telegram",
   referral_detected: "Обнаружен реферальный код",
   referral_assigned: "Назначен реферер",
+  campaign_assigned: "Назначена рекламная кампания",
+  start_param_detected: "Обнаружен start_param",
   screen_view: "Просмотр экрана",
   screen_enter: "Вход на экран",
   screen_leave: "Уход с экрана",
@@ -151,9 +153,15 @@ const ERROR_LABELS: Record<string, string> = {
 const SOURCE_LABELS: Record<string, string> = {
   direct: "Прямой вход",
   referral: "Реферальный вход",
+  campaign: "Рекламная кампания",
   debug: "Debug-вход",
   unknown: "Неизвестный источник",
   telegram_start_param: "Telegram start_param",
+  telegram_ads: "Telegram Ads",
+  channel: "Канал",
+  stories: "Stories",
+  influencer: "Блогер",
+  other: "Другое",
 };
 
 const STATUS_LABELS: Record<string, string> = {

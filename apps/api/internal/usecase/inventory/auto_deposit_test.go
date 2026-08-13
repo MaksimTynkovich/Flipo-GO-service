@@ -149,6 +149,12 @@ func (s *autoDepositUserStub) ListIDsByStakingTier(context.Context, domain.Staki
 func (s *autoDepositUserStub) SetReferrerIfEmpty(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }
+func (s *autoDepositUserStub) SetCampaignIfEmpty(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (s *autoDepositUserStub) SetAcquisitionPayloadIfEmpty(context.Context, uuid.UUID, string) (bool, error) {
+	return false, nil
+}
 func (s *autoDepositUserStub) CountReferrals(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }

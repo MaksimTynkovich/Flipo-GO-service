@@ -33,15 +33,16 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/auth"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/flipo/flipo/apps/api/internal/usecase/betfunding"
+	campaignuc "github.com/flipo/flipo/apps/api/internal/usecase/campaign"
 	casesuc "github.com/flipo/flipo/apps/api/internal/usecase/cases"
-	"github.com/flipo/flipo/apps/api/internal/usecase/quests"
 	"github.com/flipo/flipo/apps/api/internal/usecase/crash"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
-	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/flipo/flipo/apps/api/internal/usecase/market"
+	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	"github.com/flipo/flipo/apps/api/internal/usecase/payments"
 	"github.com/flipo/flipo/apps/api/internal/usecase/promo"
+	"github.com/flipo/flipo/apps/api/internal/usecase/quests"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/flipo/flipo/apps/api/internal/usecase/risk"
 	"github.com/flipo/flipo/apps/api/internal/usecase/roulette"
@@ -49,8 +50,8 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
 	"github.com/flipo/flipo/apps/api/internal/usecase/wallet"
-	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	casesworker "github.com/flipo/flipo/apps/api/internal/worker/cases"
+	crashworker "github.com/flipo/flipo/apps/api/internal/worker/crash"
 	giftdepositworker "github.com/flipo/flipo/apps/api/internal/worker/giftdeposit"
 	paymentsworker "github.com/flipo/flipo/apps/api/internal/worker/payments"
 	rouletteworker "github.com/flipo/flipo/apps/api/internal/worker/roulette"
@@ -172,11 +173,16 @@ func main() {
 	telegramAdminSvc := telegramadmin.NewService(platformRepo, userRepo, botAPI, cfg.BotUsername, cfg.WebAppShortName, cfg.WebAppURL, cfg.ChannelURL)
 	telegramAdminSvc.SetCasesUploadDir(cfg.CasesUploadDir)
 
+	campaignRepo := postgres.NewCampaignRepo(db)
+	campaignRepo.SetExcludeAdminTelegramIDs(cfg.AdminTelegramIDs)
+	campaignSvc := campaignuc.NewService(campaignRepo, cfg.BotUsername, cfg.WebAppShortName)
+
 	authSvc := auth.NewService(userRepo, cfg.BotToken, cfg.JWTSecret, cfg.JWTExpiry, referralSvc,
 		auth.WithAdminTelegramIDs(cfg.AdminTelegramIDs),
 		auth.WithAdminPanelPassword(cfg.AdminPanelPassword),
 		auth.WithAnalytics(analyticsSvc),
 		auth.WithAdminEvents(adminNotifier),
+		auth.WithCampaigns(campaignSvc),
 		auth.WithDebugAuth(cfg.DebugAuthEnabled, cfg.DebugTelegramID, cfg.DebugUsername, cfg.DebugInitialBalance),
 	)
 	riskSvc.SetAdminChecker(authSvc.IsAdmin)
@@ -337,6 +343,7 @@ func main() {
 	botUpdates.SetAnalytics(analyticsSvc)
 	botUpdates.SetStarsPaymentHandler(paymentsSvc)
 	botUpdates.SetCaseShareConfirmer(caseSvc)
+	botUpdates.SetCampaignResolver(campaignSvc)
 	botUpdates.SetWebAppURLResolver(func(ctx context.Context) string {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {
@@ -373,6 +380,7 @@ func main() {
 	adminHandler.SetQuestsService(questSvc)
 	adminHandler.SetCasesUploadDir(cfg.CasesUploadDir)
 	adminHandler.SetInventoryService(invSvc)
+	adminHandler.SetCampaignService(campaignSvc)
 	adminHandler.SetOnlineCounter(func() int {
 		return hub.OnlineUserCount(authSvc.IsAdmin)
 	})

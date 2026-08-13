@@ -135,6 +135,12 @@ func (s *walletUserRepoStub) ListIDsByStakingTier(context.Context, domain.Stakin
 func (s *walletUserRepoStub) SetReferrerIfEmpty(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }
+func (s *walletUserRepoStub) SetCampaignIfEmpty(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (s *walletUserRepoStub) SetAcquisitionPayloadIfEmpty(context.Context, uuid.UUID, string) (bool, error) {
+	return false, nil
+}
 func (s *walletUserRepoStub) CountReferrals(context.Context, uuid.UUID) (int64, error) { return 0, nil }
 func (s *walletUserRepoStub) CountReferralsSince(context.Context, uuid.UUID, time.Time) (int64, error) {
 	return 0, nil

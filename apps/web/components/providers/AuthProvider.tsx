@@ -12,7 +12,13 @@ import {
 import { trackEvent } from "@/lib/analytics";
 import { markBootStage } from "@/lib/boot";
 import { formatUserError } from "@/lib/user-errors";
-import { readReferralCodeFromTelegram, storePendingReferral, takePendingReferral } from "@/lib/referral";
+import { storeCampaignLanding } from "@/lib/campaign";
+import {
+  isReferralStartParam,
+  readStartParamFromTelegram,
+  storePendingReferral,
+  takePendingReferral,
+} from "@/lib/referral";
 import {
   getTelegramWebApp,
   hasTelegramInitData,
@@ -74,35 +80,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Always re-auth via Telegram initData on entry so first/last name
         // (and username/photo) stay in sync after profile changes.
         if (initData) {
-          const startParam = readReferralCodeFromTelegram();
+          const startParam = readStartParamFromTelegram();
           if (startParam) {
-            storePendingReferral(startParam);
-            trackEvent({
-              event_name: "referral_detected",
-              event_category: "acquisition",
-              status: "success",
-              start_param: startParam,
-              properties: { source: "telegram_start_param" },
-            });
+            if (isReferralStartParam(startParam)) {
+              storePendingReferral(startParam);
+              trackEvent({
+                event_name: "referral_detected",
+                event_category: "acquisition",
+                status: "success",
+                start_param: startParam,
+                properties: { source: "telegram_start_param" },
+              });
+            } else {
+              trackEvent({
+                event_name: "start_param_detected",
+                event_category: "acquisition",
+                status: "success",
+                start_param: startParam,
+                properties: {
+                  source: startParam.toLowerCase().startsWith("c_") ? "campaign" : "other",
+                },
+              });
+            }
           }
-          const referralCode = startParam || takePendingReferral() || undefined;
+          const referralCode = isReferralStartParam(startParam)
+            ? startParam
+            : startParam
+              ? undefined
+              : takePendingReferral() || undefined;
+          const authSource = isReferralStartParam(startParam || referralCode)
+            ? "referral"
+            : startParam
+              ? startParam.toLowerCase().startsWith("c_")
+                ? "campaign"
+                : "other"
+              : "direct";
           trackEvent({
             event_name: "auth_started",
             event_category: "auth",
             status: "info",
-            start_param: referralCode,
-            properties: { source: referralCode ? "referral" : "direct" },
+            start_param: startParam || referralCode,
+            properties: { source: authSource },
           });
-          const { token: newToken, user: authUser } = await authTelegram(initData, referralCode);
+          const { token: newToken, user: authUser, start } = await authTelegram(
+            initData,
+            isReferralStartParam(referralCode) ? referralCode : undefined,
+          );
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
+          if (start?.landing) storeCampaignLanding(start.landing);
           trackEvent({
             event_name: "auth_succeeded",
             event_category: "auth",
             status: "success",
-            start_param: referralCode,
+            start_param: start?.param || startParam || referralCode,
             staking_tier: authUser.staking_tier,
-            properties: { source: referralCode ? "referral" : "direct" },
+            properties: {
+              source: start?.kind || authSource,
+              campaign_code: start?.campaign_code,
+            },
           });
           return;
         }

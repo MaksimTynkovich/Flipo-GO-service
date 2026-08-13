@@ -6,16 +6,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	"github.com/flipo/flipo/apps/api/internal/usecase/campaign"
 	"gorm.io/gorm"
 )
 
 type Update struct {
-	UpdateID           int64                `json:"update_id"`
-	Message            *Message             `json:"message"`
-	CallbackQuery      *CallbackQuery       `json:"callback_query"`
-	PreCheckoutQuery   *PreCheckoutQuery    `json:"pre_checkout_query"`
-	ChosenInlineResult *ChosenInlineResult  `json:"chosen_inline_result"`
+	UpdateID           int64               `json:"update_id"`
+	Message            *Message            `json:"message"`
+	CallbackQuery      *CallbackQuery      `json:"callback_query"`
+	PreCheckoutQuery   *PreCheckoutQuery   `json:"pre_checkout_query"`
+	ChosenInlineResult *ChosenInlineResult `json:"chosen_inline_result"`
 }
 
 type ChosenInlineResult struct {
@@ -52,11 +54,11 @@ type Chat struct {
 }
 
 type PreCheckoutQuery struct {
-	ID               string       `json:"id"`
-	From             *MessageFrom `json:"from"`
-	Currency         string       `json:"currency"`
-	TotalAmount      int64        `json:"total_amount"`
-	InvoicePayload   string       `json:"invoice_payload"`
+	ID             string       `json:"id"`
+	From           *MessageFrom `json:"from"`
+	Currency       string       `json:"currency"`
+	TotalAmount    int64        `json:"total_amount"`
+	InvoicePayload string       `json:"invoice_payload"`
 }
 
 type SuccessfulPayment struct {
@@ -100,6 +102,12 @@ type BotUpdates struct {
 	analytics                *analyticsuc.Service
 	starsPay                 StarsPaymentHandler
 	caseShareConfirm         CaseShareConfirmer
+	campaigns                CampaignResolver
+}
+
+// CampaignResolver looks up an ad campaign by short code from start_param.
+type CampaignResolver interface {
+	FindByCode(ctx context.Context, code string) (*domain.Campaign, error)
 }
 
 // CaseShareConfirmer credits a prepared case-quest share after chosen_inline_result.
@@ -162,6 +170,10 @@ func (h *BotUpdates) SetCaseShareConfirmer(confirmer CaseShareConfirmer) {
 	h.caseShareConfirm = confirmer
 }
 
+func (h *BotUpdates) SetCampaignResolver(resolver CampaignResolver) {
+	h.campaigns = resolver
+}
+
 func (h *BotUpdates) Enabled() bool {
 	return h.api != nil && h.api.Enabled()
 }
@@ -193,7 +205,7 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 
 	payload := strings.TrimSpace(strings.TrimPrefix(text, "/start"))
 	h.trackBotStart(ctx, update.Message, payload)
-	h.maybeNotifyBotStart(ctx, update.Message)
+	h.maybeNotifyBotStart(ctx, update.Message, payload)
 
 	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload)
 }
@@ -318,7 +330,7 @@ func (h *BotUpdates) trackBotStart(ctx context.Context, msg *Message, payload st
 	})
 }
 
-func (h *BotUpdates) maybeNotifyBotStart(ctx context.Context, msg *Message) {
+func (h *BotUpdates) maybeNotifyBotStart(ctx context.Context, msg *Message, payload string) {
 	if h.adminNotifier == nil || msg == nil || msg.From == nil || msg.From.ID == 0 {
 		return
 	}
@@ -336,7 +348,28 @@ func (h *BotUpdates) maybeNotifyBotStart(ctx context.Context, msg *Message) {
 		Username:   msg.From.Username,
 		FirstName:  msg.From.FirstName,
 		LastName:   msg.From.LastName,
-	})
+	}, h.resolveBotStartAttribution(ctx, payload))
+}
+
+func (h *BotUpdates) resolveBotStartAttribution(ctx context.Context, payload string) BotStartAttribution {
+	parsed := campaign.ParseStartPayload(payload)
+	attr := BotStartAttribution{Payload: parsed.Raw, Kind: parsed.Kind}
+	if parsed.Kind != campaign.KindCampaign {
+		return attr
+	}
+	attr.Code = parsed.CampaignCode
+	if h.campaigns == nil {
+		return attr
+	}
+	found, err := h.campaigns.FindByCode(ctx, parsed.CampaignCode)
+	if err != nil || found == nil {
+		return attr
+	}
+	attr.Name = found.Name
+	attr.Code = found.Code
+	attr.Source = found.Source
+	attr.Content = found.Content
+	return attr
 }
 
 // UserRepoLookup adapts a FindByTelegramID that returns (user, error).

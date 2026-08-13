@@ -733,6 +733,28 @@ func (r *AdminRepo) enrichAdminUserRows(ctx context.Context, users []domain.User
 		}
 	}
 
+	campaignIDs := make([]uuid.UUID, 0)
+	seenCampaign := make(map[uuid.UUID]struct{})
+	for _, u := range users {
+		if u.CampaignID == nil {
+			continue
+		}
+		if _, ok := seenCampaign[*u.CampaignID]; ok {
+			continue
+		}
+		seenCampaign[*u.CampaignID] = struct{}{}
+		campaignIDs = append(campaignIDs, *u.CampaignID)
+	}
+	campaigns := make(map[uuid.UUID]domain.Campaign, len(campaignIDs))
+	if len(campaignIDs) > 0 {
+		var campRows []domain.Campaign
+		if err := r.db.WithContext(ctx).Where("id IN ?", campaignIDs).Find(&campRows).Error; err == nil {
+			for _, camp := range campRows {
+				campaigns[camp.ID] = camp
+			}
+		}
+	}
+
 	for _, u := range users {
 		row := domain.AdminUserRow{
 			User:          u,
@@ -753,6 +775,12 @@ func (r *AdminRepo) enrichAdminUserRows(ctx context.Context, users []domain.User
 				row.ReferrerCode = referralCodeFromTelegramID(ref.TelegramID)
 			} else {
 				row.CameViaReferral = true
+			}
+		}
+		if u.CampaignID != nil {
+			if camp, ok := campaigns[*u.CampaignID]; ok {
+				row.CampaignName = camp.Name
+				row.CampaignCode = camp.Code
 			}
 		}
 		rows = append(rows, row)

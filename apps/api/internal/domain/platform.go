@@ -33,19 +33,19 @@ type PlatformRiskSettings struct {
 	HotWalletSweepThreshold    int64  `gorm:"not null" json:"hot_wallet_sweep_threshold_nanoton"`
 	ColdWalletAddress          string `gorm:"size:128" json:"cold_wallet_address"`
 	// Roulette house bank / auto-recovery (admin-tunable).
-	RouletteRecoveryEnabled       bool      `gorm:"not null;default:false" json:"roulette_recovery_enabled"`
-	RouletteRecoveryActive        bool      `gorm:"not null;default:false" json:"roulette_recovery_active"`
-	RouletteBankNanoton           int64     `gorm:"not null;default:0" json:"roulette_bank_nanoton"`
-	RouletteLossThresholdNanoton  int64     `gorm:"not null;default:-50000000000" json:"roulette_loss_threshold_nanoton"`
-	RouletteRecoveryTargetNanoton int64     `gorm:"not null;default:0" json:"roulette_recovery_target_nanoton"`
-	RouletteRecoveryBiasWeight    int       `gorm:"not null;default:50" json:"roulette_recovery_bias_weight"`
+	RouletteRecoveryEnabled       bool  `gorm:"not null;default:false" json:"roulette_recovery_enabled"`
+	RouletteRecoveryActive        bool  `gorm:"not null;default:false" json:"roulette_recovery_active"`
+	RouletteBankNanoton           int64 `gorm:"not null;default:0" json:"roulette_bank_nanoton"`
+	RouletteLossThresholdNanoton  int64 `gorm:"not null;default:-50000000000" json:"roulette_loss_threshold_nanoton"`
+	RouletteRecoveryTargetNanoton int64 `gorm:"not null;default:0" json:"roulette_recovery_target_nanoton"`
+	RouletteRecoveryBiasWeight    int   `gorm:"not null;default:50" json:"roulette_recovery_bias_weight"`
 	// Crash house bank / auto-recovery (admin-tunable).
-	CrashRecoveryEnabled       bool  `gorm:"not null;default:false" json:"crash_recovery_enabled"`
-	CrashRecoveryActive        bool  `gorm:"not null;default:false" json:"crash_recovery_active"`
-	CrashBankNanoton           int64 `gorm:"not null;default:0" json:"crash_bank_nanoton"`
-	CrashLossThresholdNanoton  int64 `gorm:"not null;default:-50000000000" json:"crash_loss_threshold_nanoton"`
-	CrashRecoveryTargetNanoton int64 `gorm:"not null;default:0" json:"crash_recovery_target_nanoton"`
-	CrashRecoveryBiasWeight    int   `gorm:"not null;default:50" json:"crash_recovery_bias_weight"`
+	CrashRecoveryEnabled       bool      `gorm:"not null;default:false" json:"crash_recovery_enabled"`
+	CrashRecoveryActive        bool      `gorm:"not null;default:false" json:"crash_recovery_active"`
+	CrashBankNanoton           int64     `gorm:"not null;default:0" json:"crash_bank_nanoton"`
+	CrashLossThresholdNanoton  int64     `gorm:"not null;default:-50000000000" json:"crash_loss_threshold_nanoton"`
+	CrashRecoveryTargetNanoton int64     `gorm:"not null;default:0" json:"crash_recovery_target_nanoton"`
+	CrashRecoveryBiasWeight    int       `gorm:"not null;default:50" json:"crash_recovery_bias_weight"`
 	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
@@ -312,6 +312,8 @@ type AdminUserRow struct {
 	ReferrerUsername           string `json:"referrer_username,omitempty"`
 	ReferrerFirstName          string `json:"referrer_first_name,omitempty"`
 	ReferrerCode               string `json:"referrer_code,omitempty"`
+	CampaignName               string `json:"campaign_name,omitempty"`
+	CampaignCode               string `json:"campaign_code,omitempty"`
 }
 
 // AdminPendingGiftWithdraw — gift held in withdraw_pending for silent hold review or case claim purchase.

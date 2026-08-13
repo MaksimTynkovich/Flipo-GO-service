@@ -123,20 +123,136 @@ func (n *AdminNotifier) AlertAdminPanelLogin(ctx context.Context, challengeID st
 	}
 }
 
-func (n *AdminNotifier) NotifyBotStart(ctx context.Context, actor AdminActor) {
+// BotStartAttribution is the /start payload resolved to a campaign or referral.
+type BotStartAttribution struct {
+	Payload string
+	Kind    string
+	Name    string
+	Code    string
+	Source  string
+	Content string
+}
+
+func (n *AdminNotifier) NotifyBotStart(ctx context.Context, actor AdminActor, attr BotStartAttribution) {
 	if actor.TelegramID == 0 || n.IsAdmin(actor.TelegramID) {
 		return
 	}
 	if _, loaded := n.botStartSeen.LoadOrStore(actor.TelegramID, struct{}{}); loaded {
 		return
 	}
-	n.persist(ctx, true, actor, "bot_start", "system", "info",
-		"/start в боте",
-		FormatActor(actor),
-		FormatActor(actor),
-		nil,
-		nil,
-	)
+	title, summary, body, meta := formatBotStartNotice(actor, attr)
+	n.persist(ctx, true, actor, "bot_start", "system", "info", title, summary, body, nil, meta)
+}
+
+func formatBotStartNotice(actor AdminActor, attr BotStartAttribution) (title, summary, body string, meta map[string]any) {
+	who := FormatActor(actor)
+	payload := strings.TrimSpace(attr.Payload)
+	meta = map[string]any{}
+	if payload != "" {
+		meta["start_param"] = payload
+	}
+	if kind := strings.TrimSpace(attr.Kind); kind != "" {
+		meta["start_kind"] = kind
+	}
+
+	switch attr.Kind {
+	case "campaign":
+		channel := campaignSourceLabel(attr.Source)
+		code := strings.TrimSpace(attr.Code)
+		if code == "" {
+			code = strings.TrimPrefix(strings.ToLower(payload), "c_")
+		}
+		name := strings.TrimSpace(attr.Name)
+		content := strings.TrimSpace(attr.Content)
+		if channel != "" {
+			title = "/start · " + channel
+		} else {
+			title = "/start · реклама"
+		}
+		if content != "" {
+			title += " · " + content
+		} else if name != "" {
+			title += " · " + name
+		}
+		summary = who
+		if channel != "" {
+			summary += " · " + channel
+		}
+		if name != "" {
+			summary += " · " + name
+		}
+		var b strings.Builder
+		b.WriteString(who)
+		if channel != "" {
+			b.WriteString("\nКанал: ")
+			b.WriteString(channel)
+		}
+		if name != "" {
+			b.WriteString("\nКампания: ")
+			b.WriteString(name)
+		}
+		if code != "" {
+			b.WriteString("\nКод: c_")
+			b.WriteString(code)
+		}
+		if content != "" {
+			b.WriteString("\nВариант: ")
+			b.WriteString(content)
+		}
+		if name == "" && code != "" {
+			b.WriteString("\nКампания с этим кодом не найдена")
+		}
+		body = b.String()
+		if name != "" {
+			meta["campaign_name"] = name
+		}
+		if code != "" {
+			meta["campaign_code"] = code
+		}
+		if attr.Source != "" {
+			meta["campaign_source"] = attr.Source
+			meta["campaign_source_label"] = channel
+		}
+		if content != "" {
+			meta["campaign_content"] = content
+		}
+		return title, summary, body, meta
+	case "referral":
+		title = "/start · реферальная ссылка"
+		summary = who + " · реферальная ссылка"
+		body = who + "\nИсточник: реферальная ссылка"
+		if payload != "" {
+			body += "\nКод: " + payload
+		}
+		return title, summary, body, meta
+	}
+
+	if payload != "" {
+		title = "/start · " + payload
+		summary = who + " · " + payload
+		body = who + "\nPayload: " + payload
+		return title, summary, body, meta
+	}
+	return "/start в боте", who, who, meta
+}
+
+func campaignSourceLabel(source string) string {
+	switch strings.TrimSpace(source) {
+	case domain.CampaignSourceTelegramAds:
+		return "Telegram Ads"
+	case domain.CampaignSourceChannel:
+		return "канал"
+	case domain.CampaignSourceStories:
+		return "Stories"
+	case domain.CampaignSourceInfluencer:
+		return "блогер"
+	case domain.CampaignSourceOther:
+		return "другое"
+	case "":
+		return ""
+	default:
+		return source
+	}
 }
 
 func (n *AdminNotifier) NotifyDeposit(ctx context.Context, actor AdminActor, amountNanoton int64) {
@@ -664,11 +780,11 @@ func (n *AdminNotifier) NotifyGiftWithdraw(ctx context.Context, actor AdminActor
 	summary := fmt.Sprintf("%s · %s · %s", FormatActor(actor), name, statusLabel)
 	body := fmt.Sprintf("%s\nПодарок: %s\nСтатус: %s", FormatActor(actor), name, statusLabel)
 	meta := map[string]any{
-		"gift_name": name,
-		"status":    status,
+		"gift_name":    name,
+		"status":       status,
 		"status_label": statusLabel,
-		"link":      "/admin/finance",
-		"event":     "gift_withdraw",
+		"link":         "/admin/finance",
+		"event":        "gift_withdraw",
 	}
 	if coll != "" {
 		body += fmt.Sprintf("\nКоллекция: %s", coll)

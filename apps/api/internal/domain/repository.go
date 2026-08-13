@@ -22,6 +22,8 @@ type UserRepository interface {
 	UpdateStakingTier(ctx context.Context, userID uuid.UUID, tier StakingTier) error
 	ListIDsByStakingTier(ctx context.Context, tier StakingTier) ([]uuid.UUID, error)
 	SetReferrerIfEmpty(ctx context.Context, userID, referrerID uuid.UUID) (bool, error)
+	SetCampaignIfEmpty(ctx context.Context, userID, campaignID uuid.UUID) (bool, error)
+	SetAcquisitionPayloadIfEmpty(ctx context.Context, userID uuid.UUID, payload string) (bool, error)
 	CountReferrals(ctx context.Context, referrerID uuid.UUID) (int64, error)
 	CountReferralsSince(ctx context.Context, referrerID uuid.UUID, since time.Time) (int64, error)
 	SumReferralEarnings(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -312,6 +314,16 @@ type AdminRepository interface {
 	ListStakingPositions(ctx context.Context, filter AdminStakingPositionFilter) ([]AdminStakingPositionRow, int64, error)
 	ListStakingActivity(ctx context.Context, filter AdminStakingActivityFilter) ([]AdminStakingActivityRow, int64, error)
 	ListStakingStakers(ctx context.Context, filter AdminStakingStakerFilter) ([]AdminStakingStakerRow, int64, int64, error)
+}
+
+type CampaignRepository interface {
+	Create(ctx context.Context, campaign *Campaign) error
+	Update(ctx context.Context, campaign *Campaign) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Campaign, error)
+	FindByCode(ctx context.Context, code string) (*Campaign, error)
+	List(ctx context.Context) ([]Campaign, error)
+	Stats(ctx context.Context, filter CampaignStatsFilter) ([]CampaignStats, error)
+	Daily(ctx context.Context, campaignID uuid.UUID, from, to time.Time) ([]CampaignDailyPoint, error)
 }
 
 type AdminNotificationRepository interface {

@@ -57,4 +57,6 @@ var (
 	ErrQuestBonusLocked       = errors.New("сначала выполните все задания")
 	ErrQuestUnavailable       = errors.New("задание недоступно")
 	ErrCaseEntitlementMissing = errors.New("нет бесплатного открытия этого кейса")
+	ErrInvalidCampaign        = errors.New("некорректная кампания")
+	ErrCampaignCodeTaken      = errors.New("код кампании уже занят")
 )

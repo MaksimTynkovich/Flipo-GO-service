@@ -122,6 +122,12 @@ func (s *userRepoStub) ListIDsByStakingTier(context.Context, domain.StakingTier)
 func (s *userRepoStub) SetReferrerIfEmpty(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }
+func (s *userRepoStub) SetCampaignIfEmpty(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (s *userRepoStub) SetAcquisitionPayloadIfEmpty(context.Context, uuid.UUID, string) (bool, error) {
+	return false, nil
+}
 func (s *userRepoStub) CountReferrals(context.Context, uuid.UUID) (int64, error) { return 0, nil }
 func (s *userRepoStub) CountReferralsSince(context.Context, uuid.UUID, time.Time) (int64, error) {
 	return 0, nil

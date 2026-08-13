@@ -173,7 +173,12 @@ export default function AnalyticsSection() {
             </AdminPanel>
 
             <AdminPanel title="Что смотрят и где ломается">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <CompactRank
+                  title="Откуда пришли"
+                  items={analytics.top_sources ?? []}
+                  empty="Пока нет входов."
+                />
                 <CompactRank
                   title="Экраны"
                   items={analytics.top_screens ?? []}

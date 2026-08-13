@@ -15,12 +15,13 @@ import (
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/usecase/admin"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	"github.com/flipo/flipo/apps/api/internal/usecase/campaign"
 	casesuc "github.com/flipo/flipo/apps/api/internal/usecase/cases"
 	"github.com/flipo/flipo/apps/api/internal/usecase/fairness"
 	"github.com/flipo/flipo/apps/api/internal/usecase/inventory"
+	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/outcome"
 	questsuc "github.com/flipo/flipo/apps/api/internal/usecase/quests"
-	"github.com/flipo/flipo/apps/api/internal/usecase/market"
 	"github.com/flipo/flipo/apps/api/internal/usecase/telegramadmin"
 	"github.com/flipo/flipo/apps/api/internal/usecase/treasury"
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,7 @@ type AdminHandler struct {
 	casesUploadDir      string
 	onMaintenanceUpdate func(domain.PlatformMaintenanceSettings)
 	onlineCounter       func() int
+	campaigns           *campaign.Service
 }
 
 func NewAdminHandler(adminSvc *admin.Service, analyticsSvc *analyticsuc.Service, fairnessSvc *fairness.Service, outcomeSvc *outcome.Service, treasurySvc *treasury.Service, telegramSvc *telegramadmin.Service, hotAddr string) *AdminHandler {
@@ -76,6 +78,10 @@ func (h *AdminHandler) SetCasesService(casesSvc *casesuc.Service) {
 
 func (h *AdminHandler) SetQuestsService(svc *questsuc.Service) {
 	h.quests = svc
+}
+
+func (h *AdminHandler) SetCampaignService(svc *campaign.Service) {
+	h.campaigns = svc
 }
 
 func (h *AdminHandler) SetCasesUploadDir(dir string) {
@@ -350,10 +356,10 @@ func (h *AdminHandler) SetUserBalance(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"ok":                true,
-		"previous_balance":  result.PreviousBalance,
-		"betting_balance":   result.BettingBalance,
-		"delta":             result.Delta,
+		"ok":               true,
+		"previous_balance": result.PreviousBalance,
+		"betting_balance":  result.BettingBalance,
+		"delta":            result.Delta,
 	})
 }
 
@@ -632,9 +638,9 @@ func (h *AdminHandler) BulkMarketListings(c *gin.Context) {
 	}
 	adminID := middleware.GetUserID(c)
 	var body struct {
-		Action  string    `json:"action" binding:"required"`
-		IDs     []string  `json:"ids" binding:"required"`
-		Percent float64   `json:"percent"`
+		Action  string   `json:"action" binding:"required"`
+		IDs     []string `json:"ids" binding:"required"`
+		Percent float64  `json:"percent"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -895,11 +901,11 @@ func (h *AdminHandler) ListOutcomeOverrides(c *gin.Context) {
 func (h *AdminHandler) CreateOutcomeOverride(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	var req struct {
-		GameType        string  `json:"game_type"`
-		Target          any     `json:"target"`
-		RoundsRemaining int     `json:"rounds_remaining"`
-		DurationMinutes int     `json:"duration_minutes"`
-		Note            string  `json:"note"`
+		GameType        string `json:"game_type"`
+		Target          any    `json:"target"`
+		RoundsRemaining int    `json:"rounds_remaining"`
+		DurationMinutes int    `json:"duration_minutes"`
+		Note            string `json:"note"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1228,9 +1234,9 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		PromoPoolDailyRefillNanoton *int64 `json:"promo_pool_daily_refill_nanoton"`
 		PromoPoolAdjustNanoton      *int64 `json:"promo_pool_adjust_nanoton"`
 
-		DepositBoostEnabled    *bool  `json:"deposit_boost_enabled"`
-		DepositBoostMinNanoton *int64 `json:"deposit_boost_min_nanoton"`
-		DepositBoostBiasWeight *int   `json:"deposit_boost_bias_weight"`
+		DepositBoostEnabled         *bool  `json:"deposit_boost_enabled"`
+		DepositBoostMinNanoton      *int64 `json:"deposit_boost_min_nanoton"`
+		DepositBoostBiasWeight      *int   `json:"deposit_boost_bias_weight"`
 		DepositBoostTier1MinNanoton *int64 `json:"deposit_boost_tier1_min_nanoton"`
 		DepositBoostTier2MinNanoton *int64 `json:"deposit_boost_tier2_min_nanoton"`
 		DepositBoostTier3MinNanoton *int64 `json:"deposit_boost_tier3_min_nanoton"`
@@ -1247,44 +1253,44 @@ func (h *AdminHandler) UpdateCaseCatalogSettings(c *gin.Context) {
 		return
 	}
 	settings, err := h.cases.AdminUpdateCatalogSettings(c.Request.Context(), casesuc.CatalogSettingsPatch{
-		Enabled:                     req.Enabled,
-		BannersEnabled:              req.BannersEnabled,
-		BankEnabled:                 req.BankEnabled,
-		BankNanoton:                 req.BankNanoton,
-		BankTargetNanoton:           req.BankTargetNanoton,
-		BankLossThresholdNanoton:    req.BankLossThresholdNanoton,
-		BankRecoveryTargetNanoton:   req.BankRecoveryTargetNanoton,
-		BankBiasWeight:              req.BankBiasWeight,
-		BankMaxPrizeBps:             req.BankMaxPrizeBps,
-		BankFatPaused:                   req.BankFatPaused,
-		BankAdjustNanoton:               req.BankAdjustNanoton,
-		BankRecoverySmoothEnabled:       req.BankRecoverySmoothEnabled,
-		BankRecoveryDrainOpens:          req.BankRecoveryDrainOpens,
-		BankRecoveryReliefOpens:         req.BankRecoveryReliefOpens,
-		BankRecoveryReliefMaxPrizeBps:   req.BankRecoveryReliefMaxPrizeBps,
-		DailyPoolEnabled:                req.DailyPoolEnabled,
-		DailyPoolNanoton:            req.DailyPoolNanoton,
-		DailyPoolMaxPrizeBps:        req.DailyPoolMaxPrizeBps,
-		DailyPoolDailyRefillNanoton: req.DailyPoolDailyRefillNanoton,
-		DailyPoolAdjustNanoton:      req.DailyPoolAdjustNanoton,
-		PromoPoolEnabled:            req.PromoPoolEnabled,
-		PromoPoolNanoton:            req.PromoPoolNanoton,
-		PromoPoolMaxPrizeBps:        req.PromoPoolMaxPrizeBps,
-		PromoPoolDailyRefillNanoton: req.PromoPoolDailyRefillNanoton,
-		PromoPoolAdjustNanoton:      req.PromoPoolAdjustNanoton,
-		DepositBoostEnabled:         req.DepositBoostEnabled,
-		DepositBoostMinNanoton:      req.DepositBoostMinNanoton,
-		DepositBoostBiasWeight:      req.DepositBoostBiasWeight,
-		DepositBoostTier1MinNanoton: req.DepositBoostTier1MinNanoton,
-		DepositBoostTier2MinNanoton: req.DepositBoostTier2MinNanoton,
-		DepositBoostTier3MinNanoton: req.DepositBoostTier3MinNanoton,
-		DepositBoostTier4MinNanoton: req.DepositBoostTier4MinNanoton,
-		DepositBoostTier1BiasWeight: req.DepositBoostTier1BiasWeight,
-		DepositBoostTier2BiasWeight: req.DepositBoostTier2BiasWeight,
-		DepositBoostTier3BiasWeight: req.DepositBoostTier3BiasWeight,
-		DepositBoostTier4BiasWeight: req.DepositBoostTier4BiasWeight,
-		DepositBoostSurplusShareBps: req.DepositBoostSurplusShareBps,
-		DepositBoostRampNanoton:     req.DepositBoostRampNanoton,
+		Enabled:                       req.Enabled,
+		BannersEnabled:                req.BannersEnabled,
+		BankEnabled:                   req.BankEnabled,
+		BankNanoton:                   req.BankNanoton,
+		BankTargetNanoton:             req.BankTargetNanoton,
+		BankLossThresholdNanoton:      req.BankLossThresholdNanoton,
+		BankRecoveryTargetNanoton:     req.BankRecoveryTargetNanoton,
+		BankBiasWeight:                req.BankBiasWeight,
+		BankMaxPrizeBps:               req.BankMaxPrizeBps,
+		BankFatPaused:                 req.BankFatPaused,
+		BankAdjustNanoton:             req.BankAdjustNanoton,
+		BankRecoverySmoothEnabled:     req.BankRecoverySmoothEnabled,
+		BankRecoveryDrainOpens:        req.BankRecoveryDrainOpens,
+		BankRecoveryReliefOpens:       req.BankRecoveryReliefOpens,
+		BankRecoveryReliefMaxPrizeBps: req.BankRecoveryReliefMaxPrizeBps,
+		DailyPoolEnabled:              req.DailyPoolEnabled,
+		DailyPoolNanoton:              req.DailyPoolNanoton,
+		DailyPoolMaxPrizeBps:          req.DailyPoolMaxPrizeBps,
+		DailyPoolDailyRefillNanoton:   req.DailyPoolDailyRefillNanoton,
+		DailyPoolAdjustNanoton:        req.DailyPoolAdjustNanoton,
+		PromoPoolEnabled:              req.PromoPoolEnabled,
+		PromoPoolNanoton:              req.PromoPoolNanoton,
+		PromoPoolMaxPrizeBps:          req.PromoPoolMaxPrizeBps,
+		PromoPoolDailyRefillNanoton:   req.PromoPoolDailyRefillNanoton,
+		PromoPoolAdjustNanoton:        req.PromoPoolAdjustNanoton,
+		DepositBoostEnabled:           req.DepositBoostEnabled,
+		DepositBoostMinNanoton:        req.DepositBoostMinNanoton,
+		DepositBoostBiasWeight:        req.DepositBoostBiasWeight,
+		DepositBoostTier1MinNanoton:   req.DepositBoostTier1MinNanoton,
+		DepositBoostTier2MinNanoton:   req.DepositBoostTier2MinNanoton,
+		DepositBoostTier3MinNanoton:   req.DepositBoostTier3MinNanoton,
+		DepositBoostTier4MinNanoton:   req.DepositBoostTier4MinNanoton,
+		DepositBoostTier1BiasWeight:   req.DepositBoostTier1BiasWeight,
+		DepositBoostTier2BiasWeight:   req.DepositBoostTier2BiasWeight,
+		DepositBoostTier3BiasWeight:   req.DepositBoostTier3BiasWeight,
+		DepositBoostTier4BiasWeight:   req.DepositBoostTier4BiasWeight,
+		DepositBoostSurplusShareBps:   req.DepositBoostSurplusShareBps,
+		DepositBoostRampNanoton:       req.DepositBoostRampNanoton,
 	})
 	if err != nil {
 		respondInternal(c, err)
@@ -1792,10 +1798,10 @@ func (h *AdminHandler) ListStakingStakers(c *gin.Context) {
 		items = []domain.AdminStakingStakerRow{}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"items":                           items,
-		"total":                           total,
-		"limit":                           limit,
-		"offset":                          offset,
+		"items":                          items,
+		"total":                          total,
+		"limit":                          limit,
+		"offset":                         offset,
 		"total_projected_payout_nanoton": totalProjectedPayout,
 	})
 }
@@ -2057,3 +2063,149 @@ func (h *AdminHandler) GetDailyQuestStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
+func (h *AdminHandler) ListCampaigns(c *gin.Context) {
+	if h.campaigns == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "campaigns unavailable"})
+		return
+	}
+	from, to := parseCampaignRange(c)
+	items, err := h.campaigns.List(c.Request.Context(), domain.CampaignStatsFilter{
+		From:   from,
+		To:     to,
+		Source: strings.TrimSpace(c.Query("source")),
+	})
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+func (h *AdminHandler) CreateCampaign(c *gin.Context) {
+	if h.campaigns == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "campaigns unavailable"})
+		return
+	}
+	var req struct {
+		Name    string `json:"name"`
+		Code    string `json:"code"`
+		Source  string `json:"source"`
+		Content string `json:"content"`
+		Landing string `json:"landing"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	item, err := h.campaigns.Create(c.Request.Context(), campaign.CreateInput{
+		Name:    req.Name,
+		Code:    req.Code,
+		Source:  req.Source,
+		Content: req.Content,
+		Landing: req.Landing,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidCampaign):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_campaign"})
+		case errors.Is(err, domain.ErrCampaignCodeTaken):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "campaign_code_taken"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), middleware.GetUserID(c), "campaign_create", "campaign", item.ID.String(), item)
+	c.JSON(http.StatusCreated, item)
+}
+
+func (h *AdminHandler) GetCampaign(c *gin.Context) {
+	if h.campaigns == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "campaigns unavailable"})
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID кампании"})
+		return
+	}
+	from, to := parseCampaignRange(c)
+	item, err := h.campaigns.Get(c.Request.Context(), id, from, to)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error(), "code": "campaign_not_found"})
+			return
+		}
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *AdminHandler) PatchCampaign(c *gin.Context) {
+	if h.campaigns == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "campaigns unavailable"})
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный ID кампании"})
+		return
+	}
+	var req struct {
+		Name    *string `json:"name"`
+		Source  *string `json:"source"`
+		Content *string `json:"content"`
+		Landing *string `json:"landing"`
+		Status  *string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	item, err := h.campaigns.Update(c.Request.Context(), id, campaign.UpdateInput{
+		Name:    req.Name,
+		Source:  req.Source,
+		Content: req.Content,
+		Landing: req.Landing,
+		Status:  req.Status,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidCampaign):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "invalid_campaign"})
+		case errors.Is(err, domain.ErrNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error(), "code": "campaign_not_found"})
+		default:
+			respondInternal(c, err)
+		}
+		return
+	}
+	_ = h.admin.RecordAudit(c.Request.Context(), middleware.GetUserID(c), "campaign_update", "campaign", item.ID.String(), item)
+	c.JSON(http.StatusOK, item)
+}
+
+func parseCampaignRange(c *gin.Context) (time.Time, time.Time) {
+	now := time.Now().UTC()
+	to := parseCampaignTime(c.Query("to"), now)
+	fromRaw := strings.TrimSpace(c.Query("from"))
+	if fromRaw == "" {
+		return to.AddDate(0, 0, -30), to
+	}
+	from := parseCampaignTime(fromRaw, to.AddDate(0, 0, -30))
+	return from, to
+}
+
+func parseCampaignTime(raw string, fallback time.Time) time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t.UTC()
+	}
+	if t, err := time.Parse("2006-01-02", raw); err == nil {
+		return t.UTC()
+	}
+	return fallback
+}

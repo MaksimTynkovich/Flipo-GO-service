@@ -8,8 +8,8 @@ func TestBonusFromYield(t *testing.T) {
 		want  int64
 	}{
 		{0, 0},
-		{1_000_000_000, 50_000_000},      // 1 TON yield -> 0.05 TON bonus
-		{3_000_000_000, 150_000_000},     // 3 TON monthly -> 0.15 TON bonus
+		{1_000_000_000, 50_000_000},  // 1 TON yield -> 0.05 TON bonus
+		{3_000_000_000, 150_000_000}, // 3 TON monthly -> 0.15 TON bonus
 	}
 	for _, tt := range tests {
 		if got := BonusFromYield(tt.yield, DefaultSharePercent); got != tt.want {
@@ -37,5 +37,10 @@ func TestParseReferrerTelegramID(t *testing.T) {
 	}
 	if StartPayloadForTelegramID(0) != "ref" {
 		t.Fatalf("expected empty payload for zero id")
+	}
+	for _, raw := range []string{"cases", "crash", "c_tgads_a", "case_foo"} {
+		if _, ok := ParseReferrerTelegramID(raw); ok {
+			t.Fatalf("payload %q must not parse as referral telegram id", raw)
+		}
 	}
 }

@@ -3,12 +3,14 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/ton"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
+	"github.com/flipo/flipo/apps/api/internal/usecase/campaign"
 	"github.com/flipo/flipo/apps/api/internal/usecase/referral"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -16,13 +18,21 @@ import (
 )
 
 type Claims struct {
-	UserID      uuid.UUID `json:"user_id"`
-	TelegramID  int64     `json:"telegram_id"`
-	AdminPanel  bool      `json:"admin_panel,omitempty"`
+	UserID     uuid.UUID `json:"user_id"`
+	TelegramID int64     `json:"telegram_id"`
+	AdminPanel bool      `json:"admin_panel,omitempty"`
 	jwt.RegisteredClaims
 }
 
 const adminPanelTokenTTL = 12 * time.Hour
+
+type StartContext struct {
+	Param        string `json:"param,omitempty"`
+	Kind         string `json:"kind,omitempty"`
+	CampaignID   string `json:"campaign_id,omitempty"`
+	CampaignCode string `json:"campaign_code,omitempty"`
+	Landing      string `json:"landing,omitempty"`
+}
 
 type AdminEventNotifier interface {
 	NotifyReferralJoined(ctx context.Context, actor, referrer telegram.AdminActor)
@@ -42,6 +52,7 @@ type Service struct {
 	debugUsername       string
 	debugInitialBalance int64
 	analytics           *analyticsuc.Service
+	campaigns           *campaign.Service
 	adminEvents         AdminEventNotifier
 	adminLoginAlerter   AdminLoginAlerter
 	adminLogins         *adminLoginStore
@@ -102,20 +113,28 @@ func WithAdminEvents(notifier AdminEventNotifier) ServiceOption {
 	}
 }
 
+func WithCampaigns(campaigns *campaign.Service) ServiceOption {
+	return func(s *Service) {
+		s.campaigns = campaigns
+	}
+}
+
 func (s *Service) DebugAuthEnabled() bool {
 	return s.debugAuthEnabled
 }
 
-func (s *Service) Authenticate(ctx context.Context, initData string, referralCode string) (string, *domain.User, error) {
+func (s *Service) Authenticate(ctx context.Context, initData string, referralCode string) (string, *domain.User, StartContext, error) {
 	parsed, err := telegram.ValidateInitData(initData, s.botToken, 24*time.Hour)
 	if err != nil {
-		return "", nil, err
+		return "", nil, StartContext{}, err
 	}
 
-	code := referralCode
-	if code == "" {
-		code = parsed.StartParam
+	startParam := strings.TrimSpace(parsed.StartParam)
+	if startParam == "" {
+		startParam = strings.TrimSpace(referralCode)
 	}
+	payload := campaign.ParseStartPayload(startParam)
+	start := StartContext{Param: payload.Raw, Kind: payload.Kind}
 
 	user := &domain.User{
 		ID:          uuid.New(),
@@ -130,24 +149,71 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 	existing, findErr := s.users.FindByTelegramID(ctx, parsed.User.ID)
 	isNew := errors.Is(findErr, gorm.ErrRecordNotFound)
 	if findErr != nil && !isNew {
-		return "", nil, findErr
+		return "", nil, StartContext{}, findErr
 	}
 	if existing != nil {
 		if existing.IsBanned {
-			return "", nil, domain.ErrUserBanned
+			return "", nil, StartContext{}, domain.ErrUserBanned
 		}
 		user.ID = existing.ID
 		user.BettingBalance = existing.BettingBalance
 		user.StakingTier = existing.StakingTier
 		user.TonWallet = existing.TonWallet
 		user.ReferrerID = existing.ReferrerID
+		user.CampaignID = existing.CampaignID
+		user.AcquisitionPayload = existing.AcquisitionPayload
 	}
 
 	if err := s.users.Upsert(ctx, user); err != nil {
-		return "", nil, err
+		return "", nil, StartContext{}, err
 	}
 
-	if isNew && s.referrals != nil && code != "" {
+	var matchedCampaign *domain.Campaign
+	if payload.Kind == campaign.KindCampaign && s.campaigns != nil {
+		if found, err := s.campaigns.FindByCode(ctx, payload.CampaignCode); err == nil {
+			matchedCampaign = found
+		}
+		if matchedCampaign != nil {
+			start.CampaignID = matchedCampaign.ID.String()
+			start.CampaignCode = matchedCampaign.Code
+			start.Landing = matchedCampaign.Landing
+		}
+	}
+
+	if isNew && payload.Raw != "" {
+		if ok, err := s.users.SetAcquisitionPayloadIfEmpty(ctx, user.ID, payload.Raw); err == nil && ok {
+			user.AcquisitionPayload = payload.Raw
+		}
+		if matchedCampaign != nil {
+			assigned, err := s.users.SetCampaignIfEmpty(ctx, user.ID, matchedCampaign.ID)
+			if err == nil && assigned {
+				cid := matchedCampaign.ID
+				user.CampaignID = &cid
+				s.analytics.Track(ctx, analyticsuc.EventInput{
+					UserID:        &user.ID,
+					TelegramID:    &user.TelegramID,
+					Source:        "api",
+					EventName:     "campaign_assigned",
+					EventCategory: "acquisition",
+					Status:        "success",
+					StartParam:    payload.Raw,
+					StakingTier:   string(user.StakingTier),
+					Properties: map[string]any{
+						"source":        "campaign",
+						"is_new":        isNew,
+						"campaign_id":   matchedCampaign.ID.String(),
+						"campaign_code": matchedCampaign.Code,
+					},
+				})
+			}
+		}
+	}
+
+	if isNew && s.referrals != nil && payload.Kind == campaign.KindReferral {
+		code := payload.Raw
+		if strings.TrimSpace(referralCode) != "" && campaign.ParseStartPayload(referralCode).Kind == campaign.KindReferral {
+			code = referralCode
+		}
 		_ = s.referrals.TryAssignReferrer(ctx, user.ID, code)
 		if refreshed, err := s.users.FindByID(ctx, user.ID); err == nil && refreshed != nil {
 			user = refreshed
@@ -191,11 +257,21 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 
 	token, err := s.issueToken(user)
 	if err != nil {
-		return "", nil, err
+		return "", nil, StartContext{}, err
 	}
 	authSource := "direct"
-	if code != "" {
+	switch {
+	case user.ReferrerID != nil || payload.Kind == campaign.KindReferral:
 		authSource = "referral"
+	case payload.Kind == campaign.KindCampaign:
+		authSource = "campaign"
+	}
+	props := map[string]any{
+		"is_new": isNew,
+		"source": authSource,
+	}
+	if start.CampaignCode != "" {
+		props["campaign_code"] = start.CampaignCode
 	}
 	s.analytics.Track(ctx, analyticsuc.EventInput{
 		UserID:        &user.ID,
@@ -205,14 +281,11 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 		EventName:     "auth_succeeded",
 		EventCategory: "auth",
 		Status:        "success",
-		StartParam:    code,
+		StartParam:    payload.Raw,
 		StakingTier:   string(user.StakingTier),
-		Properties: map[string]any{
-			"is_new": isNew,
-			"source": authSource,
-		},
+		Properties:    props,
 	})
-	return token, user, nil
+	return token, user, start, nil
 }
 
 func (s *Service) AuthenticateDebug(ctx context.Context) (string, *domain.User, error) {

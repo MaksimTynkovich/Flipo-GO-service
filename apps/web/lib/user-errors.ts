@@ -20,6 +20,12 @@ export function formatUserError(
   if (code === "case_share_required") {
     return "Поделитесь ссылкой, чтобы открыть кейс.";
   }
+  if (code === "campaign_code_taken") {
+    return "Такой код кампании уже занят. Выберите другой.";
+  }
+  if (code === "invalid_campaign") {
+    return "Проверьте название и код кампании (2–24 символа: a-z, 0-9, _).";
+  }
 
   const raw =
     error instanceof Error ? error.message.trim() : typeof error === "string" ? error.trim() : "";

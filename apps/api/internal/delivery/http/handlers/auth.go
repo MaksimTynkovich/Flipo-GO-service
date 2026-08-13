@@ -51,7 +51,7 @@ func (h *AuthHandler) TelegramAuth(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.auth.Authenticate(c.Request.Context(), req.InitData, req.ReferralCode)
+	token, user, start, err := h.auth.Authenticate(c.Request.Context(), req.InitData, req.ReferralCode)
 	if err != nil {
 		h.analytics.Track(c.Request.Context(), analyticsuc.EventInput{
 			Source:        "api",
@@ -73,10 +73,14 @@ func (h *AuthHandler) TelegramAuth(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"token": token,
 		"user":  toUserView(h.auth, user),
-	})
+	}
+	if start.Param != "" || start.Kind != "" {
+		resp["start"] = start
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *AuthHandler) DebugAuth(c *gin.Context) {

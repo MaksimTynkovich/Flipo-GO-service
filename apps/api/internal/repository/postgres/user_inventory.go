@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -231,6 +232,36 @@ func (r *UserRepo) SetReferrerIfEmpty(ctx context.Context, userID, referrerID uu
 	res := r.db.WithContext(ctx).Model(&domain.User{}).
 		Where("id = ? AND referrer_id IS NULL AND id != ?", userID, referrerID).
 		Update("referrer_id", referrerID)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+func (r *UserRepo) SetCampaignIfEmpty(ctx context.Context, userID, campaignID uuid.UUID) (bool, error) {
+	if userID == uuid.Nil || campaignID == uuid.Nil {
+		return false, nil
+	}
+	res := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("id = ? AND campaign_id IS NULL", userID).
+		Update("campaign_id", campaignID)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+func (r *UserRepo) SetAcquisitionPayloadIfEmpty(ctx context.Context, userID uuid.UUID, payload string) (bool, error) {
+	payload = strings.TrimSpace(payload)
+	if userID == uuid.Nil || payload == "" {
+		return false, nil
+	}
+	if len(payload) > 64 {
+		payload = payload[:64]
+	}
+	res := r.db.WithContext(ctx).Model(&domain.User{}).
+		Where("id = ? AND (acquisition_payload IS NULL OR acquisition_payload = '')", userID).
+		Update("acquisition_payload", payload)
 	if res.Error != nil {
 		return false, res.Error
 	}

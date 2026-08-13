@@ -107,6 +107,11 @@ function metaRows(n: AdminNotification): Array<{ label: string; value: string }>
   push("Кейс", "case_title");
   push("Приз", "prize_name");
   push("Источник", "source_label");
+  push("Канал", "campaign_source_label");
+  push("Кампания", "campaign_name");
+  push("Код кампании", "campaign_code");
+  push("Вариант", "campaign_content");
+  push("start_param", "start_param");
   if (typeof meta.backed === "boolean") {
     rows.push({ label: "Обеспечен", value: meta.backed ? "да" : "нет (claim)" });
   }

@@ -51,13 +51,13 @@ func ParseReferrerID(code string) (uuid.UUID, bool) {
 	return id, true
 }
 
-// ParseReferrerTelegramID extracts a referrer Telegram id from ref_<base36|decimal telegram_id>.
+// ParseReferrerTelegramID extracts a referrer Telegram id from ref_<base36 telegram_id>.
 func ParseReferrerTelegramID(code string) (int64, bool) {
-	code = strings.TrimSpace(code)
-	if code == "" {
+	code = strings.TrimSpace(strings.ToLower(code))
+	if !strings.HasPrefix(code, "ref_") {
 		return 0, false
 	}
-	code = strings.TrimPrefix(strings.ToLower(code), "ref_")
+	code = strings.TrimPrefix(code, "ref_")
 	telegramID, err := strconv.ParseInt(code, 36, 64)
 	if err != nil || telegramID <= 0 {
 		return 0, false
