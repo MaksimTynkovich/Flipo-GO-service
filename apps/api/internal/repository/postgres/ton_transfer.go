@@ -81,6 +81,28 @@ func (r *TonTransferRepo) ListByStatus(ctx context.Context, statuses []domain.To
 	return items, q.Find(&items).Error
 }
 
+func (r *TonTransferRepo) ListPendingDeposits(ctx context.Context, now time.Time, limit int) ([]domain.TonTransfer, error) {
+	var items []domain.TonTransfer
+	q := r.db.WithContext(ctx).
+		Where("direction = ? AND status = ?", domain.TonDirectionDeposit, domain.TonStatusAwaitingPayment).
+		Order(clause.Expr{
+			SQL:  "CASE WHEN expires_at IS NULL OR expires_at > ? THEN 0 ELSE 1 END",
+			Vars: []any{now},
+		}).
+		Order(clause.Expr{
+			SQL:  "CASE WHEN expires_at IS NULL OR expires_at > ? THEN created_at END DESC",
+			Vars: []any{now},
+		}).
+		Order(clause.Expr{
+			SQL:  "CASE WHEN expires_at IS NOT NULL AND expires_at <= ? THEN created_at END ASC",
+			Vars: []any{now},
+		})
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	return items, q.Find(&items).Error
+}
+
 func (r *TonTransferRepo) ListAll(ctx context.Context, limit int) ([]domain.TonTransfer, error) {
 	if limit <= 0 {
 		limit = 100

@@ -44,7 +44,7 @@ type InventoryRepository interface {
 	Create(ctx context.Context, item *InventoryItem) error
 	CreateGiftWithdrawal(ctx context.Context, row *GiftWithdrawal) error
 	// PromoteProfileToDeposit converts a profile-virtual row into a real bot deposit
-	// (tx_ref deposit:…, available, owned by depositor). Used when the NFT lands on the bank account.
+	// (tx_ref deposit:…, owned by depositor). Staked rows stay staked; others become available.
 	PromoteProfileToDeposit(ctx context.Context, itemID, userID uuid.UUID, txRef string, floorPriceNanoton int64, metadata []byte, name, imageURL string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, from, to InventoryStatus) error
 	UpdateFloorPriceNanoton(ctx context.Context, id uuid.UUID, priceNanoton int64) error
@@ -346,6 +346,7 @@ type TonTransferRepository interface {
 	FindByTxHash(ctx context.Context, txHash string) (*TonTransfer, error)
 	ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]TonTransfer, error)
 	ListByStatus(ctx context.Context, statuses []TonTransferStatus, limit int) ([]TonTransfer, error)
+	ListPendingDeposits(ctx context.Context, now time.Time, limit int) ([]TonTransfer, error)
 	HasActiveWithdrawal(ctx context.Context, userID uuid.UUID) (bool, error)
 	Create(ctx context.Context, transfer *TonTransfer) error
 	Update(ctx context.Context, transfer *TonTransfer) error

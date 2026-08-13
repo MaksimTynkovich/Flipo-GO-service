@@ -398,16 +398,16 @@ func (s *Service) GetTransfer(ctx context.Context, userID, transferID uuid.UUID)
 }
 
 func (s *Service) ProcessPendingDeposits(ctx context.Context) error {
-	items, err := s.transfers.ListByStatus(ctx, []domain.TonTransferStatus{domain.TonStatusAwaitingPayment}, 50)
+	now := time.Now().UTC()
+	items, err := s.transfers.ListPendingDeposits(ctx, now, 50)
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC()
 	for i := range items {
 		transfer := items[i]
 		if transfer.ExpiresAt != nil && now.After(*transfer.ExpiresAt) {
 			transfer.Status = domain.TonStatusExpired
-			_ = s.transfers.Update(ctx, &items[i])
+			_ = s.transfers.Update(ctx, &transfer)
 			continue
 		}
 		if transfer.DepositComment == nil {

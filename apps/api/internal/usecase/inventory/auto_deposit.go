@@ -154,8 +154,8 @@ func (s *AutoDepositService) promoteProfileDeposit(
 	txRef string,
 ) (bool, error) {
 	switch existing.Status {
-	case domain.InvAvailable, domain.InvDissolved:
-		// ok — convert in place
+	case domain.InvAvailable, domain.InvDissolved, domain.InvStaked:
+		// ok — convert in place; keep staked rows backed by a real deposit.
 	default:
 		slog.Warn("gift deposit skipped: profile item not convertible",
 			"slug", gift.Slug,

@@ -448,7 +448,7 @@ func (r *InventoryRepo) PromoteProfileToDeposit(
 		"user_id":             userID,
 		"telegram_tx_ref":     txRef,
 		"floor_price_nanoton": floorPriceNanoton,
-		"status":              domain.InvAvailable,
+		"status":              gorm.Expr("CASE WHEN status = ? THEN status ELSE ? END", domain.InvStaked, domain.InvAvailable),
 		"deposited_at":        now,
 		"updated_at":          now,
 	}
@@ -465,6 +465,7 @@ func (r *InventoryRepo) PromoteProfileToDeposit(
 		Where("id = ? AND telegram_tx_ref LIKE ? AND status IN ?", itemID, "profile:%", []domain.InventoryStatus{
 			domain.InvAvailable,
 			domain.InvDissolved,
+			domain.InvStaked,
 		}).
 		Updates(updates)
 	if res.Error != nil {
