@@ -69,9 +69,13 @@ export function giftBuyPriceNanoton(item: {
   case_cashout_nanoton?: number;
   buyback_price_nanoton?: number;
   floor_price_nanoton: number;
+  can_buyback?: boolean;
 }): number {
   if (item.case_cashout_nanoton && item.case_cashout_nanoton > 0) {
     return item.case_cashout_nanoton;
+  }
+  if (item.can_buyback === false) {
+    return 0;
   }
   if (item.buyback_price_nanoton && item.buyback_price_nanoton > 0) {
     return item.buyback_price_nanoton;

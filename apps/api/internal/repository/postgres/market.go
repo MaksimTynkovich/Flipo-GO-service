@@ -349,8 +349,8 @@ func (r *MarketRepo) SellToBot(ctx context.Context, sellerID, itemID uuid.UUID, 
 			First(&item, "id = ? AND user_id = ? AND status = ?", itemID, sellerID, domain.InvAvailable).Error; err != nil {
 			return err
 		}
-		if domain.IsProfileVirtualItem(item) {
-			return domain.ErrInvalidAmount
+		if !domain.CanMarketBuyback(item) {
+			return domain.ErrGiftNotInBotCustody
 		}
 
 		botUser, err := ensureBotUserTx(tx)

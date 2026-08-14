@@ -44,6 +44,7 @@ var (
 	ErrCaseNameTagRequired    = errors.New("добавьте тег в имя Telegram")
 	ErrCaseShareRequired      = errors.New("поделитесь ссылкой чтобы открыть кейс")
 	ErrUnbackedBuyback        = errors.New("виртуальный приз кейса нельзя продать по рыночной цене — продайте по цене кейса или выведите подарок")
+	ErrGiftNotInBotCustody    = errors.New("подарок не задепозичен в бота — продажа недоступна")
 	ErrCaseClaimCashoutOnly   = errors.New("кейсовый приз продаётся только по гарантированной цене кейса")
 	ErrAdminPasswordNotSet    = errors.New("пароль админки не настроен")
 	ErrAdminPasswordInvalid   = errors.New("неверный пароль")

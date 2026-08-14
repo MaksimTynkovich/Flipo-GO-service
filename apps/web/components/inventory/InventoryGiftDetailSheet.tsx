@@ -49,6 +49,9 @@ export function InventoryGiftDetailSheet({
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
   const buyPrice = giftBuyPriceNanoton(item);
   const displayPrice = marketListing?.price_nanoton ?? buyPrice;
+  const canSell =
+    item.status === "available" &&
+    (Boolean(item.can_buyback) || Boolean(item.case_cashout_nanoton && item.case_cashout_nanoton > 0));
 
   useEffect(() => {
     setImgError(false);
@@ -178,19 +181,21 @@ export function InventoryGiftDetailSheet({
 
           {item.status === "available" && (
             <div className="mb-1 flex items-start justify-between gap-3">
-              <Button
-                className="h-12 min-w-0 flex-1 rounded-2xl px-2 text-[14px] font-semibold sm:text-[15px]"
-                disabled={liquidating || withdrawing}
-                onClick={onLiquidate}
-              >
-                {liquidating ? (
-                  "Продажа…"
-                ) : (
-                  <span className="inline-flex items-center justify-center gap-1">
-                    Продать
-                  </span>
-                )}
-              </Button>
+              {canSell ? (
+                <Button
+                  className="h-12 min-w-0 flex-1 rounded-2xl px-2 text-[14px] font-semibold sm:text-[15px]"
+                  disabled={liquidating || withdrawing}
+                  onClick={onLiquidate}
+                >
+                  {liquidating ? (
+                    "Продажа…"
+                  ) : (
+                    <span className="inline-flex items-center justify-center gap-1">
+                      Продать
+                    </span>
+                  )}
+                </Button>
+              ) : null}
 
               <Button
                 className="h-12 min-w-0 flex-1 rounded-2xl px-2 text-[14px] font-semibold sm:text-[15px]"

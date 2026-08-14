@@ -26,6 +26,25 @@ func NewGiftTransferService(cfg MTProtoConfig) *GiftTransferService {
 	return &GiftTransferService{cfg: cfg}
 }
 
+func (s *GiftTransferService) Enabled() bool {
+	return s != nil && s.cfg.Enabled()
+}
+
+// HasOwnedGift reports whether the collectible currently sits on the deposit MTProto account.
+func (s *GiftTransferService) HasOwnedGift(ctx context.Context, slug string) error {
+	if !s.Enabled() {
+		return ErrMTProtoNotConfigured
+	}
+	slug = normalizeGiftSlug(slug)
+	if slug == "" {
+		return fmt.Errorf("%w: empty slug", ErrGiftTransfer)
+	}
+	return WithMTProtoAPI(ctx, s.cfg, func(ctx context.Context, api *tg.Client) error {
+		_, err := findOwnedGiftInput(ctx, api, slug)
+		return err
+	})
+}
+
 // SendGift transfers a collectible gift from the deposit MTProto account back to the user.
 // Paid transfers go through payments.getPaymentForm + payments.sendStarsForm; free transfers
 // use payments.transferStarGift when Telegram reports NO_PAYMENT_NEEDED.

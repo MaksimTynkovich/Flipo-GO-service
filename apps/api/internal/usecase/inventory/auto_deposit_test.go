@@ -232,6 +232,49 @@ func TestAutoDepositPromotesStakedProfileGift(t *testing.T) {
 	}
 }
 
+func TestAutoDepositSkipsMissingMessageID(t *testing.T) {
+	repo := &autoDepositInventoryStub{}
+	svc := &AutoDepositService{
+		users:     &autoDepositUserStub{user: &domain.User{ID: uuid.New(), TelegramID: 395183166}},
+		inventory: repo,
+	}
+	ok, err := svc.creditOne(context.Background(), telegram.IncomingGift{
+		ScannedGift:      telegram.ScannedGift{Slug: "MiniOscar-4788", PriceNanoton: 150e9},
+		SenderTelegramID: 395183166,
+	})
+	if err != nil {
+		t.Fatalf("creditOne: %v", err)
+	}
+	if ok || repo.promoteCalls != 0 {
+		t.Fatalf("ok=%v promoteCalls=%d", ok, repo.promoteCalls)
+	}
+}
+
+func TestAutoDepositDoesNotPromoteOtherUsersProfileGift(t *testing.T) {
+	user := &domain.User{ID: uuid.New(), TelegramID: 395183166}
+	existing := &domain.InventoryItem{
+		ID:             uuid.New(),
+		UserID:         uuid.New(),
+		TelegramGiftID: "MiniOscar-4788",
+		TelegramTxRef:  "profile:MiniOscar-4788",
+		Status:         domain.InvStaked,
+	}
+	repo := &autoDepositInventoryStub{item: existing, findActiveItem: existing}
+	svc := &AutoDepositService{users: &autoDepositUserStub{user: user}, inventory: repo}
+
+	ok, err := svc.creditOne(context.Background(), telegram.IncomingGift{
+		ScannedGift:      telegram.ScannedGift{Slug: "MiniOscar-4788", PriceNanoton: 1},
+		SenderTelegramID: user.TelegramID,
+		MsgID:            777,
+	})
+	if err != nil {
+		t.Fatalf("creditOne: %v", err)
+	}
+	if ok || repo.promoteCalls != 0 {
+		t.Fatalf("ok=%v promoteCalls=%d", ok, repo.promoteCalls)
+	}
+}
+
 func TestAutoDepositSkipsAlreadyCreditedTxRef(t *testing.T) {
 	repo := &autoDepositInventoryStub{
 		txRefItem: &domain.InventoryItem{ID: uuid.New(), Status: domain.InvAvailable},

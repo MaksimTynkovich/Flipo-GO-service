@@ -20,6 +20,7 @@ type ItemView struct {
 	BuybackPriceNanoton int64  `json:"buyback_price_nanoton"`
 	ValuationNanoton    int64  `json:"valuation_nanoton"`
 	CaseCashoutNanoton  int64  `json:"case_cashout_nanoton,omitempty"`
+	CanBuyback          bool   `json:"can_buyback"`
 	Model               string `json:"model,omitempty"`
 	Symbol              string `json:"symbol,omitempty"`
 	Backdrop            string `json:"backdrop,omitempty"`
@@ -30,12 +31,20 @@ type Service struct {
 	users           domain.UserRepository
 	deposit         *telegram.DepositService
 	giftTransfer    *telegram.GiftTransferService
+	custody         giftCustodyChecker
 	valuator        *gifts.Valuator
 	market          LiquidationBroker
 	admin           *telegram.AdminNotifier
 	depositNotifier GiftDepositNotifier
 	withdrawHold    WithdrawHoldChecker
 }
+
+type giftCustodyChecker interface {
+	Enabled() bool
+	HasOwnedGift(ctx context.Context, slug string) error
+}
+
+var _ giftCustodyChecker = (*telegram.GiftTransferService)(nil)
 
 var fetchGiftTraits = telegram.FetchNFTPageTraits
 
@@ -57,6 +66,7 @@ func NewService(
 		users:        users,
 		deposit:      deposit,
 		giftTransfer: giftTransfer,
+		custody:      giftTransfer,
 		valuator:     valuator,
 		market:       market,
 	}
@@ -105,18 +115,23 @@ func BuildItemView(ctx context.Context, valuator *gifts.Valuator, item domain.In
 	view.Symbol = attrs.Symbol
 	view.Backdrop = attrs.Backdrop
 	view.CaseCashoutNanoton = domain.CaseClaimCashoutNanoton(item.Metadata)
+	view.CanBuyback = domain.CanMarketBuyback(item) || view.CaseCashoutNanoton > 0
 
 	if valuator == nil {
-		view.BuybackPriceNanoton = item.FloorPriceNanoton
+		if domain.CanMarketBuyback(item) {
+			view.BuybackPriceNanoton = item.FloorPriceNanoton
+		}
 		view.ValuationNanoton = item.FloorPriceNanoton
 		return view
 	}
 	// List path: cached/DB only — live Portals/MRKT would make inventory 3–4s with a handful of gifts.
 	buyback, valuation := valuator.QuoteInventoryListPrices(ctx, item)
-	if buyback > 0 {
-		view.BuybackPriceNanoton = buyback
-	} else {
-		view.BuybackPriceNanoton = item.FloorPriceNanoton
+	if domain.CanMarketBuyback(item) {
+		if buyback > 0 {
+			view.BuybackPriceNanoton = buyback
+		} else {
+			view.BuybackPriceNanoton = item.FloorPriceNanoton
+		}
 	}
 	if valuation > 0 {
 		view.ValuationNanoton = valuation
@@ -169,7 +184,7 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 		return 0, domain.ErrInvalidAmount
 	}
 	if isProfileVirtualItem(*item) {
-		return 0, domain.ErrInvalidAmount
+		return 0, domain.ErrGiftNotInBotCustody
 	}
 	// Case prizes sell at the guaranteed case cashout (not market buyback), including unbacked.
 	if domain.IsCaseClaimItem(*item) && domain.CaseClaimCashoutNanoton(item.Metadata) > 0 {
@@ -177,6 +192,18 @@ func (s *Service) Liquidate(ctx context.Context, userID, itemID uuid.UUID) (int6
 	}
 	if domain.IsUnbackedCaseClaim(*item) {
 		return 0, domain.ErrUnbackedBuyback
+	}
+	if !domain.CanMarketBuyback(*item) {
+		slog.Warn("buyback rejected: gift is not a real bot deposit",
+			"item_id", item.ID,
+			"user_id", userID,
+			"tx_ref", item.TelegramTxRef,
+			"slug", item.TelegramGiftID,
+		)
+		return 0, domain.ErrGiftNotInBotCustody
+	}
+	if err := s.requireGiftOnDepositAccount(ctx, *item); err != nil {
+		return 0, err
 	}
 
 	payout := item.FloorPriceNanoton
@@ -232,7 +259,7 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 		return false, "", domain.ErrInvalidAmount
 	}
 	if isProfileVirtualItem(*item) {
-		return false, "", domain.ErrInvalidAmount
+		return false, "", domain.ErrGiftNotInBotCustody
 	}
 	if item.Source != domain.NFTSourceTelegramGift {
 		return false, "", domain.ErrInvalidAmount
@@ -261,6 +288,10 @@ func (s *Service) Withdraw(ctx context.Context, userID, itemID uuid.UUID) (pendi
 			}, item.Name, item.CollectionSlug, "needs_purchase", item.FloorPriceNanoton)
 		}
 		return true, "Вывод в обработке", nil
+	}
+
+	if !domain.IsCaseClaimItem(*item) && !domain.CanMarketBuyback(*item) {
+		return false, "", domain.ErrGiftNotInBotCustody
 	}
 
 	if item.TelegramGiftID == "" {
@@ -509,4 +540,23 @@ func (s *Service) SetFloorPrice(ctx context.Context, slug string, price int64) e
 
 func isProfileVirtualItem(item domain.InventoryItem) bool {
 	return domain.IsProfileVirtualItem(item)
+}
+
+func (s *Service) requireGiftOnDepositAccount(ctx context.Context, item domain.InventoryItem) error {
+	if s.custody == nil || !s.custody.Enabled() {
+		return nil
+	}
+	if strings.TrimSpace(item.TelegramGiftID) == "" {
+		return domain.ErrGiftNotInBotCustody
+	}
+	if err := s.custody.HasOwnedGift(ctx, item.TelegramGiftID); err != nil {
+		slog.Warn("buyback rejected: gift is not on deposit account",
+			"item_id", item.ID,
+			"tx_ref", item.TelegramTxRef,
+			"slug", item.TelegramGiftID,
+			"error", err,
+		)
+		return domain.ErrGiftNotInBotCustody
+	}
+	return nil
 }

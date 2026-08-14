@@ -76,6 +76,9 @@ func (s *Service) QuoteGift(ctx context.Context, userID, itemID uuid.UUID) (int6
 	if item.UserID != userID || item.Status != domain.InvAvailable || domain.IsProfileVirtualItem(*item) {
 		return 0, domain.ErrGiftNotAvailable
 	}
+	if !domain.IsCaseClaimItem(*item) && !domain.CanMarketBuyback(*item) {
+		return 0, domain.ErrGiftNotAvailable
+	}
 	valuation, _ := s.valuator.QuoteInventoryValuation(ctx, *item)
 	if valuation <= 0 {
 		valuation = item.FloorPriceNanoton

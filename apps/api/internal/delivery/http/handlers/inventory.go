@@ -77,6 +77,13 @@ func (h *InventoryHandler) Liquidate(c *gin.Context) {
 			})
 			return
 		}
+		if errors.Is(err, domain.ErrGiftNotInBotCustody) {
+			httperr.Respond(c, http.StatusConflict, err, gin.H{
+				"error": err.Error(),
+				"code":  "gift_not_in_bot_custody",
+			})
+			return
+		}
 		if errors.Is(err, domain.ErrCaseClaimCashoutOnly) {
 			httperr.Respond(c, http.StatusConflict, err, gin.H{
 				"error": err.Error(),
@@ -118,6 +125,13 @@ func (h *InventoryHandler) Withdraw(c *gin.Context) {
 	pending, message, err := h.inventory.Withdraw(c.Request.Context(), userID, itemID)
 	if err != nil {
 		trackUserEvent(h.analytics, c.Request.Context(), userID, "inventory", "inventory_withdrawn", "error", "withdraw_failed", err.Error(), map[string]any{"item_id": itemID.String()})
+		if errors.Is(err, domain.ErrGiftNotInBotCustody) {
+			httperr.Respond(c, http.StatusConflict, err, gin.H{
+				"error": err.Error(),
+				"code":  "gift_not_in_bot_custody",
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

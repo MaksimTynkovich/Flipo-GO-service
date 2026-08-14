@@ -181,6 +181,16 @@ func (s *Service) Purchase(ctx context.Context, buyerID, listingID uuid.UUID) (*
 
 // BuybackFromUser pays the seller and lists the gift on the market under the bot account.
 func (s *Service) BuybackFromUser(ctx context.Context, sellerID, itemID uuid.UUID, payout, listPrice int64) (int64, error) {
+	item, err := s.inventory.FindByID(ctx, itemID)
+	if err != nil {
+		return 0, err
+	}
+	if item.UserID != sellerID {
+		return 0, domain.ErrInvalidAmount
+	}
+	if !domain.CanMarketBuyback(*item) {
+		return 0, domain.ErrGiftNotInBotCustody
+	}
 	balanceAfter, err := s.market.SellToBot(ctx, sellerID, itemID, payout, listPrice)
 	if err != nil {
 		return 0, err
@@ -301,7 +311,7 @@ func (s *Service) RelistBotGiftIfNeeded(ctx context.Context, item *domain.Invent
 	if item.Status != domain.InvAvailable && item.Status != domain.InvLocked {
 		return false, nil
 	}
-	if domain.IsProfileVirtualItem(*item) {
+	if domain.IsProfileVirtualItem(*item) || !domain.IsBotCustodyTxRef(item.TelegramTxRef) {
 		return false, nil
 	}
 	if _, err := s.market.FindActiveByItemID(ctx, item.ID); err == nil {
@@ -653,8 +663,8 @@ func (s *Service) AdminCreateBotListing(ctx context.Context, itemID uuid.UUID, p
 	if item.UserID != botUser.ID {
 		return nil, domain.ErrForbidden
 	}
-	if domain.IsProfileVirtualItem(*item) {
-		return nil, domain.ErrInvalidAmount
+	if domain.IsProfileVirtualItem(*item) || !domain.IsBotCustodyTxRef(item.TelegramTxRef) {
+		return nil, domain.ErrGiftNotInBotCustody
 	}
 	if _, err := s.market.FindActiveByItemID(ctx, itemID); err == nil {
 		return nil, domain.ErrAlreadyListed

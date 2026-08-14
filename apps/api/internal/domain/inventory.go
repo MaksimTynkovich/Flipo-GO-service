@@ -69,7 +69,7 @@ func (GiftWithdrawal) TableName() string { return "gift_withdrawals" }
 
 // IsProfileVirtualItem — запись создана только для стейка из профиля Telegram, без депозита в бота.
 func IsProfileVirtualItem(item InventoryItem) bool {
-	return strings.HasPrefix(item.TelegramTxRef, "profile:")
+	return strings.HasPrefix(item.TelegramTxRef, ProfileTxRefPrefix)
 }
 
 type NFTFloorPrice struct {

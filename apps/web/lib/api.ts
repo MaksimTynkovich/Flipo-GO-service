@@ -83,6 +83,7 @@ export type InventoryItem = {
   buyback_price_nanoton?: number;
   valuation_nanoton?: number;
   case_cashout_nanoton?: number;
+  can_buyback?: boolean;
   model?: string;
   symbol?: string;
   backdrop?: string;

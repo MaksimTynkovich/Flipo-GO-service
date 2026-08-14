@@ -160,6 +160,123 @@ func (s *liquidationBrokerStub) SettleCaseClaim(_ context.Context, _ uuid.UUID, 
 	return 777, nil
 }
 
+type buybackBrokerStub struct {
+	calls  int
+	payout int64
+}
+
+func (s *buybackBrokerStub) BuybackFromUser(_ context.Context, _, _ uuid.UUID, payout, _ int64) (int64, error) {
+	s.calls++
+	s.payout = payout
+	return 999, nil
+}
+func (s *buybackBrokerStub) SettleCaseClaim(context.Context, uuid.UUID, uuid.UUID, int64) (int64, error) {
+	return 0, errors.New("unexpected case cashout")
+}
+
+type custodyCheckerStub struct {
+	enabled bool
+	err     error
+	calls   int
+}
+
+func (s *custodyCheckerStub) Enabled() bool { return s.enabled }
+func (s *custodyCheckerStub) HasOwnedGift(context.Context, string) error {
+	s.calls++
+	return s.err
+}
+
+func TestLiquidateRejectsProfileAndManualDeposit(t *testing.T) {
+	userID := uuid.New()
+	cases := []struct {
+		name string
+		ref  string
+		slug string
+		want error
+	}{
+		{name: "profile", ref: "profile:MiniOscar-4788", slug: "MiniOscar-4788", want: domain.ErrGiftNotInBotCustody},
+		{name: "manual", ref: "deposit:manual:20260812:minioscar-4788", slug: "MiniOscar-4788", want: domain.ErrGiftNotInBotCustody},
+		{name: "slug deposit", ref: "deposit:MiniOscar-4788", slug: "MiniOscar-4788", want: domain.ErrGiftNotInBotCustody},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			itemID := uuid.New()
+			broker := &buybackBrokerStub{}
+			svc := &Service{
+				inventory: &inventoryRepoStub{item: &domain.InventoryItem{
+					ID:                itemID,
+					UserID:            userID,
+					Status:            domain.InvAvailable,
+					TelegramTxRef:     tc.ref,
+					TelegramGiftID:    tc.slug,
+					FloorPriceNanoton: 150e9,
+				}},
+				market: broker,
+			}
+			_, err := svc.Liquidate(context.Background(), userID, itemID)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err=%v want %v", err, tc.want)
+			}
+			if broker.calls != 0 {
+				t.Fatalf("buyback must not run, calls=%d", broker.calls)
+			}
+		})
+	}
+}
+
+func TestLiquidateRealDepositBuyback(t *testing.T) {
+	userID := uuid.New()
+	itemID := uuid.New()
+	broker := &buybackBrokerStub{}
+	svc := &Service{
+		inventory: &inventoryRepoStub{item: &domain.InventoryItem{
+			ID:                itemID,
+			UserID:            userID,
+			Status:            domain.InvAvailable,
+			TelegramTxRef:     "deposit:msg:777",
+			TelegramGiftID:    "MiniOscar-4788",
+			FloorPriceNanoton: 89e9,
+		}},
+		market: broker,
+	}
+	balance, err := svc.Liquidate(context.Background(), userID, itemID)
+	if err != nil {
+		t.Fatalf("liquidate: %v", err)
+	}
+	if balance != 999 || broker.calls != 1 || broker.payout != 89e9 {
+		t.Fatalf("balance=%d calls=%d payout=%d", balance, broker.calls, broker.payout)
+	}
+}
+
+func TestLiquidateRejectsWhenGiftNotOnDepositAccount(t *testing.T) {
+	userID := uuid.New()
+	itemID := uuid.New()
+	broker := &buybackBrokerStub{}
+	checker := &custodyCheckerStub{enabled: true, err: telegram.ErrGiftNotOnAccount}
+	svc := &Service{
+		inventory: &inventoryRepoStub{item: &domain.InventoryItem{
+			ID:                itemID,
+			UserID:            userID,
+			Status:            domain.InvAvailable,
+			TelegramTxRef:     "deposit:msg:777",
+			TelegramGiftID:    "MiniOscar-4788",
+			FloorPriceNanoton: 150e9,
+		}},
+		market:  broker,
+		custody: checker,
+	}
+	_, err := svc.Liquidate(context.Background(), userID, itemID)
+	if !errors.Is(err, domain.ErrGiftNotInBotCustody) {
+		t.Fatalf("err=%v", err)
+	}
+	if broker.calls != 0 {
+		t.Fatalf("buyback must not run")
+	}
+	if checker.calls != 1 {
+		t.Fatalf("custody checks=%d", checker.calls)
+	}
+}
+
 func TestBuildItemViewIncludesCaseCashout(t *testing.T) {
 	item := domain.InventoryItem{
 		Metadata: []byte(`{"case_cashout_nanoton":123456789}`),

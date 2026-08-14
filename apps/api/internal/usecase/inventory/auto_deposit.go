@@ -64,6 +64,15 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 	}
 
 	txRef := depositTxRef(gift)
+	if !domain.IsUserGiftDepositTxRef(txRef) {
+		slog.Warn("gift deposit skipped: missing telegram message/saved id",
+			"slug", gift.Slug,
+			"sender_telegram_id", gift.SenderTelegramID,
+			"msg_id", gift.MsgID,
+			"saved_id", gift.SavedID,
+		)
+		return false, nil
+	}
 	if existing, err := s.inventory.FindByTelegramTxRef(ctx, txRef); err == nil {
 		slog.Debug("gift deposit skipped: telegram message already credited",
 			"slug", gift.Slug,
@@ -106,7 +115,7 @@ func (s *AutoDepositService) creditOne(ctx context.Context, gift telegram.Incomi
 		return false, err
 	}
 	if existing != nil {
-		if domain.IsProfileVirtualItem(*existing) {
+		if domain.IsProfileVirtualItem(*existing) && existing.UserID == user.ID {
 			return s.promoteProfileDeposit(ctx, user, gift, scanned, existing, txRef)
 		}
 		slog.Info("gift deposit skipped: gift already active in inventory",
@@ -153,6 +162,17 @@ func (s *AutoDepositService) promoteProfileDeposit(
 	existing *domain.InventoryItem,
 	txRef string,
 ) (bool, error) {
+	if user == nil || existing == nil || existing.UserID != user.ID || !domain.IsProfileVirtualItem(*existing) {
+		return false, nil
+	}
+	if !domain.IsUserGiftDepositTxRef(txRef) {
+		slog.Warn("gift deposit skipped: refuse to promote profile item without real deposit tx_ref",
+			"slug", gift.Slug,
+			"tx_ref", txRef,
+			"existing_item_id", existing.ID,
+		)
+		return false, nil
+	}
 	switch existing.Status {
 	case domain.InvAvailable, domain.InvDissolved, domain.InvStaked:
 		// ok — convert in place; keep staked rows backed by a real deposit.
@@ -216,5 +236,5 @@ func depositTxRef(gift telegram.IncomingGift) string {
 	if gift.SavedID > 0 {
 		return fmt.Sprintf("deposit:saved:%d", gift.SavedID)
 	}
-	return "deposit:" + gift.Slug
+	return ""
 }

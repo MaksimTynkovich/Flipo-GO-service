@@ -471,8 +471,8 @@ func (r *InventoryRepo) PromoteProfileToDeposit(
 	metadata []byte,
 	name, imageURL string,
 ) error {
-	if txRef == "" || floorPriceNanoton <= 0 {
-		return domain.ErrInvalidAmount
+	if txRef == "" || floorPriceNanoton <= 0 || !domain.IsUserGiftDepositTxRef(txRef) {
+		return domain.ErrGiftNotInBotCustody
 	}
 	now := time.Now().UTC()
 	updates := map[string]interface{}{

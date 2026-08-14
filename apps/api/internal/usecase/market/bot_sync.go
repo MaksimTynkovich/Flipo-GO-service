@@ -41,15 +41,15 @@ func NewBotSyncService(
 }
 
 type BotSyncResult struct {
-	Scanned                int      `json:"scanned"`
-	Listed                 int      `json:"listed"`
-	SkippedOwned           int      `json:"skipped_owned"`
-	SkippedPendingDeposit  int      `json:"skipped_pending_deposit"`
-	SkippedUnpriced        int      `json:"skipped_unpriced"`
-	ReconciledMissing      int      `json:"reconciled_missing"`
-	ListedSlugs            []string `json:"listed_slugs,omitempty"`
-	ReconciledSlugs        []string `json:"reconciled_slugs,omitempty"`
-	Errors                 []string `json:"errors,omitempty"`
+	Scanned               int      `json:"scanned"`
+	Listed                int      `json:"listed"`
+	SkippedOwned          int      `json:"skipped_owned"`
+	SkippedPendingDeposit int      `json:"skipped_pending_deposit"`
+	SkippedUnpriced       int      `json:"skipped_unpriced"`
+	ReconciledMissing     int      `json:"reconciled_missing"`
+	ListedSlugs           []string `json:"listed_slugs,omitempty"`
+	ReconciledSlugs       []string `json:"reconciled_slugs,omitempty"`
+	Errors                []string `json:"errors,omitempty"`
 }
 
 type BotRepriceResult struct {
@@ -305,6 +305,14 @@ func (s *BotSyncService) syncOne(ctx context.Context, gift telegram.IncomingGift
 	}
 
 	txRef := botMarketTxRef(gift)
+	if txRef == "" {
+		slog.Warn("bot gift skipped: missing telegram message/saved id",
+			"slug", gift.Slug,
+			"msg_id", gift.MsgID,
+			"saved_id", gift.SavedID,
+		)
+		return "skipped", nil
+	}
 	if existing, err := s.inventory.FindByTelegramTxRef(ctx, txRef); err == nil {
 		if relisted, err := s.tryRelistBotOwned(ctx, existing, gift); err != nil {
 			return "", err
@@ -379,5 +387,5 @@ func botMarketTxRef(gift telegram.IncomingGift) string {
 	if gift.MsgID > 0 {
 		return fmt.Sprintf("bot-market:msg:%d", gift.MsgID)
 	}
-	return "bot-market:" + gift.Slug
+	return ""
 }
