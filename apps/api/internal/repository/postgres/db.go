@@ -132,6 +132,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := migrateDailyQuestStatsIndexes(db); err != nil {
 		return err
 	}
+	if err := migrateStakingSettleUnique(db); err != nil {
+		return err
+	}
 	return nil
 }
 

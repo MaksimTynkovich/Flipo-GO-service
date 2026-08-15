@@ -3,6 +3,7 @@ package referral
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
@@ -52,6 +53,9 @@ func (s *Service) AccrueDailyGGRShare(ctx context.Context, dayStart time.Time) e
 			}
 		}
 		if _, _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, refTypeGGR, payoutRefID); err != nil {
+			if isUniqueViolation(err) {
+				continue
+			}
 			slog.Warn("referral ggr payout failed", "referrer_id", referrerID, "error", err)
 			continue
 		}
@@ -115,4 +119,12 @@ func (s *Service) referralDailyNetLoss(ctx context.Context, userID uuid.UUID, si
 
 func dailyGGRPayoutRefID(day time.Time) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("referral-ggr:"+day.Format("2006-01-02")))
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "unique constraint")
 }

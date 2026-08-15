@@ -10,6 +10,32 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	stakingEpochLockK1 int32 = 0x464C50 // FLP
+	stakingEpochLockK2 int32 = 0x53544B // STK
+)
+
+// WithEpochLock serializes epoch settle/create across all API connections.
+func (r *StakingRepo) WithEpochLock(ctx context.Context, fn func(context.Context) error) error {
+	sqlDB, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1, $2)", stakingEpochLockK1, stakingEpochLockK2); err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock($1, $2)", stakingEpochLockK1, stakingEpochLockK2)
+	}()
+	return fn(ctx)
+}
+
 func (r *StakingRepo) GetActiveEpoch(ctx context.Context, now time.Time) (*domain.StakingEpoch, error) {
 	var epochs []domain.StakingEpoch
 	err := r.db.WithContext(ctx).
@@ -43,7 +69,19 @@ func (r *StakingRepo) GetEpochDueForSettlement(ctx context.Context, now time.Tim
 }
 
 func (r *StakingRepo) CreateEpoch(ctx context.Context, epoch *domain.StakingEpoch) error {
-	return r.db.WithContext(ctx).Create(epoch).Error
+	err := r.db.WithContext(ctx).Create(epoch).Error
+	if err == nil || !isUniqueViolation(err) {
+		return err
+	}
+	var existing domain.StakingEpoch
+	findErr := r.db.WithContext(ctx).
+		Where("starts_at = ?", epoch.StartsAt).
+		First(&existing).Error
+	if findErr != nil {
+		return err
+	}
+	*epoch = existing
+	return nil
 }
 
 func (r *StakingRepo) SettleEpoch(ctx context.Context, epochID uuid.UUID) error {

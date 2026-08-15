@@ -15,6 +15,10 @@ import (
 // SettleEndedEpochs pays yield for due epochs (no MTProto), unlocks gifts, and sends one Telegram message.
 // Cron: every day 00:05 MSK. Also used for cutover of legacy weekly epochs.
 func (s *Service) SettleEndedEpochs(ctx context.Context) error {
+	return s.withEpochLock(ctx, s.settleEndedEpochsLocked)
+}
+
+func (s *Service) settleEndedEpochsLocked(ctx context.Context) error {
 	now := time.Now().UTC()
 	for {
 		epoch, err := s.staking.GetEpochDueForSettlement(ctx, now)
@@ -65,6 +69,7 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 
 	if payDays > 0 {
 		streakBonusUsers := make(map[uuid.UUID]struct{})
+		posYield := make(map[uuid.UUID]int64, len(positions))
 		for _, pos := range positions {
 			user, err := s.users.FindByID(ctx, pos.UserID)
 			if err != nil {
@@ -83,35 +88,23 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 			if dailyYield <= 0 {
 				continue
 			}
-			if err := s.staking.UpdateAccrual(ctx, pos.ID, dailyYield); err != nil {
-				return err
-			}
+			posYield[pos.ID] = dailyYield
 			userYield[pos.UserID] += dailyYield
 		}
-		for userID := range streakBonusUsers {
-			if err := s.staking.ConsumeStreakBonusPayout(ctx, userID); err != nil {
-				slog.Warn("staking streak bonus consume failed", "user_id", userID, "error", err)
-			}
-		}
-		if bonusUserIDs, err := s.staking.ListUserIDsWithStreakBonus(ctx); err == nil {
-			for _, userID := range bonusUserIDs {
-				if _, applied := streakBonusUsers[userID]; applied {
-					continue
-				}
-				if err := s.staking.ConsumeStreakBonusPayout(ctx, userID); err != nil {
-					slog.Warn("staking streak bonus decay failed", "user_id", userID, "error", err)
-				}
-			}
-		}
 
+		paid := make(map[uuid.UUID]int64, len(userYield))
 		for userID, yield := range userYield {
 			if yield <= 0 {
 				continue
 			}
 			if _, _, err := s.users.UpdateBalance(ctx, userID, yield, domain.LedgerStakeYield, "staking_daily", payoutRefID); err != nil {
+				if isUniqueViolation(err) {
+					continue
+				}
 				slog.Warn("daily staking payout failed", "user_id", userID, "error", err)
 				continue
 			}
+			paid[userID] = yield
 			balance.NotifyUser(ctx, s.users, s.balanceNotifier, userID, yield, domain.LedgerStakeYield)
 			if s.analytics != nil {
 				if user, err := s.users.FindByID(ctx, userID); err == nil {
@@ -131,9 +124,36 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 				}
 			}
 		}
+		for _, pos := range positions {
+			yield := posYield[pos.ID]
+			if yield <= 0 {
+				continue
+			}
+			if _, ok := paid[pos.UserID]; !ok {
+				continue
+			}
+			if err := s.staking.UpdateAccrual(ctx, pos.ID, yield); err != nil {
+				return err
+			}
+		}
+		for userID := range streakBonusUsers {
+			if err := s.staking.ConsumeStreakBonusPayout(ctx, userID); err != nil {
+				slog.Warn("staking streak bonus consume failed", "user_id", userID, "error", err)
+			}
+		}
+		if bonusUserIDs, err := s.staking.ListUserIDsWithStreakBonus(ctx); err == nil {
+			for _, userID := range bonusUserIDs {
+				if _, applied := streakBonusUsers[userID]; applied {
+					continue
+				}
+				if err := s.staking.ConsumeStreakBonusPayout(ctx, userID); err != nil {
+					slog.Warn("staking streak bonus decay failed", "user_id", userID, "error", err)
+				}
+			}
+		}
 
 		referrerBonuses := make(map[uuid.UUID]int64)
-		for userID, yield := range userYield {
+		for userID, yield := range paid {
 			if yield <= 0 {
 				continue
 			}
@@ -146,11 +166,16 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 				referrerBonuses[*user.ReferrerID] += bonus
 			}
 		}
+		paidReferral := make(map[uuid.UUID]int64, len(referrerBonuses))
 		for referrerID, bonus := range referrerBonuses {
 			if _, _, err := s.users.UpdateBalance(ctx, referrerID, bonus, domain.LedgerReferralBonus, "referral_daily", payoutRefID); err != nil {
+				if isUniqueViolation(err) {
+					continue
+				}
 				slog.Warn("daily referral payout failed", "referrer_id", referrerID, "error", err)
 				continue
 			}
+			paidReferral[referrerID] = bonus
 			balance.NotifyUser(ctx, s.users, s.balanceNotifier, referrerID, bonus, domain.LedgerReferralBonus)
 			if s.analytics != nil {
 				if user, err := s.users.FindByID(ctx, referrerID); err == nil {
@@ -179,11 +204,11 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 
 		// One Telegram message per affected user (yield and/or referral bonus and/or unlock).
 		if s.notifier != nil {
-			notifyUsers := make(map[uuid.UUID]struct{}, len(positions)+len(referrerBonuses))
+			notifyUsers := make(map[uuid.UUID]struct{}, len(positions)+len(paidReferral))
 			for _, pos := range positions {
 				notifyUsers[pos.UserID] = struct{}{}
 			}
-			for referrerID := range referrerBonuses {
+			for referrerID := range paidReferral {
 				notifyUsers[referrerID] = struct{}{}
 			}
 			for userID := range notifyUsers {
@@ -191,8 +216,8 @@ func (s *Service) settleEpoch(ctx context.Context, epoch *domain.StakingEpoch) e
 				if err != nil {
 					continue
 				}
-				yield := userYield[userID]
-				bonus := referrerBonuses[userID]
+				yield := paid[userID]
+				bonus := paidReferral[userID]
 				if err := s.notifier.SendDailyStakingSettled(ctx, user.TelegramID, yield, bonus); err != nil {
 					slog.Warn("daily staking settled notify failed", "user_id", userID, "error", err)
 				}

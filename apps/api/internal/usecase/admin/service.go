@@ -452,7 +452,15 @@ func ledgerSourceLabel(t domain.LedgerType, refType string) string {
 		return "Промокод"
 	case "staking_daily":
 		return "Стейкинг (сутки)"
+	case "staking_daily_reversal":
+		return "Стейкинг (отмена дубля)"
+	case "staking_daily_cutover":
+		return "Стейкинг (сутки)"
 	case "referral_daily", "referral_ggr", "referral_milestone":
+		return "Рефералы"
+	case "referral_daily_reversal":
+		return "Рефералы (отмена дубля)"
+	case "referral_daily_cutover":
 		return "Рефералы"
 	case "admin_balance":
 		return "Админ"

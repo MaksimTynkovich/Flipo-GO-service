@@ -1,0 +1,4 @@
+DROP INDEX IF EXISTS idx_balance_ledgers_staking_daily_unique;
+DROP INDEX IF EXISTS idx_balance_ledgers_referral_daily_unique;
+DROP INDEX IF EXISTS idx_balance_ledgers_referral_ggr_unique;
+DROP INDEX IF EXISTS idx_staking_epochs_starts_at_unique;

@@ -11,37 +11,46 @@ import (
 )
 
 func (s *Service) EnsureCurrentEpoch(ctx context.Context) (*domain.StakingEpoch, error) {
-	if err := s.SettleEndedEpochs(ctx); err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	epoch, err := s.staking.GetActiveEpoch(ctx, now)
-	if err != nil {
-		return nil, err
-	}
-	if epoch != nil {
-		// Cutover: force-settle pre-redesign weekly epochs so the daily pool can open.
-		if isLegacyEpoch(epoch.StartsAt, epoch.EndsAt) {
-			slog.Info("staking forcing legacy weekly epoch cutover", "epoch_id", epoch.ID)
-			if err := s.settleEpoch(ctx, epoch); err != nil {
-				return nil, err
-			}
-		} else {
-			return epoch, nil
+	var epoch *domain.StakingEpoch
+	err := s.withEpochLock(ctx, func(ctx context.Context) error {
+		if err := s.settleEndedEpochsLocked(ctx); err != nil {
+			return err
 		}
-	}
 
-	start, end := CurrentEpochBounds(now)
-	epoch = &domain.StakingEpoch{
-		ID:        uuid.New(),
-		StartsAt:  start,
-		EndsAt:    end,
-		Status:    domain.EpochActive,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := s.staking.CreateEpoch(ctx, epoch); err != nil {
+		now := time.Now().UTC()
+		found, err := s.staking.GetActiveEpoch(ctx, now)
+		if err != nil {
+			return err
+		}
+		if found != nil {
+			// Cutover: force-settle pre-redesign weekly epochs so the daily pool can open.
+			if isLegacyEpoch(found.StartsAt, found.EndsAt) {
+				slog.Info("staking forcing legacy weekly epoch cutover", "epoch_id", found.ID)
+				if err := s.settleEpoch(ctx, found); err != nil {
+					return err
+				}
+			} else {
+				epoch = found
+				return nil
+			}
+		}
+
+		start, end := CurrentEpochBounds(now)
+		created := &domain.StakingEpoch{
+			ID:        uuid.New(),
+			StartsAt:  start,
+			EndsAt:    end,
+			Status:    domain.EpochActive,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := s.staking.CreateEpoch(ctx, created); err != nil {
+			return err
+		}
+		epoch = created
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return epoch, nil
