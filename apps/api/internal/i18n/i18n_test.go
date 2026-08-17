@@ -21,6 +21,15 @@ func TestTFormatsArgs(t *testing.T) {
 	}
 }
 
+func TestReferralShareEnglish(t *testing.T) {
+	if got := T("en", "referral.shareLine1"); got != "🎁 Join me on Flipo!" {
+		t.Fatalf("unexpected english share line: %q", got)
+	}
+	if got := T("ru", "referral.shareLine1"); got != "🎁 Присоединяйся ко мне в Flipo!" {
+		t.Fatalf("unexpected russian share line: %q", got)
+	}
+}
+
 func TestAppendLangQuery(t *testing.T) {
 	if got := AppendLangQuery("https://example.com/terms", "ru"); got != "https://example.com/terms?lang=ru" {
 		t.Fatalf("unexpected url: %q", got)

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/i18n"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/flipo/flipo/apps/api/internal/usecase/balance"
 	"github.com/google/uuid"
@@ -206,6 +207,11 @@ func (s *Service) PrepareShare(ctx context.Context, userID uuid.UUID, telegramID
 		return nil, domain.ErrNotFound
 	}
 
+	locale := domain.DefaultLocale
+	if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil {
+		locale = user.LocalizedLocale()
+	}
+
 	resultID := "rfs_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	shareURL := fmt.Sprintf(
 		"https://t.me/%s/%s?startapp=%s",
@@ -214,16 +220,16 @@ func (s *Service) PrepareShare(ctx context.Context, userID uuid.UUID, telegramID
 		url.QueryEscape(StartPayloadForTelegramID(telegramID)),
 	)
 	title := "Flipo"
-	description := "Заходи в Flipo по моей ссылке — получи бесплатный кейс и забирай подарки!"
+	description := i18n.T(locale, "referral.shareDescription")
 	caption := strings.Join([]string{
-		"🎁 Присоединяйся ко мне в Flipo!",
-		"Открой бесплатный кейс и забирай подарки.",
+		i18n.T(locale, "referral.shareLine1"),
+		i18n.T(locale, "referral.shareLine2"),
 		"",
 		shareURL,
 	}, "\n")
 	replyMarkup := map[string]any{
 		"inline_keyboard": [][]map[string]any{{
-			{"text": "🎁 Открыть бесплатный кейс", "url": shareURL},
+			{"text": i18n.T(locale, "referral.shareButton"), "url": shareURL},
 		}},
 	}
 

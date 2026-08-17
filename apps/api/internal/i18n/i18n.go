@@ -29,6 +29,10 @@ var messages = map[string]map[string]string{
 		"bot.caseDailyTitle":        "Daily case",
 		"bot.caseDailyReady":        "🎁 %s is available again!\n\nClaim your free prize — opening is ready.",
 		"bot.openCase":              "🎁 Open case",
+		"referral.shareDescription": "Join Flipo with my link — get a free case and grab gifts!",
+		"referral.shareLine1":       "🎁 Join me on Flipo!",
+		"referral.shareLine2":       "Open a free case and grab gifts.",
+		"referral.shareButton":      "🎁 Open a free case",
 	},
 	domain.LocaleRU: {
 		"bot.welcome": "👋 Добро пожаловать в Flipo!\n\n" +
@@ -51,6 +55,10 @@ var messages = map[string]map[string]string{
 		"bot.caseDailyTitle":        "Дневной кейс",
 		"bot.caseDailyReady":        "🎁 %s снова доступен!\n\nЗаберите бесплатный приз — открытие снова готово.",
 		"bot.openCase":              "🎁 Открыть кейс",
+		"referral.shareDescription": "Заходи в Flipo по моей ссылке — получи бесплатный кейс и забирай подарки!",
+		"referral.shareLine1":       "🎁 Присоединяйся ко мне в Flipo!",
+		"referral.shareLine2":       "Открой бесплатный кейс и забирай подарки.",
+		"referral.shareButton":      "🎁 Открыть бесплатный кейс",
 	},
 }
 
