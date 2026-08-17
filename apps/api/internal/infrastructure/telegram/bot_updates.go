@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/flipo/flipo/apps/api/internal/domain"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
-	"github.com/flipo/flipo/apps/api/internal/usecase/campaign"
 	"gorm.io/gorm"
 )
 
@@ -103,11 +101,6 @@ type BotUpdates struct {
 	starsPay                 StarsPaymentHandler
 	caseShareConfirm         CaseShareConfirmer
 	campaigns                CampaignResolver
-}
-
-// CampaignResolver looks up an ad campaign by short code from start_param.
-type CampaignResolver interface {
-	FindByCode(ctx context.Context, code string) (*domain.Campaign, error)
 }
 
 // CaseShareConfirmer credits a prepared case-quest share after chosen_inline_result.
@@ -348,28 +341,7 @@ func (h *BotUpdates) maybeNotifyBotStart(ctx context.Context, msg *Message, payl
 		Username:   msg.From.Username,
 		FirstName:  msg.From.FirstName,
 		LastName:   msg.From.LastName,
-	}, h.resolveBotStartAttribution(ctx, payload))
-}
-
-func (h *BotUpdates) resolveBotStartAttribution(ctx context.Context, payload string) BotStartAttribution {
-	parsed := campaign.ParseStartPayload(payload)
-	attr := BotStartAttribution{Payload: parsed.Raw, Kind: parsed.Kind}
-	if parsed.Kind != campaign.KindCampaign {
-		return attr
-	}
-	attr.Code = parsed.CampaignCode
-	if h.campaigns == nil {
-		return attr
-	}
-	found, err := h.campaigns.FindByCode(ctx, parsed.CampaignCode)
-	if err != nil || found == nil {
-		return attr
-	}
-	attr.Name = found.Name
-	attr.Code = found.Code
-	attr.Source = found.Source
-	attr.Content = found.Content
-	return attr
+	}, ResolveBotStartAttribution(ctx, h.campaigns, payload))
 }
 
 // UserRepoLookup adapts a FindByTelegramID that returns (user, error).

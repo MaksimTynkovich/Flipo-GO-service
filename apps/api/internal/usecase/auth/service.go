@@ -36,6 +36,7 @@ type StartContext struct {
 
 type AdminEventNotifier interface {
 	NotifyReferralJoined(ctx context.Context, actor, referrer telegram.AdminActor)
+	NotifyBotStart(ctx context.Context, actor telegram.AdminActor, attr telegram.BotStartAttribution)
 }
 
 type Service struct {
@@ -253,6 +254,18 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 				}
 			}
 		}
+	}
+
+	if isNew && s.adminEvents != nil && payload.Raw != "" && payload.Kind != campaign.KindReferral {
+		s.adminEvents.NotifyBotStart(ctx,
+			telegram.AdminActor{
+				TelegramID: user.TelegramID,
+				Username:   user.Username,
+				FirstName:  user.FirstName,
+				LastName:   user.LastName,
+			},
+			telegram.ResolveBotStartAttribution(ctx, s.campaigns, payload.Raw),
+		)
 	}
 
 	token, err := s.issueToken(user)
