@@ -6,6 +6,7 @@ import (
 
 	"github.com/flipo/flipo/apps/api/internal/delivery/websocket"
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/i18n"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	inventoryuc "github.com/flipo/flipo/apps/api/internal/usecase/inventory"
@@ -51,7 +52,7 @@ func (n *GiftDepositNotifier) GiftDeposited(ctx context.Context, user *domain.Us
 	if n.hub != nil {
 		n.hub.NotifyUser(user.ID, "inventory.deposited", map[string]interface{}{
 			"item":    itemView,
-			"message": "🎁 Подарок «" + item.Name + "» зачислен в инвентарь!",
+			"message": i18n.T(user.Locale, "bot.giftDeposited", item.Name),
 		})
 	}
 

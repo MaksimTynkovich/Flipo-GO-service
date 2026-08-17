@@ -2,6 +2,8 @@
 
 import { formatTON, type StakingQuestProgress, type StakingQuestsResponse } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
+import { useT } from "@/components/providers/I18nProvider";
+import type { TFunction } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 
@@ -17,9 +19,9 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function formatProgress(quest: StakingQuestProgress): string {
+function formatProgress(quest: StakingQuestProgress, t: TFunction): string {
   if (quest.progress_target <= 1) {
-    return quest.completed ? "Готово" : "0 / 1";
+    return quest.completed ? t("staking.ready") : "0 / 1";
   }
   if (
     quest.progress_target <= 100 &&
@@ -37,6 +39,7 @@ type Props = {
 };
 
 export function StakingQuestsBlock({ data, loading }: Props) {
+  const t = useT();
   if (loading && !data) {
     return <div className="h-36 animate-pulse rounded-2xl bg-surface-raised" />;
   }
@@ -48,9 +51,9 @@ export function StakingQuestsBlock({ data, loading }: Props) {
     <section className="space-y-3">
       <div className="flex items-end justify-between gap-3 px-0.5">
         <div>
-          <p className="section-label">Задания</p>
+          <p className="section-label">{t("staking.quests")}</p>
           <p className="mt-1 text-sm text-muted">
-            Лимит{" "}
+            {t("staking.limit")}{" "}
             <span className="tabular-nums text-foreground">
               {formatTON(data.personal_limit_nanoton)}
             </span>
@@ -100,7 +103,7 @@ export function StakingQuestsBlock({ data, loading }: Props) {
             {!quest.completed ? (
               <div className="mt-2 space-y-1">
                 <ProgressBar value={quest.progress_ratio} />
-                <p className="text-[10px] tabular-nums text-muted">{formatProgress(quest)}</p>
+                <p className="text-[10px] tabular-nums text-muted">{formatProgress(quest, t)}</p>
               </div>
             ) : null}
           </li>

@@ -33,6 +33,7 @@ import { PROMO_REQUIRED_CHANNEL, promoChannelUrl } from "@/lib/promo-channel";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { formatUserError } from "@/lib/user-errors";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useT } from "@/components/providers/I18nProvider";
 import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
@@ -68,6 +69,7 @@ function nextQuestStep(c: CaseView): CaseQuestStep | null {
 }
 
 export function CaseDetailView() {
+  const t = useT();
   const params = useParams();
   const router = useRouter();
   const { user, setUser } = useAuth();
@@ -111,11 +113,11 @@ export function CaseDetailView() {
     try {
       setCaseItem(await getCase(idOrSlug));
     } catch (e) {
-      notifyError(formatUserError(e, "Кейс не найден"));
+      notifyError(formatUserError(e, t("cases.notFound")));
     } finally {
       setLoading(false);
     }
-  }, [idOrSlug, notifyError]);
+  }, [idOrSlug, notifyError, t]);
 
   useEffect(() => {
     if (!featuresReady || !casesVisible) return;
@@ -217,13 +219,13 @@ export function CaseDetailView() {
         setChannelSheetOpen(true);
         void load();
       } else if (e instanceof ApiRequestError && e.code === "insufficient_funds") {
-        notifyError(formatUserError(e, "Недостаточно средств"));
+        notifyError(formatUserError(e, t("market.insufficient")));
         router.push(APP_ROUTES.deposit);
       } else if (
         e instanceof ApiRequestError &&
         (e.code === "case_cooldown" || e.code === "case_daily_used")
       ) {
-        notifyError(formatUserError(e, "Кейс пока недоступен"));
+        notifyError(formatUserError(e, t("cases.unavailable")));
         void load();
       } else if (e instanceof ApiRequestError && e.code === "case_share_required") {
         setQuestStep("share");
@@ -232,7 +234,7 @@ export function CaseDetailView() {
         setQuestStep("name");
         void load();
       } else {
-        notifyError(formatUserError(e, "Не удалось открыть кейс"));
+        notifyError(formatUserError(e, t("cases.openFailed")));
       }
     } finally {
       setOpening(false);
@@ -263,13 +265,13 @@ export function CaseDetailView() {
     if (!caseItem || opening || phase !== "idle" || cooldownBlocked || questBusy) return;
 
     if (needsTopUp) {
-      notifyError("Недостаточно средств");
+      notifyError(t("market.insufficient"));
       router.push(APP_ROUTES.deposit);
       return;
     }
 
     if (caseItem.kind === "promo" && !promoCode.trim()) {
-      notifyError("Введите промокод");
+      notifyError(t("cases.enterPromo"));
       return;
     }
 
@@ -306,7 +308,7 @@ export function CaseDetailView() {
       const prepared = await prepareCaseShare(caseItem.slug || idOrSlug);
       const sent = await sharePreparedMessage(prepared.prepared_message_id);
       if (!sent) {
-        notifyError("Отправка отменена — поделитесь постом, чтобы открыть кейс");
+        notifyError(t("cases.shareCancelled"));
         return;
       }
       const fresh = await confirmCaseShare(caseItem.slug || idOrSlug, prepared.result_id);
@@ -314,7 +316,7 @@ export function CaseDetailView() {
       haptics.notificationOccurred("success");
       await continueAfterQuests(fresh);
     } catch (e) {
-      notifyError(formatUserError(e, "Не удалось поделиться"));
+      notifyError(formatUserError(e, t("cases.shareFailed")));
     } finally {
       setQuestBusy(false);
     }
@@ -338,14 +340,14 @@ export function CaseDetailView() {
       const fresh = await getCase(idOrSlug);
       setCaseItem(fresh);
       if (fresh.required_name_tag?.trim() && fresh.name_tag_ok !== true) {
-        notifyError("Тег в имени не найден — обновите имя в Telegram и откройте приложение снова");
+        notifyError(t("cases.tagMissing"));
         setQuestStep("name");
         return;
       }
       haptics.notificationOccurred("success");
       await continueAfterQuests(fresh);
     } catch (e) {
-      notifyError(formatUserError(e, "Не удалось проверить имя"));
+      notifyError(formatUserError(e, t("cases.checkNameFailed")));
     } finally {
       setQuestBusy(false);
     }
@@ -358,12 +360,12 @@ export function CaseDetailView() {
       setCaseItem(fresh);
       if (fresh.require_channel && fresh.channel_subscribed === false) {
         setChannelSheetOpen(true);
-        notifyError("Подписка не найдена — подпишитесь и нажмите снова");
+        notifyError(t("cases.subMissing"));
         return;
       }
       await runOpen(fresh);
     } catch (e) {
-      notifyError(formatUserError(e, "Не удалось проверить подписку"));
+      notifyError(formatUserError(e, t("cases.checkSubFailed")));
     }
   }
 
@@ -413,23 +415,23 @@ export function CaseDetailView() {
       setUser((prev) => (prev ? patchUserBalance(prev, { betting_balance: balance }) : prev));
       haptics.notificationOccurred("success");
     } catch (e) {
-      notifyError(formatUserError(e, "Не удалось продать подарок"));
+      notifyError(formatUserError(e, t("cases.sellFailed")));
       throw e;
     }
   }
 
   function ctaLabel(): string {
-    if (opening || phase === "revealing") return "Открываем…";
+    if (opening || phase === "revealing") return t("cases.opening");
     if (cooldownBlocked) {
       return cooldownMs > 0 ? formatCountdown(cooldownMs) : "00:00:00";
     }
-    if (needsChannel) return "Подписаться и открыть";
-    if (isPromo) return "Открыть по промокоду";
-    if (caseItem?.free_open_available) return "Открыть бесплатно";
+    if (needsChannel) return t("cases.subscribeOpen");
+    if (isPromo) return t("cases.openPromo");
+    if (caseItem?.free_open_available) return t("cases.openFree");
     if (caseItem && caseItem.price_nanoton > 0) {
-      return `Открыть · ${formatCasePrice(caseItem.price_nanoton)} TON`;
+      return t("cases.openFor", { price: formatCasePrice(caseItem.price_nanoton) });
     }
-    return "Открыть бесплатно";
+    return t("cases.openFree");
   }
 
   if (!featuresReady || !casesVisible) {
@@ -509,7 +511,7 @@ export function CaseDetailView() {
         <ChannelSubscribeSheet
           channel={channel}
           channelUrl={channelUrl}
-          description="Чтобы открыть этот кейс, подпишитесь на наш канал"
+          description={t("cases.needChannel")}
           onClose={() => {
             setChannelSheetOpen(false);
             void load();
@@ -526,9 +528,9 @@ export function CaseDetailView() {
       {!caseItem && !loading ? (
         <div className="flex flex-col items-center gap-2 py-16 text-muted">
           <Gift className="h-8 w-8 opacity-40" />
-          <p className="text-sm">Кейс не найден</p>
+          <p className="text-sm">{t("cases.notFound")}</p>
           <Link href={APP_ROUTES.cases} className="text-sm text-accent">
-            Назад
+            {t("cases.back")}
           </Link>
         </div>
       ) : null}

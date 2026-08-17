@@ -104,6 +104,13 @@ func main() {
 	}
 
 	userRepo := postgres.NewUserRepo(db)
+	userLocale := func(ctx context.Context, telegramID int64) string {
+		user, err := userRepo.FindByTelegramID(ctx, telegramID)
+		if err != nil || user == nil {
+			return domain.DefaultLocale
+		}
+		return user.Locale
+	}
 	invRepo := postgres.NewInventoryRepo(db)
 	marketRepo := postgres.NewMarketRepo(db)
 	stakeRepo := postgres.NewStakingRepo(db)
@@ -236,6 +243,7 @@ func main() {
 	caseSvc.SetChannelRequirement(cfg.PromoRequiredChannel, botAPI)
 	caseSvc.SetAdminNotifier(adminNotifier)
 	caseBot := telegram.NewBotNotifier(cfg.BotToken)
+	caseBot.SetLocaleResolver(userLocale)
 	caseBot.SetOpenApp(telegram.OpenAppButtonOptions{
 		WebAppURL:       cfg.WebAppURL,
 		BotUsername:     cfg.BotUsername,
@@ -254,11 +262,15 @@ func main() {
 	paymentsSvc.SetBalanceNotifier(hub)
 	promoSvc.SetBalanceNotifier(hub)
 	adminSvc.SetBalanceNotifier(hub)
-	autoDepositNotifier := notifications.NewGiftDepositNotifier(telegram.NewBotNotifier(cfg.BotToken), hub, giftValuator, adminNotifier)
+	giftBot := telegram.NewBotNotifier(cfg.BotToken)
+	giftBot.SetLocaleResolver(userLocale)
+	autoDepositNotifier := notifications.NewGiftDepositNotifier(giftBot, hub, giftValuator, adminNotifier)
 	autoDepositSvc := inventory.NewAutoDepositService(userRepo, invRepo, giftValuator, autoDepositNotifier)
 	invSvc.SetAdminNotifier(adminNotifier)
 	invSvc.SetGiftDepositNotifier(autoDepositNotifier)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, telegram.NewBotNotifier(cfg.BotToken), int64(cfg.BoostReferralThreshold))
+	stakeBot := telegram.NewBotNotifier(cfg.BotToken)
+	stakeBot.SetLocaleResolver(userLocale)
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, giftScanner, giftValuator, stakeBot, int64(cfg.BoostReferralThreshold))
 	stakeSvc.SetAnalytics(analyticsSvc)
 	stakeSvc.SetBalanceNotifier(hub)
 	stakeSvc.SetReferralRewards(referralSvc)
@@ -332,6 +344,7 @@ func main() {
 	defer treasuryWorker.Stop()
 
 	botUpdates := telegram.NewBotUpdates(botAPI, cfg.WebAppURL, cfg.BotUsername, cfg.WebAppShortName, cfg.ChannelURL, cfg.SupportURL, cfg.CooperationURL, cfg.WelcomeText)
+	botUpdates.SetLocaleResolver(userLocale)
 	botUpdates.SetAdminNotifier(adminNotifier)
 	botUpdates.SetAdminLoginApprover(authSvc)
 	authSvc.SetAdminLoginAlerter(adminNotifier)

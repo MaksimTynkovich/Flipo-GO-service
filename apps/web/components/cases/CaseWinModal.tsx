@@ -7,6 +7,7 @@ import { CaseTonPrizeArt } from "@/components/cases/CaseTonPrizeArt";
 import type { CaseOpenResult } from "@/lib/api";
 import { formatTON } from "@/lib/api";
 import { giftBuyPriceNanoton, giftImageUrl } from "@/lib/gifts";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 type CaseWinModalProps = {
@@ -22,6 +23,7 @@ export function CaseWinModal({
   onAgain,
   onSell,
 }: CaseWinModalProps) {
+  const t = useT();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [selling, setSelling] = useState(false);
@@ -98,7 +100,7 @@ export function CaseWinModal({
       <button
         type="button"
         className="case-win-modal__backdrop"
-        aria-label="Закрыть"
+        aria-label={t("common.close")}
         disabled={selling}
         onClick={() => closeThen(onAgain)}
       />
@@ -137,7 +139,7 @@ export function CaseWinModal({
         ) : null}
 
         {isTon ? (
-          <p className="case-win-modal__note">Зачислено на баланс</p>
+          <p className="case-win-modal__note">{t("cases.creditedBalance")}</p>
         ) : null}
 
         <div className="case-win-modal__actions">
@@ -148,7 +150,7 @@ export function CaseWinModal({
               disabled={selling}
               onClick={() => void handleSell()}
             >
-              {selling ? "Продажа…" : "Продать"}
+              {selling ? t("common.selling") : t("common.sell")}
             </button>
           ) : null}
           <button
@@ -160,7 +162,7 @@ export function CaseWinModal({
             disabled={selling}
             onClick={() => closeThen(onAgain)}
           >
-            Продолжить
+            {t("cases.keepGoing")}
           </button>
         </div>
       </div>

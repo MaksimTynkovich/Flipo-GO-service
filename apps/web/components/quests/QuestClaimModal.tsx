@@ -8,6 +8,7 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { formatTON, resolveAsset, type DailyQuestReward } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -18,10 +19,6 @@ type Props = {
   onClose: () => void;
 };
 
-function giftTitle(reward: DailyQuestReward): string {
-  return reward.gift_name?.trim() || reward.model_name?.trim() || "Подарок";
-}
-
 function rewardKind(reward: DailyQuestReward): "gift" | "case" | "ton" {
   if (reward.type === "gift") return "gift";
   if (reward.type === "free_case_open") return "case";
@@ -29,6 +26,7 @@ function rewardKind(reward: DailyQuestReward): "gift" | "case" | "ton" {
 }
 
 export function QuestClaimModal({ reward, isBonus = false, cardImageUrl, onClose }: Props) {
+  const t = useT();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
@@ -36,20 +34,20 @@ export function QuestClaimModal({ reward, isBonus = false, cardImageUrl, onClose
   const kind = rewardKind(reward);
   const customCover = resolveAsset(cardImageUrl?.trim());
   const caseCover = resolveAsset(reward.case_image_url?.trim());
-  const caseTitle = reward.case_title?.trim() || "Бесплатный кейс";
+  const caseTitle = reward.case_title?.trim() || t("quests.freeCase");
   const caseHref =
     reward.case_slug?.trim() || reward.case_id?.trim()
       ? `${APP_ROUTES.cases}/${encodeURIComponent(reward.case_slug?.trim() || reward.case_id!.trim())}`
       : APP_ROUTES.cases;
   const giftSlug = reward.collection_slug?.trim() || "";
   const giftImage = reward.gift_image_url?.trim() || "";
-  const giftName = giftTitle(reward);
+  const giftName = reward.gift_name?.trim() || reward.model_name?.trim() || t("quests.giftFallback");
   const tonValue = reward.nanoton && reward.nanoton > 0 ? reward.nanoton : 0;
 
   const glow =
     kind === "ton" ? "#2AA0EF" : kind === "case" ? "#7C5CFF" : isBonus ? "#FF9A2E" : "#3390ec";
 
-  const eyebrow = isBonus ? "Бонус дня получен" : "Награда получена";
+  const eyebrow = isBonus ? t("quests.bonusGot") : t("quests.rewardGot");
   const title =
     kind === "gift"
       ? giftName
@@ -57,15 +55,15 @@ export function QuestClaimModal({ reward, isBonus = false, cardImageUrl, onClose
         ? caseTitle
         : tonValue > 0
           ? `+${formatTON(tonValue)} TON`
-          : "TON на баланс";
+          : t("quests.tonToBalance");
   const note =
     kind === "gift"
-      ? "Добавлен в инвентарь"
+      ? t("quests.addedInventory")
       : kind === "case"
-        ? "Бесплатное открытие доступно"
-        : "Зачислено на баланс";
+        ? t("quests.freeOpenReady")
+        : t("quests.creditedBalance");
   const primaryLabel =
-    kind === "gift" ? "В инвентарь" : kind === "case" ? "Открыть кейс" : "Продолжить";
+    kind === "gift" ? t("quests.toInventory") : kind === "case" ? t("quests.openCase") : t("common.continue");
 
   useEffect(() => {
     setMounted(true);
@@ -122,7 +120,7 @@ export function QuestClaimModal({ reward, isBonus = false, cardImageUrl, onClose
       <button
         type="button"
         className="case-win-modal__backdrop"
-        aria-label="Закрыть"
+        aria-label={t("common.close")}
         onClick={() => closeThen()}
       />
 
@@ -192,7 +190,7 @@ export function QuestClaimModal({ reward, isBonus = false, cardImageUrl, onClose
               className="case-win-modal__btn case-win-modal__btn--ghost app-control"
               onClick={() => closeThen()}
             >
-              Продолжить  
+              {t("common.continue")}  
             </button>
           ) : null}
         </div>

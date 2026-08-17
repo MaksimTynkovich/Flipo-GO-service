@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,21 @@ const (
 	TierBoost StakingTier = "boost"
 )
 
+const (
+	LocaleEN      = "en"
+	LocaleRU      = "ru"
+	DefaultLocale = LocaleEN
+)
+
+func NormalizeLocale(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case LocaleRU, "ru-ru", "russian":
+		return LocaleRU
+	default:
+		return LocaleEN
+	}
+}
+
 type User struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	TelegramID     int64     `gorm:"uniqueIndex;not null" json:"telegram_id"`
@@ -21,6 +37,7 @@ type User struct {
 	FirstName      string    `gorm:"size:128" json:"first_name"`
 	LastName       string    `gorm:"size:128" json:"last_name"`
 	PhotoURL       string    `gorm:"size:512" json:"photo_url"`
+	Locale         string    `gorm:"size:8;not null;default:'en'" json:"locale"`
 	TonWallet      string    `gorm:"size:66;index" json:"ton_wallet"`
 	BettingBalance int64     `gorm:"not null;default:0" json:"betting_balance"`
 	// AdminCreditNanoton — remaining balance that came from admin_adjust (not live deposits).

@@ -215,12 +215,28 @@ const bootWatchdog = `
       "font-family:system-ui,-apple-system,sans-serif;";
     el.innerHTML =
       '<p style="margin:0;font-size:15px;line-height:1.45;max-width:280px;opacity:.9">' +
-      "Приложение долго загружается. Обычно помогает перезапуск." +
+      (function () {
+        try {
+          return localStorage.getItem("flipo_locale") === "ru"
+            ? "Приложение долго загружается. Обычно помогает перезапуск."
+            : "The app is taking a long time to load. Restarting usually helps.";
+        } catch (_) {
+          return "The app is taking a long time to load. Restarting usually helps.";
+        }
+      })() +
       "</p>" +
       '<button type="button" id="flipo-boot-reload" style="' +
       "appearance:none;border:0;border-radius:12px;padding:12px 20px;font-size:14px;" +
       "font-weight:600;background:#3390ec;color:#fff;cursor:pointer;" +
-      '">Перезагрузить</button>';
+      '">' +
+      (function () {
+        try {
+          return localStorage.getItem("flipo_locale") === "ru" ? "Перезагрузить" : "Reload";
+        } catch (_) {
+          return "Reload";
+        }
+      })() +
+      "</button>";
     document.body.appendChild(el);
     document.getElementById("flipo-boot-reload")?.addEventListener("click", () => {
       post({
@@ -292,7 +308,7 @@ const bootWatchdog = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={cn(sans.variable, "bg-background")}>
+    <html lang="en" className={cn(sans.variable, "bg-background")}>
       <body className="bg-background font-sans antialiased">
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <Script id="tg-theme-bootstrap" strategy="beforeInteractive">

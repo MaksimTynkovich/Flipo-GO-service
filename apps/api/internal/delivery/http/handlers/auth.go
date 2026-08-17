@@ -26,6 +26,7 @@ type userView struct {
 	BettingBalance int64              `json:"betting_balance"`
 	StakingTier    domain.StakingTier `json:"staking_tier"`
 	TonWallet      string             `json:"ton_wallet,omitempty"`
+	Locale         string             `json:"locale"`
 	IsAdmin        bool               `json:"is_admin"`
 }
 
@@ -254,6 +255,28 @@ func (h *AuthHandler) ClearWallet(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *AuthHandler) UpdateLocale(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var req struct {
+		Locale string `json:"locale" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	raw := strings.ToLower(strings.TrimSpace(req.Locale))
+	if raw != domain.LocaleEN && raw != domain.LocaleRU {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported locale", "code": "invalid_locale"})
+		return
+	}
+	user, err := h.auth.UpdateLocale(c.Request.Context(), userID, raw)
+	if err != nil {
+		respondInternal(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toUserView(h.auth, user))
+}
+
 func toUserView(authSvc *auth.Service, user *domain.User) userView {
 	return userView{
 		ID:             user.ID.String(),
@@ -264,6 +287,7 @@ func toUserView(authSvc *auth.Service, user *domain.User) userView {
 		BettingBalance: user.BettingBalance,
 		StakingTier:    user.StakingTier,
 		TonWallet:      user.TonWallet,
+		Locale:         domain.NormalizeLocale(user.Locale),
 		IsAdmin:        authSvc.IsAdmin(user.TelegramID),
 	}
 }

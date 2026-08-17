@@ -129,6 +129,7 @@ func (s *autoDepositUserStub) EnsureSocialBotUser(context.Context, uuid.UUID, in
 	return nil, errors.New("not implemented")
 }
 func (s *autoDepositUserStub) UpdateWallet(context.Context, uuid.UUID, string) error { return nil }
+func (s *autoDepositUserStub) UpdateLocale(context.Context, uuid.UUID, string) error { return nil }
 func (s *autoDepositUserStub) UpdateBanned(context.Context, uuid.UUID, bool) error   { return nil }
 func (s *autoDepositUserStub) UpdateWithdrawalsDisabled(context.Context, uuid.UUID, bool) error {
 	return nil

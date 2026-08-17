@@ -1,3 +1,5 @@
+import { getRuntimeLocale, translate, type MessageKey } from "@/lib/i18n";
+
 export type CrashPhase = "betting" | "running" | "crashed" | "waiting";
 
 export type CrashRoundState = {
@@ -23,22 +25,25 @@ export const CRASH_GROWTH_PER_MS = Number(
 export const CRASH_CHART_LOG_MAX = 100;
 
 export const PHASE_LABEL: Record<string, string> = {
-  betting: "Приём ставок",
-  running: "В раунде",
-  crashed: "Краш",
-  waiting: "Ожидание",
+  betting: "crash.phase.betting",
+  running: "crash.phase.running",
+  crashed: "crash.phase.crashed",
+  waiting: "crash.phase.waiting",
 };
 
 export function phaseLabel(phase: string | undefined): string {
   if (!phase) return "—";
-  return PHASE_LABEL[phase] ?? phase;
+  const key = PHASE_LABEL[phase];
+  if (!key) return phase;
+  return translate(getRuntimeLocale(), key as MessageKey);
 }
 
 export function statusSubtext(phase: string | undefined): string {
-  if (phase === "betting") return "До старта";
-  if (phase === "running") return "В раунде";
-  if (phase === "crashed") return "Упал";
-  return "Ожидание";
+  const locale = getRuntimeLocale();
+  if (phase === "betting") return translate(locale, "crash.sub.betting");
+  if (phase === "running") return translate(locale, "crash.sub.running");
+  if (phase === "crashed") return translate(locale, "crash.sub.crashed");
+  return translate(locale, "crash.sub.waiting");
 }
 
 export function formatMultiplier(value: number): string {
@@ -150,7 +155,7 @@ export function crashPlayerName(player: {
 }): string {
   if (player.first_name?.trim()) return player.first_name.trim();
   if (player.username?.trim()) return `@${player.username.trim()}`;
-  return "Игрок";
+  return translate(getRuntimeLocale(), "common.player");
 }
 
 export function historyTierStyle(mult: number): CrashHistoryTier {

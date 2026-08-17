@@ -14,6 +14,7 @@ import {
   resolveRunStartMs,
   statusSubtext,
 } from "@/lib/crash";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 import { giftImageUrlFromURL } from "@/lib/gifts";
 
@@ -385,6 +386,9 @@ export function CrashChart({
   onLiveFrame,
   onMilestone,
 }: Props) {
+  const t = useT();
+  const targetWordRef = useRef(t("crash.target"));
+  targetWordRef.current = t("crash.target");
   const phase = state?.phase;
   const crashed = phase === "crashed";
   const running = phase === "running";
@@ -982,7 +986,7 @@ export function CrashChart({
           }
           if (autoRemainRef.current) {
             autoRemainRef.current.textContent =
-              remain < 0.005 ? "цель" : `−${remain.toFixed(2)}×`;
+              remain < 0.005 ? targetWordRef.current : `−${remain.toFixed(2)}×`;
           }
         }
 
@@ -1166,7 +1170,7 @@ export function CrashChart({
             <span key={countdown} className="crash-countdown__value">
               {countdown.toString().padStart(2, "0")}
             </span>
-            <span className="crash-countdown__label">До старта</span>
+            <span className="crash-countdown__label">{t("crash.untilStart")}</span>
           </div>
         ) : !winFx && !loseFx ? (
           <>
@@ -1187,7 +1191,7 @@ export function CrashChart({
                 crashed ? "text-danger/80" : "text-white/45",
               )}
             >
-              {awaitingStart && !running ? "В раунде" : statusSubtext(phase)}
+              {awaitingStart && !running ? t("crash.phase.running") : statusSubtext(phase)}
             </span>
           </>
         ) : null}
@@ -1217,7 +1221,7 @@ export function CrashChart({
         <div className="crash-stake-hud pointer-events-none absolute inset-x-0 bottom-0 z-[12]">
           <div className="crash-stake-hud__inner">
             <div className="crash-stake-hud__side">
-              <span className="crash-stake-hud__label">Ставка</span>
+              <span className="crash-stake-hud__label">{t("crash.stake")}</span>
               <span className="crash-stake-hud__value">
                 {stakeHud.gifts && stakeHud.gifts.length > 0 ? (
                   <span className="inline-flex items-center gap-1">
@@ -1238,7 +1242,7 @@ export function CrashChart({
               </span>
             </div>
             <div className="crash-stake-hud__side crash-stake-hud__side--win">
-              <span className="crash-stake-hud__label">Сейчас</span>
+              <span className="crash-stake-hud__label">{t("crash.current")}</span>
               <span className="crash-stake-hud__value crash-stake-hud__value--win">
                 <span className="inline-flex items-center gap-1">
                   <span ref={winAmountRef} className="tabular-nums">

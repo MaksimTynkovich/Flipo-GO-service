@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/i18n"
 	analyticsuc "github.com/flipo/flipo/apps/api/internal/usecase/analytics"
 	"gorm.io/gorm"
 )
@@ -76,6 +78,7 @@ type StarsPaymentHandler interface {
 type WebAppURLResolver func(ctx context.Context) string
 type WebAppButtonTextResolver func(ctx context.Context) string
 type TermsURLResolver func(ctx context.Context) (url, buttonText string)
+type LocaleResolver func(ctx context.Context, telegramID int64) string
 
 // UserLookup finds whether a Telegram user is already registered.
 type UserLookup interface {
@@ -94,6 +97,7 @@ type BotUpdates struct {
 	webAppURLResolver        WebAppURLResolver
 	webAppButtonTextResolver WebAppButtonTextResolver
 	termsURLResolver         TermsURLResolver
+	localeResolver           LocaleResolver
 	adminNotifier            *AdminNotifier
 	adminLogin               AdminLoginApprover
 	users                    UserLookup
@@ -137,6 +141,10 @@ func (h *BotUpdates) SetWebAppButtonTextResolver(resolver WebAppButtonTextResolv
 
 func (h *BotUpdates) SetTermsURLResolver(resolver TermsURLResolver) {
 	h.termsURLResolver = resolver
+}
+
+func (h *BotUpdates) SetLocaleResolver(resolver LocaleResolver) {
+	h.localeResolver = resolver
 }
 
 func (h *BotUpdates) SetAdminNotifier(notifier *AdminNotifier) {
@@ -200,7 +208,11 @@ func (h *BotUpdates) HandleUpdate(ctx context.Context, update Update) error {
 	h.trackBotStart(ctx, update.Message, payload)
 	h.maybeNotifyBotStart(ctx, update.Message, payload)
 
-	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload)
+	locale := domain.DefaultLocale
+	if update.Message.From != nil {
+		locale = h.resolveLocale(ctx, update.Message.From.ID)
+	}
+	return h.sendStartWelcome(ctx, update.Message.Chat.ID, payload, locale)
 }
 
 func (h *BotUpdates) handleChosenInlineResult(ctx context.Context, result *ChosenInlineResult) error {
@@ -215,7 +227,11 @@ func (h *BotUpdates) handlePreCheckout(ctx context.Context, q *PreCheckoutQuery)
 		return nil
 	}
 	if h.starsPay == nil {
-		return h.api.AnswerPreCheckoutQuery(ctx, q.ID, false, "Платежи временно недоступны")
+		locale := domain.DefaultLocale
+		if q.From != nil {
+			locale = h.resolveLocale(ctx, q.From.ID)
+		}
+		return h.api.AnswerPreCheckoutQuery(ctx, q.ID, false, i18n.T(locale, "bot.paymentsUnavailable"))
 	}
 	return h.starsPay.HandlePreCheckout(ctx, q.ID, q.InvoicePayload)
 }
@@ -365,30 +381,38 @@ func (u UserRepoLookup) FindByTelegramID(ctx context.Context, telegramID int64) 
 
 const startTermsNotice = "Заходя в проект, вы соглашаетесь с пользовательским соглашением."
 
-func (h *BotUpdates) sendStartWelcome(ctx context.Context, chatID int64, startPayload string) error {
+func (h *BotUpdates) resolveLocale(ctx context.Context, telegramID int64) string {
+	if h.localeResolver != nil && telegramID != 0 {
+		if loc := strings.TrimSpace(h.localeResolver(ctx, telegramID)); loc != "" {
+			return domain.NormalizeLocale(loc)
+		}
+	}
+	return domain.DefaultLocale
+}
+
+func (h *BotUpdates) sendStartWelcome(ctx context.Context, chatID int64, startPayload, locale string) error {
+	locale = domain.NormalizeLocale(locale)
 	text := strings.ReplaceAll(h.welcomeText, "\\n", "\n")
 	if text == "" {
-		text = "👋 Добро пожаловать в Flipo!\n\n" +
-			"🎮 Игры: рулетка, crash, PvP\n" +
-			"🎁 Стейкинг Telegram Gifts\n" +
-			"💰 TON депозиты и вывод\n\n" +
-			"Нажмите кнопку ниже, чтобы открыть приложение."
+		text = i18n.T(locale, "bot.welcome")
 	}
 	text = strings.TrimSpace(text)
-	if !strings.Contains(text, startTermsNotice) {
-		text = text + "\n\n" + startTermsNotice
+	notice := i18n.T(locale, "bot.termsNotice")
+	if !strings.Contains(text, notice) && !strings.Contains(text, startTermsNotice) {
+		text = text + "\n\n" + notice
 	}
 	text = "*" + text + "*"
 
-	return h.api.sendMessage(ctx, chatID, text, h.startMenuMarkup(ctx, startPayload), "Markdown")
+	return h.api.sendMessage(ctx, chatID, text, h.startMenuMarkup(ctx, startPayload, locale), "Markdown")
 }
 
-func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload string) map[string]any {
+func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload, locale string) map[string]any {
+	locale = domain.NormalizeLocale(locale)
 	rows := make([][]map[string]any, 0, 4)
 
-	rows = append(rows, []map[string]any{h.openAppButton(ctx, startPayload)})
+	rows = append(rows, []map[string]any{h.openAppButton(ctx, startPayload, locale)})
 
-	if termsURL, termsLabel := h.resolvedTerms(ctx); termsURL != "" {
+	if termsURL, termsLabel := h.resolvedTerms(ctx, locale); termsURL != "" {
 		rows = append(rows, []map[string]any{
 			{"text": termsLabel, "url": termsURL},
 		})
@@ -396,19 +420,19 @@ func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload string) m
 
 	if h.channelURL != "" {
 		rows = append(rows, []map[string]any{
-			{"text": "📢 Наш канал", "url": h.channelURL},
+			{"text": i18n.T(locale, "bot.channel"), "url": h.channelURL},
 		})
 	}
 
 	if h.supportURL != "" {
 		rows = append(rows, []map[string]any{
-			{"text": "💬 Поддержка", "url": h.supportURL},
+			{"text": i18n.T(locale, "bot.support"), "url": h.supportURL},
 		})
 	}
 
 	if h.cooperationURL != "" {
 		rows = append(rows, []map[string]any{
-			{"text": "🤝 Сотрудничество", "url": h.cooperationURL},
+			{"text": i18n.T(locale, "bot.cooperation"), "url": h.cooperationURL},
 		})
 	}
 
@@ -421,14 +445,14 @@ func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload string) m
 	}
 }
 
-func (h *BotUpdates) resolvedTerms(ctx context.Context) (url, buttonText string) {
+func (h *BotUpdates) resolvedTerms(ctx context.Context, locale string) (url, buttonText string) {
 	if h.termsURLResolver != nil {
 		url, buttonText = h.termsURLResolver(ctx)
 	}
-	url = strings.TrimSpace(url)
+	url = i18n.AppendLangQuery(url, locale)
 	buttonText = strings.TrimSpace(buttonText)
 	if buttonText == "" {
-		buttonText = "📄 Пользовательское соглашение"
+		buttonText = i18n.T(locale, "bot.terms")
 	}
 	return url, buttonText
 }
@@ -460,21 +484,25 @@ func (h *BotUpdates) resolvedButtonText(ctx context.Context) string {
 
 func (h *BotUpdates) openAppMarkup(ctx context.Context, startPayload string) map[string]any {
 	return map[string]any{
-		"inline_keyboard": [][]map[string]any{{h.openAppButton(ctx, startPayload)}},
+		"inline_keyboard": [][]map[string]any{{h.openAppButton(ctx, startPayload, domain.DefaultLocale)}},
 	}
 }
 
-func (h *BotUpdates) openAppButton(ctx context.Context, startPayload string) map[string]any {
+func (h *BotUpdates) openAppButton(ctx context.Context, startPayload, locale string) map[string]any {
+	buttonText := h.resolvedButtonText(ctx)
+	if buttonText == "" {
+		buttonText = i18n.T(locale, "bot.openApp")
+	}
 	if markup := OpenAppButtonMarkup(OpenAppButtonOptions{
 		WebAppURL:       h.resolvedWebAppURL(ctx),
 		BotUsername:     h.botUsername,
 		WebAppShortName: h.webAppShortName,
 		StartPayload:    startPayload,
-		ButtonText:      h.resolvedButtonText(ctx),
+		ButtonText:      buttonText,
 	}); markup != nil {
 		if kb, ok := markup["inline_keyboard"].([][]map[string]any); ok && len(kb) > 0 && len(kb[0]) > 0 {
 			return kb[0][0]
 		}
 	}
-	return map[string]any{"text": "🚀 Открыть приложение"}
+	return map[string]any{"text": buttonText}
 }

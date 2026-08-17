@@ -13,19 +13,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatCollectionSlug } from "@/lib/gifts";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 export type MarketSort = "newest" | "price_asc" | "price_desc";
 
 const SORT_CYCLE: MarketSort[] = ["price_desc", "newest", "price_asc"];
 
-const SORT_META: Record<
-  MarketSort,
-  { label: string; Icon: typeof ArrowUpDown }
-> = {
-  newest: { label: "Сначала новые", Icon: ArrowUpDown },
-  price_asc: { label: "Сначала дешевле", Icon: ArrowUpNarrowWide },
-  price_desc: { label: "Сначала дороже", Icon: ArrowDownWideNarrow },
+const SORT_META: Record<MarketSort, { key: "market.sort.newest" | "market.sort.price_asc" | "market.sort.price_desc"; Icon: typeof ArrowUpDown }> = {
+  newest: { key: "market.sort.newest", Icon: ArrowUpDown },
+  price_asc: { key: "market.sort.price_asc", Icon: ArrowUpNarrowWide },
+  price_desc: { key: "market.sort.price_desc", Icon: ArrowDownWideNarrow },
 };
 
 type Props = {
@@ -47,6 +45,7 @@ export function MarketToolbar({
   onSelectedCollectionsChange,
   collections,
 }: Props) {
+  const t = useT();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draftCollections, setDraftCollections] = useState<string[]>([]);
   const [collectionSearch, setCollectionSearch] = useState("");
@@ -101,7 +100,7 @@ export function MarketToolbar({
               document.documentElement.scrollTop = 0;
               document.body.scrollTop = 0;
             }}
-            placeholder="Поиск"
+            placeholder={t("common.search")}
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
             enterKeyHint="search"
             autoCapitalize="off"
@@ -112,7 +111,7 @@ export function MarketToolbar({
             <button
               type="button"
               onClick={() => onQueryChange("")}
-              aria-label="Очистить поиск"
+              aria-label={t("common.clearSearch")}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-opacity active:opacity-70"
             >
               <X className="h-3.5 w-3.5" />
@@ -125,7 +124,7 @@ export function MarketToolbar({
           onClick={() =>
             onSortChange(SORT_CYCLE[(SORT_CYCLE.indexOf(sort) + 1) % SORT_CYCLE.length])
           }
-          aria-label={SORT_META[sort].label}
+          aria-label={t(SORT_META[sort].key)}
           className={cn(
             "app-control relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-muted",
             sort !== "price_desc" && "text-accent",
@@ -138,7 +137,7 @@ export function MarketToolbar({
           <button
             type="button"
             onClick={openFilters}
-            aria-label="Фильтры"
+            aria-label={t("common.filters")}
             aria-expanded={filtersOpen}
             className={cn(
               "app-control relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface-raised text-muted",
@@ -159,7 +158,7 @@ export function MarketToolbar({
             <div
               role="dialog"
               aria-modal="true"
-              aria-label="Фильтры маркета"
+              aria-label={t("market.filtersAria")}
               className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[84dvh] flex-col"
             >
               <div className="shrink-0 px-4 pt-2">
@@ -171,14 +170,14 @@ export function MarketToolbar({
                       onClick={clearDraft}
                       className="absolute left-0 top-1/2 -translate-y-1/2 text-xs font-medium text-muted transition-colors active:text-foreground"
                     >
-                      Сбросить
+                      {t("common.reset")}
                     </button>
                   ) : null}
-                  <p className="text-[15px] font-semibold text-foreground">Коллекции</p>
+                  <p className="text-[15px] font-semibold text-foreground">{t("market.collections")}</p>
                   <button
                     type="button"
                     onClick={close}
-                    aria-label="Закрыть"
+                    aria-label={t("common.close")}
                     className="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised text-muted transition-opacity active:opacity-70"
                   >
                     <X className="h-4 w-4" />
@@ -193,7 +192,7 @@ export function MarketToolbar({
                     type="search"
                     value={collectionSearch}
                     onChange={(e) => setCollectionSearch(e.target.value)}
-                    placeholder="Поиск коллекции"
+                    placeholder={t("market.searchCollection")}
                     className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
                     enterKeyHint="search"
                     autoCapitalize="off"
@@ -204,7 +203,7 @@ export function MarketToolbar({
                     <button
                       type="button"
                       onClick={() => setCollectionSearch("")}
-                      aria-label="Очистить поиск"
+                      aria-label={t("common.clearSearch")}
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-opacity active:opacity-70"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -245,7 +244,7 @@ export function MarketToolbar({
                     );
                   })}
                   {filteredCollections.length === 0 ? (
-                    <li className="py-8 text-center text-sm text-muted">Ничего не найдено</li>
+                    <li className="py-8 text-center text-sm text-muted">{t("market.nothingFound")}</li>
                   ) : null}
                 </ul>
               </div>
@@ -255,7 +254,7 @@ export function MarketToolbar({
                   className="h-12 w-full rounded-2xl text-[15px] font-semibold"
                   onClick={applyFilters}
                 >
-                  Готово
+                  {t("common.done")}
                   {draftCollections.length > 0 ? ` · ${draftCollections.length}` : ""}
                 </Button>
               </div>

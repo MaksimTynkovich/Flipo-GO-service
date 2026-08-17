@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { crashBetClosedLabel } from "@/lib/bet-cta";
+import { useT } from "@/components/providers/I18nProvider";
 import { useCountdownSeconds } from "@/src/shared/hooks/useCountdownSeconds";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
@@ -70,6 +71,7 @@ export default function CrashPage() {
 }
 
 function CrashPageContent() {
+  const t = useT();
   const { user, setUser } = useAuth();
   const acceptBets = useAcceptBets();
   const { showToast } = useToast();
@@ -370,9 +372,11 @@ function CrashPageContent() {
     (preparedTonNanoton > 0 ? 1 : 0) + preparedGiftIds.length;
 
   const betButtonLabel = (() => {
-    if (!acceptBets) return "Ставки временно закрыты";
+    if (!acceptBets) return t("crash.betsClosed");
     if (canBet) {
-      return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
+      return preparedBetCount > 1
+        ? t("crash.placeBets", { count: preparedBetCount })
+        : t("crash.placeBet");
     }
     const base = crashBetClosedLabel(state?.phase);
     if (waitSeconds > 0 && (state?.phase === "waiting" || state?.phase === "crashed")) {
@@ -409,7 +413,7 @@ function CrashPageContent() {
 
   async function bet() {
     if (!acceptBets) {
-      showToast({ variant: "error", title: "Ставки временно не принимаются" });
+      showToast({ variant: "error", title: t("errors.betsPaused") });
       haptics.notificationOccurred("error");
       return;
     }
@@ -423,18 +427,18 @@ function CrashPageContent() {
     const nanotons = preparedTonNanoton;
 
     if (nanotons <= 0 && giftIds.length === 0) {
-      showToast({ variant: "error", title: "Укажите сумму TON или выберите подарок." });
+      showToast({ variant: "error", title: t("crash.needAmount") });
       haptics.notificationOccurred("error");
       return;
     }
     if (nanotons > 0 && user && user.betting_balance < nanotons) {
-      showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+      showToast({ variant: "error", title: t("crash.insufficient") });
       haptics.notificationOccurred("error");
       return;
     }
 
     if (autoEnabled && autoCashoutValue == null) {
-      showToast({ variant: "error", title: "Укажите множитель автовывода ≥ 1.01" });
+      showToast({ variant: "error", title: t("crash.autoMin") });
       haptics.notificationOccurred("error");
       return;
     }
@@ -633,14 +637,16 @@ function CrashPageContent() {
   const primaryDisabled = betting || cashingOut || (!canCashout && !canBet);
   const primaryAction = canCashout ? cashout : bet;
   const primaryBusy = betting || cashingOut;
-  const primaryBusyLabel = cashingOut ? "Забираем…" : "Ставим…";
+  const primaryBusyLabel = cashingOut ? t("crash.cashingOut") : t("crash.placing");
   const primaryLabel = (() => {
     if (canCashout) return null; // rendered with live amount span
-    if (!acceptBets) return "Ставки временно закрыты";
+    if (!acceptBets) return t("crash.betsClosed");
     if (canBet) {
-      return preparedBetCount > 1 ? `Поставить (${preparedBetCount})` : "Поставить";
+      return preparedBetCount > 1
+        ? t("crash.placeBets", { count: preparedBetCount })
+        : t("crash.placeBet");
     }
-    if (state?.phase === "running") return "Нет ставки";
+    if (state?.phase === "running") return t("crash.noBet");
     return betButtonLabel;
   })();
 
@@ -710,7 +716,7 @@ function CrashPageContent() {
               <BtnBusy label={primaryBusyLabel} />
             ) : canCashout ? (
               <span className="inline-flex items-center gap-1.5 tabular-nums">
-                <span>{roundActiveBets.length > 1 ? "Забрать все ·" : "Забрать ·"}</span>
+                <span>{roundActiveBets.length > 1 ? t("crash.cashoutAll") : t("crash.cashout")}</span>
                 <span ref={cashoutAmountRef}>{cashoutTotalTon.toFixed(2)}</span>
               </span>
             ) : (
@@ -755,7 +761,7 @@ function CrashPageContent() {
         <ProofModal
           roundId={proofRoundId}
           gameType="crash"
-          title="Проверка Crash"
+          title={t("crash.proofTitle")}
           onClose={() => setProofRoundId(null)}
         />
       ) : null}

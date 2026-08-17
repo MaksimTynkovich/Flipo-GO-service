@@ -12,6 +12,7 @@ import { getGameModes, type GameModeKey } from "@/lib/api";
 import { APP_ROUTES, GAME_LOBBY_ITEMS } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/providers/I18nProvider";
 
 const TONE_TO_MODE: Record<string, GameModeKey> = {
   crash: "crash",
@@ -21,6 +22,7 @@ const TONE_TO_MODE: Record<string, GameModeKey> = {
 export function GamesLobbyView() {
   const haptics = useTelegramHaptics();
   const { user } = useAuth();
+  const t = useT();
   const [modes, setModes] = useState<Partial<Record<GameModeKey, { enabled: boolean; available: boolean }>>>({});
   const [modesReady, setModesReady] = useState(false);
 
@@ -57,7 +59,7 @@ export function GamesLobbyView() {
         <GamesPromoBanner />
 
         <div className="games-lobby__intro">
-          <h2 className="games-lobby__intro-title">Режимы</h2>
+          <h2 className="games-lobby__intro-title">{t("games.modes")}</h2>
         </div>
 
         <div className="games-lobby__grid games-lobby__grid--duo">
@@ -88,13 +90,15 @@ export function GamesLobbyView() {
                     <GamesCardArt tone={item.tone} />
 
                     <div className="games-card__content">
-                      <p className="games-card__title">{item.title}</p>
+                      <p className="games-card__title">
+                        {item.title ?? (item.titleKey ? t(item.titleKey) : "")}
+                      </p>
                       <p className="games-card__meta">
                         <span className="games-card__meta-dot" />
-                        {adminOnly ? "Админ" : item.badge}
+                        {adminOnly ? t("common.admin") : t(item.badgeKey)}
                       </p>
                       <span className="games-card__cta">
-                        <span className="games-card__cta-label">{item.cta ?? "Играть"}</span>
+                        <span className="games-card__cta-label">{item.cta ?? t("common.play")}</span>
                         <ChevronRight className="games-card__cta-chevron" strokeWidth={2.75} aria-hidden />
                       </span>
                     </div>
@@ -119,10 +123,10 @@ export function GamesLobbyView() {
             <div className="games-lobby__referral-fade" />
           </div>
           <div className="games-lobby__referral-copy">
-            <p className="games-lobby__referral-title">Приглашайте друзей</p>
-            <p className="games-lobby__referral-desc">Доля от их стейкинга каждый день</p>
+            <p className="games-lobby__referral-title">{t("games.inviteTitle")}</p>
+            <p className="games-lobby__referral-desc">{t("games.inviteDesc")}</p>
             <span className="games-lobby__referral-cta">
-              Пригласить
+              {t("games.inviteCta")}
               <ChevronRight className="games-lobby__referral-cta-icon" strokeWidth={2.75} aria-hidden />
             </span>
           </div>

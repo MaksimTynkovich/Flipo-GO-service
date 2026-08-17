@@ -13,6 +13,8 @@ import { trackEvent } from "@/lib/analytics";
 import { markBootStage } from "@/lib/boot";
 import { formatUserError } from "@/lib/user-errors";
 import { storeCampaignLanding } from "@/lib/campaign";
+import { normalizeLocale } from "@/lib/i18n";
+import { useI18n } from "@/components/providers/I18nProvider";
 import {
   isReferralStartParam,
   readStartParamFromTelegram,
@@ -37,6 +39,7 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { setLocale, t } = useI18n();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -45,7 +48,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onSessionRefreshed = (event: Event) => {
       const user = (event as CustomEvent<{ user: User }>).detail?.user;
-      if (user) setUser(user);
+      if (user) {
+        setUser(user);
+        if (user.locale) setLocale(normalizeLocale(user.locale));
+      }
     };
     window.addEventListener(AUTH_SESSION_REFRESHED, onSessionRefreshed);
     return () => window.removeEventListener(AUTH_SESSION_REFRESHED, onSessionRefreshed);
@@ -128,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           );
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
+          if (authUser.locale) setLocale(normalizeLocale(authUser.locale));
           if (start?.landing) storeCampaignLanding(start.landing);
           trackEvent({
             event_name: "auth_succeeded",
@@ -146,7 +153,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = localStorage.getItem("flipo_token");
         if (token && allowBrowserSession) {
           try {
-            setUser(await getMe());
+            const me = await getMe();
+            setUser(me);
+            if (me.locale) setLocale(normalizeLocale(me.locale));
             trackEvent({
               event_name: "auth_restored",
               event_category: "auth",
@@ -170,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { token: newToken, user: authUser } = await authDebug();
           localStorage.setItem("flipo_token", newToken);
           setUser(authUser);
+          if (authUser.locale) setLocale(normalizeLocale(authUser.locale));
           trackEvent({
             event_name: "auth_debug_succeeded",
             event_category: "auth",
@@ -180,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        setError("Откройте приложение в Telegram.");
+        setError(t("auth.openInTelegram"));
         markBootStage("auth_failed");
       } catch (e) {
         trackEvent({
@@ -190,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error_code: "auth_failed",
           error_message: e instanceof Error ? e.message : "auth_failed",
         });
-        setError(formatUserError(e, "Не удалось войти"));
+        setError(formatUserError(e, t("auth.failed")));
         markBootStage("auth_failed");
       } finally {
         window.clearTimeout(timeoutId);

@@ -6,11 +6,13 @@ import { AltDepositPanel } from "@/components/deposit/AltDepositPanel";
 import { trackFlowViewed } from "@/lib/analytics";
 import { getPaymentFeatures, type PaymentFeatures } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/providers/I18nProvider";
 import { Bot, Star, Wallet } from "lucide-react";
 
 type Tab = "ton" | "cryptobot" | "stars";
 
 export function DepositSection() {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("ton");
   const [features, setFeatures] = useState<PaymentFeatures | null>(null);
 
@@ -54,7 +56,7 @@ export function DepositSection() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted">Выберите способ зачисления средств</p>
+      <p className="text-sm text-muted">{t("deposit.pickMethod")}</p>
 
       <div className="segment-control overflow-x-auto">
         {tabs.map(({ id, label, icon: Icon, disabled }) => (

@@ -53,8 +53,16 @@ func main() {
 		notifStore = nil
 	}
 	adminNotifier := telegram.NewAdminNotifier(notifStore, botAPI, cfg.AdminTelegramIDs)
+	giftBot := telegram.NewBotNotifier(cfg.BotToken)
+	giftBot.SetLocaleResolver(func(ctx context.Context, telegramID int64) string {
+		user, err := userRepo.FindByTelegramID(ctx, telegramID)
+		if err != nil || user == nil {
+			return domain.DefaultLocale
+		}
+		return user.Locale
+	})
 	depositNotifier := notifications.NewGiftDepositNotifier(
-		telegram.NewBotNotifier(cfg.BotToken),
+		giftBot,
 		nil,
 		valuator,
 		adminNotifier,

@@ -8,6 +8,7 @@ import { formatTON, ProfileGift, StakingStats } from "@/lib/api";
 import { TonAmount } from "@/components/icons/TonIcon";
 import { giftImageUrl } from "@/lib/gifts";
 import { formatStakingApr, formatStakingEpochEnd } from "@/lib/staking-ui";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 import { Gift } from "lucide-react";
 
@@ -28,6 +29,7 @@ function StatCell({ label, value, accent }: { label: string; value: ReactNode; a
 }
 
 export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
+  const t = useT();
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(gift.slug, gift.image_url);
   const epochEnd = epochEndsAt ? formatStakingEpochEnd(epochEndsAt) : null;
@@ -40,12 +42,12 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
 
         <div className="relative mb-4 flex items-center justify-center">
           <p className="text-[15px] font-semibold text-foreground">
-            {gift.is_staked ? "В стейке" : "Подарок"}
+            {gift.is_staked ? t("staking.inStakeBadge") : t("staking.gift")}
           </p>
           <button
             type="button"
             onClick={close}
-            aria-label="Закрыть"
+            aria-label={t("common.close")}
             className="absolute right-0 flex h-9 w-9 items-center justify-center rounded-full bg-surface-raised text-muted transition-opacity active:opacity-70"
           >
             <X className="h-4 w-4" />
@@ -68,13 +70,13 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
         <div className="mb-4 text-center">
           <p className="text-[17px] font-semibold leading-tight">{gift.name}</p>
           <p className="mt-1 inline-flex items-center gap-1 text-sm tabular-nums text-muted">
-            Стоимость <TonAmount amount={formatTON(gift.price_nanoton)} variant="brand" iconClassName="h-5 w-5" />
+            {t("staking.value")} <TonAmount amount={formatTON(gift.price_nanoton)} variant="brand" iconClassName="h-5 w-5" />
           </p>
         </div>
 
         <div className="mb-5">
           <StatCell
-            label={gift.is_staked ? "Ежедневная выплата" : "Выплата за сутки"}
+            label={gift.is_staked ? t("staking.dailyPayout") : t("staking.payoutPerDay")}
             value={`+${formatTON(gift.daily_yield_nanoton)}`}
             accent
           />
@@ -82,25 +84,25 @@ export function StakingGiftSheet({ gift, stats, epochEndsAt, onClose }: Props) {
 
         {gift.is_staked ? (
           <div className="rounded-xl bg-surface-raised px-3 py-3 text-center">
-            <p className="text-xs font-medium text-foreground">Заблокирован до полуночи МСК</p>
+            <p className="text-xs font-medium text-foreground">{t("staking.lockedUntilMidnight")}</p>
             {epochEnd && (
               <p className="mt-1 text-xs text-muted">
-                До {epochEnd.dateLine}, {epochEnd.timeLine}
+                {t("staking.until", { date: epochEnd.dateLine, time: epochEnd.timeLine })}
               </p>
             )}
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              Ежедневный цикл: выплата и разблокировка в 00:05 МСК — потом снова застейкайте
+              {t("staking.cycleHint")}
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             <p className="rounded-xl bg-surface-raised px-3 py-3 text-center text-xs leading-relaxed text-muted">
-              {formatStakingApr(stats.monthly_rate_percent)} от стоимости подарка.
-              Стейк на сутки: ночью выплата, на следующий день нужно застейкать снова.
+              {t("staking.aprOfValue", { apr: formatStakingApr(stats.monthly_rate_percent) })}{" "}
+              {t("staking.dayCycle")}
             </p>
             {gift.source === "profile" ? (
               <p className="text-center text-[11px] leading-relaxed text-accent">
-                Подарок остаётся у вас — передавать боту не нужно
+                {t("staking.staysWithYou")}
               </p>
             ) : null}
           </div>

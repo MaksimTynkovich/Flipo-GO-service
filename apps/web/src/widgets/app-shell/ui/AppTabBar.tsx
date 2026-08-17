@@ -6,20 +6,23 @@ import { cn } from "@/lib/utils";
 import { getMainTabs } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useCasesFeatures } from "@/components/providers/CasesFeaturesProvider";
+import { useT } from "@/components/providers/I18nProvider";
+import type { MessageKey } from "@/lib/i18n";
 
 export function AppTabBar() {
   const pathname = usePathname();
   const haptics = useTelegramHaptics();
   const { casesVisible } = useCasesFeatures();
   const tabs = getMainTabs({ casesEnabled: casesVisible });
+  const t = useT();
 
   return (
     <nav
-      aria-label="Основная навигация"
+      aria-label={t("nav.main")}
       className="app-tabbar absolute bottom-0 left-0 right-0 z-50 bg-background pb-[var(--app-safe-bottom)] pl-[var(--app-safe-left)] pr-[var(--app-safe-right)] hairline-top"
     >
       <div className="app-container flex h-[3.75rem] items-stretch">
-        {tabs.map(({ href, label, icon: Icon, match }) => {
+        {tabs.map(({ href, id, icon: Icon, match }) => {
           const active = match(pathname);
 
           return (
@@ -49,7 +52,7 @@ export function AppTabBar() {
                   active ? "font-semibold" : "font-medium",
                 )}
               >
-                {label}
+                {t(`nav.${id}` as MessageKey)}
               </span>
             </Link>
           );

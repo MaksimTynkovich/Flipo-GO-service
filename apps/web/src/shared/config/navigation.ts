@@ -9,6 +9,7 @@ import {
   User,
 } from "lucide-react";
 import { MARKET_ENABLED } from "@/src/shared/config/features";
+import type { MessageKey } from "@/lib/i18n";
 
 export const APP_ROUTES = {
   home: "/cases",
@@ -30,9 +31,9 @@ export type ScreenLevel = "tab" | "stack";
 
 export type ScreenContext = {
   level: ScreenLevel;
-  title: string;
+  titleKey?: MessageKey;
   backHref?: string;
-  backLabel?: string;
+  backLabelKey?: MessageKey;
   /** Prefer browser history when the entry point may vary (e.g. deposit). */
   useRouterBack?: boolean;
 };
@@ -47,34 +48,34 @@ const TAB_ROOTS = [
 
 const STACK_SCREENS: Record<string, Omit<ScreenContext, "level">> = {
   [APP_ROUTES.deposit]: {
-    title: "Пополнение",
-    backLabel: "Назад",
+    titleKey: "nav.deposit",
+    backLabelKey: "common.back",
     useRouterBack: true,
   },
   [APP_ROUTES.inventory]: {
-    title: "Инвентарь",
+    titleKey: "nav.inventory",
     backHref: APP_ROUTES.profile,
-    backLabel: "Профиль",
+    backLabelKey: "nav.profile",
   },
   [APP_ROUTES.profileStaking]: {
-    title: "Стейкинг",
+    titleKey: "nav.staking",
     backHref: APP_ROUTES.profile,
-    backLabel: "Профиль",
+    backLabelKey: "nav.profile",
   },
   [APP_ROUTES.profileReferrals]: {
-    title: "Рефералы",
+    titleKey: "nav.referrals",
     backHref: APP_ROUTES.profile,
-    backLabel: "Профиль",
+    backLabelKey: "nav.profile",
   },
   [APP_ROUTES.crash]: {
-    title: "Crash",
+    titleKey: "nav.crash",
     backHref: APP_ROUTES.games,
-    backLabel: "Игры",
+    backLabelKey: "nav.games",
   },
   [APP_ROUTES.roulette]: {
-    title: "Колесо фортуны",
+    titleKey: "nav.roulette",
     backHref: APP_ROUTES.games,
-    backLabel: "Игры",
+    backLabelKey: "nav.games",
   },
 };
 
@@ -216,9 +217,10 @@ export function getMainTabs(options?: { casesEnabled?: boolean }): MainTabItem[]
 
 export type GameLobbyItem = {
   href: string;
-  title: string;
-  description: string;
-  badge: string;
+  title?: string;
+  titleKey?: MessageKey;
+  descriptionKey: MessageKey;
+  badgeKey: MessageKey;
   cta?: string;
   icon: LucideIcon;
   tone: "crash" | "roulette";
@@ -228,16 +230,16 @@ export const GAME_LOBBY_ITEMS: GameLobbyItem[] = [
   {
     href: APP_ROUTES.crash,
     title: "Crash",
-    description: "Успейте забрать до краша.",
-    badge: "Онлайн",
+    descriptionKey: "games.crashDesc",
+    badgeKey: "common.online",
     icon: Rocket,
     tone: "crash",
   },
   {
     href: APP_ROUTES.roulette,
-    title: "Колесо фортуны",
-    description: "Выберите цвет и ждите.",
-    badge: "Онлайн",
+    titleKey: "nav.roulette",
+    descriptionKey: "games.rouletteDesc",
+    badgeKey: "common.online",
     icon: CircleDot,
     tone: "roulette",
   },
@@ -259,15 +261,27 @@ export function getActiveMainTab(pathname: string): MainTabItem["id"] | null {
 export function getScreenContext(pathname: string): ScreenContext {
   if (isTabRoot(pathname)) {
     const tab = MAIN_TABS.find((item) => item.href === pathname);
-    return { level: "tab", title: tab?.label ?? "" };
+    const titleKey =
+      tab?.id === "cases"
+        ? "nav.cases"
+        : tab?.id === "games"
+          ? "nav.games"
+          : tab?.id === "quests"
+            ? "nav.quests"
+            : tab?.id === "market"
+              ? "nav.market"
+              : tab?.id === "profile"
+                ? "nav.profile"
+                : undefined;
+    return { level: "tab", titleKey };
   }
 
   if (pathname.startsWith(`${APP_ROUTES.cases}/`)) {
     return {
       level: "stack",
-      title: "Кейс",
+      titleKey: "nav.case",
       backHref: APP_ROUTES.cases,
-      backLabel: "Кейсы",
+      backLabelKey: "nav.cases",
     };
   }
 
@@ -279,22 +293,22 @@ export function getScreenContext(pathname: string): ScreenContext {
   if (pathname.startsWith(`${APP_ROUTES.profile}/`)) {
     return {
       level: "stack",
-      title: "Профиль",
+      titleKey: "nav.profile",
       backHref: APP_ROUTES.profile,
-      backLabel: "Профиль",
+      backLabelKey: "nav.profile",
     };
   }
 
   if (pathname.startsWith(`${APP_ROUTES.games}/`)) {
     return {
       level: "stack",
-      title: "Игра",
+      titleKey: "nav.game",
       backHref: APP_ROUTES.games,
-      backLabel: "Игры",
+      backLabelKey: "nav.games",
     };
   }
 
-  return { level: "stack", title: "", backLabel: "Назад", useRouterBack: true };
+  return { level: "stack", titleKey: undefined, backLabelKey: "common.back", useRouterBack: true };
 }
 
 export function isStackScreen(pathname: string): boolean {

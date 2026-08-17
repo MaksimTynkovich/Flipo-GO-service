@@ -5,6 +5,7 @@ import { candyTileBackgroundForLoot } from "@/components/cases/case-ui";
 import { CaseTonPrizeArt, CASE_TON_TILE_BACKGROUND } from "@/components/cases/CaseTonPrizeArt";
 import type { CaseLootPreview } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 /** How many prize tiles must fit fully in the roulette viewport. */
@@ -113,6 +114,7 @@ export function CaseOpenReveal({
   embedded = false,
   onComplete,
 }: CaseOpenRevealProps) {
+  const t = useT();
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const onCompleteRef = useRef(onComplete);
@@ -232,7 +234,7 @@ export function CaseOpenReveal({
     return (
       <div className={cn("case-reveal case-reveal--empty", embedded && "case-reveal--embedded")}>
         <div className="case-reveal__frame case-reveal__frame--empty">
-          <p className="text-sm text-white/40">Нет призов</p>
+          <p className="text-sm text-white/40">{t("cases.noPrizes")}</p>
         </div>
       </div>
     );
@@ -256,7 +258,7 @@ export function CaseOpenReveal({
       }
       role="status"
       aria-live={isSpin ? "polite" : "off"}
-      aria-label={isSpin ? "Открытие кейса" : "Призы в рулетке"}
+      aria-label={isSpin ? t("cases.openingAria") : t("cases.prizesAria")}
     >
       <div className="case-reveal__frame">
         <div className="case-reveal__fade case-reveal__fade--left" aria-hidden />

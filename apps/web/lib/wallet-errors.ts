@@ -1,3 +1,5 @@
+import { getRuntimeLocale, translate, type MessageKey } from "@/lib/i18n";
+
 export type WalletMessageType = "success" | "error" | "info";
 
 export type WalletMessage = {
@@ -6,6 +8,10 @@ export type WalletMessage = {
 };
 
 const MIN_TON_LABEL = "0.1 TON";
+
+function t(key: MessageKey, params?: Record<string, string | number>): string {
+  return translate(getRuntimeLocale(), key, params);
+}
 
 export function formatWalletError(
   error: unknown,
@@ -21,13 +27,11 @@ export function formatWalletError(
       lower.includes("declined") ||
       lower.includes("user denied")
     ) {
-      return "Операция отменена в кошельке.";
+      return t("errors.operationCancelled");
     }
 
     if (lower.includes("insufficient balance") || lower.includes("недостаточно средств")) {
-      return context === "withdraw"
-        ? "Недостаточно средств. Учтите комиссию — она добавляется к сумме списания."
-        : "Недостаточно средств на балансе.";
+      return context === "withdraw" ? t("errors.insufficientFee") : t("errors.insufficientBalance");
     }
 
     if (
@@ -35,66 +39,65 @@ export function formatWalletError(
       lower.includes("подключи ton-кошелёк") ||
       lower.includes("подключите ton-кошелёк")
     ) {
-      return "Сначала подключите TON-кошелёк.";
+      return t("errors.connectWallet");
     }
 
     if (lower.includes("invalid amount") || lower.includes("корректную сумму")) {
       return context === "withdraw"
-        ? `Минимальная сумма вывода на кошелёк — ${MIN_TON_LABEL}.`
-        : `Минимальное пополнение — ${MIN_TON_LABEL}.`;
+        ? t("errors.minWithdraw", { min: MIN_TON_LABEL })
+        : t("errors.minDeposit", { min: MIN_TON_LABEL });
     }
 
     if (lower.includes("transfer expired") || lower.includes("время на оплату истекло")) {
-      return "Время на оплату истекло. Создайте новое пополнение.";
+      return t("errors.paymentExpired");
     }
 
     if (lower.includes("transfer already pending") || lower.includes("активная операция")) {
-      return "У вас уже есть активная операция. Дождитесь её завершения.";
+      return t("errors.activeTransfer");
     }
 
     if (lower.includes("chain verification unavailable") || lower.includes("ton временно недоступен")) {
-      return "Сервис TON временно недоступен. Попробуйте через пару минут.";
+      return t("errors.tonUnavailable");
     }
 
     if (lower.includes("failed to fetch") || lower.includes("network")) {
-      return "Нет связи с сервером. Проверьте интернет и попробуйте снова.";
+      return t("errors.network");
     }
 
-    if (raw && !raw.startsWith("Key:") && /[а-яё]/i.test(raw)) {
+    if (raw && !raw.startsWith("Key:") && /[а-яё]/i.test(raw) && getRuntimeLocale() === "ru") {
       return raw;
     }
   }
 
-  return context === "withdraw"
-    ? "Не удалось создать вывод. Попробуйте ещё раз."
-    : "Не удалось выполнить пополнение. Попробуйте ещё раз.";
+  return context === "withdraw" ? t("errors.withdrawFailed") : t("errors.depositFailed");
 }
 
 export function walletStatusLabel(status: string): string {
   switch (status) {
     case "awaiting_payment":
-      return "Ожидает оплату";
+      return t("wallet.awaiting_payment");
     case "pending_review":
-      return "В ожидании";
+      return t("wallet.pending_review");
     case "queued":
-      return "В очереди";
+      return t("wallet.queued");
     case "broadcasting":
-      return "Отправляется";
+      return t("wallet.broadcasting");
     case "completed":
-      return "Завершено";
+      return t("wallet.completed");
     case "failed":
-      return "Ошибка";
+      return t("wallet.failed");
     case "rejected":
-      return "Отклонён";
+      return t("wallet.rejected");
     case "expired":
-      return "Истекло";
+      return t("wallet.expired");
     default:
-      return "В обработке";
+      return t("wallet.processing");
   }
 }
 
 export function formatTransferDate(iso: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
+  const locale = getRuntimeLocale() === "ru" ? "ru-RU" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
     day: "numeric",
     month: "short",
     hour: "2-digit",

@@ -3,6 +3,7 @@
 import { type CSSProperties } from "react";
 import { Copy, Share2, UserRound, X } from "lucide-react";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
+import { useT } from "@/components/providers/I18nProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ export function CaseQuestSheet({
   onShare,
   onCheckName,
 }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const isShare = step === "share";
   const tag = nameTag.trim() || "@flipoGameBot";
@@ -32,9 +34,9 @@ export function CaseQuestSheet({
   async function copyTag() {
     try {
       await navigator.clipboard.writeText(tag);
-      showToast({ variant: "success", title: "Тег скопирован" });
+      showToast({ variant: "success", title: t("cases.tagCopied") });
     } catch {
-      showToast({ variant: "error", title: "Не удалось скопировать" });
+      showToast({ variant: "error", title: t("cases.copyFailed") });
     }
   }
 
@@ -61,7 +63,7 @@ export function CaseQuestSheet({
           <button
             type="button"
             onClick={close}
-            aria-label="Закрыть"
+            aria-label={t("common.close")}
             className="absolute right-4 top-3.5 flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground sm:right-5"
           >
             <X className="h-4 w-4" />
@@ -86,17 +88,10 @@ export function CaseQuestSheet({
               id="case-quest-title"
               className="text-[1.125rem] font-semibold tracking-tight text-foreground"
             >
-              {isShare ? "Поделитесь с друзьями" : "Добавьте бота в имя"}
+              {isShare ? t("cases.shareFriends") : t("cases.addBotToName")}
             </h2>
             <p className="mt-2 max-w-[20rem] text-sm leading-relaxed text-muted">
-              {isShare ? (
-                "Отправьте пост другу в Telegram, чтобы открыть кейс"
-              ) : (
-                <>
-                  Добавьте <span className="font-semibold text-foreground">{tag}</span> в имя
-                  Telegram, затем нажмите «Проверить»
-                </>
-              )}
+              {isShare ? t("cases.sharePost") : t("cases.addTag", { tag })}
             </p>
 
             {!isShare ? (
@@ -123,12 +118,12 @@ export function CaseQuestSheet({
                   "linear-gradient(180deg, var(--quest-cta) 0%, var(--quest-cta-deep) 100%)",
               }}
             >
-              {busy ? "…" : isShare ? "Поделиться" : "Проверить и продолжить"}
+              {busy ? t("common.sharing") : isShare ? t("common.share") : t("cases.checkContinue")}
             </button>
 
             {!isShare ? (
               <p className="mt-3 text-[11px] leading-relaxed text-muted/80">
-                После смены имени перезайдите в приложение, если проверка не проходит
+                {t("cases.reopenHint")}
               </p>
             ) : null}
           </div>

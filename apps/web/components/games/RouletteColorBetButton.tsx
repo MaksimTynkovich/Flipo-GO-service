@@ -2,11 +2,8 @@
 
 import { formatTON } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
-import {
-  ROULETTE_COLOR_STYLES,
-  RouletteColor,
-  rouletteFillStyle,
-} from "@/lib/roulette";
+import { RouletteColor, colorLabel, rouletteFillStyle } from "@/lib/roulette";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 import { trackDisabledClick } from "@/lib/analytics";
 
@@ -29,7 +26,7 @@ export function RouletteColorBetButton({
   active,
   onClick,
 }: Props) {
-  const style = ROULETTE_COLOR_STYLES[color];
+  const t = useT();
   const hasMine = myStake > 0;
   const hasTotal = roundTotal > 0;
 
@@ -39,8 +36,8 @@ export function RouletteColorBetButton({
       disabled={disabled}
       aria-label={
         hasMine
-          ? `${style.label}, ваша ставка ${formatTON(myStake)} TON`
-          : `${style.label} ${multiplier}`
+          ? t("roulette.yourBet", { color: colorLabel(color), amount: formatTON(myStake) })
+          : `${colorLabel(color)} ${multiplier}`
       }
       onPointerDown={() => {
         if (disabled) {

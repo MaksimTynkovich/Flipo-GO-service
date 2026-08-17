@@ -11,6 +11,7 @@ import { BetFundingMode } from "@/lib/bet-funding";
 import { formatTON } from "@/lib/api";
 import { giftImageUrl, giftValuationNanoton } from "@/lib/gifts";
 import { pluralizeGifts } from "@/lib/staking-ui";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 type AmountInputProps = {
@@ -52,11 +53,13 @@ export function BetFundingControl({
   excludedGiftIds = [],
   multiple = true,
   amountInputProps,
-  title = "Ставка",
+  title,
   subtitle,
   className,
   combined = false,
 }: Props) {
+  const t = useT();
+  const heading = title ?? t("bet.title");
   const [open, setOpen] = useState(false);
   // Prefetch gifts while the control is on screen so the sheet opens at full height.
   const { gifts, reload } = useBettableGifts(true);
@@ -116,7 +119,7 @@ export function BetFundingControl({
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-medium text-muted">{title}</span>
+          <span className="block text-[11px] font-medium text-muted">{heading}</span>
           {combined ? (
             summaryReady ? (
               <CombinedSummary
@@ -134,7 +137,7 @@ export function BetFundingControl({
               />
             ) : (
               <span className="mt-0.5 block text-[15px] font-semibold text-muted">
-                Настроить
+                {t("common.configure")}
               </span>
             )
           ) : mode === "balance" ? (
@@ -163,7 +166,7 @@ export function BetFundingControl({
             </span>
           ) : (
             <span className="mt-0.5 block text-[15px] font-semibold text-muted">
-              Выберите подарок
+              {t("bet.pickGift")}
             </span>
           )}
         </span>
@@ -177,7 +180,7 @@ export function BetFundingControl({
           )}
         >
           <Pencil className="h-3 w-3" />
-          Изменить
+          {t("bet.change")}
           <ChevronRight className="h-3.5 w-3.5 opacity-70 transition-transform group-active:translate-x-0.5" />
         </span>
       </button>
@@ -216,7 +219,7 @@ export function BetFundingControl({
                 className="mt-4 h-11 w-full rounded-xl"
                 onClick={close}
               >
-                Готово
+                {t("common.done")}
               </Button>
             </div>
           )}

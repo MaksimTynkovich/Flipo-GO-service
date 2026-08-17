@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RouletteHistoryEntry } from "@/lib/api";
 import { colorLabel, normalizeRouletteColor, rouletteFillStyle } from "@/lib/roulette";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 /** Half of previous dense packing (~2+2px). */
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function RouletteHistory({ history, onSelectRound, className }: Props) {
+  const t = useT();
   const rowRef = useRef<HTMLDivElement>(null);
   const [fitCount, setFitCount] = useState(24);
   const recent = history.slice(0, HISTORY_LIMIT);
@@ -44,7 +46,7 @@ export function RouletteHistory({ history, onSelectRound, className }: Props) {
     <div className={cn("roulette-history", className)}>
       <div ref={rowRef} className="roulette-history__row roulette-history__row--dashes">
         {visible.length === 0 ? (
-          <span className="roulette-history__empty">Нет игр</span>
+          <span className="roulette-history__empty">{t("roulette.noGames")}</span>
         ) : (
           visible.map((entry, index) => {
             const color = normalizeRouletteColor(entry.color);
@@ -55,11 +57,11 @@ export function RouletteHistory({ history, onSelectRound, className }: Props) {
               <button
                 key={entry.round_id || `${entry.round_number}-${index}`}
                 type="button"
-                title={`#${entry.round_number} — проверить честность`}
+                title={t("roulette.historyFairness", { number: entry.round_number })}
                 disabled={!clickable}
                 onClick={() => clickable && onSelectRound?.(entry)}
                 style={fill}
-                aria-label={`Результат ${colorLabel(color)}`}
+                aria-label={t("roulette.resultAria", { color: colorLabel(color) })}
                 className={cn(
                   "roulette-history__dash",
                   index === 0 && "roulette-history__dash--latest",

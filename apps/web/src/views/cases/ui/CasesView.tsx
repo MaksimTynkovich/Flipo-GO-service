@@ -16,6 +16,7 @@ import {
   type CasesCatalog,
 } from "@/lib/api";
 import { formatUserError } from "@/lib/user-errors";
+import { useT } from "@/components/providers/I18nProvider";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { connectGameWS } from "@/lib/ws";
 
@@ -65,6 +66,7 @@ function parseLiveDrop(payload: unknown): CaseLiveDrop | null {
 }
 
 export function CasesView() {
+  const t = useT();
   const router = useRouter();
   const { casesVisible, ready: featuresReady } = useCasesFeatures();
   const { showToast } = useToast();
@@ -101,12 +103,12 @@ export function CasesView() {
     } catch (e) {
       showToast({
         variant: "error",
-        title: formatUserError(e, "Не удалось загрузить кейсы"),
+        title: formatUserError(e, t("cases.loadFailed")),
       });
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     if (!featuresReady || !casesVisible) return;

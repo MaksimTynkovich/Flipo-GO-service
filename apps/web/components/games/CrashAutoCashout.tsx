@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { CRASH_AUTO_PRESETS } from "@/lib/crash";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 
@@ -21,6 +22,7 @@ export function CrashAutoCashout({
   onTargetChange,
   disabled,
 }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   return (
@@ -45,7 +47,7 @@ export function CrashAutoCashout({
             )}
           />
           <span className="truncate text-xs font-semibold">
-            {enabled ? `Авто · ${target || "—"}×` : "Автовывод выкл"}
+            {enabled ? t("crash.autoOn", { target: target || "—" }) : t("crash.autoOff")}
           </span>
         </span>
         <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" />
@@ -58,8 +60,8 @@ export function CrashAutoCashout({
               <div className="sheet-handle" />
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[15px] font-semibold text-foreground">Автовывод</p>
-                  <p className="mt-0.5 text-xs text-muted">Забрать ставку при достижении ×</p>
+                  <p className="text-[15px] font-semibold text-foreground">{t("crash.autoTitle")}</p>
+                  <p className="mt-0.5 text-xs text-muted">{t("crash.autoHint")}</p>
                 </div>
                 <button
                   type="button"
@@ -68,7 +70,7 @@ export function CrashAutoCashout({
                     "relative h-7 w-12 shrink-0 overflow-hidden rounded-full transition-colors duration-200",
                     enabled ? "bg-accent" : "bg-surface-raised",
                   )}
-                  aria-label={enabled ? "Выключить автовывод" : "Включить автовывод"}
+                  aria-label={enabled ? t("crash.autoDisable") : t("crash.autoEnable")}
                 >
                   <span
                     className={cn(
@@ -86,7 +88,7 @@ export function CrashAutoCashout({
                 )}
               >
                 <div className="flex h-12 items-center rounded-xl bg-surface-raised px-3.5">
-                  <span className="text-sm text-muted">Цель</span>
+                  <span className="text-sm text-muted">{t("crash.autoGoal")}</span>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -113,7 +115,7 @@ export function CrashAutoCashout({
                       );
                     }}
                     className="ml-3 w-full bg-transparent text-right text-lg font-semibold tabular-nums outline-none"
-                    aria-label="Множитель автовывода"
+                    aria-label={t("crash.autoMultiplier")}
                   />
                   <span className="ml-1 text-sm text-muted">×</span>
                 </div>
@@ -146,7 +148,7 @@ export function CrashAutoCashout({
                 className="btn-primary mt-5 flex h-11 w-full items-center justify-center rounded-xl text-sm font-bold"
                 onClick={close}
               >
-                Готово
+                {t("common.done")}
               </button>
             </div>
           )}

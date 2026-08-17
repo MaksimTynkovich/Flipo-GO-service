@@ -70,6 +70,7 @@ export type User = {
   betting_balance: number;
   staking_tier: "base" | "boost";
   ton_wallet?: string;
+  locale?: "en" | "ru";
   is_admin?: boolean;
 };
 
@@ -205,7 +206,7 @@ export async function api<T>(path: string, options: RequestInit = {}, retried = 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    const message = err.error || "Запрос не выполнен";
+    const message = err.error || "Request failed";
     const requestId =
       res.headers.get("X-Request-ID") ||
       (res as Response & { requestId?: string }).requestId ||
@@ -286,6 +287,13 @@ export async function updateWallet(wallet: string) {
   return api<{ wallet: string }>("/api/v1/me/wallet", {
     method: "PATCH",
     body: JSON.stringify({ wallet }),
+  });
+}
+
+export async function updateLocale(locale: "en" | "ru") {
+  return api<User>("/api/v1/me/locale", {
+    method: "PATCH",
+    body: JSON.stringify({ locale }),
   });
 }
 

@@ -1,6 +1,7 @@
 /** x50 рулетка: 50 секторов — blue×2, red×2, green×5, yellow×50 */
 
 import { easeSpinWithSoftLanding } from "@/lib/spin-ease";
+import { getRuntimeLocale, translate } from "@/lib/i18n";
 
 export const ROULETTE_COLORS = ["blue", "red", "green", "yellow"] as const;
 export type RouletteColor = (typeof ROULETTE_COLORS)[number];
@@ -159,15 +160,16 @@ export function normalizeRouletteColor(color: string): RouletteColor | null {
 }
 
 export function colorLabel(color: string): string {
+  const locale = getRuntimeLocale();
   switch (normalizeRouletteColor(color) ?? color) {
     case "blue":
-      return "Синее";
+      return translate(locale, "roulette.color.blue");
     case "red":
-      return "Красное";
+      return translate(locale, "roulette.color.red");
     case "green":
-      return "Зелёное";
+      return translate(locale, "roulette.color.green");
     case "yellow":
-      return "Жёлтое";
+      return translate(locale, "roulette.color.yellow");
     default:
       return color;
   }
@@ -212,7 +214,7 @@ export function roulettePlayerName(player: {
 }): string {
   if (player.first_name?.trim()) return player.first_name.trim();
   if (player.username?.trim()) return `@${player.username.trim()}`;
-  return "Игрок";
+  return translate(getRuntimeLocale(), "common.player");
 }
 
 export const ROULETTE_WHEEL_COLORS = {

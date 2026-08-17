@@ -32,6 +32,7 @@ import {
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAnalyticsInput } from "@/lib/useAnalyticsInput";
 import { notifyBettableGiftsChanged } from "@/components/games/useBettableGifts";
+import { useT } from "@/components/providers/I18nProvider";
 
 const QUICK_AMOUNTS = ["0.1", "0.5", "1", "5"];
 
@@ -63,6 +64,7 @@ export default function RoulettePage() {
 }
 
 function RoulettePageContent() {
+  const t = useT();
   const { user } = useAuth();
   const acceptBets = useAcceptBets();
   const { showToast } = useToast();
@@ -235,7 +237,7 @@ function RoulettePageContent() {
       if (!acceptBets) {
         showToast({
           variant: "error",
-          title: "Ставки временно не принимаются",
+          title: t("roulette.betsPaused"),
         });
         haptics.notificationOccurred("error");
         return;
@@ -253,12 +255,12 @@ function RoulettePageContent() {
       const nanotons = Math.floor(parseFloat(amountTon || "0") * 1_000_000_000);
 
       if (nanotons <= 0 && giftIds.length === 0) {
-        showToast({ variant: "error", title: "Укажите сумму TON или выберите подарок." });
+        showToast({ variant: "error", title: t("roulette.needAmount") });
         haptics.notificationOccurred("error");
         return;
       }
       if (nanotons > 0 && user && user.betting_balance < nanotons) {
-        showToast({ variant: "error", title: "Недостаточно средств на балансе." });
+        showToast({ variant: "error", title: t("roulette.insufficient") });
         haptics.notificationOccurred("error");
         return;
       }
@@ -322,13 +324,13 @@ function RoulettePageContent() {
         {(state?.round_number || state?.server_seed_hash) && (
           <div className="roulette-meta">
             <span>
-              {state.round_number != null ? `Раунд #${state.round_number}` : null}
+              {state.round_number != null ? t("common.round", { number: state.round_number }) : null}
             </span>
             {state.server_seed_hash ? (
               <button
                 type="button"
                 className="roulette-meta__hash transition hover:text-foreground/70 active:opacity-70"
-                title="Проверить честность"
+                title={t("roulette.fairnessTitle")}
                 onClick={() => state.round_id && setProofRoundId(state.round_id)}
               >
                 Hash: {state.server_seed_hash.slice(0, 4)}…{state.server_seed_hash.slice(-4)}
@@ -373,7 +375,7 @@ function RoulettePageContent() {
         <ProofModal
           roundId={proofRoundId}
           gameType="roulette"
-          title="Проверка рулетки"
+          title={t("roulette.proofTitle")}
           onClose={() => setProofRoundId(null)}
         />
       ) : null}

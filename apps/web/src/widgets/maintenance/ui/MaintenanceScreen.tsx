@@ -1,11 +1,11 @@
 "use client";
 
 import { Wrench } from "lucide-react";
-
-const DEFAULT_MESSAGE = "Скоро вернёмся.";
+import { useT } from "@/components/providers/I18nProvider";
 
 export function MaintenanceScreen({ message }: { message?: string }) {
-  const text = (message || "").trim() || DEFAULT_MESSAGE;
+  const t = useT();
+  const text = (message || "").trim() || t("maintenance.default");
 
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-6 py-10 text-center">
@@ -13,7 +13,7 @@ export function MaintenanceScreen({ message }: { message?: string }) {
         <Wrench className="h-9 w-9" strokeWidth={1.75} />
       </div>
 
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">Техническое обслуживание</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t("maintenance.title")}</h1>
       <p className="mt-3 max-w-sm text-sm leading-6 text-muted">{text}</p>
     </div>
   );

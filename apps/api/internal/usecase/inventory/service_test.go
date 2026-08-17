@@ -104,6 +104,7 @@ func (s *userRepoStub) EnsureSocialBotUser(context.Context, uuid.UUID, int64, st
 	return nil, errors.New("not implemented")
 }
 func (s *userRepoStub) UpdateWallet(context.Context, uuid.UUID, string) error            { return nil }
+func (s *userRepoStub) UpdateLocale(context.Context, uuid.UUID, string) error            { return nil }
 func (s *userRepoStub) UpdateBanned(context.Context, uuid.UUID, bool) error              { return nil }
 func (s *userRepoStub) UpdateWithdrawalsDisabled(context.Context, uuid.UUID, bool) error { return nil }
 func (s *userRepoStub) UpdateBalance(context.Context, uuid.UUID, int64, domain.LedgerType, string, uuid.UUID) (int64, int64, error) {

@@ -25,10 +25,13 @@ import { formatUserError } from "@/lib/user-errors";
 import { getTelegramWebApp, openTelegramShare, sharePreparedMessage } from "@/src/shared/lib/twa";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useI18n } from "@/components/providers/I18nProvider";
+import { localeDateTag, type Locale, type TFunction } from "@/lib/i18n";
 import { Copy, Gamepad2, Gift, Link2, Send } from "lucide-react";
 
 export default function ProfileReferralsPage() {
   const { user } = useAuth();
+  const { t, locale } = useI18n();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
   const [copied, setCopied] = useState(false);
@@ -38,10 +41,7 @@ export default function ProfileReferralsPage() {
   const [loading, setLoading] = useState(true);
 
   const referralLink = user ? referralTelegramUrl(user.telegram_id) : "";
-  const shareText = [
-    "🎁 Присоединяйся ко мне в Flipo!",
-    "Открой бесплатный кейс и забирай подарки.",
-  ].join("\n");
+  const shareText = [t("referrals.shareText1"), t("referrals.shareText2")].join("\n");
 
   useEffect(() => {
     Promise.all([getReferralStats(), getReferralInviteeStatus()])
@@ -73,7 +73,7 @@ export default function ProfileReferralsPage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     reportReferralShare("share").catch(() => {});
-    showToast({ variant: "success", title: "Текст скопирован — отправьте другу" });
+    showToast({ variant: "success", title: t("referrals.copiedShare") });
   }
 
   async function handleShare() {
@@ -93,14 +93,14 @@ export default function ProfileReferralsPage() {
       }
       reportReferralShare("share").catch(() => {});
       haptics.notificationOccurred("success");
-      showToast({ variant: "success", title: "Приглашение отправлено" });
+      showToast({ variant: "success", title: t("referrals.sent") });
     } catch (e) {
       try {
         await fallbackShare();
       } catch {
         showToast({
           variant: "error",
-          title: formatUserError(e, "Не удалось поделиться"),
+          title: formatUserError(e, t("referrals.shareFailed")),
         });
       }
     } finally {
@@ -118,13 +118,15 @@ export default function ProfileReferralsPage() {
   return (
     <PageShell flush className="space-y-4">
       <section className="space-y-1.5 pt-1">
-        <h1 className="text-[1.25rem] font-semibold tracking-tight">Рефералы</h1>
+        <h1 className="text-[1.25rem] font-semibold tracking-tight">{t("referrals.title")}</h1>
         <p className="text-sm leading-relaxed text-muted">
-          Бонусы за вход по ссылке и доход с приглашённых друзей.
+          {t("referrals.lead")}
         </p>
       </section>
 
       <InviteeSection
+        t={t}
+        locale={locale}
         loading={loading}
         invitee={invitee}
         boostPercent={boostPercent}
@@ -132,16 +134,16 @@ export default function ProfileReferralsPage() {
       />
 
       <section className="space-y-2">
-        <p className="section-label">Приглашайте — зарабатывайте</p>
+        <p className="section-label">{t("referrals.inviteEarn")}</p>
         <div className="grid grid-cols-2 gap-2">
           <div className="stat-tile">
-            <p className="text-[11px] text-muted">Приглашено</p>
+            <p className="text-[11px] text-muted">{t("referrals.invited")}</p>
             <p className="mt-1.5 text-xl font-bold tabular-nums">
               {loading ? "…" : (stats?.referral_count ?? 0)}
             </p>
           </div>
           <div className="stat-tile">
-            <p className="text-[11px] text-muted">Заработано</p>
+            <p className="text-[11px] text-muted">{t("referrals.earned")}</p>
             <div className="mt-1.5 text-lg font-bold tabular-nums text-success">
               {loading ? (
                 "…"
@@ -159,14 +161,14 @@ export default function ProfileReferralsPage() {
         <div className="grid grid-cols-1 gap-2">
           <InfoCard
             icon={<Gift className="h-4 w-4" />}
-            title={`${sharePercent}% от стейкинга`}
-            hint="Доля от дохода друзей по подаркам"
+            title={t("referrals.fromStaking", { percent: sharePercent })}
+            hint={t("referrals.fromStakingHint")}
             value={loading ? "…" : `${formatTON(stats?.staking_earned_nanoton ?? 0)} TON`}
           />
           <InfoCard
             icon={<Gamepad2 className="h-4 w-4" />}
-            title={`${gamesPercent}% от игр`}
-            hint="Доля от игры друзей"
+            title={t("referrals.fromGames", { percent: gamesPercent })}
+            hint={t("referrals.fromGamesHint")}
             value={loading ? "…" : `${formatTON(stats?.ggr_earned_nanoton ?? 0)} TON`}
           />
         </div>
@@ -174,7 +176,7 @@ export default function ProfileReferralsPage() {
 
       <section className="panel space-y-3">
         <div>
-          <p className="section-label">Ваша ссылка</p>
+          <p className="section-label">{t("referrals.yourLink")}</p>
           <p className="mt-2 break-all rounded-xl bg-surface-raised px-3 py-2.5 font-mono text-xs leading-relaxed text-foreground/90">
             {referralLink || "…"}
           </p>
@@ -183,11 +185,11 @@ export default function ProfileReferralsPage() {
         <div className="grid grid-cols-2 gap-2">
           <Button className="h-11 w-full rounded-xl" disabled={sharing || !referralLink} onClick={() => void handleShare()}>
             <Send className="mr-2 h-4 w-4" />
-            {sharing ? "…" : "Поделиться"}
+            {sharing ? t("common.sharing") : t("common.share")}
           </Button>
           <Button className="h-11 w-full rounded-xl" variant="outline" onClick={() => void handleCopy()}>
             <Copy className="mr-2 h-4 w-4" />
-            {copied ? "Скопировано" : "Копировать"}
+            {copied ? t("common.copied") : t("common.copy")}
           </Button>
         </div>
       </section>
@@ -196,11 +198,15 @@ export default function ProfileReferralsPage() {
 }
 
 function InviteeSection({
+  t,
+  locale,
   loading,
   invitee,
   boostPercent,
   limitBonusTon,
 }: {
+  t: TFunction;
+  locale: Locale;
   loading: boolean;
   invitee: ReferralInviteeStatus | null;
   boostPercent: number;
@@ -222,9 +228,9 @@ function InviteeSection({
           <Link2 className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium">Вы зашли без реферальной ссылки</p>
+          <p className="text-sm font-medium">{t("referrals.noLink")}</p>
           <p className="mt-1 text-[12px] leading-relaxed text-muted">
-            Бонусы по реферальной ссылке доступны только новым пользователям.
+            {t("referrals.noLinkHint")}
           </p>
         </div>
       </section>
@@ -239,27 +245,27 @@ function InviteeSection({
             <Gift className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-sm font-medium">Вы пришли по приглашению</p>
+            <p className="text-sm font-medium">{t("referrals.cameByInvite")}</p>
             <p className="mt-1 text-[12px] leading-relaxed text-muted">
-              Бонусы включатся после первого стейка подарка в разделе «Стейкинг».
+              {t("referrals.cameByInviteHint")}
             </p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <PerkCard
             value={`+${boostPercent}%`}
-            label="к стейкингу"
-            hint="На 30 дней"
+            label={t("referrals.toStaking")}
+            hint={t("referrals.for30days")}
             muted
           />
           <PerkCard
             value={`+${limitBonusTon}`}
-            label="TON к лимиту"
-            hint="Больше подарков"
+            label={t("referrals.tonToLimit")}
+            hint={t("referrals.moreGifts")}
             muted
           />
         </div>
-        <p className="text-center text-[11px] text-muted">Ожидает первого стейка</p>
+        <p className="text-center text-[11px] text-muted">{t("referrals.waitingFirstStake")}</p>
       </section>
     );
   }
@@ -267,22 +273,24 @@ function InviteeSection({
   if (invitee.perks_active) {
     return (
       <section className="panel space-y-3 border border-success/20 bg-success/5 py-3">
-        <p className="text-sm font-medium text-success">Бонусы по ссылке активны</p>
+        <p className="text-sm font-medium text-success">{t("referrals.bonusesActive")}</p>
         <div className="grid grid-cols-2 gap-2">
           <PerkCard
             value={`+${boostPercent}%`}
-            label="к стейкингу"
-            hint="Уже в доходе"
+            label={t("referrals.toStaking")}
+            hint={t("referrals.alreadyInYield")}
           />
           <PerkCard
             value={`+${limitBonusTon}`}
-            label="TON к лимиту"
-            hint="В стейкинге"
+            label={t("referrals.tonToLimit")}
+            hint={t("referrals.inStaking")}
           />
         </div>
         {invitee.expires_at ? (
           <p className="text-center text-[11px] text-muted">
-            До {new Date(invitee.expires_at).toLocaleDateString("ru-RU")}
+            {t("referrals.until", {
+              date: new Date(invitee.expires_at).toLocaleDateString(localeDateTag(locale)),
+            })}
           </p>
         ) : null}
       </section>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { reportBootHang } from "@/lib/boot";
+import { useT } from "@/components/providers/I18nProvider";
 
 type AppSplashScreenProps = {
   /** When true, show reload CTA after slowMs (React already mounted but stuck on splash). */
@@ -11,6 +12,7 @@ type AppSplashScreenProps = {
 
 export function AppSplashScreen({ showRecovery = false, slowMs = 8000 }: AppSplashScreenProps) {
   const [slow, setSlow] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     if (!showRecovery) return;
@@ -26,7 +28,7 @@ export function AppSplashScreen({ showRecovery = false, slowMs = 8000 }: AppSpla
       className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-background px-6 pt-[var(--app-safe-top)] pb-[var(--app-safe-bottom)]"
       role="status"
       aria-live="polite"
-      aria-label="Загрузка"
+      aria-label={t("splash.aria")}
     >
       {!slow ? (
         <div className="splash-brand">
@@ -40,7 +42,7 @@ export function AppSplashScreen({ showRecovery = false, slowMs = 8000 }: AppSpla
       ) : (
         <>
           <p className="max-w-[280px] text-center text-[0.9375rem] leading-relaxed text-muted">
-            Приложение долго загружается. Обычно помогает перезапуск.
+            {t("splash.slow")}
           </p>
           <button
             type="button"
@@ -50,7 +52,7 @@ export function AppSplashScreen({ showRecovery = false, slowMs = 8000 }: AppSpla
               window.location.reload();
             }}
           >
-            Перезагрузить
+            {t("splash.reload")}
           </button>
         </>
       )}

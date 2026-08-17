@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/i18n"
 )
 
 type BotNotifier struct {
-	api     *BotAPI
-	openApp OpenAppButtonOptions
+	api            *BotAPI
+	openApp        OpenAppButtonOptions
+	localeResolver LocaleResolver
 }
 
 func NewBotNotifier(token string) *BotNotifier {
@@ -22,8 +26,24 @@ func (n *BotNotifier) SetOpenApp(opts OpenAppButtonOptions) {
 	n.openApp = opts
 }
 
+func (n *BotNotifier) SetLocaleResolver(resolver LocaleResolver) {
+	if n == nil {
+		return
+	}
+	n.localeResolver = resolver
+}
+
 func (n *BotNotifier) Enabled() bool {
 	return n != nil && n.api != nil && n.api.Enabled()
+}
+
+func (n *BotNotifier) resolveLocale(ctx context.Context, telegramUserID int64) string {
+	if n != nil && n.localeResolver != nil && telegramUserID != 0 {
+		if loc := strings.TrimSpace(n.localeResolver(ctx, telegramUserID)); loc != "" {
+			return domain.NormalizeLocale(loc)
+		}
+	}
+	return domain.DefaultLocale
 }
 
 func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int64, giftName string) error {
@@ -31,7 +51,8 @@ func (n *BotNotifier) SendGiftDeposited(ctx context.Context, telegramUserID int6
 		return nil
 	}
 
-	text := fmt.Sprintf("🎁 Подарок «%s» зачислен в инвентарь!", giftName)
+	locale := n.resolveLocale(ctx, telegramUserID)
+	text := i18n.T(locale, "bot.giftDeposited", giftName)
 	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, text, nil, ""))
 }
 
@@ -40,15 +61,16 @@ func (n *BotNotifier) SendDailyStakingSettled(ctx context.Context, telegramUserI
 		return nil
 	}
 
+	locale := n.resolveLocale(ctx, telegramUserID)
 	var parts []string
-	parts = append(parts, "✅ Дневной стейкинг завершён!")
+	parts = append(parts, i18n.T(locale, "bot.stakingSettledTitle"))
 	if yieldNanoton > 0 {
-		parts = append(parts, fmt.Sprintf("За сутки: %s TON — зачислено на баланс.", formatTON(yieldNanoton)))
+		parts = append(parts, i18n.T(locale, "bot.stakingYield", formatTON(yieldNanoton)))
 	}
 	if referralBonusNanoton > 0 {
-		parts = append(parts, fmt.Sprintf("Рефералы: %s TON — зачислено на баланс.", formatTON(referralBonusNanoton)))
+		parts = append(parts, i18n.T(locale, "bot.stakingReferral", formatTON(referralBonusNanoton)))
 	}
-	parts = append(parts, "Подарки разблокированы — можно застейкать снова.")
+	parts = append(parts, i18n.T(locale, "bot.stakingUnlocked"))
 	return ignoreUnavailable(n.api.sendMessage(ctx, telegramUserID, strings.Join(parts, "\n\n"), nil, ""))
 }
 
@@ -56,13 +78,14 @@ func (n *BotNotifier) SendCaseDailyReady(ctx context.Context, telegramUserID int
 	if !n.Enabled() || telegramUserID == 0 {
 		return nil
 	}
+	locale := n.resolveLocale(ctx, telegramUserID)
 	title := strings.TrimSpace(caseTitle)
 	if title == "" {
-		title = "Дневной кейс"
+		title = i18n.T(locale, "bot.caseDailyTitle")
 	}
-	text := fmt.Sprintf("🎁 %s снова доступен!\n\nЗаберите бесплатный приз — открытие снова готово.", title)
+	text := i18n.T(locale, "bot.caseDailyReady", title)
 	opts := n.openApp
-	opts.ButtonText = "🎁 Открыть кейс"
+	opts.ButtonText = i18n.T(locale, "bot.openCase")
 	slug := strings.TrimSpace(caseSlug)
 	if slug != "" {
 		opts.StartPayload = "case_" + slug

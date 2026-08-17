@@ -12,9 +12,11 @@ import {
   ROULETTE_COLORS,
   ROULETTE_COLOR_STYLES,
   RouletteColor,
+  colorLabel,
   rouletteMultiplier,
   roulettePlayerName,
 } from "@/lib/roulette";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -224,6 +226,7 @@ export const RouletteRoundBets = memo(function RouletteRoundBets({
   onBetColor,
   canBet = false,
 }: Props) {
+  const t = useT();
   const rows = useMemo(() => aggregateBets(data?.bets ?? []), [data?.bets]);
   const [flashKeys, setFlashKeys] = useState<Set<string>>(() => new Set());
   const [expanded, setExpanded] = useState<RouletteColor | null>(null);
@@ -333,7 +336,7 @@ export const RouletteRoundBets = memo(function RouletteRoundBets({
                 !canBet && "cursor-default",
               )}
               style={{ backgroundColor: `${accent}20` }}
-              aria-label={`${style.label} ${style.multiplier}`}
+              aria-label={`${colorLabel(color)} ${style.multiplier}`}
             >
               <span
                 className="flex min-w-0 items-center gap-0.5 text-[11px] font-bold tabular-nums"
@@ -379,7 +382,7 @@ export const RouletteRoundBets = memo(function RouletteRoundBets({
                   className="mt-auto px-1 py-1.5 text-center text-[10px] font-semibold outline-none"
                   style={{ color: accent }}
                 >
-                  {isOpen ? "свернуть" : `Все (${list.length})`}
+                  {isOpen ? t("common.collapse") : t("common.allCount", { count: list.length })}
                 </button>
               ) : (
                 <div className="mt-auto h-[1.75rem]" aria-hidden />

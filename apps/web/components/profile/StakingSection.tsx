@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useT } from "@/components/providers/I18nProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { GiftTile, GiftTileSkeleton } from "@/components/profile/GiftTile";
 import { StakingGiftSheet } from "@/components/profile/StakingGiftSheet";
@@ -57,6 +58,7 @@ const emptyStats: StakingStats = {
 type Tab = "staked" | "add";
 
 export function StakingSection() {
+  const t = useT();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [gifts, setGifts] = useState<ProfileGift[]>([]);
@@ -163,7 +165,7 @@ export function StakingSection() {
       } else {
         showToast({
           variant: "error",
-          title: formatUserError(e, "Не удалось застейкать подарок"),
+          title: formatUserError(e, t("staking.stakeFailed")),
         });
       }
       await load();
@@ -180,14 +182,14 @@ export function StakingSection() {
     unstakedGifts.length > 0;
 
   const stakeLabel = staking
-    ? "Стейкаем…"
+    ? t("staking.staking")
     : poolFull
-      ? "Дождитесь следующего дня"
+      ? t("staking.waitNextDay")
       : selectedGifts.length > 0
         ? allUnstakedSelected && unstakedGifts.length > 1
-          ? "Застейкать все"
-          : "Застейкать"
-        : "Выберите подарки";
+          ? t("staking.stakeAll")
+          : t("staking.stake")
+        : t("staking.pickGifts");
 
   return (
     <div className="space-y-4">
@@ -226,9 +228,9 @@ export function StakingSection() {
             <Gift className="h-5 w-5" />
           </div>
           <div className="space-y-1.5">
-            <p className="text-sm font-semibold">Подарков пока нет</p>
+            <p className="text-sm font-semibold">{t("staking.noGifts")}</p>
             <p className="mx-auto max-w-[17rem] text-xs leading-relaxed text-muted">
-              Включите отображение в Telegram-профиле — подарки появятся здесь сами, без передачи боту.
+              {t("staking.profileHint")}
             </p>
           </div>
         </section>
@@ -240,7 +242,7 @@ export function StakingSection() {
               onClick={() => setTab("staked")}
               className={cn("segment-item", tab === "staked" && "segment-item-active")}
             >
-              В стейке
+              {t("staking.inStake")}
               {stakedGifts.length > 0 && (
                 <span className="tabular-nums text-[10px] opacity-70">{stakedGifts.length}</span>
               )}
@@ -250,7 +252,7 @@ export function StakingSection() {
               onClick={() => setTab("add")}
               className={cn("segment-item", tab === "add" && "segment-item-active")}
             >
-              Добавить
+              {t("staking.add")}
               {unstakedGifts.length > 0 && (
                 <span className="tabular-nums text-[10px] opacity-70">{unstakedGifts.length}</span>
               )}
@@ -261,9 +263,9 @@ export function StakingSection() {
             <section key="staked" className="segment-panel space-y-3">
               {stakedGifts.length === 0 ? (
                 <div className="panel flex flex-col items-center gap-3 py-9 text-center">
-                  <p className="text-sm font-semibold">Стейк пуст</p>
+                  <p className="text-sm font-semibold">{t("staking.emptyStake")}</p>
                   <p className="max-w-[16rem] text-xs leading-relaxed text-muted">
-                    Добавьте подарки — доход начнёт капать каждый день.
+                    {t("staking.emptyHint")}
                   </p>
                   {unstakedGifts.length > 0 ? (
                     <Button
@@ -271,7 +273,7 @@ export function StakingSection() {
                       className="mt-1 h-10 rounded-xl px-5"
                       onClick={() => setTab("add")}
                     >
-                      Добавить · {pluralizeGifts(unstakedGifts.length)}
+                      {t("staking.addCount", { count: pluralizeGifts(unstakedGifts.length) })}
                     </Button>
                   ) : null}
                 </div>
@@ -293,16 +295,16 @@ export function StakingSection() {
             <section key="add" className="segment-panel space-y-3">
               {unstakedGifts.length === 0 ? (
                 <div className="panel flex flex-col items-center gap-2 py-9 text-center">
-                  <p className="text-sm font-semibold text-success">Всё в стейке</p>
-                  <p className="text-xs text-muted">Новых подарков нет</p>
+                  <p className="text-sm font-semibold text-success">{t("staking.allStaked")}</p>
+                  <p className="text-xs text-muted">{t("staking.noNew")}</p>
                 </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between gap-3 px-0.5">
                     <p className="min-w-0 text-xs text-muted">
                       {selectedGifts.length > 0
-                        ? `Выбрано ${pluralizeGifts(selectedGifts.length)}`
-                        : "Выберите подарки"}
+                        ? t("staking.selectedGifts", { count: pluralizeGifts(selectedGifts.length) })
+                        : t("staking.pickGifts")}
                     </p>
                     <div className="flex shrink-0 items-center gap-3">
                       {selectedGifts.length > 0 ? (
@@ -311,7 +313,7 @@ export function StakingSection() {
                           onClick={clearSelection}
                           className="text-xs font-medium text-muted"
                         >
-                          Сбросить
+                          {t("common.reset")}
                         </button>
                       ) : null}
                       {unstakedGifts.length > 1 && selectedGifts.length < unstakedGifts.length ? (
@@ -320,7 +322,7 @@ export function StakingSection() {
                           onClick={selectAll}
                           className="text-xs font-medium text-accent"
                         >
-                          Выбрать все
+                          {t("common.selectAll")}
                         </button>
                       ) : null}
                     </div>
@@ -348,10 +350,10 @@ export function StakingSection() {
                   {poolFull ? (
                     <div className="rounded-xl border border-danger/25 bg-danger/10 px-3 py-2.5">
                       <p className="text-[12px] font-medium leading-snug text-danger">
-                        Нельзя застейкать: общий пул заполнен.
+                        {t("staking.poolFullShort")}
                       </p>
                       <p className="mt-1 text-[11px] leading-snug text-danger/80">
-                        Дождитесь следующего дня — после ночной выплаты место в пуле освободится.
+                        {t("staking.poolFullWait")}
                       </p>
                     </div>
                   ) : null}
@@ -382,7 +384,7 @@ export function StakingSection() {
         <ChannelSubscribeSheet
           channel={channel}
           channelUrl={channelUrl}
-          description="Чтобы застейкать подарки, подпишитесь на канал"
+          description={t("staking.channelDesc")}
           onClose={() => {
             setChannelSheetOpen(false);
             void load();

@@ -9,6 +9,7 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { formatCollectionSlug, giftBuyPriceNanoton, giftImageUrl, traitValue } from "@/lib/gifts";
 import { inventoryItemSlug } from "@/components/inventory/InventoryGiftCard";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
+import { useT } from "@/components/providers/I18nProvider";
 
 type Props = {
   item: InventoryItem;
@@ -42,6 +43,7 @@ export function InventoryGiftDetailSheet({
   onWithdraw,
   onCancelListing,
 }: Props) {
+  const t = useT();
   const [imgError, setImgError] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showWithdrawHint, setShowWithdrawHint] = useState(false);
@@ -75,18 +77,18 @@ export function InventoryGiftDetailSheet({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Подарок в инвентаре"
+        aria-label={t("inventory.giftAria")}
         className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-full min-h-0 flex-col overflow-hidden"
       >
         <div className="shrink-0 px-4 pt-2">
           <div className="sheet-handle" />
 
           <div className="relative flex items-center justify-center pb-2">
-            <p className="text-[15px] font-semibold text-foreground">Подарок</p>
+            <p className="text-[15px] font-semibold text-foreground">{t("common.gift")}</p>
             <button
               type="button"
               onClick={close}
-              aria-label="Закрыть"
+              aria-label={t("common.close")}
               className="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised text-muted transition-opacity active:opacity-70"
             >
               <X className="h-4 w-4" />
@@ -115,7 +117,7 @@ export function InventoryGiftDetailSheet({
               <button
                 type="button"
                 onClick={handleCopy}
-                aria-label="Скопировать название"
+                aria-label={t("inventory.copyName")}
                 className="mt-0.5 shrink-0 text-muted transition-colors active:text-accent"
               >
                 <Copy className="h-4 w-4" />
@@ -127,12 +129,12 @@ export function InventoryGiftDetailSheet({
             </span>
           </div>
 
-          {copied && <p className="mb-2 text-xs text-accent">Скопировано</p>}
+          {copied && <p className="mb-2 text-xs text-accent">{t("common.copied")}</p>}
 
           <div className="mb-3 divide-y divide-[var(--border)] rounded-2xl bg-surface-raised/60 px-4">
-            <TraitRow label="Коллекция" value={formatCollectionSlug(item.collection_slug)} />
-            <TraitRow label="Узор" value={traitValue(item.backdrop)} />
-            <TraitRow label="Символ" value={traitValue(item.symbol)} />
+            <TraitRow label={t("common.collection")} value={formatCollectionSlug(item.collection_slug)} />
+            <TraitRow label={t("common.backdrop")} value={traitValue(item.backdrop)} />
+            <TraitRow label={t("common.symbol")} value={traitValue(item.symbol)} />
           </div>
         </div>
 
@@ -150,14 +152,13 @@ export function InventoryGiftDetailSheet({
                 <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface-raised text-[10px] font-semibold">
                   i
                 </span>
-                Как вывести подарок?
+                {t("inventory.howWithdraw")}
               </button>
 
               {showWithdrawHint && (
                 <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-10 rounded-2xl bg-surface-raised px-3.5 py-3 shadow-[0_-8px_28px_rgba(0,0,0,0.35)] ring-1 ring-inset ring-white/[0.06]">
                   <p className="text-xs leading-relaxed text-muted">
-                    Перед выводом отправьте боту {depositBotMention()} любое сообщение — без этого Telegram не
-                    сможет доставить подарок обратно вам.
+                    {t("inventory.withdrawHint", { bot: depositBotMention() })}
                   </p>
                   <a
                     href={depositBotTelegramUrl()}
@@ -165,7 +166,7 @@ export function InventoryGiftDetailSheet({
                     rel="noopener noreferrer"
                     className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-accent"
                   >
-                    Открыть {depositBotMention()}
+                    {t("inventory.openBotNamed", { bot: depositBotMention() })}
                     <ArrowUpRight className="h-3.5 w-3.5" />
                   </a>
                 </div>
@@ -175,7 +176,7 @@ export function InventoryGiftDetailSheet({
 
           {item.status === "withdraw_pending" && (
             <p className="mb-3 text-center text-sm text-muted">
-              Вывод в обработке
+              {t("inventory.withdrawPending")}
             </p>
           )}
 
@@ -188,10 +189,10 @@ export function InventoryGiftDetailSheet({
                   onClick={onLiquidate}
                 >
                   {liquidating ? (
-                    "Продажа…"
+                    t("common.selling")
                   ) : (
                     <span className="inline-flex items-center justify-center gap-1">
-                      Продать
+                      {t("common.sell")}
                     </span>
                   )}
                 </Button>
@@ -203,7 +204,7 @@ export function InventoryGiftDetailSheet({
                 disabled={liquidating || withdrawing}
                 onClick={onWithdraw}
               >
-                {withdrawing ? "Вывод…" : "Вывести"}
+                {withdrawing ? t("common.withdrawing") : t("common.withdraw")}
               </Button>
             </div>
           )}
@@ -214,7 +215,7 @@ export function InventoryGiftDetailSheet({
               variant="outline"
               onClick={onCancelListing}
             >
-              Снять с маркета
+              {t("inventory.unlist")}
             </Button>
           )}
         </div>

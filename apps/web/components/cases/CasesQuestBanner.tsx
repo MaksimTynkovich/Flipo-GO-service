@@ -12,35 +12,39 @@ import { ChevronRight } from "lucide-react";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { getDailyQuestPromo, resolveAsset, type DailyQuestPromoSlide } from "@/lib/api";
+import { useT } from "@/components/providers/I18nProvider";
+import type { TFunction } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const AUTO_MS = 4500;
 
 /** Only used when the promo API fails or returns empty — never as the initial paint. */
-const FALLBACK_SLIDES: DailyQuestPromoSlide[] = [
-  {
-    id: "duo",
-    tone: "duo",
-    eyebrow: "Супер-акция",
-    title: "1+1 на кейсы",
-    subtitle: "Открой кейс — второй бесплатно",
-    cta: "К заданиям",
-    cta_color: "#7c5cff",
-    cover_url: "/cases/covers/quest-promo-2x.webp",
-    active: true,
-  },
-  {
-    id: "open",
-    tone: "open",
-    eyebrow: "Задание дня",
-    title: "Открой кейс",
-    subtitle: "Выполни цель и забери награду",
-    cta: "Смотреть",
-    cta_color: "#0f9f7a",
-    cover_url: "/cases/covers/quest-promo-open.webp",
-    active: true,
-  },
-];
+function fallbackSlides(t: TFunction): DailyQuestPromoSlide[] {
+  return [
+    {
+      id: "duo",
+      tone: "duo",
+      eyebrow: t("cases.promo"),
+      title: t("cases.bannerTitle"),
+      subtitle: t("cases.bannerSubtitle"),
+      cta: t("cases.toQuests"),
+      cta_color: "#7c5cff",
+      cover_url: "/cases/covers/quest-promo-2x.webp",
+      active: true,
+    },
+    {
+      id: "open",
+      tone: "open",
+      eyebrow: t("cases.dailyTask"),
+      title: t("cases.openCase"),
+      subtitle: t("cases.completeGoal"),
+      cta: t("cases.view"),
+      cta_color: "#0f9f7a",
+      cover_url: "/cases/covers/quest-promo-open.webp",
+      active: true,
+    },
+  ];
+}
 
 function toneClass(tone: string): "duo" | "open" {
   return tone === "duo" ? "duo" : "open";
@@ -114,6 +118,7 @@ export function CasesQuestPromoSlideCard({
   className?: string;
   onNavigate?: () => void;
 }) {
+  const t = useT();
   const cover = resolveAsset(slide.cover_url?.trim()) || undefined;
   const slideClass = cn(
     "cases-quest-promo__slide",
@@ -170,7 +175,7 @@ export function CasesQuestPromoSlideCard({
             slide.cta_bold && "cases-quest-promo__cta--bold",
           )}
         >
-          {slide.cta || "К заданиям"}
+          {slide.cta || t("cases.toQuests")}
           <ChevronRight
             className="cases-quest-promo__cta-icon"
             strokeWidth={2.75}
@@ -219,6 +224,7 @@ export function CasesQuestBannerPreview({
 }
 
 export function CasesQuestBanner() {
+  const t = useT();
   const haptics = useTelegramHaptics();
   const [slides, setSlides] = useState<DailyQuestPromoSlide[] | null>(null);
   const [index, setIndex] = useState(0);
@@ -231,18 +237,18 @@ export function CasesQuestBanner() {
       try {
         const items = await getDailyQuestPromo();
         if (cancelled) return;
-        setSlides(items.length > 0 ? items : FALLBACK_SLIDES);
+        setSlides(items.length > 0 ? items : fallbackSlides(t));
         setIndex(0);
       } catch {
         if (cancelled) return;
-        setSlides(FALLBACK_SLIDES);
+        setSlides(fallbackSlides(t));
         setIndex(0);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!slides || slides.length < 2 || paused) return;
@@ -309,7 +315,7 @@ export function CasesQuestBanner() {
       </div>
 
       {visibleSlides.length > 1 ? (
-        <div className="cases-quest-promo__dots" role="tablist" aria-label="Акции квестов">
+        <div className="cases-quest-promo__dots" role="tablist" aria-label={t("cases.questsAria")}>
           {visibleSlides.map((slide, i) => (
             <button
               key={slide.id}

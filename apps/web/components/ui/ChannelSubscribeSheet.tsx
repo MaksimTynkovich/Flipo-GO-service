@@ -2,6 +2,7 @@
 
 import { Copy, Send, X } from "lucide-react";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
+import { useT } from "@/components/providers/I18nProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { promoChannelMention } from "@/lib/promo-channel";
 import { cn } from "@/lib/utils";
@@ -17,20 +18,22 @@ type Props = {
 export function ChannelSubscribeSheet({
   channel,
   channelUrl,
-  description = "Для этого действия нужна подписка на канал",
+  description,
   onClose,
   onOpenChannel,
 }: Props) {
+  const t = useT();
   const { showToast } = useToast();
   const mention = promoChannelMention(channel) || channel;
+  const body = description ?? t("channel.needSub");
 
   async function copyMention() {
     if (!mention) return;
     try {
       await navigator.clipboard.writeText(mention);
-      showToast({ variant: "success", title: "Имя канала скопировано" });
+      showToast({ variant: "success", title: t("channel.copied") });
     } catch {
-      showToast({ variant: "error", title: "Не удалось скопировать" });
+      showToast({ variant: "error", title: t("channel.copyFailed") });
     }
   }
 
@@ -48,7 +51,7 @@ export function ChannelSubscribeSheet({
           <button
             type="button"
             onClick={close}
-            aria-label="Закрыть"
+            aria-label={t("common.close")}
             className="absolute right-4 top-3.5 flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground sm:right-5"
           >
             <X className="h-4 w-4" />
@@ -69,10 +72,10 @@ export function ChannelSubscribeSheet({
               id="channel-subscribe-title"
               className="text-[1.125rem] font-semibold tracking-tight text-foreground"
             >
-              Подпишитесь на канал
+              {t("channel.title")}
             </h2>
             <p className="mt-2 max-w-[20rem] text-sm leading-snug text-muted">
-              {description}
+              {body}
             </p>
 
             {mention ? (
@@ -82,7 +85,7 @@ export function ChannelSubscribeSheet({
                   void copyMention();
                 }}
                 className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-surface-raised px-3.5 py-2 text-[15px] font-medium text-[var(--link)] transition-opacity active:opacity-70"
-                aria-label={`Скопировать ${mention}`}
+                aria-label={t("channel.copyAria", { mention })}
               >
                 <span className="tabular-nums">{mention}</span>
                 <Copy className="h-3.5 w-3.5 opacity-70" strokeWidth={2.25} />
@@ -99,7 +102,7 @@ export function ChannelSubscribeSheet({
                 "app-control mt-5 flex h-14 w-full items-center justify-center gap-2 text-[15px] font-semibold tracking-tight",
               )}
             >
-              Перейти в канал
+              {t("channel.open")}
             </button>
 
             <button
@@ -107,7 +110,7 @@ export function ChannelSubscribeSheet({
               onClick={close}
               className="mt-2 flex h-11 w-full items-center justify-center text-[14px] font-medium text-muted transition-colors hover:text-foreground active:opacity-70"
             >
-              Закрыть
+              {t("common.close")}
             </button>
           </div>
         </div>

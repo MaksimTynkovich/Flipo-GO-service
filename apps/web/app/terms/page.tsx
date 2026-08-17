@@ -1,11 +1,12 @@
 import fs from "fs";
 import path from "path";
 
-function loadTerms(): string {
+function loadTerms(lang: string): string {
+  const fileName = lang === "ru" ? "TERMS.ru.md" : "TERMS.en.md";
   const candidates = [
-    path.join(process.cwd(), "docs", "TERMS.ru.md"),
-    path.join(process.cwd(), "..", "..", "docs", "TERMS.ru.md"),
-    path.join(process.cwd(), "content", "TERMS.ru.md"),
+    path.join(process.cwd(), "docs", fileName),
+    path.join(process.cwd(), "..", "..", "docs", fileName),
+    path.join(process.cwd(), "content", fileName),
   ];
   for (const file of candidates) {
     try {
@@ -14,11 +15,18 @@ function loadTerms(): string {
       // try next
     }
   }
-  return "Пользовательское соглашение Flipo.";
+  return lang === "ru"
+    ? "Пользовательское соглашение Flipo."
+    : "Flipo Terms of Service.";
 }
 
-export default function TermsPage() {
-  const body = loadTerms();
+export default function TermsPage({
+  searchParams,
+}: {
+  searchParams?: { lang?: string };
+}) {
+  const lang = searchParams?.lang === "ru" ? "ru" : "en";
+  const body = loadTerms(lang);
 
   return (
     <main

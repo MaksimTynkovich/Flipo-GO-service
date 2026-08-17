@@ -14,6 +14,7 @@ import {
 } from "@/components/cases/case-ui";
 import { formatTON, type CaseLootPreview, type CaseView } from "@/lib/api";
 import { formatCollectionSlug, giftImageUrl } from "@/lib/gifts";
+import { useT } from "@/components/providers/I18nProvider";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { cn } from "@/lib/utils";
 
@@ -22,9 +23,11 @@ export type CaseDetailPreviewSource = Pick<
   "title" | "slug" | "kind" | "accent_color" | "price_nanoton" | "require_channel"
 >;
 
-export function caseDetailHeading(title: string): string {
+export function caseDetailHeading(title: string, caseWord = "Case"): string {
   if (!title) return "";
-  return title.toLowerCase().includes("кейс") ? title : `${title} Кейс`;
+  const lower = title.toLowerCase();
+  if (lower.includes("кейс") || lower.includes("case")) return title;
+  return `${title} ${caseWord}`;
 }
 
 function collectionNameFromOriginalUrl(url?: string): string | null {
@@ -49,6 +52,7 @@ function lootCollectionLabel(entry: CaseLootPreview): string {
 }
 
 function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
+  const t = useT();
   const isTon = entry.prize_type === "ton";
   const floor =
     isTon
@@ -57,8 +61,8 @@ function CaseLootCard({ entry }: { entry: CaseLootPreview }) {
   const model = entry.model_name?.trim();
   const backdrop = entry.backdrop?.trim();
   const hintParts = isTon
-    ? ["На баланс"]
-    : [model || "рандом", backdrop].filter(Boolean);
+    ? [t("cases.toBalance")]
+    : [model || t("cases.random"), backdrop].filter(Boolean);
 
   return (
     <article className="case-loot-card">
@@ -146,10 +150,11 @@ export function CaseDetailPlayerPreview({
   aboveCta,
   className,
 }: CaseDetailPlayerPreviewProps) {
+  const t = useT();
   const patternUid = useId().replace(/:/g, "");
   const accent = caseItem.accent_color || "#3390ec";
   const theme = getCaseTheme(caseItem);
-  const heading = caseDetailHeading(caseItem.title);
+  const heading = caseDetailHeading(caseItem.title, t("nav.case"));
   const stripLoot =
     revealMode === "spin" && revealLoot && revealLoot.length > 0 ? revealLoot : loot;
 
@@ -177,10 +182,10 @@ export function CaseDetailPlayerPreview({
 
       {showPromoCodeInput ? (
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-white/55">Промокод</span>
+          <span className="text-xs font-medium text-white/55">{t("common.promo")}</span>
           <input
             className="input-field w-full uppercase tracking-wide"
-            placeholder="Введите код"
+            placeholder={t("cases.enterCode")}
             value={promoCode}
             autoCapitalize="characters"
             autoCorrect="off"
@@ -208,12 +213,12 @@ export function CaseDetailPlayerPreview({
       <section className="case-detail__collections">
         <div className="case-detail__collections-head">
           <Package className="h-4 w-4 text-accent" strokeWidth={2.2} aria-hidden />
-          <h2>Список призов</h2>
+          <h2>{t("cases.prizeList")}</h2>
         </div>
         {loot.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/[0.06] bg-surface py-10 text-muted">
             <Gift className="h-7 w-7 opacity-40" />
-            <p className="text-sm">Призы скоро появятся</p>
+            <p className="text-sm">{t("cases.prizesSoon")}</p>
           </div>
         ) : (
           <div className="case-detail__loot-grid">
@@ -232,7 +237,7 @@ export function CaseDetailPlayerPreview({
     <div
       className="admin-case-preview-frame"
       style={{ ["--accent" as string]: accent }}
-      aria-label="Предпросмотр экрана кейса"
+      aria-label={t("cases.previewAria")}
     >
       {content}
     </div>

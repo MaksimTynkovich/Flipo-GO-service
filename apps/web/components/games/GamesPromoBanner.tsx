@@ -9,6 +9,7 @@ import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { openTelegramLink } from "@/src/shared/lib/twa";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/providers/I18nProvider";
 
 type PromoSlide = {
   id: string;
@@ -23,7 +24,7 @@ type PromoSlide = {
 
 const AUTO_MS = 4000;
 
-function buildSlides(): PromoSlide[] {
+function buildSlides(t: ReturnType<typeof useT>): PromoSlide[] {
   const slides: PromoSlide[] = [];
   const channelUrl = promoChannelUrl();
   const channelLabel = promoChannelMention();
@@ -32,11 +33,11 @@ function buildSlides(): PromoSlide[] {
     slides.push({
       id: "channel",
       tone: "channel",
-      title: "Наш канал",
+      title: t("games.channelTitle"),
       subtitle: channelLabel
-        ? `Новости и промо в ${channelLabel}`
-        : "Новости, розыгрыши и промокоды",
-      cta: "Подписаться",
+        ? t("games.channelSubtitleNamed", { channel: channelLabel })
+        : t("games.channelSubtitle"),
+      cta: t("games.channelCta"),
       href: channelUrl,
       external: true,
       coverSrc: "/games/covers/promo-channel.webp",
@@ -47,18 +48,18 @@ function buildSlides(): PromoSlide[] {
     {
       id: "staking",
       tone: "staking",
-      title: "Стейкинг подарков",
-      subtitle: "До 48% APR — пассивный доход",
-      cta: "К стейкингу",
+      title: t("games.stakingTitle"),
+      subtitle: t("games.stakingSubtitle"),
+      cta: t("games.stakingCta"),
       href: APP_ROUTES.profileStaking,
       coverSrc: "/games/covers/promo-staking.webp",
     },
     {
       id: "referrals",
       tone: "referrals",
-      title: "Приглашайте друзей",
-      subtitle: "Доля от их стейкинга каждый день",
-      cta: "Пригласить",
+      title: t("games.inviteTitle"),
+      subtitle: t("games.inviteDesc"),
+      cta: t("games.inviteCta"),
       href: APP_ROUTES.profileReferrals,
       coverSrc: "/games/covers/promo-referrals.webp",
     },
@@ -68,7 +69,8 @@ function buildSlides(): PromoSlide[] {
 }
 
 export function GamesPromoBanner() {
-  const slides = useMemo(() => buildSlides(), []);
+  const t = useT();
+  const slides = useMemo(() => buildSlides(t), [t]);
   const haptics = useTelegramHaptics();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -181,7 +183,7 @@ export function GamesPromoBanner() {
       </div>
 
       {slides.length > 1 ? (
-        <div className="games-promo__dots" role="tablist" aria-label="Промо">
+        <div className="games-promo__dots" role="tablist" aria-label={t("games.promoAria")}>
           {slides.map((slide, i) => (
             <button
               key={slide.id}

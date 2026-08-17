@@ -1,16 +1,20 @@
-/** Short CTA copy when bets are closed — shown on place-bet buttons. */
+import { getRuntimeLocale, translate, type MessageKey } from "@/lib/i18n";
+
+function t(key: MessageKey): string {
+  return translate(getRuntimeLocale(), key);
+}
 
 export function crashBetClosedLabel(phase: string | undefined): string {
   switch (phase) {
     case "running":
-      return "Раунд идёт";
+      return t("crash.cta.running");
     case "crashed":
-      return "Ждём раунд";
+      return t("crash.cta.wait");
     case "waiting":
-      return "Ждём раунд";
+      return t("crash.cta.wait");
     case "betting":
-      return "Поставить";
+      return t("crash.cta.bet");
     default:
-      return "Ждём раунд";
+      return t("crash.cta.wait");
   }
 }

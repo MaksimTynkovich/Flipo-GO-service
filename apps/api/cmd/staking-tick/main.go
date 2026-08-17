@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
@@ -57,6 +58,14 @@ func main() {
 		platformRepo,
 		giftTraitRepo,
 	)
+	stakeBot := telegram.NewBotNotifier(cfg.BotToken)
+	stakeBot.SetLocaleResolver(func(ctx context.Context, telegramID int64) string {
+		user, err := userRepo.FindByTelegramID(ctx, telegramID)
+		if err != nil || user == nil {
+			return domain.DefaultLocale
+		}
+		return user.Locale
+	})
 	stakeSvc := staking.NewService(
 		stakeRepo,
 		invRepo,
@@ -64,7 +73,7 @@ func main() {
 		platformRepo,
 		telegram.NewProfileGiftScanner(mtprotoCfg, cfg.DebugAuthEnabled && !mtprotoCfg.Enabled()),
 		valuator,
-		telegram.NewBotNotifier(cfg.BotToken),
+		stakeBot,
 		int64(cfg.BoostReferralThreshold),
 	)
 	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))

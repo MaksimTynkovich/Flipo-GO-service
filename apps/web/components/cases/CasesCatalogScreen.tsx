@@ -9,6 +9,8 @@ import { CaseTonPrizeArt, CaseMiniTonPrice, CASE_TON_TILE_BACKGROUND } from "@/c
 import { resolveAsset, type CaseLootPreview, type CaseView } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
+import { useT } from "@/components/providers/I18nProvider";
+import type { TFunction } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const LOOT_PREVIEW_LIMIT = 4;
@@ -22,12 +24,12 @@ function isFreeCase(caseItem: CaseView): boolean {
   );
 }
 
-function priceLabel(caseItem: CaseView): { text: string; free: boolean } {
+function priceLabel(caseItem: CaseView, t: TFunction): { text: string; free: boolean } {
   if (caseItem.kind === "promo") {
-    return { text: "Промокод", free: true };
+    return { text: t("common.promo"), free: true };
   }
   if (isFreeCase(caseItem)) {
-    return { text: "Бесплатно", free: true };
+    return { text: t("common.free"), free: true };
   }
   return { text: formatCasePrice(caseItem.price_nanoton), free: false };
 }
@@ -118,9 +120,10 @@ export function CaseCard({
   selected?: boolean;
   onClick?: () => void;
 }) {
+  const t = useT();
   const href = `${APP_ROUTES.cases}/${caseItem.slug}`;
   const cover = resolveAsset(caseItem.image_url?.trim()) || "";
-  const price = priceLabel(caseItem);
+  const price = priceLabel(caseItem, t);
   const lootPreview = topCaseLootGifts(caseItem.loot);
   const accent = getCatalogAccent(caseItem);
   const kindTone =
@@ -251,11 +254,12 @@ const LOBBY_CARD_SKEL = 6;
 
 /** Full lobby stubs — live strip, quest banner, catalog grid. */
 export function CasesLobbySkeleton({ className }: { className?: string }) {
+  const t = useT();
   return (
     <div
       className={cn("cases-lobby space-y-4 pb-2", className)}
       aria-busy="true"
-      aria-label="Загрузка кейсов"
+      aria-label={t("cases.loadingAria")}
     >
       <div className="cases-live cases-live--skeleton" aria-hidden>
         <div className="cases-live__row">
@@ -317,6 +321,7 @@ export function CasesCatalogScreen({
   onCaseClick?: (caseItem: CaseView) => void;
   className?: string;
 }) {
+  const t = useT();
   const { featuredRow, catalog } = flatOrder
     ? { featuredRow: [] as CaseView[], catalog: cases }
     : equalGrid
@@ -346,11 +351,11 @@ export function CasesCatalogScreen({
       ) : null}
 
       <section className="cases-catalog__section">
-        {showBanners ? <h2 className="cases-catalog__heading">Каталог</h2> : null}
+        {showBanners ? <h2 className="cases-catalog__heading">{t("cases.catalog")}</h2> : null}
         {catalog.length === 0 ? (
           <div className="cases-catalog__empty">
             <Gift className="h-7 w-7 opacity-35" />
-            <p>Пока нет кейсов</p>
+            <p>{t("cases.empty")}</p>
           </div>
         ) : (
           <div className="cases-catalog__grid">

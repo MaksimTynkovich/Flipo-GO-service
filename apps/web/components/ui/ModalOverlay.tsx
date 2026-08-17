@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { trackModalAbandon, trackModalOpen } from "@/lib/analytics";
+import { getRuntimeLocale, translate } from "@/lib/i18n";
 
 const EXIT_MS = 300;
 
@@ -122,7 +123,7 @@ export function ModalOverlay({ onClose, children, className, analyticsModalId }:
     >
       <button
         type="button"
-        aria-label="Закрыть"
+        aria-label={translate(getRuntimeLocale(), "common.close")}
         className={cn("overlay-backdrop absolute inset-0", open && "overlay-backdrop-open")}
         onClick={handleClose}
       />

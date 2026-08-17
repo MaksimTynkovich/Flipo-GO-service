@@ -8,6 +8,7 @@ import { BetFundingMode } from "@/lib/bet-funding";
 import { giftImageUrl, giftValuationNanoton } from "@/lib/gifts";
 import { cn } from "@/lib/utils";
 import { useBettableGifts } from "@/components/games/useBettableGifts";
+import { useT } from "@/components/providers/I18nProvider";
 
 type AmountInputProps = {
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -119,6 +120,7 @@ export function BetFundingPanel({
   layout = "inline",
   combined = false,
 }: Props) {
+  const t = useT();
   const showGifts = combined || mode === "gift";
   const showBalance = combined || mode === "balance";
   const { gifts, loading: loadingGifts } = useBettableGifts(showGifts);
@@ -173,7 +175,7 @@ export function BetFundingPanel({
             className={cn("segment-item gap-1.5", mode === "gift" && "segment-item-active")}
           >
             <Gift className="h-4 w-4" />
-            Подарок
+            {t("bet.gift")}
           </button>
         </div>
       ) : null}
@@ -225,10 +227,10 @@ export function BetFundingPanel({
       {showGifts ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-medium text-muted">Подарки</p>
+            <p className="text-[11px] font-medium text-muted">{t("bet.gifts")}</p>
             {multiple && selectedGiftIds.length > 0 ? (
               <p className="text-[11px] tabular-nums text-muted">
-                Выбрано: {selectedGiftIds.length}
+                {t("common.selected", { count: selectedGiftIds.length })}
               </p>
             ) : null}
           </div>
@@ -238,7 +240,7 @@ export function BetFundingPanel({
                 <div
                   className="gift-bet-grid gift-bet-grid--sheet"
                   aria-busy
-                  aria-label="Загружаем подарки"
+                  aria-label={t("bet.loadingGifts")}
                 >
                   {Array.from({ length: 6 }).map((_, i) => (
                     <BetGiftCardSkeleton key={i} />
@@ -248,7 +250,7 @@ export function BetFundingPanel({
                 <div
                   className="gift-bet-grid gift-bet-grid--inline"
                   aria-busy
-                  aria-label="Загружаем подарки"
+                  aria-label={t("bet.loadingGifts")}
                 >
                   {Array.from({ length: 4 }).map((_, i) => (
                     <BetGiftCardSkeleton key={i} className="w-[6.75rem] shrink-0" />
@@ -264,10 +266,10 @@ export function BetFundingPanel({
               >
                 <p className="gift-bet-empty col-span-full w-full rounded-xl bg-surface-raised px-3 py-4 text-center text-xs text-muted">
                   {fixedStakeNanoton
-                    ? "Нет подарка с нужной стоимостью для этой комнаты"
+                    ? t("bet.noneForRoom")
                     : excludedGiftIds.length > 0
-                      ? "Все доступные подарки уже в ставках"
-                      : "Нет доступных подарков в инвентаре"}
+                      ? t("bet.allInPlay")
+                      : t("bet.noneInInventory")}
                 </p>
               </div>
             ) : isSheet ? (

@@ -10,6 +10,7 @@ import { patchUserBalance } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
 import { formatCollectionSlug } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
+import { useT } from "@/components/providers/I18nProvider";
 import { Gift, SearchX } from "lucide-react";
 
 const PAGE_SIZE = 20;
@@ -62,6 +63,7 @@ function mergeListings(prev: MarketListing[], next: MarketListing[]): MarketList
 }
 
 export function MarketSection({ onPurchased }: Props) {
+  const t = useT();
   const { user, setUser, ready } = useAuth();
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,10 +150,10 @@ export function MarketSection({ onPurchased }: Props) {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     } else {
-      setLoadError(formatUserError(lastError, "Не удалось загрузить маркет"));
+      setLoadError(formatUserError(lastError, t("market.loadFailed")));
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const load = useCallback(async () => {
     await loadPage(0, false);
@@ -252,7 +254,7 @@ export function MarketSection({ onPurchased }: Props) {
       await load();
       onPurchased?.();
     } catch (e) {
-      setError(formatUserError(e, "Ошибка покупки"));
+      setError(formatUserError(e, t("market.buyError")));
     } finally {
       setBuying(false);
     }
@@ -306,14 +308,14 @@ export function MarketSection({ onPurchased }: Props) {
       {!loading && loadError && listings.length === 0 && (
         <div className="flex flex-col items-center gap-3 py-12 text-center">
           <SearchX className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
-          <p className="text-sm font-medium">Не удалось загрузить</p>
+          <p className="text-sm font-medium">{t("market.loadError")}</p>
           <p className="max-w-[15rem] text-xs leading-relaxed text-muted">{loadError}</p>
           <button
             type="button"
             onClick={() => void load()}
             className="text-xs font-semibold text-accent"
           >
-            Повторить
+            {t("common.retry")}
           </button>
         </div>
       )}
@@ -321,9 +323,9 @@ export function MarketSection({ onPurchased }: Props) {
       {!loading && !loadError && listings.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-12 text-center">
           <Gift className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
-          <p className="text-sm font-medium">Маркет пуст</p>
+          <p className="text-sm font-medium">{t("market.empty")}</p>
           <p className="max-w-[15rem] text-xs leading-relaxed text-muted">
-            Скоро здесь появятся подарки
+            {t("market.emptyHint")}
           </p>
         </div>
       )}
@@ -335,9 +337,9 @@ export function MarketSection({ onPurchased }: Props) {
         visibleListings.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <SearchX className="h-7 w-7 text-muted/40" strokeWidth={1.5} />
-          <p className="text-sm font-medium">Ничего не найдено</p>
+          <p className="text-sm font-medium">{t("market.nothingFound")}</p>
           <p className="max-w-[15rem] text-xs leading-relaxed text-muted">
-            Попробуйте другой запрос или сбросьте фильтры
+            {t("market.tryFilters")}
           </p>
           {hasActiveFilters ? (
             <button
@@ -349,7 +351,7 @@ export function MarketSection({ onPurchased }: Props) {
               }}
               className="mt-1 text-xs font-semibold text-accent"
             >
-              Сбросить
+              {t("market.reset")}
             </button>
           ) : null}
         </div>

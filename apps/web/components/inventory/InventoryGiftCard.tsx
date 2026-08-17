@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatTON, InventoryItem } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { giftBuyPriceNanoton, giftImageUrl } from "@/lib/gifts";
+import { useT } from "@/components/providers/I18nProvider";
 import { Gift } from "lucide-react";
 
 export function inventoryItemSlug(item: InventoryItem): string {
@@ -16,16 +17,17 @@ type Props = {
   onClick?: (item: InventoryItem) => void;
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  locked: "На маркете",
-  withdraw_pending: "На выводе",
-};
-
 export function InventoryGiftCard({ item, listingPrice, onClick }: Props) {
+  const t = useT();
   const [imgError, setImgError] = useState(false);
   const imageSrc = giftImageUrl(inventoryItemSlug(item), item.image_url);
   const price = listingPrice ?? giftBuyPriceNanoton(item);
-  const statusLabel = STATUS_LABEL[item.status];
+  const statusLabel =
+    item.status === "locked"
+      ? t("inventory.status.locked")
+      : item.status === "withdraw_pending"
+        ? t("inventory.status.withdraw_pending")
+        : null;
 
   return (
     <button

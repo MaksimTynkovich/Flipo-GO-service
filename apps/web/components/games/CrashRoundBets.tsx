@@ -10,6 +10,7 @@ import {
 import { BetStakeLabel, GiftStakeIcons } from "@/components/games/BetStakeLabel";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { crashPlayerName, formatMultiplier } from "@/lib/crash";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -287,6 +288,7 @@ function PlayerRow({
   flash?: boolean;
   liveMultiplier?: number | null;
 }) {
+  const t = useT();
   const [imgError, setImgError] = useState(false);
   const name = crashPlayerName(player);
   const initial = (player.first_name?.[0] || player.username?.[0] || "?").toUpperCase();
@@ -361,7 +363,7 @@ function PlayerRow({
         ) : showLiveGain ? (
           <LiveGainPlaque valueNanoton={liveGain} hot={hotGain} />
         ) : isCashedOut ? null : (
-          <p className="text-[11px] font-medium text-muted">В игре</p>
+          <p className="text-[11px] font-medium text-muted">{t("crash.inPlay")}</p>
         )}
       </div>
     </div>
@@ -369,6 +371,7 @@ function PlayerRow({
 }
 
 export function CrashRoundBets({ data, liveMultiplier = null }: Props) {
+  const t = useT();
   const bets = data?.bets ?? [];
   const aggregated = useMemo(() => aggregateBets(bets), [bets]);
   const orderRef = useRef<string[]>([]);
@@ -451,12 +454,12 @@ export function CrashRoundBets({ data, liveMultiplier = null }: Props) {
   }, [cashedSignature, aggregated, data?.round_id]);
 
   if (bets.length === 0) {
-    return <p className="py-2 text-center text-xs text-muted">Пока нет ставок</p>;
+    return <p className="py-2 text-center text-xs text-muted">{t("crash.noBets")}</p>;
   }
 
   return (
     <div className="space-y-2">
-      <p className="section-label">Игроки</p>
+      <p className="section-label">{t("crash.players")}</p>
       <div className="space-y-0.5">
         {players.map((player) => (
           <PlayerRow

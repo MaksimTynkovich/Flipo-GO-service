@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CrashHistoryEntry } from "@/lib/api";
 import { formatMultiplierCompact } from "@/lib/crash";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -54,6 +55,7 @@ function countFitting(
 }
 
 export function CrashHistory({ history, onSelectRound, className }: Props) {
+  const t = useT();
   const [fitCount, setFitCount] = useState(8);
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -108,7 +110,7 @@ export function CrashHistory({ history, onSelectRound, className }: Props) {
       <div className="crash-history__fade" aria-hidden />
       <div ref={rowRef} className="crash-history__row">
         {visible.length === 0 ? (
-          <span className="crash-history__empty">Нет игр</span>
+          <span className="crash-history__empty">{t("crash.noGames")}</span>
         ) : (
           visible.map((entry, index) => {
             const clickable = !!entry.round_id && !!onSelectRound;
@@ -116,7 +118,7 @@ export function CrashHistory({ history, onSelectRound, className }: Props) {
               <button
                 key={entry.round_id || entry.round_number}
                 type="button"
-                title={`Раунд #${entry.round_number}`}
+                title={t("crash.roundTitle", { number: entry.round_number })}
                 disabled={!clickable}
                 onClick={() => clickable && onSelectRound?.(entry)}
                 data-tone={tierTone(entry.crash_point)}

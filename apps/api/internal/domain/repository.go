@@ -13,6 +13,7 @@ type UserRepository interface {
 	Upsert(ctx context.Context, user *User) error
 	EnsureSocialBotUser(ctx context.Context, id uuid.UUID, telegramID int64, username, firstName, photoURL string) (*User, error)
 	UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error
+	UpdateLocale(ctx context.Context, userID uuid.UUID, locale string) error
 	UpdateBanned(ctx context.Context, userID uuid.UUID, banned bool) error
 	UpdateWithdrawalsDisabled(ctx context.Context, userID uuid.UUID, disabled bool) error
 	UpdateBalance(ctx context.Context, userID uuid.UUID, delta int64, ledger LedgerType, refType string, refID uuid.UUID) (balanceAfter int64, adminFundedConsumed int64, err error)

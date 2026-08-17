@@ -22,6 +22,7 @@ import { patchUserBalance } from "@/lib/apply-balance";
 import { markModalCompleted } from "@/lib/analytics";
 import { INVENTORY_DEPOSITED_EVENT } from "@/components/providers/UserRealtimeProvider";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useT } from "@/components/providers/I18nProvider";
 import { Gift, ArrowUpRight } from "lucide-react";
 import { depositBotMention, depositBotTelegramUrl } from "@/lib/bot";
 import { formatUserError } from "@/lib/user-errors";
@@ -30,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { GIFT_DEPOSIT_ENABLED, MARKET_ENABLED } from "@/src/shared/config/features";
 
 export function InventorySection() {
+  const t = useT();
   const { user, setUser } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [myListings, setMyListings] = useState<MarketListing[]>([]);
@@ -100,7 +102,7 @@ export function InventorySection() {
       closeSheet();
       load();
     } catch (e) {
-      setListError(formatUserError(e, "Не удалось продать подарок"));
+      setListError(formatUserError(e, t("inventory.sellFailed")));
     } finally {
       setLiquidating(false);
     }
@@ -129,7 +131,7 @@ export function InventorySection() {
         load();
       }
     } catch (e) {
-      setListError(formatUserError(e, "Не удалось вывести подарок"));
+      setListError(formatUserError(e, t("inventory.withdrawFailed")));
     } finally {
       setWithdrawing(false);
     }
@@ -155,7 +157,7 @@ export function InventorySection() {
 
       <section className={GIFT_DEPOSIT_ENABLED ? "mt-5 space-y-2" : "space-y-2"}>
         <div className="flex items-center justify-between px-0.5">
-          <p className="section-label">Мои подарки</p>
+          <p className="section-label">{t("inventory.myGifts")}</p>
           {!loading && <span className="text-xs text-muted">{visibleItems.length}</span>}
         </div>
 
@@ -181,10 +183,10 @@ export function InventorySection() {
               <Gift className="h-5 w-5" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold">Инвентарь пуст</p>
+              <p className="text-sm font-semibold">{t("inventory.empty")}</p>
               {GIFT_DEPOSIT_ENABLED ? (
                 <p className="text-xs leading-relaxed text-muted">
-                  Отправьте подарок боту {depositBotMention()} — он появится здесь.
+                  {t("inventory.sendBot", { bot: depositBotMention() })}
                 </p>
               ) : null}
             </div>
@@ -199,7 +201,7 @@ export function InventorySection() {
                   }
                 }}
               >
-                Открыть бота
+                {t("inventory.openBot")}
                 <ArrowUpRight className="ml-1.5 h-4 w-4" />
               </Button>
             ) : null}

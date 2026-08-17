@@ -6,6 +6,7 @@ import { PageShell } from "@/components/PageShell";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { getGameModes, type GameModeKey } from "@/lib/api";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
+import { useT } from "@/components/providers/I18nProvider";
 
 type GateState = "loading" | "ok" | "blocked";
 
@@ -18,6 +19,7 @@ export function GameModeGate({
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<GateState>("loading");
+  const t = useT();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,12 +56,10 @@ export function GameModeGate({
     return (
       <PageShell>
         <div className="space-y-3 pt-6">
-          <h1 className="text-lg font-semibold">Режим временно недоступен</h1>
-          <p className="text-sm text-muted">
-            Этот режим сейчас выключен. Загляните позже или выберите другую игру.
-          </p>
+          <h1 className="text-lg font-semibold">{t("games.gateTitle")}</h1>
+          <p className="text-sm text-muted">{t("games.gateBody")}</p>
           <Link href={APP_ROUTES.games} className="inline-flex text-sm font-medium text-accent">
-            К списку режимов
+            {t("games.gateCta")}
           </Link>
         </div>
       </PageShell>

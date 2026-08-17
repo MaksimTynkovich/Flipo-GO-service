@@ -14,6 +14,7 @@ import {
   STAKING_STREAK_BONUS_MULTIPLIER,
   STAKING_STREAK_TARGET_DAYS,
 } from "@/lib/staking-ui";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 import { Check, Flame, Sparkles } from "lucide-react";
 
@@ -53,6 +54,7 @@ function StreakTrack({
   stakedToday: boolean;
   multiplier: number;
 }) {
+  const t = useT();
   const days = Math.max(1, target);
   const atRisk = !bonusActive && !stakedToday && current > 0;
   const bonusReady = !bonusActive && current >= target;
@@ -61,7 +63,7 @@ function StreakTrack({
   return (
     <div
       className="overflow-hidden rounded-2xl bg-surface-raised/70 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_6%,transparent)]"
-      aria-label={`Серия ${current} из ${target}`}
+      aria-label={t("staking.streakAria", { current, target })}
     >
       <div className="flex items-stretch">
         <div className="min-w-0 flex-1 p-2.5 pr-2">
@@ -90,10 +92,10 @@ function StreakTrack({
                   style={waiting ? { animation: "live-pulse 1.8s ease-out infinite" } : undefined}
                   aria-label={
                     filled
-                      ? `День ${day}: засчитан`
+                      ? t("staking.dayCounted", { day })
                       : waiting
-                        ? `День ${day}: застейкайте сегодня`
-                        : `День ${day}`
+                        ? t("staking.dayStakeToday", { day })
+                        : t("staking.dayN", { day })
                   }
                 >
                   {filled ? (
@@ -129,7 +131,7 @@ function StreakTrack({
                 : "border-[color-mix(in_srgb,var(--foreground)_8%,transparent)] bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)]",
           )}
           style={bonusActive ? { animation: "live-pulse 2.2s ease-out infinite" } : undefined}
-          aria-label={bonusActive ? `Бонус ×${multiplier} активен` : `Награда ×${multiplier}`}
+          aria-label={bonusActive ? t("staking.bonusActiveAria", { multiplier }) : t("staking.rewardAria", { multiplier })}
         >
           <span
             className={cn(
@@ -145,7 +147,7 @@ function StreakTrack({
               bonusActive || bonusReady ? "text-success/80" : "text-muted",
             )}
           >
-            {bonusActive ? "сейчас" : "бонус"}
+            {bonusActive ? t("common.now") : t("common.bonus")}
           </span>
         </div>
       </div>
@@ -160,6 +162,7 @@ type Props = {
 };
 
 export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
+  const t = useT();
   const liveEarned = useLiveEarned(stats.earned_nanoton, stats.active_daily_yield_nanoton);
 
   const unstakedCount = Math.max(0, stats.total_count - stats.staked_count);
@@ -193,7 +196,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
       <section className="panel overflow-hidden p-0">
         <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium text-muted">Заработано</p>
+            <p className="text-[11px] font-medium text-muted">{t("staking.earned")}</p>
             <p className="mt-1.5 text-[1.75rem] font-bold tabular-nums leading-none tracking-tight">
               <TonAmount
                 amount={formatTON(liveEarned)}
@@ -202,9 +205,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
               />
             </p>
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              {hasPortfolio
-                ? "Ежедневный доход: выплата сегодня ночью · завтра снова застейкайте"
-                : "Стейкинг каждый день: застейкайте подарки — доход придёт ночью"}
+              {hasPortfolio ? t("staking.dailyYieldNight") : t("staking.dailyYieldStart")}
             </p>
           </div>
           <span className={cn("chip shrink-0", isBoost ? "chip-accent" : "")}>
@@ -216,13 +217,13 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
 
         <div className="grid grid-cols-2">
           <div className="px-3 py-3">
-            <p className="text-[10px] text-muted">За сутки</p>
+            <p className="text-[10px] text-muted">{t("staking.perDay")}</p>
             <p className="mt-1 text-sm font-semibold tabular-nums text-success">
               +{formatTON(stats.active_daily_yield_nanoton)}
             </p>
           </div>
           <div className="border-l border-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-3 py-3">
-            <p className="text-[10px] text-muted">В стейке</p>
+            <p className="text-[10px] text-muted">{t("staking.inStake")}</p>
             <p className="mt-1 text-sm font-semibold tabular-nums">
               {stats.staked_count}
               <span className="text-muted">/{stats.total_count}</span>
@@ -235,7 +236,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
             <div className="hairline-top" />
             <div className="space-y-1.5 px-4 py-3">
               <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-muted">Потенциал</span>
+                <span className="text-muted">{t("staking.potential")}</span>
                 <span className="inline-flex items-center gap-1 tabular-nums text-accent">
                   +
                   <TonAmount
@@ -243,7 +244,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
                     variant="brand"
                     iconClassName="h-3.5 w-3.5"
                   />
-                  /сутки
+                  {t("common.perDay")}
                 </span>
               </div>
               <ProgressBar
@@ -253,7 +254,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
                 }
               />
               <p className="text-[11px] text-muted">
-                Ещё {pluralizeGifts(unstakedCount)} вне стейка
+                {t("staking.moreUnstaked", { count: pluralizeGifts(unstakedCount) })}
               </p>
             </div>
           </>
@@ -307,7 +308,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
             <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold tracking-tight">
-                  {streakBonusActive ? "Бонус серии" : "Серия стейка"}
+                  {streakBonusActive ? t("staking.streakBonus") : t("staking.streak")}
                 </p>
                 {streakBonusActive ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold tabular-nums text-success">
@@ -350,7 +351,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
               </span>
               <p className="text-[11px] font-medium leading-snug text-accent">
-                Застейкайте сегодня, чтобы не сбросить серию
+                {t("staking.keepStreak")}
               </p>
             </div>
           ) : null}
@@ -359,7 +360,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
             <div className="flex items-center gap-2 rounded-xl bg-success/10 px-3 py-2">
               <Sparkles className="h-3.5 w-3.5 shrink-0 text-success" />
               <p className="text-[11px] font-medium leading-snug text-success">
-                Сегодня доход удвоен — не пропустите стейк
+                {t("staking.doubleToday")}
               </p>
             </div>
           ) : null}
@@ -371,7 +372,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
           {tvlCap > 0 ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-muted">Пул</span>
+                <span className="text-muted">{t("staking.pool")}</span>
                 <span className="tabular-nums text-foreground">
                   {Math.min(100, Math.round((tvlUsed / tvlCap) * 100))}%
                 </span>
@@ -379,7 +380,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
               <ProgressBar value={tvlUsed / tvlCap} tone={poolFull ? "danger" : "accent"} />
               {poolFull ? (
                 <p className="text-[11px] font-medium leading-snug text-danger">
-                  Общий пул заполнен — сейчас нельзя застейкать. Дождитесь следующего дня.
+                  {t("staking.poolFullNow")}
                 </p>
               ) : null}
             </div>
@@ -388,7 +389,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
           {personalLimit > 0 ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="text-muted">Личный лимит</span>
+                <span className="text-muted">{t("staking.personalLimit")}</span>
                 <span className="tabular-nums text-foreground">
                   {formatTON(personalUsed)} / {formatTON(personalLimit)}
                 </span>
@@ -401,11 +402,12 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
 
       {stats.referral_perk_pending ? (
         <section className="panel bg-accent/5 p-3.5">
-          <p className="text-sm font-medium">Бонус по реферальной ссылке</p>
+          <p className="text-sm font-medium">{t("staking.refLinkBonus")}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
-            Застейкайте первый подарок — включится +{stats.referral_boost_percent ?? 0.5}% к доходу
-            и +{Math.round((stats.referral_limit_bonus_nanoton ?? 20_000_000_000) / 1_000_000_000)} TON
-            к лимиту на 30 дней.
+            {t("staking.refLinkHint", {
+              percent: stats.referral_boost_percent ?? 0.5,
+              ton: Math.round((stats.referral_limit_bonus_nanoton ?? 20_000_000_000) / 1_000_000_000),
+            })}
           </p>
         </section>
       ) : null}
@@ -413,8 +415,10 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
       {stats.referral_perk_active ? (
         <p className="inline-flex items-center gap-1.5 px-0.5 text-xs text-success">
           <Sparkles className="h-3.5 w-3.5" />
-          Реферальный бонус: +{stats.referral_boost_percent ?? 0.5}% к доходу, +
-          {Math.round((stats.referral_limit_bonus_nanoton ?? 0) / 1_000_000_000)} TON к лимиту
+          {t("staking.refBonusLine", {
+            percent: stats.referral_boost_percent ?? 0.5,
+            ton: Math.round((stats.referral_limit_bonus_nanoton ?? 0) / 1_000_000_000),
+          })}
         </p>
       ) : null}
 
@@ -423,7 +427,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
           <div className="flex items-center justify-between gap-2">
             <p className="inline-flex items-center gap-1.5 text-sm font-medium">
               <Sparkles className="h-3.5 w-3.5 text-accent" />
-              Буст {formatStakingRate("boost")}
+              {t("staking.boostLabel", { apr: formatStakingRate("boost") })}
             </p>
             <span className="text-xs tabular-nums text-muted">
               {Math.min(stats.boost_referral_count, stats.boost_referral_target)}/
@@ -440,7 +444,7 @@ export function StakingOverview({ isBoost, stats, epochEndsAt }: Props) {
       {isBoost ? (
         <p className="inline-flex items-center gap-1.5 px-0.5 text-xs text-accent">
           <Sparkles className="h-3.5 w-3.5" />
-          {aprLabel} до конца месяца
+          {t("staking.boostUntil", { apr: aprLabel })}
         </p>
       ) : null}
     </div>

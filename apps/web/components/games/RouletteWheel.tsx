@@ -18,6 +18,7 @@ import {
   spinTargetRotation,
   WHEEL_COLORS,
 } from "@/lib/roulette";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 const CATCHUP_MS = 250;
@@ -121,6 +122,7 @@ type Props = {
 };
 
 export function RouletteWheel({ state }: Props) {
+  const t = useT();
   const wheelRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<SVGPathElement>(null);
   const lastSpinRound = useRef<string | null>(null);
@@ -388,7 +390,7 @@ export function RouletteWheel({ state }: Props) {
             </div>
           ) : null}
           {phase === "waiting" && !showHeldResult && !awaitingStart ? (
-            <span className="roulette-hub__idle">Скоро</span>
+            <span className="roulette-hub__idle">{t("roulette.soon")}</span>
           ) : null}
         </div>
       </div>

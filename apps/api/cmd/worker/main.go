@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/flipo/flipo/apps/api/internal/domain"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/config"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/gifts"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/log"
@@ -48,7 +49,15 @@ func main() {
 		platformRepo,
 		giftTraitRepo,
 	)
-	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, telegram.NewMTProtoGiftScanner(telegram.MTProtoConfig{}), giftValuator, telegram.NewBotNotifier(cfg.BotToken), int64(cfg.BoostReferralThreshold))
+	stakeBot := telegram.NewBotNotifier(cfg.BotToken)
+	stakeBot.SetLocaleResolver(func(ctx context.Context, telegramID int64) string {
+		user, err := userRepo.FindByTelegramID(ctx, telegramID)
+		if err != nil || user == nil {
+			return domain.DefaultLocale
+		}
+		return user.Locale
+	})
+	stakeSvc := staking.NewService(stakeRepo, invRepo, userRepo, platformRepo, telegram.NewMTProtoGiftScanner(telegram.MTProtoConfig{}), giftValuator, stakeBot, int64(cfg.BoostReferralThreshold))
 	stakeSvc.SetAnalytics(analyticsuc.NewService(analyticsRepo))
 
 	stakingWorker := stakingworker.NewWorker(stakeSvc)

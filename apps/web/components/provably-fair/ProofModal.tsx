@@ -5,6 +5,7 @@ import { CheckCircle2, Clock3, Shield, XCircle } from "lucide-react";
 import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { getRoundProof, type RoundProof } from "@/lib/api";
 import { verifyRoundProof } from "@/lib/provably-fair";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export function ProofModal({ roundId, gameType, title, onClose }: Props) {
+  const t = useT();
   const [proof, setProof] = useState<RoundProof | null>(null);
   const [verified, setVerified] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
           const message =
             e && typeof e === "object" && "message" in e && typeof e.message === "string"
               ? e.message
-              : "Проверка честности недоступна для этого раунда";
+              : t("fairness.unavailable");
           setError(message);
         })
         .finally(() => {
@@ -58,7 +60,7 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
       cancelled = true;
       window.clearTimeout(start);
     };
-  }, [roundId, gameType]);
+  }, [roundId, gameType, t]);
 
   const pendingReveal = !!proof && !proof.server_seed;
 
@@ -77,7 +79,7 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
                 <p className="text-base font-semibold tracking-tight">{title}</p>
               </div>
               <p className="mt-1 text-xs text-muted">
-                Provably fair — независимая проверка раунда
+                {t("fairness.lead")}
               </p>
             </div>
             <button
@@ -85,7 +87,7 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
               className="shrink-0 rounded-lg px-2 py-1 text-sm text-muted transition-opacity active:opacity-70"
               onClick={close}
             >
-              Закрыть
+              {t("common.close")}
             </button>
           </div>
 
@@ -94,7 +96,7 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
               <>
                 <div className="proof-sheet__status proof-sheet__status--pending">
                   <span className="proof-sheet__status-dot" />
-                  Проверяем раунд…
+                  {t("fairness.checking")}
                 </div>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="proof-sheet__skeleton" />
@@ -103,14 +105,14 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
             ) : !proof ? (
               <div className="proof-sheet__status proof-sheet__status--fail">
                 <XCircle className="h-4 w-4 shrink-0" />
-                {error || "Проверка честности недоступна для этого раунда"}
+                {error || t("fairness.unavailable")}
               </div>
             ) : (
               <>
                 {pendingReveal ? (
                   <div className="proof-sheet__status proof-sheet__status--pending">
                     <Clock3 className="h-4 w-4 shrink-0" />
-                    Раунд ещё идёт — seed раскроется после завершения
+                    {t("fairness.seedLater")}
                   </div>
                 ) : (
                   <div
@@ -127,23 +129,23 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
                     {verified === null
                       ? "—"
                       : verified
-                        ? "Проверка пройдена"
-                        : "Проверка не пройдена"}
+                        ? t("fairness.passed")
+                        : t("fairness.failed")}
                   </div>
                 )}
 
-                <ProofRow label="Раунд" value={`#${proof.round_number}`} />
+                <ProofRow label={t("fairness.round")} value={`#${proof.round_number}`} />
                 <ProofRow label="Server seed hash" value={proof.server_seed_hash} mono />
                 <ProofRow
                   label="Server seed"
-                  value={proof.server_seed || "скрыт до завершения"}
+                  value={proof.server_seed || t("fairness.hiddenSeed")}
                   mono
                 />
                 <ProofRow label="Client seed" value={proof.client_seed || "—"} mono />
                 <ProofRow label="Nonce" value={String(proof.nonce)} />
                 <ProofRow
-                  label="Результат"
-                  value={proof.result || (pendingReveal ? "ожидается" : "—")}
+                  label={t("fairness.result")}
+                  value={proof.result || (pendingReveal ? t("fairness.pending") : "—")}
                   emphasize
                 />
               </>
@@ -152,7 +154,7 @@ export function ProofModal({ roundId, gameType, title, onClose }: Props) {
 
           <div className="px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4">
             <button type="button" className="proof-sheet__cta" onClick={close}>
-              Понятно
+              {t("fairness.gotIt")}
             </button>
           </div>
         </div>

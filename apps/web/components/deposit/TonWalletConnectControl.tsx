@@ -3,9 +3,11 @@
 import { TonConnectButton, useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import { Button } from "@/components/ui/button";
 import { formatTonWalletAddress } from "@/lib/wallet";
+import { useT } from "@/components/providers/I18nProvider";
 import { Unlink, Wallet } from "lucide-react";
 
 export function TonWalletConnectControl() {
+  const t = useT();
   const wallet = useTonWallet();
   const [tonConnectUI] = useTonConnectUI();
   const connectedAddr = wallet?.account?.address;
@@ -26,7 +28,7 @@ export function TonWalletConnectControl() {
           <Wallet className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">Telegram Wallet подключён</p>
+          <p className="text-sm font-semibold text-foreground">{t("deposit.walletConnected")}</p>
           <p className="mt-1 break-all font-mono text-xs leading-relaxed text-muted">
             {displayWallet}
           </p>
@@ -39,7 +41,7 @@ export function TonWalletConnectControl() {
           className="h-10 flex-1 rounded-xl text-xs"
           onClick={() => tonConnectUI.openModal()}
         >
-          Сменить кошелёк
+          {t("deposit.changeWallet")}
         </Button>
         <Button
           type="button"
@@ -48,7 +50,7 @@ export function TonWalletConnectControl() {
           onClick={() => tonConnectUI.disconnect()}
         >
           <Unlink className="mr-1.5 h-3.5 w-3.5" />
-          Отвязать
+          {t("deposit.unlink")}
         </Button>
       </div>
     </div>

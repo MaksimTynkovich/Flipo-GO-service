@@ -24,6 +24,8 @@ import {
 import { patchUserBalance } from "@/lib/apply-balance";
 import { giftGradient, giftImageUrl } from "@/lib/gifts";
 import { formatUserError } from "@/lib/user-errors";
+import { useT } from "@/components/providers/I18nProvider";
+import type { TFunction } from "@/lib/i18n";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { cn } from "@/lib/utils";
@@ -72,53 +74,53 @@ function progressPct(progress: number, target: number): number {
   return Math.max(0, Math.min(100, Math.round((progress / target) * 100)));
 }
 
-function giftTitle(reward: DailyQuestReward): string {
-  return reward.gift_name?.trim() || reward.model_name?.trim() || "Подарок";
+function giftTitle(reward: DailyQuestReward, t: TFunction): string {
+  return reward.gift_name?.trim() || reward.model_name?.trim() || t("quests.giftFallback");
 }
 
-function rewardLabel(reward: DailyQuestReward): string {
+function rewardLabel(reward: DailyQuestReward, t: TFunction): string {
   if (reward.type === "none") {
-    return "К бонусу дня";
+    return t("quests.toDailyBonus");
   }
   if (reward.type === "free_case_open") {
     const title = reward.case_title?.trim();
-    return title ? `Кейс «${title}»` : "Бесплатный кейс";
+    return title ? t("quests.freeCaseNamed", { title }) : t("quests.freeCase");
   }
   if (reward.type === "gift") {
-    return giftTitle(reward);
+    return giftTitle(reward, t);
   }
   if (reward.nanoton) return `${formatTON(reward.nanoton)} TON`;
   return "—";
 }
 
-function hasQuestReward(reward: DailyQuestReward): boolean {
+function hasQuestReward(reward: DailyQuestReward, t: TFunction): boolean {
   const type = reward.type?.trim() || "";
   if (!type || type === "none") return false;
   if (type === "balance_nanoton") return (reward.nanoton ?? 0) > 0;
   if (type === "free_case_open" || type === "gift") return true;
-  return rewardLabel(reward) !== "—";
+  return rewardLabel(reward, t) !== "—";
 }
 
-function bonusRewardHeadline(reward: DailyQuestReward): string {
+function bonusRewardHeadline(reward: DailyQuestReward, t: TFunction): string {
   if (reward.type === "free_case_open") {
     const title = reward.case_title?.trim();
-    return title ? `Кейс «${title}»` : "Бесплатный кейс";
+    return title ? t("quests.freeCaseNamed", { title }) : t("quests.freeCase");
   }
   if (reward.type === "gift") {
-    return giftTitle(reward);
+    return giftTitle(reward, t);
   }
-  if (reward.nanoton) return `+${formatTON(reward.nanoton)} TON на баланс`;
-  return "Награда за все задания";
+  if (reward.nanoton) return t("quests.tonBalance", { amount: formatTON(reward.nanoton) });
+  return t("quests.allReward");
 }
 
-function claimSuccessTitle(reward: DailyQuestReward, isBonus: boolean): string {
+function claimSuccessTitle(reward: DailyQuestReward, isBonus: boolean, t: TFunction): string {
   if (reward.type === "free_case_open") {
-    return isBonus ? "Бонусный кейс получен" : "Бесплатный кейс получен";
+    return isBonus ? t("quests.bonusCaseGot") : t("quests.freeCaseGot");
   }
   if (reward.type === "gift") {
-    return `${giftTitle(reward)} в инвентаре`;
+    return t("quests.giftInInventory", { name: giftTitle(reward, t) });
   }
-  return isBonus ? "Бонус зачислен" : "Награда зачислена";
+  return isBonus ? t("quests.bonusCredited") : t("quests.rewardCredited");
 }
 
 function notifyInventoryIfGift(result: DailyQuestClaimResult) {
@@ -135,6 +137,7 @@ function shouldCelebrateClaim(reward: DailyQuestReward): boolean {
 }
 
 export function QuestsView() {
+  const t = useT();
   const { showToast } = useToast();
   const { setUser } = useAuth();
   const haptics = useTelegramHaptics();
@@ -149,12 +152,12 @@ export function QuestsView() {
     } catch (e) {
       showToast({
         variant: "error",
-        title: formatUserError(e, "Не удалось загрузить задания"),
+        title: formatUserError(e, t("quests.loadFailed")),
       });
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     void load();
@@ -168,7 +171,7 @@ export function QuestsView() {
     }
     showToast({
       variant: "success",
-      title: claimSuccessTitle(result.reward, isBonus),
+      title: claimSuccessTitle(result.reward, isBonus, t),
     });
   }
 
@@ -185,7 +188,7 @@ export function QuestsView() {
     } catch (e) {
       showToast({
         variant: "error",
-        title: formatUserError(e, "Не удалось забрать награду"),
+        title: formatUserError(e, t("quests.claimFailed")),
       });
     } finally {
       setBusy(null);
@@ -205,7 +208,7 @@ export function QuestsView() {
     } catch (e) {
       showToast({
         variant: "error",
-        title: formatUserError(e, "Не удалось забрать бонус"),
+        title: formatUserError(e, t("quests.bonusFailed")),
       });
     } finally {
       setBusy(null);
@@ -216,7 +219,7 @@ export function QuestsView() {
     <PageShell flush>
       <section className="quests-lobby">
         <header className="quests-lobby__intro">
-          <h1 className="quests-lobby__intro-title">Задания дня</h1>
+          <h1 className="quests-lobby__intro-title">{t("quests.dayTitle")}</h1>
         </header>
 
         {loading && !board ? (
@@ -231,6 +234,7 @@ export function QuestsView() {
           <div className="quests-lobby__stack">
             {board.bonus.status !== "disabled" ? (
               <BonusCard
+                t={t}
                 bonus={board.bonus}
                 busy={busy === "bonus"}
                 onClaim={() => void onClaimBonus()}
@@ -238,13 +242,14 @@ export function QuestsView() {
             ) : null}
 
             <div className="quests-lobby__tasks">
-              <h2 className="quests-lobby__section-title">Задания</h2>
+              <h2 className="quests-lobby__section-title">{t("quests.section")}</h2>
               {board.tasks.length === 0 ? (
-                <p className="quests-lobby__empty">Сегодня заданий нет</p>
+                <p className="quests-lobby__empty">{t("quests.empty")}</p>
               ) : (
                 <div className="quests-lobby__list">
                   {board.tasks.map((task, index) => (
                     <TaskRow
+                      t={t}
                       key={task.id}
                       task={task}
                       tone={taskTone(task, index)}
@@ -351,10 +356,12 @@ function BonusWash({
 }
 
 function BonusCard({
+  t,
   bonus,
   busy,
   onClaim,
 }: {
+  t: TFunction;
   bonus: DailyQuestBonus;
   busy: boolean;
   onClaim: () => void;
@@ -390,7 +397,7 @@ function BonusCard({
             // eslint-disable-next-line @next/next/no-img-element
             <img className="quests-bonus-card__reward-thumb" src={rewardThumb} alt="" draggable={false} />
           ) : null}
-          <span className="quests-bonus-card__reward-text">{bonusRewardHeadline(bonus.reward)}</span>
+          <span className="quests-bonus-card__reward-text">{bonusRewardHeadline(bonus.reward, t)}</span>
           {giftPrice > 0 ? (
             <span className="quests-bonus-card__reward-price" title={`${formatTON(giftPrice)} TON`}>
               <span className="quests-bonus-card__reward-sep" aria-hidden>
@@ -420,7 +427,7 @@ function BonusCard({
           </div>
         </div>
         {claimed ? (
-          <span className="quests-pill quests-pill--done">Получено</span>
+          <span className="quests-pill quests-pill--done">{t("quests.received")}</span>
         ) : ready ? (
           <button
             type="button"
@@ -428,10 +435,10 @@ function BonusCard({
             disabled={busy}
             onClick={onClaim}
           >
-            {busy ? "…" : "Забрать"}
+            {busy ? t("common.sharing") : t("common.claim")}
           </button>
         ) : (
-          <span className="quests-pill quests-pill--muted">Выполните все</span>
+          <span className="quests-pill quests-pill--muted">{t("quests.completeAll")}</span>
         )}
       </div>
     </article>
@@ -439,12 +446,14 @@ function BonusCard({
 }
 
 function TaskRow({
+  t,
   task,
   tone,
   busy,
   onClaim,
   onNavigate,
 }: {
+  t: TFunction;
   task: DailyQuestTask;
   tone: TaskTone;
   busy: boolean;
@@ -471,7 +480,7 @@ function TaskRow({
             ? APP_ROUTES.crash
             : null;
   const isTon = task.reward.type === "balance_nanoton";
-  const noReward = !hasQuestReward(task.reward);
+  const noReward = !hasQuestReward(task.reward, t);
   const cardThumb = resolveAsset(task.card_image_url?.trim());
   const giftThumb =
     !cardThumb && !noReward && task.reward.type === "gift"
@@ -482,7 +491,7 @@ function TaskRow({
     !noReward && task.reward.type === "gift" && task.reward.nanoton && task.reward.nanoton > 0
       ? task.reward.nanoton
       : 0;
-  const rewardText = rewardLabel(task.reward);
+  const rewardText = rewardLabel(task.reward, t);
   const giftPlateBg =
     !cardThumb && !noReward && task.reward.type === "gift"
       ? giftGradient(task.reward.collection_slug?.trim() || task.reward.gift_name || "gift")
@@ -493,7 +502,7 @@ function TaskRow({
   if (claimed) {
     action = (
       <span className="quests-pill quests-pill--done">
-        {noReward ? "Выполнено" : "Получено"}
+        {noReward ? t("quests.done") : t("quests.received")}
       </span>
     );
   } else if (ready) {
@@ -504,17 +513,17 @@ function TaskRow({
         disabled={busy}
         onClick={onClaim}
       >
-        {busy ? "…" : "Забрать"}
+        {busy ? t("common.sharing") : t("common.claim")}
       </button>
     );
   } else if (href) {
     action = (
       <Link href={href} className="quests-pill quests-pill--primary" onClick={onNavigate}>
-        Выполнить
+        {t("quests.do")}
       </Link>
     );
   } else {
-    action = <span className="quests-pill quests-pill--muted">Выполнить</span>;
+    action = <span className="quests-pill quests-pill--muted">{t("quests.do")}</span>;
   }
 
   return (
@@ -547,7 +556,7 @@ function TaskRow({
         <p className="quests-task-row__title">{task.title}</p>
         {!noReward ? (
           <p className="quests-task-row__reward" title={rewardText}>
-            <span className="quests-task-row__reward-label">Награда:</span>
+            <span className="quests-task-row__reward-label">{t("quests.rewardLabel")}</span>
             {isTon ? (
               <span className="quests-task-row__reward-value">
                 <TonIcon variant="brand" size="sm" className="quests-task-row__reward-ton" title="TON" />

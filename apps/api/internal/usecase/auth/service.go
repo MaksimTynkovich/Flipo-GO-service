@@ -144,6 +144,7 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 		FirstName:   parsed.User.FirstName,
 		LastName:    parsed.User.LastName,
 		PhotoURL:    parsed.User.PhotoURL,
+		Locale:      domain.DefaultLocale,
 		StakingTier: domain.TierBase,
 	}
 
@@ -163,6 +164,7 @@ func (s *Service) Authenticate(ctx context.Context, initData string, referralCod
 		user.ReferrerID = existing.ReferrerID
 		user.CampaignID = existing.CampaignID
 		user.AcquisitionPayload = existing.AcquisitionPayload
+		user.Locale = domain.NormalizeLocale(existing.Locale)
 	}
 
 	if err := s.users.Upsert(ctx, user); err != nil {
@@ -312,6 +314,7 @@ func (s *Service) AuthenticateDebug(ctx context.Context) (string, *domain.User, 
 		Username:       s.debugUsername,
 		FirstName:      "Debug",
 		LastName:       "User",
+		Locale:         domain.DefaultLocale,
 		StakingTier:    domain.TierBase,
 		BettingBalance: s.debugInitialBalance,
 	}
@@ -325,6 +328,7 @@ func (s *Service) AuthenticateDebug(ctx context.Context) (string, *domain.User, 
 		user.BettingBalance = existing.BettingBalance
 		user.StakingTier = existing.StakingTier
 		user.TonWallet = existing.TonWallet
+		user.Locale = domain.NormalizeLocale(existing.Locale)
 	}
 
 	if err := s.users.Upsert(ctx, user); err != nil {
@@ -421,4 +425,12 @@ func (s *Service) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet str
 
 func (s *Service) ClearWallet(ctx context.Context, userID uuid.UUID) error {
 	return s.users.UpdateWallet(ctx, userID, "")
+}
+
+func (s *Service) UpdateLocale(ctx context.Context, userID uuid.UUID, locale string) (*domain.User, error) {
+	normalized := domain.NormalizeLocale(locale)
+	if err := s.users.UpdateLocale(ctx, userID, normalized); err != nil {
+		return nil, err
+	}
+	return s.users.FindByID(ctx, userID)
 }

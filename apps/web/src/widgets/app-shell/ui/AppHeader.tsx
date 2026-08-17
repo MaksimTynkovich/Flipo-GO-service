@@ -10,10 +10,12 @@ import { TonIcon } from "@/components/icons/TonIcon";
 import { APP_ROUTES } from "@/src/shared/config/navigation";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
 import { BalanceGainFx } from "@/src/widgets/app-shell/ui/BalanceGainFx";
+import { useT } from "@/components/providers/I18nProvider";
 
 export function AppHeader() {
   const { user, loading } = useAuth();
   const haptics = useTelegramHaptics();
+  const t = useT();
   const balanceRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -21,7 +23,7 @@ export function AppHeader() {
       <div className="app-container relative flex h-[3.75rem] items-center justify-between gap-3">
         <Link
           href={APP_ROUTES.profile}
-          aria-label="Профиль"
+          aria-label={t("header.profile")}
           onClick={() => haptics.impactOccurred("light")}
           className="app-control relative z-10 flex shrink-0 items-center rounded-full active:opacity-80"
         >
@@ -39,7 +41,7 @@ export function AppHeader() {
 
             <Link
               href={APP_ROUTES.deposit}
-              aria-label="Пополнить баланс"
+              aria-label={t("header.deposit")}
               onClick={() => haptics.impactOccurred("medium")}
               className="app-control balance-pill__deposit"
             >

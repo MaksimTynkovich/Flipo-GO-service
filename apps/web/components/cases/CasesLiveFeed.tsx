@@ -9,6 +9,7 @@ import {
 } from "@/lib/changes-gifts";
 import { resolveAsset, type CaseLiveDrop } from "@/lib/api";
 import { giftImageUrl } from "@/lib/gifts";
+import { useT } from "@/components/providers/I18nProvider";
 import { cn } from "@/lib/utils";
 
 function collectionHint(drop: CaseLiveDrop): string {
@@ -114,6 +115,7 @@ export function CasesLiveFeed({
   /** Highlight the newest realtime drop. */
   freshOpenId?: string | null;
 }) {
+  const t = useT();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const visible = items.slice(0, 10);
   const hasFresh = Boolean(freshOpenId && visible.some((d) => d.open_id === freshOpenId));
@@ -130,7 +132,7 @@ export function CasesLiveFeed({
   return (
     <section
       className={cn("cases-live", hasFresh && "cases-live--fresh", className)}
-      aria-label="Лента выигрышей"
+      aria-label={t("cases.liveAria")}
     >
       <div className="cases-live__row">
         <div className="cases-live__badge" aria-hidden>

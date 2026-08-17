@@ -94,6 +94,7 @@ func (r *UserRepo) EnsureSocialBotUser(ctx context.Context, id uuid.UUID, telegr
 		Username:       username,
 		FirstName:      firstName,
 		PhotoURL:       photoURL,
+		Locale:         domain.DefaultLocale,
 		BettingBalance: 0,
 		StakingTier:    domain.TierBase,
 		CreatedAt:      now,
@@ -107,6 +108,14 @@ func (r *UserRepo) EnsureSocialBotUser(ctx context.Context, id uuid.UUID, telegr
 
 func (r *UserRepo) UpdateWallet(ctx context.Context, userID uuid.UUID, wallet string) error {
 	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Update("ton_wallet", wallet).Error
+}
+
+func (r *UserRepo) UpdateLocale(ctx context.Context, userID uuid.UUID, locale string) error {
+	locale = domain.NormalizeLocale(locale)
+	return r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"locale":     locale,
+		"updated_at": time.Now().UTC(),
+	}).Error
 }
 
 func (r *UserRepo) UpdateBanned(ctx context.Context, userID uuid.UUID, banned bool) error {

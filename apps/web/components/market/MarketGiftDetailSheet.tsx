@@ -7,6 +7,7 @@ import { ModalOverlay } from "@/components/ui/ModalOverlay";
 import { formatTON, MarketListing } from "@/lib/api";
 import { TonIcon } from "@/components/icons/TonIcon";
 import { formatCollectionSlug, giftImageUrl, traitValue } from "@/lib/gifts";
+import { useT } from "@/components/providers/I18nProvider";
 
 type Props = {
   listing: MarketListing;
@@ -51,6 +52,7 @@ export function MarketGiftDetailSheet({
   onClose,
   onBuy,
 }: Props) {
+  const t = useT();
   const [imgError, setImgError] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -79,18 +81,18 @@ export function MarketGiftDetailSheet({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Покупка подарка"
+        aria-label={t("market.buyAria")}
         className="sheet-panel relative mx-auto flex w-full max-w-lg max-h-[min(92dvh,100%)] flex-col"
       >
         <div className="shrink-0 px-4 pt-2">
           <div className="sheet-handle" />
 
           <div className="relative flex items-center justify-center pb-2">
-            <p className="text-[15px] font-semibold text-foreground">Подарок</p>
+            <p className="text-[15px] font-semibold text-foreground">{t("common.gift")}</p>
             <button
               type="button"
               onClick={close}
-              aria-label="Закрыть"
+              aria-label={t("common.close")}
               className="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised text-muted transition-opacity active:opacity-70"
             >
               <X className="h-4 w-4" />
@@ -118,7 +120,7 @@ export function MarketGiftDetailSheet({
               <button
                 type="button"
                 onClick={handleCopy}
-                aria-label="Скопировать название"
+                aria-label={t("inventory.copyName")}
                 className="mt-0.5 shrink-0 text-muted transition-colors active:text-accent"
               >
                 <Copy className="h-4 w-4" />
@@ -134,12 +136,12 @@ export function MarketGiftDetailSheet({
             </span>
           </div>
 
-          {copied && <p className="mb-2 text-xs text-accent">Скопировано</p>}
+          {copied && <p className="mb-2 text-xs text-accent">{t("common.copied")}</p>}
 
           <div className="mb-3 divide-y divide-[var(--border)] rounded-2xl bg-surface-raised/60 px-4">
-            <TraitRow label="Коллекция" value={formatCollectionSlug(listing.item.collection_slug)} />
-            <TraitRow label="Узор" value={traitValue(listing.item.backdrop)} />
-            <TraitRow label="Символ" value={traitValue(listing.item.symbol)} />
+            <TraitRow label={t("common.collection")} value={formatCollectionSlug(listing.item.collection_slug)} />
+            <TraitRow label={t("common.backdrop")} value={traitValue(listing.item.backdrop)} />
+            <TraitRow label={t("common.symbol")} value={traitValue(listing.item.symbol)} />
           </div>
         </div>
 
@@ -147,9 +149,9 @@ export function MarketGiftDetailSheet({
           {error && <p className="mb-3 text-center text-sm text-danger">{error}</p>}
 
           {!isLoggedIn ? (
-            <p className="py-2 text-center text-sm text-muted">Войдите, чтобы купить</p>
+            <p className="py-2 text-center text-sm text-muted">{t("market.signInToBuy")}</p>
           ) : isOwnListing ? (
-            <p className="py-2 text-center text-sm text-muted">Это ваш лот</p>
+            <p className="py-2 text-center text-sm text-muted">{t("market.yourListing")}</p>
           ) : (
             <Button
               className="h-12 w-full rounded-2xl text-[15px] font-semibold"
@@ -157,16 +159,16 @@ export function MarketGiftDetailSheet({
               onClick={onBuy}
             >
               {buying
-                ? "Покупка…"
+                ? t("common.buying")
                 : priceRefreshing
-                  ? "Обновление цены…"
+                  ? t("market.priceUpdating")
                   : promoRestricted
-                    ? "Бонус нельзя тратить"
+                    ? t("market.bonusLocked")
                     : insufficientFunds
-                      ? "Недостаточно средств"
+                      ? t("market.insufficient")
                       : (
                         <span className="inline-flex items-center justify-center gap-1">
-                          Купить · {formatTON(listing.price_nanoton)}
+                          {t("market.buyFor", { amount: formatTON(listing.price_nanoton) })}
                           <TonIcon variant="brand" className="h-5 w-5" />
                         </span>
                       )}

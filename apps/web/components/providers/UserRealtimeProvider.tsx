@@ -12,6 +12,7 @@ import {
   stashCasePrizeBalance,
 } from "@/lib/case-prize-balance";
 import { useTelegramHaptics } from "@/src/shared/hooks/useTelegramHaptics";
+import { useT } from "@/components/providers/I18nProvider";
 
 export const INVENTORY_DEPOSITED_EVENT = "flipo:inventory-deposited";
 
@@ -24,6 +25,7 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
   const { user, setUser } = useAuth();
   const { showToast } = useToast();
   const haptics = useTelegramHaptics();
+  const t = useT();
   const recentDepositEventsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -129,7 +131,7 @@ export function UserRealtimeProvider({ children }: { children: React.ReactNode }
         },
       });
       showToast({
-        title: payload.message || `🎁 Подарок «${payload.item.name}» зачислен в инвентарь!`,
+        title: payload.message || t("inventory.depositedToast", { name: payload.item.name }),
       });
     });
     // Reconnect only when the authenticated user changes.

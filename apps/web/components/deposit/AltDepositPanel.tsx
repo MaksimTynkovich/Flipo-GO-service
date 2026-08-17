@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useT } from "@/components/providers/I18nProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ function parseStarsInput(raw: string): number {
 }
 
 export function AltDepositPanel({ provider }: { provider: Provider }) {
+  const t = useT();
   const { setUser } = useAuth();
   const { showToast } = useToast();
   const [amount, setAmount] = useState(provider === "stars" ? "100" : "1");
@@ -103,7 +105,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
           }
           showToast({
             variant: "success",
-            title: `Зачислено ${formatTON(intent.amount_nanoton)} TON`,
+            title: t("deposit.credited", { amount: formatTON(intent.amount_nanoton) }),
           });
         }
       } catch {
@@ -138,7 +140,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
 
   async function handlePay() {
     if (!enabled) {
-      showToast({ variant: "error", title: "Способ временно недоступен" });
+      showToast({ variant: "error", title: t("deposit.methodUnavailable") });
       return;
     }
     setLoading(true);
@@ -149,13 +151,13 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
         if (nanoton < min) {
           showToast({
             variant: "error",
-            title: `Минимум ${formatTON(min)} TON`,
+            title: t("deposit.minTon", { amount: formatTON(min) }),
           });
           return;
         }
         const intent = await createCryptoBotDeposit(nanoton);
         if (!intent.pay_url) {
-          throw new Error("Не получена ссылка на оплату");
+          throw new Error(t("deposit.noPayLink"));
         }
         setPendingId(intent.id);
         const opened = openTelegramLink(intent.pay_url) || openTelegramInvoice(intent.pay_url);
@@ -164,35 +166,35 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
         }
         showToast({
           variant: "info",
-          title: "Оплатите счёт в Crypto Bot — баланс обновится автоматически",
+          title: t("deposit.payCryptoBot"),
         });
         return;
       }
 
       const stars = parseStarsInput(amount);
       if (stars < 1) {
-        showToast({ variant: "error", title: "Укажите число Stars" });
+        showToast({ variant: "error", title: t("deposit.enterStars") });
         return;
       }
       if (minStarsHint && stars < minStarsHint) {
         showToast({
           variant: "error",
-          title: `Минимум ${minStarsHint} Stars`,
+          title: t("deposit.minStars", { amount: minStarsHint }),
         });
         return;
       }
       const intent = await createStarsDeposit({ starsCount: stars });
       if (!intent.pay_url) {
-        throw new Error("Не получена ссылка на оплату");
+        throw new Error(t("deposit.noPayLink"));
       }
       setPendingId(intent.id);
       showToast({
         variant: "info",
-        title: "Оплатите счёт Stars — зачисление придёт автоматически",
+        title: t("deposit.payStars"),
       });
       openTelegramInvoice(intent.pay_url, (status) => {
         if (status === "paid") {
-          showToast({ variant: "info", title: "Оплата прошла, зачисляем…" });
+          showToast({ variant: "info", title: t("deposit.paymentOk") });
           // Webhook may lag behind the Mini App callback — poll briefly.
           const started = Date.now();
           const poll = async () => {
@@ -213,7 +215,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
                 }
                 showToast({
                   variant: "success",
-                  title: `Зачислено ${formatTON(fresh.amount_nanoton)} TON`,
+                  title: t("deposit.credited", { amount: formatTON(fresh.amount_nanoton) }),
                 });
                 return;
               }
@@ -226,13 +228,13 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
           };
           void poll();
         } else if (status === "cancelled" || status === "failed") {
-          showToast({ variant: "error", title: "Оплата не завершена" });
+          showToast({ variant: "error", title: t("deposit.paymentIncomplete") });
         }
       });
     } catch (e) {
       showToast({
         variant: "error",
-        title: formatUserError(e, "Не удалось создать платёж"),
+        title: formatUserError(e, t("deposit.createFailed")),
       });
     } finally {
       setLoading(false);
@@ -253,9 +255,7 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
           <div className="min-w-0">
             <p className="text-sm font-semibold">{title}</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              {provider === "cryptobot"
-                ? "Оплата через @CryptoBot — TON зачисляется на баланс после подтверждения."
-                : "Укажите сумму в Stars — на баланс зачислится эквивалент в TON."}
+              {provider === "cryptobot" ? t("deposit.cryptoHint") : t("deposit.starsHint")}
             </p>
           </div>
         </div>
@@ -264,13 +264,13 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
           <div className="h-24 animate-pulse rounded-2xl bg-surface-raised" />
         ) : !enabled ? (
           <p className="rounded-2xl bg-surface-raised/70 px-4 py-3 text-xs text-muted">
-            Способ временно недоступен. Попробуйте позже или выберите другой способ.
+            {t("deposit.unavailableHint")}
           </p>
         ) : (
           <>
             <label className="block space-y-1.5">
               <span className="text-[11px] font-medium text-muted">
-                {provider === "stars" ? "Сумма (Stars)" : "Сумма (TON)"}
+                {provider === "stars" ? t("deposit.amountStars") : t("deposit.amountTon")}
               </span>
               <input
                 className="input-field"
@@ -292,17 +292,17 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
                 {quote && quote.amount_nanoton > 0 ? (
                   <>
                     <p>
-                      К зачислению:{" "}
+                      {t("deposit.toCredit")}{" "}
                       <span className="font-semibold text-foreground">
                         {formatTON(quote.amount_nanoton)} TON
                       </span>
                     </p>
                     {minStarsHint ? (
-                      <p className="mt-1">Минимум: {minStarsHint} Stars</p>
+                      <p className="mt-1">{t("deposit.minStarsLine", { amount: minStarsHint })}</p>
                     ) : null}
                   </>
                 ) : (
-                  <p>Введите сумму в Stars, чтобы увидеть курс в TON</p>
+                  <p>{t("deposit.enterStarsRate")}</p>
                 )}
               </div>
             ) : null}
@@ -314,15 +314,15 @@ export function AltDepositPanel({ provider }: { provider: Provider }) {
               onClick={() => void handlePay()}
             >
               {loading
-                ? "Создаём счёт…"
+                ? t("deposit.creatingInvoice")
                 : provider === "stars"
-                  ? `Оплатить ${starsAmount || 0} Stars`
-                  : `Оплатить ${formatTON(nanotonFromTonInput(amount) || 0)} TON`}
+                  ? t("deposit.payStarsCta", { amount: starsAmount || 0 })
+                  : t("deposit.payTonCta", { amount: formatTON(nanotonFromTonInput(amount) || 0) })}
             </Button>
 
             {pendingId ? (
               <p className="text-center text-[11px] text-muted">
-                Ожидаем оплату… баланс обновится автоматически
+                {t("deposit.waitingPayment")}
               </p>
             ) : null}
           </>

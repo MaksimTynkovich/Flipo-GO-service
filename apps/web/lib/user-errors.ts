@@ -1,40 +1,35 @@
-/** Map API/client errors to concise Russian copy for UI surfaces. */
-export function formatUserError(
-  error: unknown,
-  fallback = "Что-то пошло не так. Попробуйте ещё раз.",
-): string {
+import { getRuntimeLocale, translate, type MessageKey } from "@/lib/i18n";
+
+function t(key: MessageKey): string {
+  return translate(getRuntimeLocale(), key);
+}
+
+/** Map API/client errors to concise copy for UI surfaces. */
+export function formatUserError(error: unknown, fallback?: string): string {
+  const defaultFallback = fallback ?? t("errors.generic");
   const code =
     error && typeof error === "object" && "code" in error && typeof (error as { code?: unknown }).code === "string"
       ? (error as { code: string }).code
       : "";
 
-  if (code === "staking_pool_full") {
-    return "Нельзя застейкать: общий пул заполнен. Дождитесь следующего дня — после ночной выплаты место освободится.";
-  }
-  if (code === "staking_personal_limit") {
-    return "Нельзя застейкать: исчерпан личный лимит. Выполните задания, чтобы увеличить его.";
-  }
-  if (code === "case_name_tag_required") {
-    return "Добавьте тег в имя Telegram.";
-  }
-  if (code === "case_share_required") {
-    return "Поделитесь ссылкой, чтобы открыть кейс.";
-  }
-  if (code === "campaign_code_taken") {
-    return "Такой код кампании уже занят. Выберите другой.";
-  }
-  if (code === "gift_not_in_bot_custody") {
-    return "Этот подарок не задепозичен в бота, продать его нельзя.";
-  }
+  const codeKeys: Record<string, MessageKey> = {
+    staking_pool_full: "errors.stakingPoolFull",
+    staking_personal_limit: "errors.stakingPersonalLimit",
+    case_name_tag_required: "errors.nameTag",
+    case_share_required: "errors.shareRequired",
+    campaign_code_taken: "errors.campaignTaken",
+    gift_not_in_bot_custody: "errors.giftNotInBot",
+  };
+  if (code && codeKeys[code]) return t(codeKeys[code]);
 
   const raw =
     error instanceof Error ? error.message.trim() : typeof error === "string" ? error.trim() : "";
-  if (!raw) return fallback;
+  if (!raw) return defaultFallback;
 
   const lower = raw.toLowerCase();
 
   if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("load failed")) {
-    return "Нет связи с сервером. Проверьте интернет и попробуйте снова.";
+    return t("errors.network");
   }
   if (
     raw.startsWith("Key:") ||
@@ -50,105 +45,103 @@ export function formatUserError(
     lower.includes("аккаунте бота") ||
     lower.includes("бот закупа")
   ) {
-    return fallback;
+    return defaultFallback;
   }
 
-  const rules: Array<[RegExp | string, string]> = [
-    ["недостаточно средств. учти комиссию", "Недостаточно средств. Учтите комиссию — она добавляется к сумме списания."],
-    ["недостаточно средств. учтите комиссию", "Недостаточно средств. Учтите комиссию — она добавляется к сумме списания."],
-    ["недостаточно средств", "Недостаточно средств."],
-    ["insufficient balance", "Недостаточно средств."],
-    ["ставки больше не принимаются", "Ставки больше не принимаются."],
-    ["round not accepting bets", "Ставки больше не принимаются."],
-    ["предмет уже выставлен", "Предмет уже на маркете."],
-    ["item already listed", "Предмет уже на маркете."],
-    ["кошелёк не подключён", "Сначала подключите TON-кошелёк."],
-    ["wallet not linked", "Сначала подключите TON-кошелёк."],
-    ["сначала подключи ton-кошелёк", "Сначала подключите TON-кошелёк."],
-    ["сначала подключите ton-кошелёк", "Сначала подключите TON-кошелёк."],
-    ["у тебя уже есть активная операция", "У вас уже есть активная операция. Дождитесь её завершения."],
-    ["у вас уже есть активная операция", "У вас уже есть активная операция. Дождитесь её завершения."],
-    ["дождись её завершения", "У вас уже есть активная операция. Дождитесь её завершения."],
-    ["время на оплату истекло", "Время на оплату истекло. Создайте новое пополнение."],
-    ["создай новое пополнение", "Время на оплату истекло. Создайте новое пополнение."],
-    ["сервис ton временно недоступен", "Сервис TON временно недоступен. Попробуйте через пару минут."],
-    ["попробуй через пару минут", "Сервис TON временно недоступен. Попробуйте через пару минут."],
-    ["укажи корректную сумму", "Укажите корректную сумму. Проверьте минимальный лимит операции."],
-    ["проверь минимальный лимит", "Укажите корректную сумму. Проверьте минимальный лимит операции."],
-    ["проверь интернет", "Нет связи с сервером. Проверьте интернет и попробуйте снова."],
-    ["не удалось выполнить операцию. попробуй ещё раз", "Не удалось выполнить операцию. Попробуйте ещё раз."],
-    ["попробуй ещё раз", "Не удалось выполнить операцию. Попробуйте ещё раз."],
-    ["недействительный токен", "Сессия истекла. Откройте приложение снова."],
-    ["invalid token", "Сессия истекла. Откройте приложение снова."],
-    ["неверные данные telegram", "Не удалось войти через Telegram."],
-    ["invalid telegram init data", "Не удалось войти через Telegram."],
-    ["данные telegram устарели", "Данные Telegram устарели. Откройте приложение снова."],
-    ["telegram init data expired", "Данные Telegram устарели. Откройте приложение снова."],
-    ["требуется авторизация", "Войдите в приложение снова."],
-    ["missing authorization", "Войдите в приложение снова."],
-    ["аккаунт заблокирован", "Аккаунт заблокирован."],
-    ["account suspended", "Аккаунт заблокирован."],
-    ["игра временно недоступна", "Игра временно недоступна."],
-    ["game disabled", "Игра временно недоступна."],
-    ["ставки временно не принимаются", "Ставки временно не принимаются."],
-    ["bets_paused", "Ставки временно не принимаются."],
-    ["техническое обслуживание", "Техническое обслуживание. Загляните позже."],
-    ["maintenance", "Техническое обслуживание. Загляните позже."],
-    ["кейсы временно недоступны", "Кейсы временно недоступны."],
-    ["cases_disabled", "Кейсы временно недоступны."],
-    ["добавьте тег в имя", "Добавьте тег в имя Telegram."],
-    ["case_name_tag_required", "Добавьте тег в имя Telegram."],
-    ["поделитесь ссылкой", "Поделитесь ссылкой, чтобы открыть кейс."],
-    ["case_share_required", "Поделитесь ссылкой, чтобы открыть кейс."],
-    ["маркет временно недоступен", "Маркет временно недоступен."],
-    ["market_disabled", "Маркет временно недоступен."],
-    ["депозит подарками временно недоступен", "Депозит подарками временно недоступен."],
-    ["gift_deposit_disabled", "Депозит подарками временно недоступен."],
-    ["лот не найден", "Лот не найден."],
-    ["listing not found", "Лот не найден."],
-    ["не найдено", "Не найдено."],
-    ["not found", "Не найдено."],
-    ["доступ запрещён", "Доступ запрещён."],
-    ["forbidden", "Доступ запрещён."],
-    ["подарок не задепозичен в бота", "Этот подарок не задепозичен в бота, продать его нельзя."],
-    ["gift_not_in_bot_custody", "Этот подарок не задепозичен в бота, продать его нельзя."],
-    ["gift not available for bet", "Подарок недоступен для ставки."],
-    ["подарок недоступен для вывода", "Подарок недоступен для вывода."],
-    ["gift is not available for withdrawal", "Подарок недоступен для вывода."],
-    ["вывод подарков временно недоступен", "Вывод подарков временно недоступен."],
-    ["gift withdrawal is not configured", "Вывод подарков временно недоступен."],
-    ["вывод из стейка доступен только в конце дня", "Вывод из стейка доступен после 00:05 МСК."],
-    ["вывод из стейка доступен только в конце недели", "Вывод из стейка доступен после 00:05 МСК."],
-    ["unstaking is not available", "Вывод из стейка доступен после 00:05 МСК."],
-    ["подарок уже в стейке", "Подарок уже в стейке."],
-    ["gift already staked", "Подарок уже в стейке."],
-    ["подарок уже застейкан", "Подарок уже в стейке сегодня."],
-    ["пул стейкинга заполнен", "Нельзя застейкать: общий пул заполнен. Дождитесь следующего дня — после ночной выплаты место освободится."],
-    ["staking pool full", "Нельзя застейкать: общий пул заполнен. Дождитесь следующего дня — после ночной выплаты место освободится."],
-    ["staking_pool_full", "Нельзя застейкать: общий пул заполнен. Дождитесь следующего дня — после ночной выплаты место освободится."],
-    ["личный лимит стейкинга", "Нельзя застейкать: исчерпан личный лимит. Выполните задания, чтобы увеличить его."],
-    ["staking personal limit", "Нельзя застейкать: исчерпан личный лимит. Выполните задания, чтобы увеличить его."],
-    ["staking_personal_limit", "Нельзя застейкать: исчерпан личный лимит. Выполните задания, чтобы увеличить его."],
-    ["подарок недоступен для стейкинга", "Подарок недоступен для стейкинга."],
-    ["gift not available for staking", "Подарок недоступен для стейкинга."],
-    ["подарок выставлен на маркет", "Сначала снимите подарок с маркета."],
-    ["подарок участвует в игре", "Подарок участвует в игре — дождитесь окончания раунда."],
-    ["request failed", fallback],
-    ["auth failed", "Не удалось войти."],
-    ["internal server error", fallback],
-    ["внутренняя ошибка сервера", fallback],
+  const rules: Array<[string, MessageKey]> = [
+    ["недостаточно средств. учти комиссию", "errors.insufficientFee"],
+    ["недостаточно средств. учтите комиссию", "errors.insufficientFee"],
+    ["недостаточно средств", "errors.insufficientFunds"],
+    ["insufficient balance", "errors.insufficientFunds"],
+    ["ставки больше не принимаются", "errors.betsClosed"],
+    ["round not accepting bets", "errors.betsClosed"],
+    ["предмет уже выставлен", "errors.alreadyListed"],
+    ["item already listed", "errors.alreadyListed"],
+    ["кошелёк не подключён", "errors.connectWallet"],
+    ["wallet not linked", "errors.connectWallet"],
+    ["сначала подключи ton-кошелёк", "errors.connectWallet"],
+    ["сначала подключите ton-кошелёк", "errors.connectWallet"],
+    ["у тебя уже есть активная операция", "errors.activeTransfer"],
+    ["у вас уже есть активная операция", "errors.activeTransfer"],
+    ["дождись её завершения", "errors.activeTransfer"],
+    ["время на оплату истекло", "errors.paymentExpired"],
+    ["создай новое пополнение", "errors.paymentExpired"],
+    ["сервис ton временно недоступен", "errors.tonUnavailable"],
+    ["попробуй через пару минут", "errors.tonUnavailable"],
+    ["укажи корректную сумму", "errors.invalidAmount"],
+    ["проверь минимальный лимит", "errors.invalidAmount"],
+    ["проверь интернет", "errors.network"],
+    ["не удалось выполнить операцию. попробуй ещё раз", "errors.tryAgain"],
+    ["попробуй ещё раз", "errors.tryAgain"],
+    ["недействительный токен", "errors.sessionExpired"],
+    ["invalid token", "errors.sessionExpired"],
+    ["неверные данные telegram", "errors.telegramAuth"],
+    ["invalid telegram init data", "errors.telegramAuth"],
+    ["данные telegram устарели", "errors.telegramExpired"],
+    ["telegram init data expired", "errors.telegramExpired"],
+    ["требуется авторизация", "errors.authRequired"],
+    ["missing authorization", "errors.authRequired"],
+    ["аккаунт заблокирован", "errors.banned"],
+    ["account suspended", "errors.banned"],
+    ["игра временно недоступна", "errors.gameDisabled"],
+    ["game disabled", "errors.gameDisabled"],
+    ["ставки временно не принимаются", "errors.betsPaused"],
+    ["bets_paused", "errors.betsPaused"],
+    ["техническое обслуживание", "errors.maintenance"],
+    ["maintenance", "errors.maintenance"],
+    ["кейсы временно недоступны", "errors.casesDisabled"],
+    ["cases_disabled", "errors.casesDisabled"],
+    ["добавьте тег в имя", "errors.nameTag"],
+    ["case_name_tag_required", "errors.nameTag"],
+    ["поделитесь ссылкой", "errors.shareRequired"],
+    ["case_share_required", "errors.shareRequired"],
+    ["маркет временно недоступен", "errors.marketDisabled"],
+    ["market_disabled", "errors.marketDisabled"],
+    ["депозит подарками временно недоступен", "errors.giftDepositDisabled"],
+    ["gift_deposit_disabled", "errors.giftDepositDisabled"],
+    ["лот не найден", "errors.listingNotFound"],
+    ["listing not found", "errors.listingNotFound"],
+    ["не найдено", "errors.notFound"],
+    ["not found", "errors.notFound"],
+    ["доступ запрещён", "errors.forbidden"],
+    ["forbidden", "errors.forbidden"],
+    ["подарок не задепозичен в бота", "errors.giftNotInBot"],
+    ["gift_not_in_bot_custody", "errors.giftNotInBot"],
+    ["gift not available for bet", "errors.giftNotForBet"],
+    ["подарок недоступен для вывода", "errors.giftNotForWithdraw"],
+    ["gift is not available for withdrawal", "errors.giftNotForWithdraw"],
+    ["вывод подарков временно недоступен", "errors.giftWithdrawDisabled"],
+    ["gift withdrawal is not configured", "errors.giftWithdrawDisabled"],
+    ["вывод из стейка доступен только в конце дня", "errors.unstakeWindow"],
+    ["вывод из стейка доступен только в конце недели", "errors.unstakeWindow"],
+    ["unstaking is not available", "errors.unstakeWindow"],
+    ["подарок уже в стейке", "errors.alreadyStaked"],
+    ["gift already staked", "errors.alreadyStaked"],
+    ["подарок уже застейкан", "errors.alreadyStakedToday"],
+    ["пул стейкинга заполнен", "errors.stakingPoolFull"],
+    ["staking pool full", "errors.stakingPoolFull"],
+    ["staking_pool_full", "errors.stakingPoolFull"],
+    ["личный лимит стейкинга", "errors.stakingPersonalLimit"],
+    ["staking personal limit", "errors.stakingPersonalLimit"],
+    ["staking_personal_limit", "errors.stakingPersonalLimit"],
+    ["подарок недоступен для стейкинга", "errors.giftNotForStake"],
+    ["gift not available for staking", "errors.giftNotForStake"],
+    ["подарок выставлен на маркет", "errors.unlistFirst"],
+    ["подарок участвует в игре", "errors.giftInGame"],
+    ["request failed", "errors.generic"],
+    ["auth failed", "errors.signInFailed"],
+    ["internal server error", "errors.generic"],
+    ["внутренняя ошибка сервера", "errors.generic"],
   ];
 
-  for (const [needle, text] of rules) {
-    if (typeof needle === "string") {
-      if (lower.includes(needle.toLowerCase())) return text;
-    } else if (needle.test(raw)) {
-      return text;
-    }
+  for (const [needle, key] of rules) {
+    if (lower.includes(needle.toLowerCase())) return t(key);
   }
 
-  // Prefer known Russian copy from API; hide leftover English / opaque internals.
-  if (/[а-яё]/i.test(raw) && raw.length <= 120 && !/[_{}=<>]/.test(raw)) return raw;
-  if (/^[A-Za-z0-9 ,.'"%:+\-_/()]+$/.test(raw)) return fallback;
-  return fallback;
+  const locale = getRuntimeLocale();
+  if (locale === "ru" && /[а-яё]/i.test(raw) && raw.length <= 120 && !/[_{}=<>]/.test(raw)) {
+    return raw;
+  }
+  if (/^[A-Za-z0-9 ,.'"%:+\-_/()]+$/.test(raw)) return defaultFallback;
+  return defaultFallback;
 }
