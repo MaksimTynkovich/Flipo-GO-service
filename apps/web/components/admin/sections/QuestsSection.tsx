@@ -195,6 +195,32 @@ function dateOnly(value?: string | null): string {
   return value.slice(0, 10);
 }
 
+function hydrateLocalized(en?: string | null, ru?: string | null, fallback?: string | null) {
+  const fb = (fallback || "").trim();
+  return {
+    en: (en || "").trim() || fb,
+    ru: (ru || "").trim() || fb,
+  };
+}
+
+function hydratePromoSlide(slide: DailyQuestPromoSlide): DailyQuestPromoSlide {
+  const eyebrow = hydrateLocalized(slide.eyebrow_en, slide.eyebrow_ru, slide.eyebrow);
+  const title = hydrateLocalized(slide.title_en, slide.title_ru, slide.title);
+  const subtitle = hydrateLocalized(slide.subtitle_en, slide.subtitle_ru, slide.subtitle);
+  const cta = hydrateLocalized(slide.cta_en, slide.cta_ru, slide.cta);
+  return {
+    ...slide,
+    eyebrow_en: eyebrow.en,
+    eyebrow_ru: eyebrow.ru,
+    title_en: title.en,
+    title_ru: title.ru,
+    subtitle_en: subtitle.en,
+    subtitle_ru: subtitle.ru,
+    cta_en: cta.en,
+    cta_ru: cta.ru,
+  };
+}
+
 function giftRewardLabel(name?: string, slug?: string, model?: string): string {
   const title = name?.trim() || model?.trim() || slug?.trim();
   return title ? `Подарок: ${title}` : "Подарок";
@@ -259,13 +285,14 @@ export default function QuestsSection() {
         getAdminCases().catch(() => [] as AdminCase[]),
       ]);
       setQuests(items);
+      const bonusTitles = hydrateLocalized(boardRes.bonus_title_en, boardRes.bonus_title_ru, boardRes.bonus_title);
       setBoard({
         ...boardRes,
-        bonus_title_en: boardRes.bonus_title_en || boardRes.bonus_title || "",
-        bonus_title_ru: boardRes.bonus_title_ru || boardRes.bonus_title || "",
+        bonus_title_en: bonusTitles.en,
+        bonus_title_ru: bonusTitles.ru,
         promo_slides:
           boardRes.promo_slides && boardRes.promo_slides.length > 0
-            ? boardRes.promo_slides
+            ? boardRes.promo_slides.map(hydratePromoSlide)
             : DEFAULT_PROMO_SLIDES,
       });
       setCases(caseRes);
@@ -390,11 +417,14 @@ export default function QuestsSection() {
         promo_slides: board.promo_slides ?? [],
       };
       const next = await updateAdminDailyQuestBoard(payload);
+      const bonusTitles = hydrateLocalized(next.bonus_title_en, next.bonus_title_ru, next.bonus_title);
       setBoard({
         ...next,
+        bonus_title_en: bonusTitles.en,
+        bonus_title_ru: bonusTitles.ru,
         promo_slides:
           next.promo_slides && next.promo_slides.length > 0
-            ? next.promo_slides
+            ? next.promo_slides.map(hydratePromoSlide)
             : board.promo_slides ?? DEFAULT_PROMO_SLIDES,
       });
       showToast({ variant: "success", title: "Бонус сохранён" });
@@ -689,8 +719,8 @@ export default function QuestsSection() {
             className="sm:col-span-2"
             label="Заголовок"
             en={board.bonus_title_en || ""}
-            ru={board.bonus_title_ru || board.bonus_title}
-            onEnChange={(bonus_title_en) => setBoard({ ...board, bonus_title_en, bonus_title: bonus_title_en || board.bonus_title_ru || board.bonus_title })}
+            ru={board.bonus_title_ru || ""}
+            onEnChange={(bonus_title_en) => setBoard({ ...board, bonus_title_en })}
             onRuChange={(bonus_title_ru) => setBoard({ ...board, bonus_title_ru })}
             controlClassName={QUEST_INPUT}
             enPlaceholder="Bonus of the day"
@@ -864,7 +894,15 @@ export default function QuestsSection() {
             <div className="space-y-1.5">
               <p className="text-xs text-muted">Предпросмотр</p>
               <div className="rounded-2xl bg-[#0c141c] p-3">
-                <CasesQuestBannerPreview slide={slide} />
+                <CasesQuestBannerPreview
+                  slide={{
+                    ...slide,
+                    eyebrow: slide.eyebrow_ru || slide.eyebrow,
+                    title: slide.title_ru || slide.title,
+                    subtitle: slide.subtitle_ru || slide.subtitle,
+                    cta: slide.cta_ru || slide.cta,
+                  }}
+                />
               </div>
               <p className="text-[11px] leading-relaxed text-muted">
                 В текстах: <code className="text-foreground/80">**акцент**</code> для цветного
@@ -877,8 +915,8 @@ export default function QuestsSection() {
                 className="sm:col-span-2"
                 label="Надзаголовок"
                 en={slide.eyebrow_en || ""}
-                ru={slide.eyebrow_ru || slide.eyebrow}
-                onEnChange={(eyebrow_en) => updatePromoSlide(index, { eyebrow_en, eyebrow: eyebrow_en || slide.eyebrow_ru || slide.eyebrow })}
+                ru={slide.eyebrow_ru || ""}
+                onEnChange={(eyebrow_en) => updatePromoSlide(index, { eyebrow_en })}
                 onRuChange={(eyebrow_ru) => updatePromoSlide(index, { eyebrow_ru })}
                 controlClassName={QUEST_INPUT}
                 enPlaceholder="1 + 1"
@@ -903,8 +941,8 @@ export default function QuestsSection() {
                 className="sm:col-span-2"
                 label="Заголовок"
                 en={slide.title_en || ""}
-                ru={slide.title_ru || slide.title}
-                onEnChange={(title_en) => updatePromoSlide(index, { title_en, title: title_en || slide.title_ru || slide.title })}
+                ru={slide.title_ru || ""}
+                onEnChange={(title_en) => updatePromoSlide(index, { title_en })}
                 onRuChange={(title_ru) => updatePromoSlide(index, { title_ru })}
                 multiline
                 controlClassName={QUEST_INPUT}
@@ -948,8 +986,8 @@ export default function QuestsSection() {
                 className="sm:col-span-2"
                 label="Подзаголовок"
                 en={slide.subtitle_en || ""}
-                ru={slide.subtitle_ru || slide.subtitle}
-                onEnChange={(subtitle_en) => updatePromoSlide(index, { subtitle_en, subtitle: subtitle_en || slide.subtitle_ru || slide.subtitle })}
+                ru={slide.subtitle_ru || ""}
+                onEnChange={(subtitle_en) => updatePromoSlide(index, { subtitle_en })}
                 onRuChange={(subtitle_ru) => updatePromoSlide(index, { subtitle_ru })}
                 controlClassName={QUEST_INPUT}
                 enPlaceholder="The second open is free"
@@ -974,8 +1012,8 @@ export default function QuestsSection() {
                 className="sm:col-span-2"
                 label="Текст кнопки"
                 en={slide.cta_en || ""}
-                ru={slide.cta_ru || slide.cta}
-                onEnChange={(cta_en) => updatePromoSlide(index, { cta_en, cta: cta_en || slide.cta_ru || slide.cta })}
+                ru={slide.cta_ru || ""}
+                onEnChange={(cta_en) => updatePromoSlide(index, { cta_en })}
                 onRuChange={(cta_ru) => updatePromoSlide(index, { cta_ru })}
                 controlClassName={QUEST_INPUT}
                 enPlaceholder="Join"
@@ -1113,8 +1151,8 @@ export default function QuestsSection() {
             className="sm:col-span-2"
             label="Название"
             en={draft.title_en || ""}
-            ru={draft.title_ru || draft.title}
-            onEnChange={(title_en) => setDraft({ ...draft, title_en, title: title_en || draft.title_ru || draft.title })}
+            ru={draft.title_ru || ""}
+            onEnChange={(title_en) => setDraft({ ...draft, title_en })}
             onRuChange={(title_ru) => setDraft({ ...draft, title_ru })}
             controlClassName={QUEST_INPUT}
             enPlaceholder="Open a case"
@@ -1426,6 +1464,8 @@ export default function QuestsSection() {
                     setDraft({
                       ...EMPTY_QUEST,
                       ...q,
+                      title_en: hydrateLocalized(q.title_en, q.title_ru, q.title).en,
+                      title_ru: hydrateLocalized(q.title_en, q.title_ru, q.title).ru,
                       active_from: dateOnly(q.active_from) || null,
                       active_to: dateOnly(q.active_to) || null,
                     })
