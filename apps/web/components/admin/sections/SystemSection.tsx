@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminPage, AdminButton, AdminField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminField, AdminLocalizedField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -20,6 +20,8 @@ const DEFAULT_SETTINGS: AdminMaintenanceSettings = {
   enabled: false,
   accept_bets: true,
   message: "",
+  message_en: "",
+  message_ru: "",
 };
 
 const DEFAULT_WITHDRAWAL: AdminWithdrawalSettings = {
@@ -33,7 +35,7 @@ const DEFAULT_DEPOSIT: AdminDepositSettings = {
 
 type SystemCache = [AdminMaintenanceSettings, AdminWithdrawalSettings, AdminDepositSettings];
 
-const CACHE_KEY = "admin:system:v4";
+const CACHE_KEY = "admin:system:v5";
 
 export default function SystemSection() {
   const { showToast } = useToast();
@@ -57,8 +59,11 @@ export default function SystemSection() {
         ]),
       );
       const nextMaintenance = {
+        ...DEFAULT_SETTINGS,
         ...maintenance,
         accept_bets: maintenance.accept_bets !== false,
+        message_en: maintenance.message_en || maintenance.message || "",
+        message_ru: maintenance.message_ru || maintenance.message || "",
       };
       const nextWithdrawal = {
         ...DEFAULT_WITHDRAWAL,
@@ -151,9 +156,16 @@ export default function SystemSection() {
                     await updateAdminMaintenanceSettings({
                       enabled: form.enabled,
                       accept_bets: form.accept_bets,
-                      message: form.message.trim(),
+                      message: form.message_en.trim() || form.message_ru.trim(),
+                      message_en: form.message_en.trim(),
+                      message_ru: form.message_ru.trim(),
                     });
-                    const next = { ...form, message: form.message.trim() };
+                    const next = {
+                      ...form,
+                      message: form.message_en.trim() || form.message_ru.trim(),
+                      message_en: form.message_en.trim(),
+                      message_ru: form.message_ru.trim(),
+                    };
                     setSettings(next);
                     cacheSnapshot(next);
                     showToast({
@@ -209,18 +221,18 @@ export default function SystemSection() {
               </span>
             </label>
 
-            <AdminField
+            <AdminLocalizedField
               label="Сообщение на экране"
-              hint="Если пусто — покажем стандартный текст «Проводим техническое обслуживание…»."
-            >
-              <textarea
-                className="input-field min-h-24"
-                value={form.message}
-                maxLength={500}
-                onChange={(e) => setSettings({ ...form, message: e.target.value })}
-                placeholder="Скоро вернёмся."
-              />
-            </AdminField>
+              hint="Если оба поля пустые — игрок увидит стандартный текст на своём языке."
+              en={form.message_en}
+              ru={form.message_ru}
+              onEnChange={(message_en) => setSettings({ ...form, message_en })}
+              onRuChange={(message_ru) => setSettings({ ...form, message_ru })}
+              multiline
+              maxLength={500}
+              enPlaceholder="We'll be back soon."
+              ruPlaceholder="Скоро вернёмся."
+            />
 
             <AdminToolbar>
               <AdminButton
@@ -232,9 +244,16 @@ export default function SystemSection() {
                     await updateAdminMaintenanceSettings({
                       enabled: form.enabled,
                       accept_bets: form.accept_bets,
-                      message: form.message.trim(),
+                      message: form.message_en.trim() || form.message_ru.trim(),
+                      message_en: form.message_en.trim(),
+                      message_ru: form.message_ru.trim(),
                     });
-                    const next = { ...form, message: form.message.trim() };
+                    const next = {
+                      ...form,
+                      message: form.message_en.trim() || form.message_ru.trim(),
+                      message_en: form.message_en.trim(),
+                      message_ru: form.message_ru.trim(),
+                    };
                     setSettings(next);
                     cacheSnapshot(next);
                     showToast({

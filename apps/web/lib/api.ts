@@ -1266,14 +1266,22 @@ export type AdminBotSettings = {
   spam_protection_level: number;
   webapp_url: string;
   webapp_button_text: string;
+  webapp_button_text_en: string;
+  webapp_button_text_ru: string;
+  welcome_text_en: string;
+  welcome_text_ru: string;
   terms_url: string;
   terms_button_text: string;
+  terms_button_text_en: string;
+  terms_button_text_ru: string;
 };
 
 export type MaintenanceStatus = {
   enabled: boolean;
   accept_bets: boolean;
   message: string;
+  message_en?: string;
+  message_ru?: string;
 };
 
 export type AdminMaintenanceSettings = {
@@ -1281,6 +1289,8 @@ export type AdminMaintenanceSettings = {
   enabled: boolean;
   accept_bets: boolean;
   message: string;
+  message_en: string;
+  message_ru: string;
   updated_at?: string;
 };
 
@@ -2574,7 +2584,11 @@ export async function claimDailyQuestBonus() {
 export type AdminDailyQuest = {
   id?: string;
   title: string;
+  title_en?: string;
+  title_ru?: string;
   description: string;
+  description_en?: string;
+  description_ru?: string;
   sort_order: number;
   active: boolean;
   active_from?: string | null;
@@ -2602,6 +2616,14 @@ export type DailyQuestPromoSlide = {
   title: string;
   subtitle: string;
   cta: string;
+  eyebrow_en?: string;
+  eyebrow_ru?: string;
+  title_en?: string;
+  title_ru?: string;
+  subtitle_en?: string;
+  subtitle_ru?: string;
+  cta_en?: string;
+  cta_ru?: string;
   /** Hex accent for CTA text on the white pill, e.g. #0f9f7a */
   cta_color?: string;
   cta_bold?: boolean;
@@ -2627,7 +2649,11 @@ export async function getDailyQuestPromo() {
 export type AdminDailyQuestBoard = {
   id?: number;
   bonus_title: string;
+  bonus_title_en?: string;
+  bonus_title_ru?: string;
   bonus_description: string;
+  bonus_description_en?: string;
+  bonus_description_ru?: string;
   bonus_reward_type: "balance_nanoton" | "free_case_open" | "gift" | string;
   bonus_reward_nanoton: number;
   bonus_reward_case_id?: string | null;
@@ -2924,6 +2950,8 @@ export type AdminCase = {
   id: string;
   slug: string;
   title: string;
+  title_en?: string;
+  title_ru?: string;
   image_url?: string;
   accent_color?: string;
   price_nanoton: number;
@@ -2941,6 +2969,8 @@ export type AdminCaseUpsert = {
   id?: string;
   slug: string;
   title: string;
+  title_en?: string;
+  title_ru?: string;
   image_url?: string;
   accent_color?: string;
   price_nanoton: number;
@@ -3415,6 +3445,8 @@ export async function deleteAdminCasePromoCode(code: string) {
 export type TelegramBroadcast = {
   id: string;
   message: string;
+  message_en?: string;
+  message_ru?: string;
   image_urls?: string[];
   include_channel_button?: boolean;
   status: string;
@@ -3426,7 +3458,8 @@ export type TelegramBroadcast = {
 };
 
 export async function createAdminBroadcast(
-  message: string,
+  messageEn: string,
+  messageRu: string,
   includeChannelButton = false,
   imageUrls?: string[],
 ) {
@@ -3434,7 +3467,8 @@ export async function createAdminBroadcast(
   return api<TelegramBroadcast>("/api/v1/admin/telegram/broadcast", {
     method: "POST",
     body: JSON.stringify({
-      message,
+      message_en: messageEn,
+      message_ru: messageRu,
       include_channel_button: includeChannelButton,
       ...(urls.length ? { image_urls: urls } : {}),
     }),

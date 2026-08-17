@@ -1375,6 +1375,7 @@ func (h *AdminHandler) UpsertCase(c *gin.Context) {
 		return
 	}
 	req.Slug = strings.ToLower(strings.TrimSpace(req.Slug))
+	req.TitleEN, req.TitleRU, req.Title = domain.SyncLocalized(req.TitleEN, req.TitleRU, req.Title)
 	if req.Slug == "" || req.Title == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "нужны slug и title"})
 		return
@@ -1824,6 +1825,8 @@ func (h *AdminHandler) CreateBroadcast(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	var req struct {
 		Message              string   `json:"message"`
+		MessageEN            string   `json:"message_en"`
+		MessageRU            string   `json:"message_ru"`
 		ImageURL             string   `json:"image_url"`
 		ImageURLs            []string `json:"image_urls"`
 		IncludeChannelButton bool     `json:"include_channel_button"`
@@ -1836,7 +1839,15 @@ func (h *AdminHandler) CreateBroadcast(c *gin.Context) {
 	if len(imageURLs) == 0 && strings.TrimSpace(req.ImageURL) != "" {
 		imageURLs = []string{strings.TrimSpace(req.ImageURL)}
 	}
-	broadcast, err := h.telegram.CreateBroadcast(c.Request.Context(), adminID, req.Message, imageURLs, req.IncludeChannelButton)
+	broadcast, err := h.telegram.CreateBroadcast(
+		c.Request.Context(),
+		adminID,
+		req.MessageEN,
+		req.MessageRU,
+		req.Message,
+		imageURLs,
+		req.IncludeChannelButton,
+	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

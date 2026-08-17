@@ -33,6 +33,7 @@ type UserRepository interface {
 	ListReferrals(ctx context.Context, referrerID uuid.UUID) ([]User, error)
 	ListReferredUsers(ctx context.Context) ([]User, error)
 	ListTelegramIDs(ctx context.Context, limit, offset int) ([]int64, error)
+	ListTelegramRecipients(ctx context.Context, limit, offset int) ([]TelegramRecipient, error)
 	CountUsers(ctx context.Context) (int64, error)
 }
 

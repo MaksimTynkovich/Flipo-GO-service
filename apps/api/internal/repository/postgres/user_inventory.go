@@ -351,6 +351,21 @@ func (r *UserRepo) ListTelegramIDs(ctx context.Context, limit, offset int) ([]in
 	return ids, err
 }
 
+func (r *UserRepo) ListTelegramRecipients(ctx context.Context, limit, offset int) ([]domain.TelegramRecipient, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var rows []domain.TelegramRecipient
+	err := r.db.WithContext(ctx).Model(&domain.User{}).
+		Select("telegram_id", "COALESCE(NULLIF(locale, ''), 'en') AS locale").
+		Where("deleted_at IS NULL AND telegram_id > 0").
+		Order("created_at ASC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error
+	return rows, err
+}
+
 func (r *UserRepo) CountUsers(ctx context.Context) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.User{}).

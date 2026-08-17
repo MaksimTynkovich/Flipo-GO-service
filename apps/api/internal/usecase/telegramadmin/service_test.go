@@ -15,7 +15,7 @@ func TestBroadcastMarkupIncludesChannelButton(t *testing.T) {
 		channelURL:      "https://t.me/flipo_channel",
 	}
 
-	markup := svc.broadcastMarkup(domain.TelegramBotSettings{}, true)
+	markup := svc.broadcastMarkup(domain.TelegramBotSettings{}, true, domain.LocaleRU)
 	if markup == nil {
 		t.Fatal("expected markup")
 	}
@@ -23,7 +23,7 @@ func TestBroadcastMarkupIncludesChannelButton(t *testing.T) {
 	if !ok || len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %#v", markup["inline_keyboard"])
 	}
-	if rows[1][0]["text"] != channelButtonText {
+	if rows[1][0]["text"] != "📢 Наш канал" {
 		t.Fatalf("unexpected channel button text: %#v", rows[1][0]["text"])
 	}
 	if rows[1][0]["url"] != "https://t.me/flipo_channel" {
@@ -37,7 +37,7 @@ func TestBroadcastMarkupSkipsChannelWhenDisabled(t *testing.T) {
 		channelURL:   "https://t.me/flipo_channel",
 	}
 
-	markup := svc.broadcastMarkup(domain.TelegramBotSettings{}, false)
+	markup := svc.broadcastMarkup(domain.TelegramBotSettings{}, false, domain.LocaleEN)
 	rows := markup["inline_keyboard"].([][]map[string]any)
 	if len(rows) != 1 {
 		t.Fatalf("expected only open-app row, got %d", len(rows))
@@ -47,7 +47,7 @@ func TestBroadcastMarkupSkipsChannelWhenDisabled(t *testing.T) {
 func TestBroadcastMarkupChannelOnly(t *testing.T) {
 	svc := &Service{channelURL: "https://t.me/flipo_channel"}
 
-	markup := svc.broadcastMarkup(domain.TelegramBotSettings{}, true)
+	markup := svc.broadcastMarkup(domain.TelegramBotSettings{}, true, domain.LocaleEN)
 	rows := markup["inline_keyboard"].([][]map[string]any)
 	if len(rows) != 1 {
 		t.Fatalf("expected channel-only row, got %d", len(rows))

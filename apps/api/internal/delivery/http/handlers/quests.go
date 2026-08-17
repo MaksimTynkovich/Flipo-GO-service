@@ -31,7 +31,8 @@ func (h *QuestsHandler) ListDaily(c *gin.Context) {
 }
 
 func (h *QuestsHandler) ListPromo(c *gin.Context) {
-	slides, err := h.quests.ListPromoSlides(c.Request.Context())
+	userID := middleware.GetUserID(c)
+	slides, err := h.quests.ListPromoSlides(c.Request.Context(), userID)
 	if err != nil {
 		httperr.Respond(c, http.StatusInternalServerError, err, gin.H{"error": "не удалось загрузить баннер"})
 		return

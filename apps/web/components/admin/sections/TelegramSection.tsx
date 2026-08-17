@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Upload, X } from "lucide-react";
-import { AdminPage, AdminButton, AdminField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminField, AdminLocalizedField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -23,8 +23,14 @@ const DEFAULT_SETTINGS: AdminBotSettings = {
   spam_protection_level: 2,
   webapp_url: "",
   webapp_button_text: "",
+  webapp_button_text_en: "",
+  webapp_button_text_ru: "",
+  welcome_text_en: "",
+  welcome_text_ru: "",
   terms_url: "",
   terms_button_text: "",
+  terms_button_text_en: "",
+  terms_button_text_ru: "",
 };
 
 const MAX_PHOTO_CAPTION = 1024;
@@ -50,7 +56,8 @@ export default function TelegramSection() {
   const { showToast } = useToast();
   const [settings, setSettings] = useState<AdminBotSettings | null>(null);
   const [broadcasts, setBroadcasts] = useState<TelegramBroadcast[]>([]);
-  const [message, setMessage] = useState("");
+  const [messageEn, setMessageEn] = useState("");
+  const [messageRu, setMessageRu] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [includeChannelButton, setIncludeChannelButton] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -72,12 +79,24 @@ export default function TelegramSection() {
         ...data,
         terms_url: data.terms_url ?? "",
         terms_button_text: data.terms_button_text ?? "",
+        terms_button_text_en: data.terms_button_text_en || data.terms_button_text || "",
+        terms_button_text_ru: data.terms_button_text_ru || data.terms_button_text || "",
+        webapp_button_text_en: data.webapp_button_text_en || data.webapp_button_text || "",
+        webapp_button_text_ru: data.webapp_button_text_ru || data.webapp_button_text || "",
+        welcome_text_en: data.welcome_text_en ?? "",
+        welcome_text_ru: data.welcome_text_ru ?? "",
       });
       primeCache("admin:telegram:settings", {
         ...DEFAULT_SETTINGS,
         ...data,
         terms_url: data.terms_url ?? "",
         terms_button_text: data.terms_button_text ?? "",
+        terms_button_text_en: data.terms_button_text_en || data.terms_button_text || "",
+        terms_button_text_ru: data.terms_button_text_ru || data.terms_button_text || "",
+        webapp_button_text_en: data.webapp_button_text_en || data.webapp_button_text || "",
+        webapp_button_text_ru: data.webapp_button_text_ru || data.webapp_button_text || "",
+        welcome_text_en: data.welcome_text_en ?? "",
+        welcome_text_ru: data.welcome_text_ru ?? "",
       });
     } finally {
       setSettingsLoading(false);
@@ -152,7 +171,7 @@ export default function TelegramSection() {
   }, [broadcasts]);
 
   const formSettings = settings ?? DEFAULT_SETTINGS;
-  const canSend = Boolean(message.trim() || imageUrls.length) && !sending && !uploadingImage;
+  const canSend = Boolean(messageEn.trim() || messageRu.trim() || imageUrls.length) && !sending && !uploadingImage;
 
   async function onPickImages(files: File[]) {
     if (!files.length) return;
@@ -235,6 +254,18 @@ export default function TelegramSection() {
               />
             </AdminField>
 
+            <AdminLocalizedField
+              label="Приветствие /start"
+              hint="Если оба поля пустые — возьмём TELEGRAM_WELCOME_TEXT из .env, затем стандартный текст бота."
+              en={formSettings.welcome_text_en}
+              ru={formSettings.welcome_text_ru}
+              onEnChange={(welcome_text_en) => setSettings({ ...formSettings, welcome_text_en })}
+              onRuChange={(welcome_text_ru) => setSettings({ ...formSettings, welcome_text_ru })}
+              multiline
+              enPlaceholder="Welcome to Flipo!"
+              ruPlaceholder="Добро пожаловать в Flipo!"
+            />
+
             <AdminField
               label="WebApp URL"
               hint="Кнопка в рассылке. Можно указать https://t.me/ваш_бот/app или прямой HTTPS. Если пусто — возьмём ссылку из BOT_USERNAME и WEBAPP_SHORT_NAME."
@@ -247,18 +278,17 @@ export default function TelegramSection() {
               />
             </AdminField>
 
-            <AdminField
-              label="Текст кнопки"
-              hint="Подпись на кнопке открытия приложения в рассылке и в /start. Если пусто — «🚀 Открыть приложение»."
-            >
-              <input
-                className="input-field"
-                value={formSettings.webapp_button_text}
-                onChange={(e) => setSettings({ ...formSettings, webapp_button_text: e.target.value })}
-                placeholder="🚀 Открыть приложение"
-                maxLength={64}
-              />
-            </AdminField>
+            <AdminLocalizedField
+              label="Текст кнопки приложения"
+              hint="Подпись на кнопке открытия приложения в рассылке и в /start. Если пусто — стандартный текст бота."
+              en={formSettings.webapp_button_text_en}
+              ru={formSettings.webapp_button_text_ru}
+              onEnChange={(webapp_button_text_en) => setSettings({ ...formSettings, webapp_button_text_en })}
+              onRuChange={(webapp_button_text_ru) => setSettings({ ...formSettings, webapp_button_text_ru })}
+              maxLength={64}
+              enPlaceholder="🚀 Open app"
+              ruPlaceholder="🚀 Открыть приложение"
+            />
 
             <AdminField
               label="Ссылка на соглашение"
@@ -272,18 +302,17 @@ export default function TelegramSection() {
               />
             </AdminField>
 
-            <AdminField
+            <AdminLocalizedField
               label="Текст кнопки соглашения"
-              hint="Если пусто — «📄 Пользовательское соглашение»."
-            >
-              <input
-                className="input-field"
-                value={formSettings.terms_button_text}
-                onChange={(e) => setSettings({ ...formSettings, terms_button_text: e.target.value })}
-                placeholder="📄 Пользовательское соглашение"
-                maxLength={64}
-              />
-            </AdminField>
+              hint="Если пусто — стандартный текст бота."
+              en={formSettings.terms_button_text_en}
+              ru={formSettings.terms_button_text_ru}
+              onEnChange={(terms_button_text_en) => setSettings({ ...formSettings, terms_button_text_en })}
+              onRuChange={(terms_button_text_ru) => setSettings({ ...formSettings, terms_button_text_ru })}
+              maxLength={64}
+              enPlaceholder="📄 Terms of service"
+              ruPlaceholder="📄 Пользовательское соглашение"
+            />
 
             <AdminToolbar>
               <AdminButton
@@ -312,22 +341,22 @@ export default function TelegramSection() {
 
       <AdminPanel title="Массовая рассылка" description="Сообщение уйдёт всем игрокам с привязанным Telegram.">
         <div className="space-y-4">
-          <AdminField
+          <AdminLocalizedField
             label="Текст сообщения"
             hint={
               imageUrls.length
-                ? `С изображениями текст идёт подписью (до ${MAX_PHOTO_CAPTION} символов).`
-                : undefined
+                ? `С изображениями текст идёт подписью (до ${MAX_PHOTO_CAPTION} символов в каждом языке).`
+                : "Каждый игрок получит версию на своём языке."
             }
-          >
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="input-field min-h-28"
-              placeholder="Текст сообщения для всех игроков"
-              maxLength={imageUrls.length ? MAX_PHOTO_CAPTION : undefined}
-            />
-          </AdminField>
+            en={messageEn}
+            ru={messageRu}
+            onEnChange={setMessageEn}
+            onRuChange={setMessageRu}
+            multiline
+            maxLength={imageUrls.length ? MAX_PHOTO_CAPTION : undefined}
+            enPlaceholder="Message for English-speaking players"
+            ruPlaceholder="Сообщение для русскоязычных игроков"
+          />
 
           <AdminField
             label="Изображения"
@@ -422,10 +451,14 @@ export default function TelegramSection() {
             <AdminButton
               disabled={!canSend}
               onClick={async () => {
-                const text = message.trim();
+                const textEn = messageEn.trim();
+                const textRu = messageRu.trim();
                 const images = imageUrls.map((u) => u.trim()).filter(Boolean);
-                if (!text && !images.length) return;
-                if (images.length && text.length > MAX_PHOTO_CAPTION) {
+                if (!textEn && !textRu && !images.length) return;
+                if (
+                  images.length &&
+                  (textEn.length > MAX_PHOTO_CAPTION || textRu.length > MAX_PHOTO_CAPTION)
+                ) {
                   showToast({
                     variant: "error",
                     title: "Слишком длинная подпись",
@@ -444,8 +477,9 @@ export default function TelegramSection() {
                   primeCache("admin:telegram:settings", nextSettings);
                   setSettings(nextSettings);
 
-                  await createAdminBroadcast(text, includeChannelButton, images);
-                  setMessage("");
+                  await createAdminBroadcast(textEn, textRu, includeChannelButton, images);
+                  setMessageEn("");
+                  setMessageRu("");
                   setImageUrls([]);
                   setIncludeChannelButton(false);
                   showToast({ variant: "success", title: "Рассылка запущена" });
@@ -540,7 +574,7 @@ export default function TelegramSection() {
                       ) : null}
                       <div className="min-w-0 flex-1">
                         <p className="line-clamp-2">
-                          {item.message || (thumbs.length ? `Изображения (${thumbs.length})` : "")}
+                          {item.message_ru || item.message_en || item.message || (thumbs.length ? `Изображения (${thumbs.length})` : "")}
                         </p>
                         <p className="mt-1 text-[11px] text-muted">
                           {expanded ? "Скрыть журнал доставок" : "Журнал доставок"}

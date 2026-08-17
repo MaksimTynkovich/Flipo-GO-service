@@ -139,6 +139,7 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 	if err != nil {
 		return nil, err
 	}
+	locale := s.userLocale(ctx, userID)
 	for _, q := range tasks {
 		progress, err := s.progressAt(ctx, userID, q, since)
 		if err != nil {
@@ -165,14 +166,14 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 			}
 			completed++
 		}
-		reward, err := s.rewardView(ctx, rewardSpecFromQuest(q))
+		reward, err := s.rewardView(ctx, rewardSpecFromQuest(q), locale)
 		if err != nil {
 			return nil, err
 		}
 		view := TaskView{
 			ID:           q.ID,
-			Title:        q.Title,
-			Description:  q.Description,
+			Title:        q.LocalizedTitle(locale),
+			Description:  q.LocalizedDescription(locale),
 			Objective:    q.ObjectiveType,
 			Target:       q.ObjectiveTarget,
 			Progress:     minInt64(progress, q.ObjectiveTarget),
@@ -185,7 +186,7 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 			view.ObjectiveCaseID = q.ObjectiveCaseID
 			if c, cErr := s.cases.FindByID(ctx, *q.ObjectiveCaseID); cErr == nil && c != nil {
 				view.ObjectiveCaseSlug = c.Slug
-				view.ObjectiveCaseTitle = c.Title
+				view.ObjectiveCaseTitle = c.LocalizedTitle(locale)
 			}
 		}
 		views = append(views, view)
@@ -196,15 +197,15 @@ func (s *Service) ListDaily(ctx context.Context, userID uuid.UUID) (*DailyBoardV
 		return nil, err
 	}
 	bonus := BonusView{
-		Title:          board.BonusTitle,
-		Description:    board.BonusDescription,
+		Title:          board.LocalizedBonusTitle(locale),
+		Description:    board.LocalizedBonusDescription(locale),
 		CompletedCount: completed,
 		TotalCount:     len(tasks),
 		Status:         "disabled",
 		CardImageURL:   strings.TrimSpace(board.BonusCardImageURL),
 	}
 	if board.BonusActive {
-		bonus.Reward, err = s.rewardView(ctx, rewardSpecFromBoard(board))
+		bonus.Reward, err = s.rewardView(ctx, rewardSpecFromBoard(board), locale)
 		if err != nil {
 			return nil, err
 		}
@@ -266,7 +267,7 @@ func (s *Service) ClaimTask(ctx context.Context, userID, questID uuid.UUID) (*Cl
 		return nil, err
 	}
 	if q.RewardType != domain.DailyQuestRewardNone {
-		s.notifyClaim(ctx, userID, false, q.Title, result.Reward)
+		s.notifyClaim(ctx, userID, false, q.LocalizedTitle(domain.LocaleRU), result.Reward)
 	}
 	return result, nil
 }
@@ -315,7 +316,7 @@ func (s *Service) ClaimBonus(ctx context.Context, userID uuid.UUID) (*ClaimResul
 	if err != nil {
 		return nil, err
 	}
-	s.notifyClaim(ctx, userID, true, board.BonusTitle, result.Reward)
+	s.notifyClaim(ctx, userID, true, board.LocalizedBonusTitle(domain.LocaleRU), result.Reward)
 	return result, nil
 }
 
@@ -357,7 +358,7 @@ func (s *Service) grantClaim(
 	}
 
 	result := &ClaimResult{}
-	reward, err := s.rewardView(ctx, spec)
+	reward, err := s.rewardView(ctx, spec, s.userLocale(ctx, userID))
 	if err != nil {
 		_ = s.quests.DeleteClaim(ctx, claimID)
 		return nil, err
@@ -616,7 +617,7 @@ func isUndefinedTableErr(err error) bool {
 		strings.Contains(msg, "no such table")
 }
 
-func (s *Service) rewardView(ctx context.Context, spec rewardSpec) (RewardView, error) {
+func (s *Service) rewardView(ctx context.Context, spec rewardSpec, locale string) (RewardView, error) {
 	v := RewardView{
 		Type:           spec.Type,
 		Nanoton:        spec.Nanoton,
@@ -628,7 +629,7 @@ func (s *Service) rewardView(ctx context.Context, spec rewardSpec) (RewardView, 
 	}
 	if spec.Type == domain.DailyQuestRewardFreeCase && spec.CaseID != nil {
 		if c, err := s.cases.FindByID(ctx, *spec.CaseID); err == nil && c != nil {
-			v.CaseTitle = c.Title
+			v.CaseTitle = c.LocalizedTitle(locale)
 			v.CaseSlug = c.Slug
 			v.CaseImage = c.ImageURL
 		}
@@ -645,6 +646,17 @@ func (s *Service) rewardView(ctx context.Context, spec rewardSpec) (RewardView, 
 		}
 	}
 	return v, nil
+}
+
+func (s *Service) userLocale(ctx context.Context, userID uuid.UUID) string {
+	if s.users == nil || userID == uuid.Nil {
+		return domain.DefaultLocale
+	}
+	u, err := s.users.FindByID(ctx, userID)
+	if err != nil || u == nil {
+		return domain.DefaultLocale
+	}
+	return u.LocalizedLocale()
 }
 
 func rewardSpecFromQuest(q domain.DailyQuest) rewardSpec {
@@ -738,8 +750,8 @@ func validateReward(spec rewardSpec) error {
 }
 
 func validateQuest(q *domain.DailyQuest) error {
-	q.Title = strings.TrimSpace(q.Title)
-	q.Description = strings.TrimSpace(q.Description)
+	q.TitleEN, q.TitleRU, q.Title = domain.SyncLocalized(q.TitleEN, q.TitleRU, q.Title)
+	q.DescriptionEN, q.DescriptionRU, q.Description = domain.SyncLocalized(q.DescriptionEN, q.DescriptionRU, q.Description)
 	q.RewardCollectionSlug = strings.TrimSpace(q.RewardCollectionSlug)
 	q.RewardModelName = strings.TrimSpace(q.RewardModelName)
 	q.RewardGiftName = strings.TrimSpace(q.RewardGiftName)
@@ -849,7 +861,11 @@ func (s *Service) AdminListQuests(ctx context.Context) ([]domain.DailyQuest, err
 type AdminQuestUpsert struct {
 	ID                   uuid.UUID  `json:"id"`
 	Title                string     `json:"title"`
+	TitleEN              string     `json:"title_en"`
+	TitleRU              string     `json:"title_ru"`
 	Description          string     `json:"description"`
+	DescriptionEN        string     `json:"description_en"`
+	DescriptionRU        string     `json:"description_ru"`
 	SortOrder            int        `json:"sort_order"`
 	Active               bool       `json:"active"`
 	ActiveFrom           *string    `json:"active_from"`
@@ -872,7 +888,11 @@ func (s *Service) AdminUpsertQuest(ctx context.Context, req AdminQuestUpsert) (*
 	q := &domain.DailyQuest{
 		ID:                   req.ID,
 		Title:                req.Title,
+		TitleEN:              req.TitleEN,
+		TitleRU:              req.TitleRU,
 		Description:          req.Description,
+		DescriptionEN:        req.DescriptionEN,
+		DescriptionRU:        req.DescriptionRU,
 		SortOrder:            req.SortOrder,
 		Active:               req.Active,
 		ObjectiveType:        req.ObjectiveType,
@@ -949,7 +969,7 @@ func (s *Service) AdminGetBoard(ctx context.Context) (*domain.DailyQuestBoardSet
 	return board, nil
 }
 
-func (s *Service) ListPromoSlides(ctx context.Context) ([]domain.DailyQuestPromoSlide, error) {
+func (s *Service) ListPromoSlides(ctx context.Context, userID uuid.UUID) ([]domain.DailyQuestPromoSlide, error) {
 	board, err := s.quests.GetBoardSettings(ctx)
 	if err != nil {
 		return nil, err
@@ -958,25 +978,37 @@ func (s *Service) ListPromoSlides(ctx context.Context) ([]domain.DailyQuestPromo
 	if len(slides) == 0 {
 		slides = domain.DefaultDailyQuestPromoSlides()
 	}
+	locale := s.userLocale(ctx, userID)
 	out := make([]domain.DailyQuestPromoSlide, 0, len(slides))
 	for _, slide := range slides {
 		if !slide.Active {
 			continue
 		}
 		normalized := normalizePromoSlide(slide)
-		if normalized.Title == "" && normalized.Eyebrow == "" {
+		resolved := normalized
+		resolved.Eyebrow = normalized.LocalizedEyebrow(locale)
+		resolved.Title = normalized.LocalizedTitle(locale)
+		resolved.Subtitle = normalized.LocalizedSubtitle(locale)
+		resolved.CTA = normalized.LocalizedCTA(locale)
+		if resolved.Title == "" && resolved.Eyebrow == "" {
 			continue
 		}
-		out = append(out, normalized)
+		out = append(out, resolved)
 	}
 	return out, nil
 }
 
 func (s *Service) AdminUpdateBoard(ctx context.Context, settings *domain.DailyQuestBoardSettings) error {
-	settings.BonusTitle = strings.TrimSpace(settings.BonusTitle)
-	settings.BonusDescription = strings.TrimSpace(settings.BonusDescription)
+	settings.BonusTitleEN, settings.BonusTitleRU, settings.BonusTitle = domain.SyncLocalized(
+		settings.BonusTitleEN, settings.BonusTitleRU, settings.BonusTitle,
+	)
+	settings.BonusDescriptionEN, settings.BonusDescriptionRU, settings.BonusDescription = domain.SyncLocalized(
+		settings.BonusDescriptionEN, settings.BonusDescriptionRU, settings.BonusDescription,
+	)
 	if settings.BonusTitle == "" {
-		settings.BonusTitle = "Бонус дня"
+		settings.BonusTitleEN = "Bonus of the day"
+		settings.BonusTitleRU = "Бонус дня"
+		settings.BonusTitle = "Bonus of the day"
 	}
 	normalizeBoardRewardFields(settings)
 	if existing, err := s.quests.GetBoardSettings(ctx); err == nil && existing != nil {
@@ -1017,7 +1049,10 @@ func normalizePromoSlides(slides []domain.DailyQuestPromoSlide) []domain.DailyQu
 		if n.ID == "" {
 			n.ID = fmt.Sprintf("slide-%d", i+1)
 		}
-		if n.Title == "" && n.Eyebrow == "" && n.Subtitle == "" && n.CoverURL == "" {
+		if n.Title == "" && n.TitleEN == "" && n.TitleRU == "" &&
+			n.Eyebrow == "" && n.EyebrowEN == "" && n.EyebrowRU == "" &&
+			n.Subtitle == "" && n.SubtitleEN == "" && n.SubtitleRU == "" &&
+			n.CoverURL == "" {
 			continue
 		}
 		out = append(out, n)
@@ -1031,12 +1066,14 @@ func normalizePromoSlide(slide domain.DailyQuestPromoSlide) domain.DailyQuestPro
 	if slide.Tone != "duo" && slide.Tone != "open" {
 		slide.Tone = "open"
 	}
-	slide.Eyebrow = strings.TrimSpace(slide.Eyebrow)
-	slide.Title = strings.TrimSpace(slide.Title)
-	slide.Subtitle = strings.TrimSpace(slide.Subtitle)
-	slide.CTA = strings.TrimSpace(slide.CTA)
+	slide.EyebrowEN, slide.EyebrowRU, slide.Eyebrow = domain.SyncLocalized(slide.EyebrowEN, slide.EyebrowRU, slide.Eyebrow)
+	slide.TitleEN, slide.TitleRU, slide.Title = domain.SyncLocalized(slide.TitleEN, slide.TitleRU, slide.Title)
+	slide.SubtitleEN, slide.SubtitleRU, slide.Subtitle = domain.SyncLocalized(slide.SubtitleEN, slide.SubtitleRU, slide.Subtitle)
+	slide.CTAEN, slide.CTARU, slide.CTA = domain.SyncLocalized(slide.CTAEN, slide.CTARU, slide.CTA)
 	if slide.CTA == "" {
-		slide.CTA = "К заданиям"
+		slide.CTAEN = "To quests"
+		slide.CTARU = "К заданиям"
+		slide.CTA = "To quests"
 	}
 	slide.CTAColor = normalizePromoCTAColor(slide.CTAColor)
 	slide.EyebrowColor = normalizePromoCTAColor(slide.EyebrowColor)

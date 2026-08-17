@@ -164,6 +164,9 @@ func (s *walletUserRepoStub) ListReferredUsers(context.Context) ([]domain.User, 
 func (s *walletUserRepoStub) ListTelegramIDs(context.Context, int, int) ([]int64, error) {
 	return nil, nil
 }
+func (s *walletUserRepoStub) ListTelegramRecipients(context.Context, int, int) ([]domain.TelegramRecipient, error) {
+	return nil, nil
+}
 func (s *walletUserRepoStub) CountUsers(context.Context) (int64, error) { return 0, nil }
 
 var (

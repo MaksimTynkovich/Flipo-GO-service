@@ -48,7 +48,7 @@ func TestOpenAppMarkupWebAppURLWithPayload(t *testing.T) {
 
 func TestStartMenuMarkupIncludesTermsButton(t *testing.T) {
 	h := NewBotUpdates(NewBotAPI("token"), "https://example.com", "", "", "", "", "", "Привет")
-	h.SetTermsURLResolver(func(ctx context.Context) (string, string) {
+	h.SetTermsURLResolver(func(ctx context.Context, locale string) (string, string) {
 		return "https://example.com/terms", "Политика"
 	})
 	markup := h.startMenuMarkup(context.Background(), "", "")

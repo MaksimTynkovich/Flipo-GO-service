@@ -3,7 +3,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getMaintenanceStatus } from "@/lib/api";
+import { pickLocalized } from "@/lib/i18n/locale";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { useI18n } from "@/components/providers/I18nProvider";
 import { AppSplashScreen } from "@/src/widgets/app-shell/ui/AppSplashScreen";
 import { MaintenanceScreen } from "@/src/widgets/maintenance/ui/MaintenanceScreen";
 
@@ -26,6 +28,7 @@ export function useAcceptBets() {
 export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { locale } = useI18n();
   const isAdminRoute = pathname.startsWith("/admin");
   const isAdminUser = Boolean(user?.is_admin);
   const bypass = isAdminRoute || isAdminUser;
@@ -35,7 +38,13 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    const apply = (data: { enabled: boolean; accept_bets?: boolean; message: string }) => {
+    const apply = (data: {
+      enabled: boolean;
+      accept_bets?: boolean;
+      message: string;
+      message_en?: string;
+      message_ru?: string;
+    }) => {
       if (cancelled) return;
       setAcceptBets(data.accept_bets !== false);
       if (bypass) {
@@ -43,7 +52,10 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
         return;
       }
       if (data.enabled) {
-        setState({ status: "maintenance", message: data.message || "" });
+        setState({
+          status: "maintenance",
+          message: pickLocalized(locale, data.message_en, data.message_ru, data.message),
+        });
         return;
       }
       setState({ status: "open" });
@@ -66,7 +78,7 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [bypass]);
+  }, [bypass, locale]);
 
   // Poll while the app is open so turning maintenance / bet pause on/off applies without reload.
   useEffect(() => {
@@ -76,7 +88,10 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
           setAcceptBets(data.accept_bets !== false);
           if (bypass) return;
           if (data.enabled) {
-            setState({ status: "maintenance", message: data.message || "" });
+            setState({
+              status: "maintenance",
+              message: pickLocalized(locale, data.message_en, data.message_ru, data.message),
+            });
           } else {
             setState({ status: "open" });
           }
@@ -85,7 +100,7 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
     }, 20_000);
 
     return () => window.clearInterval(timer);
-  }, [bypass]);
+  }, [bypass, locale]);
 
   const bettingValue = useMemo(() => ({ acceptBets }), [acceptBets]);
 

@@ -30,6 +30,63 @@ func NormalizeLocale(s string) string {
 	}
 }
 
+// PickLocalized returns EN or RU copy for the player's locale.
+// Empty values fall back to the other language, then to fallback (legacy single field).
+func PickLocalized(locale, en, ru, fallback string) string {
+	locale = NormalizeLocale(locale)
+	en = strings.TrimSpace(en)
+	ru = strings.TrimSpace(ru)
+	fallback = strings.TrimSpace(fallback)
+	if locale == LocaleRU {
+		if ru != "" {
+			return ru
+		}
+		if en != "" {
+			return en
+		}
+		return fallback
+	}
+	if en != "" {
+		return en
+	}
+	if ru != "" {
+		return ru
+	}
+	return fallback
+}
+
+// SyncLocalized fills missing EN/RU from each other or from the legacy fallback
+// and returns the English-first canonical string for slug/stats columns.
+func SyncLocalized(en, ru, fallback string) (enOut, ruOut, canonical string) {
+	enOut = strings.TrimSpace(en)
+	ruOut = strings.TrimSpace(ru)
+	fallback = strings.TrimSpace(fallback)
+	if enOut == "" {
+		enOut = ruOut
+	}
+	if ruOut == "" {
+		ruOut = enOut
+	}
+	if enOut == "" && ruOut == "" {
+		enOut, ruOut = fallback, fallback
+	}
+	canonical = PickLocalized(DefaultLocale, enOut, ruOut, fallback)
+	return enOut, ruOut, canonical
+}
+
+// ClipRunes trims space and caps the string to n Unicode characters.
+func ClipRunes(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if n <= 0 {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
 type User struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	TelegramID     int64     `gorm:"uniqueIndex;not null" json:"telegram_id"`
@@ -57,4 +114,16 @@ type User struct {
 
 	Inventory        []InventoryItem   `gorm:"foreignKey:UserID" json:"-"`
 	StakingPositions []StakingPosition `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func (u *User) LocalizedLocale() string {
+	if u == nil {
+		return DefaultLocale
+	}
+	return NormalizeLocale(u.Locale)
+}
+
+type TelegramRecipient struct {
+	TelegramID int64  `gorm:"column:telegram_id"`
+	Locale     string `gorm:"column:locale"`
 }

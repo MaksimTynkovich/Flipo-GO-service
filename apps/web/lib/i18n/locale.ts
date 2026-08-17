@@ -19,3 +19,16 @@ export function normalizeLocale(value: unknown): Locale {
 export function localeDateTag(locale: Locale): string {
   return locale === "ru" ? "ru-RU" : "en-US";
 }
+
+export function pickLocalized(
+  locale: Locale | string,
+  en?: string | null,
+  ru?: string | null,
+  fallback?: string | null,
+): string {
+  const enT = (en || "").trim();
+  const ruT = (ru || "").trim();
+  const fb = (fallback || "").trim();
+  if (normalizeLocale(locale) === "ru") return ruT || enT || fb;
+  return enT || ruT || fb;
+}

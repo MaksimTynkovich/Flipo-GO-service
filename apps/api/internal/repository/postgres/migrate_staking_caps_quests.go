@@ -102,19 +102,23 @@ func seedStakingQuestsDaily(db *gorm.DB) error {
 	// Highest reward: deposit_50 (15 TON).
 	// wager_* = total volume across crash/roulette/pvp/cases.
 	if err := db.Exec(`
-		INSERT INTO staking_quests (code, title, description, reward_limit_nanoton, sort_order, active)
+		INSERT INTO staking_quests (code, title, title_en, title_ru, description, description_en, description_ru, reward_limit_nanoton, sort_order, active)
 		VALUES
-			('first_game_bet', 'Первая ставка', 'Сделай первую ставку в любой игре', 2000000000, 10, TRUE),
-			('wager_5', 'Ставки ×5', 'Поставь суммарно 5 TON в играх и кейсах', 5000000000, 20, TRUE),
-			('wager_25', 'Ставки ×25', 'Поставь суммарно 25 TON в играх и кейсах', 10000000000, 25, TRUE),
-			('deposit_5', 'Пополнение', 'Пополни баланс на 5 TON', 3000000000, 50, TRUE),
-			('deposit_30', 'Пополнение', 'Пополни баланс на 30 TON', 5000000000, 55, TRUE),
-			('deposit_50', 'Пополнение', 'Пополни баланс на 50 TON', 15000000000, 58, TRUE),
-			('referral_active_1', '1 реферал', '1 приглашённый реферал', 5000000000, 60, TRUE),
-			('referral_active_5', '5 рефералов', '5 приглашённых рефералов', 5000000000, 65, TRUE)
+			('first_game_bet', 'First bet', 'First bet', 'Первая ставка', 'Place your first bet in any game', 'Place your first bet in any game', 'Сделай первую ставку в любой игре', 2000000000, 10, TRUE),
+			('wager_5', 'Bets ×5', 'Bets ×5', 'Ставки ×5', 'Wager 5 TON total in games and cases', 'Wager 5 TON total in games and cases', 'Поставь суммарно 5 TON в играх и кейсах', 5000000000, 20, TRUE),
+			('wager_25', 'Bets ×25', 'Bets ×25', 'Ставки ×25', 'Wager 25 TON total in games and cases', 'Wager 25 TON total in games and cases', 'Поставь суммарно 25 TON в играх и кейсах', 10000000000, 25, TRUE),
+			('deposit_5', 'Top up', 'Top up', 'Пополнение', 'Top up your balance by 5 TON', 'Top up your balance by 5 TON', 'Пополни баланс на 5 TON', 3000000000, 50, TRUE),
+			('deposit_30', 'Top up', 'Top up', 'Пополнение', 'Top up your balance by 30 TON', 'Top up your balance by 30 TON', 'Пополни баланс на 30 TON', 5000000000, 55, TRUE),
+			('deposit_50', 'Top up', 'Top up', 'Пополнение', 'Top up your balance by 50 TON', 'Top up your balance by 50 TON', 'Пополни баланс на 50 TON', 15000000000, 58, TRUE),
+			('referral_active_1', '1 referral', '1 referral', '1 реферал', 'Invite 1 referral', 'Invite 1 referral', '1 приглашённый реферал', 5000000000, 60, TRUE),
+			('referral_active_5', '5 referrals', '5 referrals', '5 рефералов', 'Invite 5 referrals', 'Invite 5 referrals', '5 приглашённых рефералов', 5000000000, 65, TRUE)
 		ON CONFLICT (code) DO UPDATE SET
 			title = EXCLUDED.title,
+			title_en = EXCLUDED.title_en,
+			title_ru = EXCLUDED.title_ru,
 			description = EXCLUDED.description,
+			description_en = EXCLUDED.description_en,
+			description_ru = EXCLUDED.description_ru,
 			reward_limit_nanoton = EXCLUDED.reward_limit_nanoton,
 			sort_order = EXCLUDED.sort_order,
 			active = EXCLUDED.active

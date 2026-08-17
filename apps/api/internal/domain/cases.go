@@ -44,6 +44,8 @@ type Case struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Slug           string         `gorm:"size:64;not null;index" json:"slug"`
 	Title          string         `gorm:"size:128;not null" json:"title"`
+	TitleEN        string         `gorm:"column:title_en;size:128;not null;default:''" json:"title_en"`
+	TitleRU        string         `gorm:"column:title_ru;size:128;not null;default:''" json:"title_ru"`
 	ImageURL       string         `gorm:"size:512" json:"image_url"`
 	AccentColor    string         `gorm:"size:32" json:"accent_color"`
 	PriceNanoton   int64          `gorm:"not null" json:"price_nanoton"`
@@ -62,6 +64,10 @@ type Case struct {
 }
 
 func (Case) TableName() string { return "cases" }
+
+func (c Case) LocalizedTitle(locale string) string {
+	return PickLocalized(locale, c.TitleEN, c.TitleRU, c.Title)
+}
 
 type CaseLootEntry struct {
 	ID                  uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
@@ -122,11 +128,18 @@ type UserCaseCooldown struct {
 
 // CaseCooldownReadyNotify — row ready for "daily case available" Telegram push.
 type CaseCooldownReadyNotify struct {
-	UserID     uuid.UUID
-	CaseID     uuid.UUID
-	TelegramID int64
-	CaseTitle  string
-	CaseSlug   string
+	UserID      uuid.UUID
+	CaseID      uuid.UUID
+	TelegramID  int64
+	Locale      string
+	CaseTitle   string
+	CaseTitleEN string
+	CaseTitleRU string
+	CaseSlug    string
+}
+
+func (r CaseCooldownReadyNotify) LocalizedTitle(locale string) string {
+	return PickLocalized(locale, r.CaseTitleEN, r.CaseTitleRU, r.CaseTitle)
 }
 
 func (UserCaseCooldown) TableName() string { return "user_case_cooldowns" }

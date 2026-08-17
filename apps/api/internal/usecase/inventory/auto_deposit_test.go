@@ -180,6 +180,9 @@ func (s *autoDepositUserStub) ListReferredUsers(context.Context) ([]domain.User,
 func (s *autoDepositUserStub) ListTelegramIDs(context.Context, int, int) ([]int64, error) {
 	return nil, nil
 }
+func (s *autoDepositUserStub) ListTelegramRecipients(context.Context, int, int) ([]domain.TelegramRecipient, error) {
+	return nil, nil
+}
 func (s *autoDepositUserStub) CountUsers(context.Context) (int64, error) { return 0, nil }
 
 var (

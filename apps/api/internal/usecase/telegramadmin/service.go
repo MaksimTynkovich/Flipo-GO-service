@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/flipo/flipo/apps/api/internal/domain"
+	"github.com/flipo/flipo/apps/api/internal/i18n"
 	"github.com/flipo/flipo/apps/api/internal/infrastructure/telegram"
 	"github.com/google/uuid"
 )
 
 const (
-	channelButtonText  = "📢 Наш канал"
 	maxPhotoCaptionLen = 1024
 	maxBroadcastImages = 5
 	staticCasesURLPref = "/static/cases/"
@@ -59,8 +59,8 @@ func (s *Service) SetCasesUploadDir(dir string) {
 	s.casesUploadDir = strings.TrimSpace(dir)
 }
 
-func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, message string, imageURLs []string, includeChannelButton bool) (*domain.TelegramBroadcast, error) {
-	message = strings.TrimSpace(message)
+func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, messageEN, messageRU, message string, imageURLs []string, includeChannelButton bool) (*domain.TelegramBroadcast, error) {
+	messageEN, messageRU, message = domain.SyncLocalized(messageEN, messageRU, message)
 	imageURLs = normalizeImageURLs(imageURLs)
 	if message == "" && len(imageURLs) == 0 {
 		return nil, fmt.Errorf("нужен текст или изображение")
@@ -68,8 +68,10 @@ func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, messag
 	if len(imageURLs) > maxBroadcastImages {
 		return nil, fmt.Errorf("не больше %d изображений", maxBroadcastImages)
 	}
-	if len(imageURLs) > 0 && len(message) > maxPhotoCaptionLen {
-		return nil, fmt.Errorf("подпись к изображению не длиннее %d символов", maxPhotoCaptionLen)
+	if len(imageURLs) > 0 {
+		if len([]rune(messageEN)) > maxPhotoCaptionLen || len([]rune(messageRU)) > maxPhotoCaptionLen {
+			return nil, fmt.Errorf("подпись к изображению не длиннее %d символов", maxPhotoCaptionLen)
+		}
 	}
 	if includeChannelButton && s.channelURL == "" {
 		return nil, fmt.Errorf("TELEGRAM_CHANNEL_URL не задан в .env")
@@ -99,6 +101,8 @@ func (s *Service) CreateBroadcast(ctx context.Context, adminID uuid.UUID, messag
 	broadcast := &domain.TelegramBroadcast{
 		ID:                   uuid.New(),
 		Message:              message,
+		MessageEN:            messageEN,
+		MessageRU:            messageRU,
 		ImageURLs:            imageURLs,
 		IncludeChannelButton: includeChannelButton,
 		Status:               "queued",
@@ -246,8 +250,9 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 	if err != nil {
 		return err
 	}
-	markup := s.broadcastMarkup(*settings, broadcast.IncludeChannelButton)
-	if markup == nil {
+	markupEN := s.broadcastMarkup(*settings, broadcast.IncludeChannelButton, domain.LocaleEN)
+	markupRU := s.broadcastMarkup(*settings, broadcast.IncludeChannelButton, domain.LocaleRU)
+	if markupEN == nil && markupRU == nil {
 		slog.Warn("broadcast without open-app button", "broadcast_id", broadcast.ID, "hint", "set webapp_url in admin or BOT_USERNAME/WEBAPP_SHORT_NAME in env")
 	}
 
@@ -269,27 +274,33 @@ func (s *Service) runBroadcast(ctx context.Context, broadcast *domain.TelegramBr
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		ids, err := s.users.ListTelegramIDs(ctx, pageSize, offset)
+		ids, err := s.users.ListTelegramRecipients(ctx, pageSize, offset)
 		if err != nil {
 			return err
 		}
 		if len(ids) == 0 {
 			break
 		}
-		for _, chatID := range ids {
+		for _, rec := range ids {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			status, errMsg := s.deliverToRecipient(ctx, chatID, broadcast.Message, photoSources, &cachedFileIDs, markup)
+			locale := domain.NormalizeLocale(rec.Locale)
+			msg := broadcast.LocalizedMessage(locale)
+			markup := markupEN
+			if locale == domain.LocaleRU {
+				markup = markupRU
+			}
+			status, errMsg := s.deliverToRecipient(ctx, rec.TelegramID, msg, photoSources, &cachedFileIDs, markup)
 			if err := s.platform.UpsertBroadcastDelivery(ctx, &domain.TelegramBroadcastDelivery{
 				BroadcastID:  broadcast.ID,
-				TelegramID:   chatID,
+				TelegramID:   rec.TelegramID,
 				Status:       status,
 				ErrorMessage: errMsg,
 			}); err != nil {
 				slog.Warn("broadcast delivery journal write failed",
 					"broadcast_id", broadcast.ID,
-					"chat_id", chatID,
+					"chat_id", rec.TelegramID,
 					"status", status,
 					"error", err,
 				)
@@ -449,7 +460,8 @@ func (s *Service) sendBroadcastItem(
 	return nil
 }
 
-func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings, includeChannelButton bool) map[string]any {
+func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings, includeChannelButton bool, locale string) map[string]any {
+	locale = domain.NormalizeLocale(locale)
 	webAppURL := strings.TrimSpace(settings.WebAppURL)
 	// Deep links must not be used as web_app.url; prefer HTTPS from env.
 	if webAppURL == "" || strings.HasPrefix(webAppURL, "https://t.me/") ||
@@ -460,12 +472,17 @@ func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings, includeCh
 		webAppURL = s.envWebAppURL
 	}
 
+	buttonText := settings.LocalizedOpenAppButton(locale)
+	if buttonText == "" {
+		buttonText = i18n.T(locale, "bot.openApp")
+	}
+
 	rows := make([][]map[string]any, 0, 2)
 	if openApp := telegram.OpenAppButtonMarkup(telegram.OpenAppButtonOptions{
 		WebAppURL:       webAppURL,
 		BotUsername:     s.botUsername,
 		WebAppShortName: s.webAppShortName,
-		ButtonText:      settings.WebAppButtonText,
+		ButtonText:      buttonText,
 	}); openApp != nil {
 		if kb, ok := openApp["inline_keyboard"].([][]map[string]any); ok {
 			rows = append(rows, kb...)
@@ -474,7 +491,7 @@ func (s *Service) broadcastMarkup(settings domain.TelegramBotSettings, includeCh
 
 	if includeChannelButton && s.channelURL != "" {
 		rows = append(rows, []map[string]any{
-			{"text": channelButtonText, "url": s.channelURL},
+			{"text": i18n.T(locale, "bot.channel"), "url": s.channelURL},
 		})
 	}
 

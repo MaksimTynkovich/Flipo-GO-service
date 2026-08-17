@@ -189,3 +189,89 @@ export function AdminChip({
     </button>
   );
 }
+
+export function AdminLocalizedField({
+  label,
+  hint,
+  en,
+  ru,
+  onEnChange,
+  onRuChange,
+  multiline = false,
+  maxLength,
+  enPlaceholder,
+  ruPlaceholder,
+  className,
+  controlClassName,
+}: {
+  label: string;
+  hint?: string;
+  en: string;
+  ru: string;
+  onEnChange: (value: string) => void;
+  onRuChange: (value: string) => void;
+  multiline?: boolean;
+  maxLength?: number;
+  enPlaceholder?: string;
+  ruPlaceholder?: string;
+  className?: string;
+  controlClassName?: string;
+}) {
+  const fieldClass = controlClassName || "input-field";
+  return (
+    <div className={cn("space-y-2", className)}>
+      <div>
+        <p className="text-sm text-[var(--admin-muted,#8b98a8)]">{label}</p>
+        {hint ? (
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--admin-muted,#8b98a8)]">{hint}</p>
+        ) : null}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block space-y-1.5 text-sm">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--admin-muted,#8b98a8)]">
+            EN
+          </span>
+          {multiline ? (
+            <textarea
+              className={cn(fieldClass, "min-h-24")}
+              value={en}
+              maxLength={maxLength}
+              placeholder={enPlaceholder}
+              onChange={(e) => onEnChange(e.target.value)}
+            />
+          ) : (
+            <input
+              className={fieldClass}
+              value={en}
+              maxLength={maxLength}
+              placeholder={enPlaceholder}
+              onChange={(e) => onEnChange(e.target.value)}
+            />
+          )}
+        </label>
+        <label className="block space-y-1.5 text-sm">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--admin-muted,#8b98a8)]">
+            RU
+          </span>
+          {multiline ? (
+            <textarea
+              className={cn(fieldClass, "min-h-24")}
+              value={ru}
+              maxLength={maxLength}
+              placeholder={ruPlaceholder}
+              onChange={(e) => onRuChange(e.target.value)}
+            />
+          ) : (
+            <input
+              className={fieldClass}
+              value={ru}
+              maxLength={maxLength}
+              placeholder={ruPlaceholder}
+              onChange={(e) => onRuChange(e.target.value)}
+            />
+          )}
+        </label>
+      </div>
+    </div>
+  );
+}

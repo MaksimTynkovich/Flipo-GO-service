@@ -271,7 +271,10 @@ func (r *CaseRepo) ListDailyCooldownsReadyForNotify(ctx context.Context, cooldow
 			ucc.user_id,
 			ucc.case_id,
 			u.telegram_id,
+			COALESCE(u.locale, 'en') AS locale,
 			c.title AS case_title,
+			c.title_en AS case_title_en,
+			c.title_ru AS case_title_ru,
 			c.slug AS case_slug
 		FROM user_case_cooldowns ucc
 		INNER JOIN users u ON u.id = ucc.user_id

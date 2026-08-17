@@ -364,19 +364,26 @@ func main() {
 		}
 		return settings.WebAppURL
 	})
-	botUpdates.SetWebAppButtonTextResolver(func(ctx context.Context) string {
+	botUpdates.SetWebAppButtonTextResolver(func(ctx context.Context, locale string) string {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {
 			return ""
 		}
-		return settings.WebAppButtonText
+		return settings.LocalizedOpenAppButton(locale)
 	})
-	botUpdates.SetTermsURLResolver(func(ctx context.Context) (string, string) {
+	botUpdates.SetWelcomeTextResolver(func(ctx context.Context, locale string) string {
+		settings, err := platformRepo.GetBotSettings(ctx)
+		if err != nil {
+			return ""
+		}
+		return settings.LocalizedWelcome(locale)
+	})
+	botUpdates.SetTermsURLResolver(func(ctx context.Context, locale string) (string, string) {
 		settings, err := platformRepo.GetBotSettings(ctx)
 		if err != nil {
 			return "", ""
 		}
-		return settings.TermsURL, settings.TermsButtonText
+		return settings.TermsURL, settings.LocalizedTermsButton(locale)
 	})
 	if cfg.TelegramWebhookURL != "" {
 		if err := botAPI.SetWebhook(ctx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {

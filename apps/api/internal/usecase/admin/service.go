@@ -664,15 +664,22 @@ func (s *Service) GetBotSettings(ctx context.Context) (*domain.TelegramBotSettin
 
 func (s *Service) UpdateBotSettings(ctx context.Context, adminID uuid.UUID, settings domain.TelegramBotSettings) error {
 	settings.WebAppURL = strings.TrimSpace(settings.WebAppURL)
-	settings.WebAppButtonText = strings.TrimSpace(settings.WebAppButtonText)
 	settings.TermsURL = strings.TrimSpace(settings.TermsURL)
-	settings.TermsButtonText = strings.TrimSpace(settings.TermsButtonText)
-	if len(settings.TermsButtonText) > 64 {
-		settings.TermsButtonText = settings.TermsButtonText[:64]
-	}
-	if len(settings.WebAppButtonText) > 64 {
-		settings.WebAppButtonText = settings.WebAppButtonText[:64]
-	}
+	settings.WelcomeTextEN, settings.WelcomeTextRU, _ = domain.SyncLocalized(
+		settings.WelcomeTextEN, settings.WelcomeTextRU, "",
+	)
+	settings.WebAppButtonTextEN, settings.WebAppButtonTextRU, settings.WebAppButtonText = domain.SyncLocalized(
+		settings.WebAppButtonTextEN, settings.WebAppButtonTextRU, settings.WebAppButtonText,
+	)
+	settings.TermsButtonTextEN, settings.TermsButtonTextRU, settings.TermsButtonText = domain.SyncLocalized(
+		settings.TermsButtonTextEN, settings.TermsButtonTextRU, settings.TermsButtonText,
+	)
+	settings.WebAppButtonText = domain.ClipRunes(settings.WebAppButtonText, 64)
+	settings.WebAppButtonTextEN = domain.ClipRunes(settings.WebAppButtonTextEN, 64)
+	settings.WebAppButtonTextRU = domain.ClipRunes(settings.WebAppButtonTextRU, 64)
+	settings.TermsButtonText = domain.ClipRunes(settings.TermsButtonText, 64)
+	settings.TermsButtonTextEN = domain.ClipRunes(settings.TermsButtonTextEN, 64)
+	settings.TermsButtonTextRU = domain.ClipRunes(settings.TermsButtonTextRU, 64)
 	if err := s.platform.UpdateBotSettings(ctx, &settings); err != nil {
 		return err
 	}
@@ -684,10 +691,12 @@ func (s *Service) GetMaintenanceSettings(ctx context.Context) (*domain.PlatformM
 }
 
 func (s *Service) UpdateMaintenanceSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformMaintenanceSettings) error {
-	settings.Message = strings.TrimSpace(settings.Message)
-	if len(settings.Message) > 500 {
-		settings.Message = settings.Message[:500]
-	}
+	settings.MessageEN, settings.MessageRU, settings.Message = domain.SyncLocalized(
+		settings.MessageEN, settings.MessageRU, settings.Message,
+	)
+	settings.Message = domain.ClipRunes(settings.Message, 500)
+	settings.MessageEN = domain.ClipRunes(settings.MessageEN, 500)
+	settings.MessageRU = domain.ClipRunes(settings.MessageRU, 500)
 	if err := s.platform.UpdateMaintenanceSettings(ctx, &settings); err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ import {
   AdminChip,
   AdminEmpty,
   AdminField,
+  AdminLocalizedField,
   AdminPage,
   AdminPanel,
   AdminToolbar,
@@ -200,6 +201,10 @@ function slugFromTitle(title: string): string {
   return out.replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
 }
 
+function caseDisplayTitle(c: { title?: string; title_en?: string; title_ru?: string }) {
+  return (c.title_ru || c.title_en || c.title || "").trim();
+}
+
 type CaseDraft = AdminCaseUpsert & { id?: string };
 type LootDraft = AdminCaseLootEntry & {
   _key: string;
@@ -216,6 +221,8 @@ function emptyCaseDraft(): CaseDraft {
   return {
     slug: "",
     title: "",
+    title_en: "",
+    title_ru: "",
     image_url: "",
     accent_color: "#3b82f6",
     price_nanoton: 500_000_000,
@@ -234,6 +241,8 @@ function caseToDraft(c: AdminCase): CaseDraft {
     id: c.id,
     slug: c.slug,
     title: c.title,
+    title_en: c.title_en || "",
+    title_ru: c.title_ru || c.title || "",
     image_url: c.image_url || "",
     accent_color: c.accent_color || "#3b82f6",
     price_nanoton: c.price_nanoton,
@@ -748,7 +757,9 @@ export default function CasesSection() {
   );
 
   async function saveCase() {
-    const title = draft.title.trim();
+    const titleEn = (draft.title_en || "").trim();
+    const titleRu = (draft.title_ru || "").trim();
+    const title = titleEn || titleRu;
     const slug = (draft.id ? draft.slug : slugFromTitle(title) || draft.slug).trim().toLowerCase();
     if (!title) {
       showToast({ title: "Укажите название", variant: "error" });
@@ -776,6 +787,8 @@ export default function CasesSection() {
         ...(draft.id ? { id: draft.id } : {}),
         slug,
         title,
+        title_en: titleEn,
+        title_ru: titleRu,
         image_url: draft.image_url?.trim() || "",
         accent_color: draft.accent_color?.trim() || "#3b82f6",
         price_nanoton: priceNanoton,
@@ -804,7 +817,7 @@ export default function CasesSection() {
 
   async function removeCase() {
     if (!draft.id) return;
-    const label = draft.title.trim() || draft.slug || draft.id;
+    const label = caseDisplayTitle(draft) || draft.slug || draft.id;
     if (!window.confirm(`Удалить кейс «${label}»? История открытий сохранится.`)) return;
     setDeletingCase(true);
     try {
@@ -1028,6 +1041,8 @@ export default function CasesSection() {
             id: c.id,
             slug: c.slug,
             title: c.title,
+            title_en: c.title_en || c.title,
+            title_ru: c.title_ru || c.title,
             image_url: c.image_url || "",
             accent_color: c.accent_color || "#3b82f6",
             price_nanoton: c.price_nanoton,
@@ -1088,7 +1103,7 @@ export default function CasesSection() {
 
   const previewCase = useMemo(
     () => ({
-      title: draft.title || "Кейс",
+      title: draft.title_ru || draft.title_en || draft.title || "Кейс",
       slug: draft.slug || "preview",
       kind: draft.kind,
       accent_color: draft.accent_color,
@@ -1620,7 +1635,7 @@ deposit_boost_tier4_bias_weight: 15
           title="Витрина"
         >
           <CasesPageAdminPreview
-            cases={cases}
+            cases={cases.map((c) => ({ ...c, title: caseDisplayTitle(c) || c.title }))}
             bannersEnabled={bannersEnabled}
             selectedId={typeof selectedId === "string" ? selectedId : null}
             draftOverlay={draft.id ? draft : null}
@@ -1638,7 +1653,7 @@ deposit_boost_tier4_bias_weight: 15
                     active={selectedId === c.id}
                     onClick={() => selectCase(c)}
                   >
-                    {c.title} · выкл
+                    {caseDisplayTitle(c)} · выкл
                   </AdminChip>
                 ))}
               {selectedId === "new" ? <AdminChip active>Новый</AdminChip> : null}
@@ -1857,30 +1872,37 @@ deposit_boost_tier4_bias_weight: 15
             description="Slug берётся из названия при создании и больше не меняется. Цена 0 — бесплатный / daily."
           >
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              <AdminField
+              <AdminLocalizedField
+                className="sm:col-span-2 lg:col-span-3"
                 label="Название"
                 hint={
                   draft.id
                     ? `slug: ${draft.slug}`
                     : draft.slug
-                      ? `slug: ${draft.slug}`
-                      : "slug появится из названия"
+                      ? `slug: ${draft.slug} (из EN, иначе RU)`
+                      : "slug появится из английского названия"
                 }
-              >
-                <input
-                  className="input-field"
-                  value={draft.title}
-                  onChange={(e) => {
-                    const title = e.target.value;
-                    setDraft((d) => ({
-                      ...d,
-                      title,
-                      ...(d.id ? {} : { slug: slugFromTitle(title) }),
-                    }));
-                  }}
-                  placeholder="Стартовый кейс"
-                />
-              </AdminField>
+                en={draft.title_en || ""}
+                ru={draft.title_ru || ""}
+                onEnChange={(titleEn) => {
+                  setDraft((d) => ({
+                    ...d,
+                    title_en: titleEn,
+                    title: titleEn || d.title_ru || d.title,
+                    ...(d.id ? {} : { slug: slugFromTitle(titleEn || d.title_ru || "") }),
+                  }));
+                }}
+                onRuChange={(titleRu) => {
+                  setDraft((d) => ({
+                    ...d,
+                    title_ru: titleRu,
+                    title: d.title_en || titleRu || d.title,
+                    ...(d.id ? {} : { slug: slugFromTitle(d.title_en || titleRu) }),
+                  }));
+                }}
+                enPlaceholder="Starter case"
+                ruPlaceholder="Стартовый кейс"
+              />
               <AdminField
                 label="Тип"
                 hint={

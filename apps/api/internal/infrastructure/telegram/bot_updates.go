@@ -76,8 +76,9 @@ type StarsPaymentHandler interface {
 }
 
 type WebAppURLResolver func(ctx context.Context) string
-type WebAppButtonTextResolver func(ctx context.Context) string
-type TermsURLResolver func(ctx context.Context) (url, buttonText string)
+type WebAppButtonTextResolver func(ctx context.Context, locale string) string
+type TermsURLResolver func(ctx context.Context, locale string) (url, buttonText string)
+type WelcomeTextResolver func(ctx context.Context, locale string) string
 type LocaleResolver func(ctx context.Context, telegramID int64) string
 
 // UserLookup finds whether a Telegram user is already registered.
@@ -97,6 +98,7 @@ type BotUpdates struct {
 	webAppURLResolver        WebAppURLResolver
 	webAppButtonTextResolver WebAppButtonTextResolver
 	termsURLResolver         TermsURLResolver
+	welcomeTextResolver      WelcomeTextResolver
 	localeResolver           LocaleResolver
 	adminNotifier            *AdminNotifier
 	adminLogin               AdminLoginApprover
@@ -141,6 +143,10 @@ func (h *BotUpdates) SetWebAppButtonTextResolver(resolver WebAppButtonTextResolv
 
 func (h *BotUpdates) SetTermsURLResolver(resolver TermsURLResolver) {
 	h.termsURLResolver = resolver
+}
+
+func (h *BotUpdates) SetWelcomeTextResolver(resolver WelcomeTextResolver) {
+	h.welcomeTextResolver = resolver
 }
 
 func (h *BotUpdates) SetLocaleResolver(resolver LocaleResolver) {
@@ -392,7 +398,13 @@ func (h *BotUpdates) resolveLocale(ctx context.Context, telegramID int64) string
 
 func (h *BotUpdates) sendStartWelcome(ctx context.Context, chatID int64, startPayload, locale string) error {
 	locale = domain.NormalizeLocale(locale)
-	text := strings.ReplaceAll(h.welcomeText, "\\n", "\n")
+	text := ""
+	if h.welcomeTextResolver != nil {
+		text = strings.TrimSpace(h.welcomeTextResolver(ctx, locale))
+	}
+	if text == "" {
+		text = strings.ReplaceAll(h.welcomeText, "\\n", "\n")
+	}
 	if text == "" {
 		text = i18n.T(locale, "bot.welcome")
 	}
@@ -447,7 +459,7 @@ func (h *BotUpdates) startMenuMarkup(ctx context.Context, startPayload, locale s
 
 func (h *BotUpdates) resolvedTerms(ctx context.Context, locale string) (url, buttonText string) {
 	if h.termsURLResolver != nil {
-		url, buttonText = h.termsURLResolver(ctx)
+		url, buttonText = h.termsURLResolver(ctx, locale)
 	}
 	url = i18n.AppendLangQuery(url, locale)
 	buttonText = strings.TrimSpace(buttonText)
@@ -475,9 +487,9 @@ func (h *BotUpdates) resolvedWebAppURL(ctx context.Context) string {
 	return ""
 }
 
-func (h *BotUpdates) resolvedButtonText(ctx context.Context) string {
+func (h *BotUpdates) resolvedButtonText(ctx context.Context, locale string) string {
 	if h.webAppButtonTextResolver != nil {
-		return strings.TrimSpace(h.webAppButtonTextResolver(ctx))
+		return strings.TrimSpace(h.webAppButtonTextResolver(ctx, locale))
 	}
 	return ""
 }
@@ -489,7 +501,7 @@ func (h *BotUpdates) openAppMarkup(ctx context.Context, startPayload string) map
 }
 
 func (h *BotUpdates) openAppButton(ctx context.Context, startPayload, locale string) map[string]any {
-	buttonText := h.resolvedButtonText(ctx)
+	buttonText := h.resolvedButtonText(ctx, locale)
 	if buttonText == "" {
 		buttonText = i18n.T(locale, "bot.openApp")
 	}

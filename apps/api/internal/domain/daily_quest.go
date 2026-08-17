@@ -44,7 +44,11 @@ const (
 type DailyQuest struct {
 	ID              uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Title           string     `gorm:"size:256;not null" json:"title"`
+	TitleEN         string     `gorm:"column:title_en;size:256;not null;default:''" json:"title_en"`
+	TitleRU         string     `gorm:"column:title_ru;size:256;not null;default:''" json:"title_ru"`
 	Description     string     `gorm:"type:text;not null;default:''" json:"description"`
+	DescriptionEN   string     `gorm:"column:description_en;type:text;not null;default:''" json:"description_en"`
+	DescriptionRU   string     `gorm:"column:description_ru;type:text;not null;default:''" json:"description_ru"`
 	SortOrder       int        `gorm:"not null;default:0" json:"sort_order"`
 	Active          bool       `gorm:"not null;default:true" json:"active"`
 	ActiveFrom      *time.Time `gorm:"type:date" json:"active_from,omitempty"`
@@ -69,11 +73,23 @@ type DailyQuest struct {
 
 func (DailyQuest) TableName() string { return "daily_quests" }
 
+func (q DailyQuest) LocalizedTitle(locale string) string {
+	return PickLocalized(locale, q.TitleEN, q.TitleRU, q.Title)
+}
+
+func (q DailyQuest) LocalizedDescription(locale string) string {
+	return PickLocalized(locale, q.DescriptionEN, q.DescriptionRU, q.Description)
+}
+
 // DailyQuestBoardSettings — singleton bonus for completing all tasks today.
 type DailyQuestBoardSettings struct {
 	ID                         int        `gorm:"primaryKey" json:"id"`
 	BonusTitle                 string     `gorm:"size:256;not null;default:'Бонус дня'" json:"bonus_title"`
+	BonusTitleEN               string     `gorm:"column:bonus_title_en;size:256;not null;default:''" json:"bonus_title_en"`
+	BonusTitleRU               string     `gorm:"column:bonus_title_ru;size:256;not null;default:''" json:"bonus_title_ru"`
 	BonusDescription           string     `gorm:"type:text;not null;default:''" json:"bonus_description"`
+	BonusDescriptionEN         string     `gorm:"column:bonus_description_en;type:text;not null;default:''" json:"bonus_description_en"`
+	BonusDescriptionRU         string     `gorm:"column:bonus_description_ru;type:text;not null;default:''" json:"bonus_description_ru"`
 	BonusRewardType            string     `gorm:"size:32;not null;default:'balance_nanoton'" json:"bonus_reward_type"`
 	BonusRewardNanoton         int64      `gorm:"not null;default:0" json:"bonus_reward_nanoton"`
 	BonusRewardCaseID          *uuid.UUID `gorm:"type:uuid" json:"bonus_reward_case_id,omitempty"`
@@ -93,6 +109,14 @@ type DailyQuestBoardSettings struct {
 
 func (DailyQuestBoardSettings) TableName() string { return "daily_quest_board_settings" }
 
+func (s DailyQuestBoardSettings) LocalizedBonusTitle(locale string) string {
+	return PickLocalized(locale, s.BonusTitleEN, s.BonusTitleRU, s.BonusTitle)
+}
+
+func (s DailyQuestBoardSettings) LocalizedBonusDescription(locale string) string {
+	return PickLocalized(locale, s.BonusDescriptionEN, s.BonusDescriptionRU, s.BonusDescription)
+}
+
 // DailyQuestPromoSlide — one slide in the cases catalog quest banner.
 type DailyQuestPromoSlide struct {
 	ID       string `json:"id"`
@@ -101,6 +125,14 @@ type DailyQuestPromoSlide struct {
 	Title    string `json:"title"`
 	Subtitle string `json:"subtitle"`
 	CTA      string `json:"cta"`
+	EyebrowEN  string `json:"eyebrow_en,omitempty"`
+	EyebrowRU  string `json:"eyebrow_ru,omitempty"`
+	TitleEN    string `json:"title_en,omitempty"`
+	TitleRU    string `json:"title_ru,omitempty"`
+	SubtitleEN string `json:"subtitle_en,omitempty"`
+	SubtitleRU string `json:"subtitle_ru,omitempty"`
+	CTAEN      string `json:"cta_en,omitempty"`
+	CTARU      string `json:"cta_ru,omitempty"`
 	// CTAColor — hex text color for the white pill CTA.
 	CTAColor string `json:"cta_color,omitempty"`
 	CTABold  bool   `json:"cta_bold,omitempty"`
@@ -119,26 +151,65 @@ type DailyQuestPromoSlide struct {
 	Active    bool   `json:"active"`
 }
 
+func (s DailyQuestPromoSlide) LocalizedEyebrow(locale string) string {
+	return PickLocalized(locale, s.EyebrowEN, s.EyebrowRU, s.Eyebrow)
+}
+
+func (s DailyQuestPromoSlide) LocalizedTitle(locale string) string {
+	return PickLocalized(locale, s.TitleEN, s.TitleRU, s.Title)
+}
+
+func (s DailyQuestPromoSlide) LocalizedSubtitle(locale string) string {
+	return PickLocalized(locale, s.SubtitleEN, s.SubtitleRU, s.Subtitle)
+}
+
+func (s DailyQuestPromoSlide) LocalizedCTA(locale string) string {
+	cta := PickLocalized(locale, s.CTAEN, s.CTARU, s.CTA)
+	if cta != "" {
+		return cta
+	}
+	if NormalizeLocale(locale) == LocaleRU {
+		return "К заданиям"
+	}
+	return "To quests"
+}
+
 // DefaultDailyQuestPromoSlides — seed content matching historical hardcoded banner.
 func DefaultDailyQuestPromoSlides() []DailyQuestPromoSlide {
 	return []DailyQuestPromoSlide{
 		{
 			ID:       "duo",
 			Tone:     "duo",
-			Eyebrow:  "Супер-акция",
-			Title:    "1+1 на кейсы",
-			Subtitle: "Открой кейс — второй бесплатно",
-			CTA:      "К заданиям",
+			Eyebrow:    "Promo",
+			EyebrowEN:  "Promo",
+			EyebrowRU:  "Супер-акция",
+			Title:      "1+1 on cases",
+			TitleEN:    "1+1 on cases",
+			TitleRU:    "1+1 на кейсы",
+			Subtitle:   "Open a case — get the second one free",
+			SubtitleEN: "Open a case — get the second one free",
+			SubtitleRU: "Открой кейс — второй бесплатно",
+			CTA:        "To quests",
+			CTAEN:      "To quests",
+			CTARU:      "К заданиям",
 			CoverURL: "/cases/covers/quest-promo-2x.webp",
 			Active:   true,
 		},
 		{
 			ID:       "open",
 			Tone:     "open",
-			Eyebrow:  "Задание дня",
-			Title:    "Открой кейс",
-			Subtitle: "Выполни цель и забери награду",
-			CTA:      "Смотреть",
+			Eyebrow:    "Daily quest",
+			EyebrowEN:  "Daily quest",
+			EyebrowRU:  "Задание дня",
+			Title:      "Open a case",
+			TitleEN:    "Open a case",
+			TitleRU:    "Открой кейс",
+			Subtitle:   "Complete the goal and claim the reward",
+			SubtitleEN: "Complete the goal and claim the reward",
+			SubtitleRU: "Выполни цель и забери награду",
+			CTA:        "View",
+			CTAEN:      "View",
+			CTARU:      "Смотреть",
 			CoverURL: "/cases/covers/quest-promo-open.webp",
 			Active:   true,
 		},

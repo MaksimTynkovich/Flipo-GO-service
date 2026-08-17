@@ -17,32 +17,46 @@ type MaintenanceState struct {
 	enabled    bool
 	acceptBets bool
 	message    string
+	messageEN  string
+	messageRU  string
 }
 
 func NewMaintenanceState() *MaintenanceState {
 	return &MaintenanceState{acceptBets: true}
 }
 
-func (s *MaintenanceState) Set(enabled bool, acceptBets bool, message string) {
+func (s *MaintenanceState) Set(enabled bool, acceptBets bool, message, messageEN, messageRU string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.enabled = enabled
 	s.acceptBets = acceptBets
 	s.message = message
+	s.messageEN = messageEN
+	s.messageRU = messageRU
 }
 
-func (s *MaintenanceState) Snapshot() (enabled bool, acceptBets bool, message string) {
+func (s *MaintenanceState) Snapshot() (enabled bool, acceptBets bool, message, messageEN, messageRU string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.enabled, s.acceptBets, s.message
+	return s.enabled, s.acceptBets, s.message, s.messageEN, s.messageRU
 }
 
 func (s *MaintenanceState) Load(settings *domain.PlatformMaintenanceSettings) {
 	if settings == nil {
-		s.Set(false, true, "")
+		s.Set(false, true, "", "", "")
 		return
 	}
-	s.Set(settings.Enabled, settings.AcceptBets, settings.Message)
+	s.Set(settings.Enabled, settings.AcceptBets, settings.Message, settings.MessageEN, settings.MessageRU)
+}
+
+func maintenanceJSON(enabled, acceptBets bool, message, messageEN, messageRU string) gin.H {
+	return gin.H{
+		"enabled":     enabled,
+		"accept_bets": acceptBets,
+		"message":     strings.TrimSpace(message),
+		"message_en":  strings.TrimSpace(messageEN),
+		"message_ru":  strings.TrimSpace(messageRU),
+	}
 }
 
 const defaultMaintenanceMessage = "Скоро вернёмся."
@@ -52,7 +66,7 @@ const defaultMaintenanceMessage = "Скоро вернёмся."
 // status endpoint stay available so staff can keep using the product.
 func MaintenanceGate(state *MaintenanceState, authSvc *auth.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		enabled, _, message := state.Snapshot()
+		enabled, _, message, messageEN, messageRU := state.Snapshot()
 		if !enabled {
 			c.Next()
 			return
@@ -65,14 +79,13 @@ func MaintenanceGate(state *MaintenanceState, authSvc *auth.Service) gin.Handler
 			c.Next()
 			return
 		}
-		if message == "" {
-			message = defaultMaintenanceMessage
+		payload := maintenanceJSON(true, false, message, messageEN, messageRU)
+		if payload["message"] == "" {
+			payload["message"] = defaultMaintenanceMessage
 		}
-		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
-			"error":   message,
-			"code":    "maintenance",
-			"message": message,
-		})
+		payload["error"] = payload["message"]
+		payload["code"] = "maintenance"
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, payload)
 	}
 }
 

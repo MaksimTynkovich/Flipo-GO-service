@@ -145,6 +145,9 @@ func (s *userRepoStub) ListReferrals(context.Context, uuid.UUID) ([]domain.User,
 }
 func (s *userRepoStub) ListReferredUsers(context.Context) ([]domain.User, error)   { return nil, nil }
 func (s *userRepoStub) ListTelegramIDs(context.Context, int, int) ([]int64, error) { return nil, nil }
+func (s *userRepoStub) ListTelegramRecipients(context.Context, int, int) ([]domain.TelegramRecipient, error) {
+	return nil, nil
+}
 func (s *userRepoStub) CountUsers(context.Context) (int64, error)                  { return 0, nil }
 
 type liquidationBrokerStub struct {

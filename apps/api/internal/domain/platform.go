@@ -185,12 +185,30 @@ type TelegramBotSettings struct {
 	SpamProtectionLevel int       `gorm:"not null;default:1" json:"spam_protection_level"`
 	WebAppURL           string    `gorm:"column:web_app_url;size:512" json:"webapp_url"`
 	WebAppButtonText    string    `gorm:"column:web_app_button_text;size:64" json:"webapp_button_text"`
+	WebAppButtonTextEN  string    `gorm:"column:web_app_button_text_en;size:64;not null;default:''" json:"webapp_button_text_en"`
+	WebAppButtonTextRU  string    `gorm:"column:web_app_button_text_ru;size:64;not null;default:''" json:"webapp_button_text_ru"`
+	WelcomeTextEN       string    `gorm:"column:welcome_text_en;type:text;not null;default:''" json:"welcome_text_en"`
+	WelcomeTextRU       string    `gorm:"column:welcome_text_ru;type:text;not null;default:''" json:"welcome_text_ru"`
 	TermsURL            string    `gorm:"column:terms_url;size:512;not null;default:''" json:"terms_url"`
 	TermsButtonText     string    `gorm:"column:terms_button_text;size:64;not null;default:''" json:"terms_button_text"`
+	TermsButtonTextEN   string    `gorm:"column:terms_button_text_en;size:64;not null;default:''" json:"terms_button_text_en"`
+	TermsButtonTextRU   string    `gorm:"column:terms_button_text_ru;size:64;not null;default:''" json:"terms_button_text_ru"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 func (TelegramBotSettings) TableName() string { return "telegram_bot_settings" }
+
+func (s TelegramBotSettings) LocalizedWelcome(locale string) string {
+	return PickLocalized(locale, s.WelcomeTextEN, s.WelcomeTextRU, "")
+}
+
+func (s TelegramBotSettings) LocalizedOpenAppButton(locale string) string {
+	return PickLocalized(locale, s.WebAppButtonTextEN, s.WebAppButtonTextRU, s.WebAppButtonText)
+}
+
+func (s TelegramBotSettings) LocalizedTermsButton(locale string) string {
+	return PickLocalized(locale, s.TermsButtonTextEN, s.TermsButtonTextRU, s.TermsButtonText)
+}
 
 // PlatformMaintenanceSettings — singleton kill-switch for site-wide maintenance mode.
 // AcceptBets=false pauses new game bets while cashouts and in-flight rounds continue.
@@ -199,10 +217,16 @@ type PlatformMaintenanceSettings struct {
 	Enabled    bool      `gorm:"not null;default:false" json:"enabled"`
 	AcceptBets bool      `gorm:"not null;default:true" json:"accept_bets"`
 	Message    string    `gorm:"type:text;not null;default:''" json:"message"`
+	MessageEN  string    `gorm:"column:message_en;type:text;not null;default:''" json:"message_en"`
+	MessageRU  string    `gorm:"column:message_ru;type:text;not null;default:''" json:"message_ru"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func (PlatformMaintenanceSettings) TableName() string { return "platform_maintenance_settings" }
+
+func (s PlatformMaintenanceSettings) LocalizedMessage(locale string) string {
+	return PickLocalized(locale, s.MessageEN, s.MessageRU, s.Message)
+}
 
 // PlatformWithdrawalSettings — silent hold for withdrawals (singleton id=1).
 // When Enabled, TON (and gift) withdrawals look like "pending" to the player.
@@ -594,6 +618,8 @@ func (PromoRedemption) TableName() string { return "promo_redemptions" }
 type TelegramBroadcast struct {
 	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Message              string     `gorm:"type:text;not null" json:"message"`
+	MessageEN            string     `gorm:"column:message_en;type:text;not null;default:''" json:"message_en"`
+	MessageRU            string     `gorm:"column:message_ru;type:text;not null;default:''" json:"message_ru"`
 	ImageURLs            []string   `gorm:"type:jsonb;serializer:json" json:"image_urls,omitempty"`
 	IncludeChannelButton bool       `gorm:"not null;default:false" json:"include_channel_button"`
 	Status               string     `gorm:"size:32;not null;default:'queued';index" json:"status"`
@@ -606,6 +632,10 @@ type TelegramBroadcast struct {
 }
 
 func (TelegramBroadcast) TableName() string { return "telegram_broadcasts" }
+
+func (b TelegramBroadcast) LocalizedMessage(locale string) string {
+	return PickLocalized(locale, b.MessageEN, b.MessageRU, b.Message)
+}
 
 // TelegramBroadcastDelivery — per-recipient result of a mass broadcast.
 type TelegramBroadcastDelivery struct {

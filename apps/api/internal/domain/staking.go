@@ -50,7 +50,11 @@ const (
 type StakingQuest struct {
 	Code                string    `gorm:"primaryKey;size:64" json:"code"`
 	Title               string    `gorm:"size:256;not null" json:"title"`
+	TitleEN             string    `gorm:"column:title_en;size:256;not null;default:''" json:"title_en"`
+	TitleRU             string    `gorm:"column:title_ru;size:256;not null;default:''" json:"title_ru"`
 	Description         string    `gorm:"type:text;not null;default:''" json:"description"`
+	DescriptionEN       string    `gorm:"column:description_en;type:text;not null;default:''" json:"description_en"`
+	DescriptionRU       string    `gorm:"column:description_ru;type:text;not null;default:''" json:"description_ru"`
 	RewardLimitNanoton  int64     `gorm:"not null" json:"reward_limit_nanoton"`
 	SortOrder           int       `gorm:"not null;default:0" json:"sort_order"`
 	Active              bool      `gorm:"not null;default:true" json:"active"`
@@ -58,6 +62,14 @@ type StakingQuest struct {
 }
 
 func (StakingQuest) TableName() string { return "staking_quests" }
+
+func (q StakingQuest) LocalizedTitle(locale string) string {
+	return PickLocalized(locale, q.TitleEN, q.TitleRU, q.Title)
+}
+
+func (q StakingQuest) LocalizedDescription(locale string) string {
+	return PickLocalized(locale, q.DescriptionEN, q.DescriptionRU, q.Description)
+}
 
 // StakingQuestCompletion — records that a user finished a quest.
 type StakingQuestCompletion struct {

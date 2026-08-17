@@ -18,19 +18,15 @@ func NewMaintenanceHandler(platform domain.PlatformRepository, state *middleware
 	return &MaintenanceHandler{platform: platform, state: state}
 }
 
-const publicDefaultMaintenanceMessage = "Скоро вернёмся."
-
 func (h *MaintenanceHandler) Status(c *gin.Context) {
 	if h.state != nil {
-		enabled, acceptBets, message := h.state.Snapshot()
-		message = strings.TrimSpace(message)
-		if enabled && message == "" {
-			message = publicDefaultMaintenanceMessage
-		}
+		enabled, acceptBets, message, messageEN, messageRU := h.state.Snapshot()
 		c.JSON(http.StatusOK, gin.H{
 			"enabled":     enabled,
 			"accept_bets": acceptBets,
-			"message":     message,
+			"message":     strings.TrimSpace(message),
+			"message_en":  strings.TrimSpace(messageEN),
+			"message_ru":  strings.TrimSpace(messageRU),
 		})
 		return
 	}
@@ -38,16 +34,20 @@ func (h *MaintenanceHandler) Status(c *gin.Context) {
 	settings, err := h.platform.GetMaintenanceSettings(c.Request.Context())
 	if err != nil {
 		// Fail open for the status probe so the app can still boot if DB hiccups.
-		c.JSON(http.StatusOK, gin.H{"enabled": false, "accept_bets": true, "message": ""})
+		c.JSON(http.StatusOK, gin.H{
+			"enabled":     false,
+			"accept_bets": true,
+			"message":     "",
+			"message_en":  "",
+			"message_ru":  "",
+		})
 		return
-	}
-	message := strings.TrimSpace(settings.Message)
-	if settings.Enabled && message == "" {
-		message = publicDefaultMaintenanceMessage
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":     settings.Enabled,
 		"accept_bets": settings.AcceptBets,
-		"message":     message,
+		"message":     strings.TrimSpace(settings.Message),
+		"message_en":  strings.TrimSpace(settings.MessageEN),
+		"message_ru":  strings.TrimSpace(settings.MessageRU),
 	})
 }

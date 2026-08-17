@@ -1,6 +1,5 @@
 package cases
 
-// 11
 import (
 	"context"
 	"crypto/rand"
@@ -199,6 +198,8 @@ type AdminCaseView struct {
 	ID              uuid.UUID        `json:"id"`
 	Slug            string           `json:"slug"`
 	Title           string           `json:"title"`
+	TitleEN         string           `json:"title_en"`
+	TitleRU         string           `json:"title_ru"`
 	ImageURL        string           `json:"image_url"`
 	AccentColor     string           `json:"accent_color"`
 	PriceNanoton    int64            `json:"price_nanoton"`
@@ -294,8 +295,9 @@ func (s *Service) Catalog(ctx context.Context, userID uuid.UUID, telegramID int6
 		return channelCached
 	}
 	freeOpenByCase := s.availableFreeOpenCaseIDs(ctx, userID)
+	locale := s.userLocale(ctx, userID)
 	for _, row := range rows {
-		view := s.toCaseView(ctx, row, true)
+		view := s.toCaseView(ctx, row, true, locale)
 		if view.RequireChannel {
 			if s.requiredChannel != "" {
 				view.RequiredChannel = s.requiredChannel
@@ -340,7 +342,7 @@ func (s *Service) Get(ctx context.Context, idOrSlug string, userID uuid.UUID, te
 	if !c.Active {
 		return nil, domain.ErrCaseUnavailable
 	}
-	view := s.toCaseView(ctx, *c, true)
+	view := s.toCaseView(ctx, *c, true, s.userLocale(ctx, userID))
 	if userID != uuid.Nil && (c.Kind == domain.CaseKindDaily || isFreeChannelCase(*c)) {
 		avail, next, _ := s.caseOpenCooldownAvailability(ctx, userID, c.ID)
 		view.DailyAvailable = &avail
@@ -883,6 +885,8 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 			ID:              row.ID,
 			Slug:            row.Slug,
 			Title:           row.Title,
+			TitleEN:         row.TitleEN,
+			TitleRU:         row.TitleRU,
 			ImageURL:        row.ImageURL,
 			AccentColor:     row.AccentColor,
 			PriceNanoton:    row.PriceNanoton,
@@ -923,6 +927,10 @@ func (s *Service) AdminList(ctx context.Context) ([]AdminCaseView, error) {
 }
 
 func (s *Service) AdminUpsertCase(ctx context.Context, c *domain.Case) error {
+	c.TitleEN, c.TitleRU, c.Title = domain.SyncLocalized(c.TitleEN, c.TitleRU, c.Title)
+	if c.Title == "" {
+		return fmt.Errorf("укажите название кейса")
+	}
 	if c.Kind == "" {
 		c.Kind = domain.CaseKindCatalog
 	}
@@ -1189,7 +1197,7 @@ func (s *Service) NotifyDailyCasesReady(ctx context.Context) (int, error) {
 		if row.TelegramID <= 0 {
 			continue
 		}
-		if err := s.userNotifier.SendCaseDailyReady(ctx, row.TelegramID, row.CaseTitle, row.CaseSlug); err != nil {
+		if err := s.userNotifier.SendCaseDailyReady(ctx, row.TelegramID, row.LocalizedTitle(row.Locale), row.CaseSlug); err != nil {
 			continue
 		}
 		if err := s.cases.MarkCaseCooldownReadyNotified(ctx, row.UserID, row.CaseID, now); err != nil {
@@ -1788,11 +1796,11 @@ func caseOpenCooldownElapsed(lastOpenAt *time.Time, now time.Time) bool {
 	return !now.UTC().Before(lastOpenAt.UTC().Add(caseOpenCooldown))
 }
 
-func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) CaseView {
+func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool, locale string) CaseView {
 	view := CaseView{
 		ID:              c.ID,
 		Slug:            c.Slug,
-		Title:           c.Title,
+		Title:           c.LocalizedTitle(locale),
 		ImageURL:        c.ImageURL,
 		AccentColor:     c.AccentColor,
 		PriceNanoton:    c.PriceNanoton,
@@ -1820,6 +1828,17 @@ func (s *Service) toCaseView(ctx context.Context, c domain.Case, withLoot bool) 
 		}
 	}
 	return view
+}
+
+func (s *Service) userLocale(ctx context.Context, userID uuid.UUID) string {
+	if s.users == nil || userID == uuid.Nil {
+		return domain.DefaultLocale
+	}
+	u, err := s.users.FindByID(ctx, userID)
+	if err != nil || u == nil {
+		return domain.DefaultLocale
+	}
+	return u.LocalizedLocale()
 }
 
 // availableFreeOpenCaseIDs returns case IDs with at least one unused quest entitlement.
@@ -2086,7 +2105,7 @@ func (s *Service) ConfirmShare(ctx context.Context, userID uuid.UUID, telegramID
 		}
 		return nil, err
 	}
-	view := s.toCaseView(ctx, *c, true)
+	view := s.toCaseView(ctx, *c, true, s.userLocale(ctx, userID))
 	if c.Kind == domain.CaseKindDaily || isFreeChannelCase(*c) {
 		avail, next, _ := s.caseOpenCooldownAvailability(ctx, userID, c.ID)
 		view.DailyAvailable = &avail

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Upload } from "lucide-react";
 import { GiftPickerModal } from "@/components/admin/GiftPickerModal";
 import { AdminUserPicker } from "@/components/admin/AdminUserPicker";
-import { AdminPage, AdminButton, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminPage, AdminButton, AdminLocalizedField, AdminToolbar } from "@/components/admin/admin-ui";
 import { AdminIntField, AdminTonField } from "@/components/admin/AdminInputs";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -109,14 +109,24 @@ function PromoColorPicker({
   );
 }
 
+const QUEST_INPUT = "w-full rounded-lg border border-border bg-background px-3 py-2";
+
 const DEFAULT_PROMO_SLIDES: DailyQuestPromoSlide[] = [
   {
     id: "duo",
     tone: "duo",
-    eyebrow: "Супер-акция",
-    title: "1+1 на кейсы",
-    subtitle: "Открой кейс — второй бесплатно",
-    cta: "К заданиям",
+    eyebrow: "Promo",
+    eyebrow_en: "Promo",
+    eyebrow_ru: "Супер-акция",
+    title: "1+1 on cases",
+    title_en: "1+1 on cases",
+    title_ru: "1+1 на кейсы",
+    subtitle: "Open a case — get the second one free",
+    subtitle_en: "Open a case — get the second one free",
+    subtitle_ru: "Открой кейс — второй бесплатно",
+    cta: "To quests",
+    cta_en: "To quests",
+    cta_ru: "К заданиям",
     cta_color: "#7c5cff",
     cta_bold: false,
     cover_url: "/cases/covers/quest-promo-2x.webp",
@@ -125,10 +135,18 @@ const DEFAULT_PROMO_SLIDES: DailyQuestPromoSlide[] = [
   {
     id: "open",
     tone: "open",
-    eyebrow: "Задание дня",
-    title: "Открой кейс",
-    subtitle: "Выполни цель и забери награду",
-    cta: "Смотреть",
+    eyebrow: "Daily quest",
+    eyebrow_en: "Daily quest",
+    eyebrow_ru: "Задание дня",
+    title: "Open a case",
+    title_en: "Open a case",
+    title_ru: "Открой кейс",
+    subtitle: "Complete the goal and claim the reward",
+    subtitle_en: "Complete the goal and claim the reward",
+    subtitle_ru: "Выполни цель и забери награду",
+    cta: "View",
+    cta_en: "View",
+    cta_ru: "Смотреть",
     cta_color: "#0f9f7a",
     cta_bold: false,
     cover_url: "/cases/covers/quest-promo-open.webp",
@@ -138,6 +156,8 @@ const DEFAULT_PROMO_SLIDES: DailyQuestPromoSlide[] = [
 
 const EMPTY_QUEST: AdminDailyQuest = {
   title: "",
+  title_en: "",
+  title_ru: "",
   description: "",
   sort_order: 10,
   active: true,
@@ -155,7 +175,9 @@ const EMPTY_QUEST: AdminDailyQuest = {
 };
 
 const EMPTY_BOARD: AdminDailyQuestBoard = {
-  bonus_title: "Бонус дня",
+  bonus_title: "Bonus of the day",
+  bonus_title_en: "Bonus of the day",
+  bonus_title_ru: "Бонус дня",
   bonus_description: "",
   bonus_reward_type: "balance_nanoton",
   bonus_reward_nanoton: 1_000_000_000,
@@ -224,7 +246,7 @@ export default function QuestsSection() {
   const [uploadingBonusCardImage, setUploadingBonusCardImage] = useState(false);
 
   const caseOptions = useMemo(
-    () => cases.filter((c) => c.active !== false).sort((a, b) => a.title.localeCompare(b.title)),
+    () => cases.filter((c) => c.active !== false).sort((a, b) => (a.title_ru || a.title).localeCompare(b.title_ru || b.title)),
     [cases],
   );
 
@@ -239,6 +261,8 @@ export default function QuestsSection() {
       setQuests(items);
       setBoard({
         ...boardRes,
+        bonus_title_en: boardRes.bonus_title_en || boardRes.bonus_title || "",
+        bonus_title_ru: boardRes.bonus_title_ru || boardRes.bonus_title || "",
         promo_slides:
           boardRes.promo_slides && boardRes.promo_slides.length > 0
             ? boardRes.promo_slides
@@ -280,7 +304,7 @@ export default function QuestsSection() {
   }
 
   async function saveQuest() {
-    if (!draft.title.trim()) {
+    if (!(draft.title_en || "").trim() && !(draft.title_ru || "").trim() && !draft.title.trim()) {
       showToast({ variant: "error", title: "Укажите название" });
       return;
     }
@@ -292,7 +316,9 @@ export default function QuestsSection() {
     try {
       const payload: AdminDailyQuest = {
         ...draft,
-        title: draft.title.trim(),
+        title: (draft.title_en || draft.title_ru || draft.title).trim(),
+        title_en: (draft.title_en || "").trim(),
+        title_ru: (draft.title_ru || "").trim(),
         description: "",
         active_from: draft.active_from || null,
         active_to: draft.active_to || null,
@@ -342,7 +368,9 @@ export default function QuestsSection() {
     try {
       const payload: AdminDailyQuestBoard = {
         ...board,
-        bonus_title: board.bonus_title.trim() || "Бонус дня",
+        bonus_title: (board.bonus_title_en || board.bonus_title_ru || board.bonus_title).trim() || "Bonus of the day",
+        bonus_title_en: (board.bonus_title_en || "").trim(),
+        bonus_title_ru: (board.bonus_title_ru || "").trim(),
         bonus_description: "",
         bonus_reward_case_id:
           board.bonus_reward_type === "free_case_open" ? board.bonus_reward_case_id || null : null,
@@ -449,9 +477,17 @@ export default function QuestsSection() {
         id: `slide-${index + 1}`,
         tone: "open",
         eyebrow: "",
+        eyebrow_en: "",
+        eyebrow_ru: "",
         title: "",
+        title_en: "",
+        title_ru: "",
         subtitle: "",
-        cta: "К заданиям",
+        subtitle_en: "",
+        subtitle_ru: "",
+        cta: "To quests",
+        cta_en: "To quests",
+        cta_ru: "К заданиям",
         cta_color: "#0f9f7a",
         cta_bold: false,
         cover_url: "",
@@ -546,9 +582,17 @@ export default function QuestsSection() {
           id: `slide-${Date.now()}`,
           tone: "open",
           eyebrow: "",
+          eyebrow_en: "",
+          eyebrow_ru: "",
           title: "",
+          title_en: "",
+          title_ru: "",
           subtitle: "",
-          cta: "К заданиям",
+          subtitle_en: "",
+          subtitle_ru: "",
+          cta: "To quests",
+          cta_en: "To quests",
+          cta_ru: "К заданиям",
           cta_color: "#0f9f7a",
           cta_bold: false,
           cover_url: "",
@@ -569,7 +613,7 @@ export default function QuestsSection() {
     if (q.reward_type === "none") return "Без награды";
     if (q.reward_type === "free_case_open") {
       const c = caseOptions.find((x) => x.id === q.reward_case_id);
-      return c ? `Кейс: ${c.title}` : "Кейс";
+      return c ? `Кейс: ${c.title_ru || c.title}` : "Кейс";
     }
     if (q.reward_type === "gift") {
       return `${giftRewardLabel(q.reward_gift_name, q.reward_collection_slug, q.reward_model_name)} (${formatTON(q.reward_nanoton)} TON)`;
@@ -594,7 +638,8 @@ export default function QuestsSection() {
     if (q.objective_type === "roulette_color_streak") {
       return `Рулетка серия цвета ×${q.objective_target}`;
     }
-    const caseTitle = caseOptions.find((x) => x.id === q.objective_case_id)?.title;
+    const found = caseOptions.find((x) => x.id === q.objective_case_id);
+    const caseTitle = found ? found.title_ru || found.title : undefined;
     if (q.objective_type === "open_cases_spend") {
       const amount = `${formatTON(q.objective_target)} TON`;
       return caseTitle ? `Кейс «${caseTitle}» ${amount}` : `Кейсы ${amount}`;
@@ -640,14 +685,17 @@ export default function QuestsSection() {
       <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
         <h3 className="text-sm font-semibold">Бонус за все задания</h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-sm sm:col-span-2">
-            <span className="text-muted">Заголовок</span>
-            <input
-              className="w-full rounded-lg border border-border bg-background px-3 py-2"
-              value={board.bonus_title}
-              onChange={(e) => setBoard({ ...board, bonus_title: e.target.value })}
-            />
-          </label>
+          <AdminLocalizedField
+            className="sm:col-span-2"
+            label="Заголовок"
+            en={board.bonus_title_en || ""}
+            ru={board.bonus_title_ru || board.bonus_title}
+            onEnChange={(bonus_title_en) => setBoard({ ...board, bonus_title_en, bonus_title: bonus_title_en || board.bonus_title_ru || board.bonus_title })}
+            onRuChange={(bonus_title_ru) => setBoard({ ...board, bonus_title_ru })}
+            controlClassName={QUEST_INPUT}
+            enPlaceholder="Bonus of the day"
+            ruPlaceholder="Бонус дня"
+          />
           <label className="space-y-1 text-sm">
             <span className="text-muted">Тип награды</span>
             <select
@@ -680,7 +728,7 @@ export default function QuestsSection() {
                 <option value="">Выберите кейс</option>
                 {caseOptions.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.title}
+                    {c.title_ru || c.title}
                   </option>
                 ))}
               </select>
@@ -825,15 +873,17 @@ export default function QuestsSection() {
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm sm:col-span-2">
-                <span className="text-muted">Надзаголовок</span>
-                <input
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
-                  value={slide.eyebrow}
-                  onChange={(e) => updatePromoSlide(index, { eyebrow: e.target.value })}
-                  placeholder="1 + 1"
-                />
-              </label>
+              <AdminLocalizedField
+                className="sm:col-span-2"
+                label="Надзаголовок"
+                en={slide.eyebrow_en || ""}
+                ru={slide.eyebrow_ru || slide.eyebrow}
+                onEnChange={(eyebrow_en) => updatePromoSlide(index, { eyebrow_en, eyebrow: eyebrow_en || slide.eyebrow_ru || slide.eyebrow })}
+                onRuChange={(eyebrow_ru) => updatePromoSlide(index, { eyebrow_ru })}
+                controlClassName={QUEST_INPUT}
+                enPlaceholder="1 + 1"
+                ruPlaceholder="1 + 1"
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -849,15 +899,18 @@ export default function QuestsSection() {
                 onChange={(color) => updatePromoSlide(index, { eyebrow_color: color })}
               />
 
-              <label className="space-y-1 text-sm sm:col-span-2">
-                <span className="text-muted">Заголовок</span>
-                <textarea
-                  className="min-h-[4.5rem] w-full rounded-lg border border-border bg-background px-3 py-2"
-                  value={slide.title}
-                  onChange={(e) => updatePromoSlide(index, { title: e.target.value })}
-                  placeholder={"Кейс в **подарок**"}
-                />
-              </label>
+              <AdminLocalizedField
+                className="sm:col-span-2"
+                label="Заголовок"
+                en={slide.title_en || ""}
+                ru={slide.title_ru || slide.title}
+                onEnChange={(title_en) => updatePromoSlide(index, { title_en, title: title_en || slide.title_ru || slide.title })}
+                onRuChange={(title_ru) => updatePromoSlide(index, { title_ru })}
+                multiline
+                controlClassName={QUEST_INPUT}
+                enPlaceholder={"Case as a **gift**"}
+                ruPlaceholder={"Кейс в **подарок**"}
+              />
               <label className="space-y-1 text-sm">
                 <span className="text-muted">Размер заголовка</span>
                 <select
@@ -891,15 +944,17 @@ export default function QuestsSection() {
                 onChange={(color) => updatePromoSlide(index, { accent_color: color })}
               />
 
-              <label className="space-y-1 text-sm sm:col-span-2">
-                <span className="text-muted">Подзаголовок</span>
-                <input
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
-                  value={slide.subtitle}
-                  onChange={(e) => updatePromoSlide(index, { subtitle: e.target.value })}
-                  placeholder="Второй открывается бесплатно"
-                />
-              </label>
+              <AdminLocalizedField
+                className="sm:col-span-2"
+                label="Подзаголовок"
+                en={slide.subtitle_en || ""}
+                ru={slide.subtitle_ru || slide.subtitle}
+                onEnChange={(subtitle_en) => updatePromoSlide(index, { subtitle_en, subtitle: subtitle_en || slide.subtitle_ru || slide.subtitle })}
+                onRuChange={(subtitle_ru) => updatePromoSlide(index, { subtitle_ru })}
+                controlClassName={QUEST_INPUT}
+                enPlaceholder="The second open is free"
+                ruPlaceholder="Второй открывается бесплатно"
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -915,15 +970,17 @@ export default function QuestsSection() {
                 onChange={(color) => updatePromoSlide(index, { subtitle_color: color })}
               />
 
-              <label className="space-y-1 text-sm">
-                <span className="text-muted">Текст кнопки</span>
-                <input
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2"
-                  value={slide.cta}
-                  onChange={(e) => updatePromoSlide(index, { cta: e.target.value })}
-                  placeholder="Участвовать"
-                />
-              </label>
+              <AdminLocalizedField
+                className="sm:col-span-2"
+                label="Текст кнопки"
+                en={slide.cta_en || ""}
+                ru={slide.cta_ru || slide.cta}
+                onEnChange={(cta_en) => updatePromoSlide(index, { cta_en, cta: cta_en || slide.cta_ru || slide.cta })}
+                onRuChange={(cta_ru) => updatePromoSlide(index, { cta_ru })}
+                controlClassName={QUEST_INPUT}
+                enPlaceholder="Join"
+                ruPlaceholder="Участвовать"
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -1005,17 +1062,25 @@ export default function QuestsSection() {
                   onClick={() =>
                     updatePromoSlide(index, {
                       eyebrow: "1 + 1",
+                      eyebrow_en: "1 + 1",
+                      eyebrow_ru: "1 + 1",
                       eyebrow_color: "#ff4eb1",
                       eyebrow_bold: true,
-                      title: "Кейс в **подарок**",
+                      title: "Case as a **gift**",
+                      title_en: "Case as a **gift**",
+                      title_ru: "Кейс в **подарок**",
                       title_color: "#ffffff",
                       title_bold: true,
                       title_size: "lg",
                       accent_color: "#ff4eb1",
-                      subtitle: "Второй открывается бесплатно",
+                      subtitle: "The second open is free",
+                      subtitle_en: "The second open is free",
+                      subtitle_ru: "Второй открывается бесплатно",
                       subtitle_color: "#9ec9ff",
                       subtitle_bold: false,
-                      cta: "Участвовать",
+                      cta: "Join",
+                      cta_en: "Join",
+                      cta_ru: "Участвовать",
                       cta_color: "#3390ec",
                       cta_bold: true,
                       tone: "duo",
@@ -1044,14 +1109,17 @@ export default function QuestsSection() {
           {draft.id ? "Редактирование задания" : "Новое задание"}
         </h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-sm sm:col-span-2">
-            <span className="text-muted">Название</span>
-            <input
-              className="w-full rounded-lg border border-border bg-background px-3 py-2"
-              value={draft.title}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-            />
-          </label>
+          <AdminLocalizedField
+            className="sm:col-span-2"
+            label="Название"
+            en={draft.title_en || ""}
+            ru={draft.title_ru || draft.title}
+            onEnChange={(title_en) => setDraft({ ...draft, title_en, title: title_en || draft.title_ru || draft.title })}
+            onRuChange={(title_ru) => setDraft({ ...draft, title_ru })}
+            controlClassName={QUEST_INPUT}
+            enPlaceholder="Open a case"
+            ruPlaceholder="Открой кейс"
+          />
           <label className="space-y-1 text-sm">
             <span className="text-muted">Цель</span>
             <select
@@ -1163,7 +1231,7 @@ export default function QuestsSection() {
                 <option value="">Любой платный кейс</option>
                 {caseOptions.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.title}
+                    {c.title_ru || c.title}
                   </option>
                 ))}
               </select>
@@ -1200,7 +1268,7 @@ export default function QuestsSection() {
                 <option value="">Выберите кейс</option>
                 {caseOptions.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.title}
+                    {c.title_ru || c.title}
                   </option>
                 ))}
               </select>
@@ -1345,7 +1413,7 @@ export default function QuestsSection() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">
                   {q.active ? "" : "[выкл] "}
-                  {q.title}
+                  {q.title_ru || q.title_en || q.title}
                 </p>
                 <p className="text-xs text-muted">
                   {objectiveLabel(q)} → {rewardLabel(q)}

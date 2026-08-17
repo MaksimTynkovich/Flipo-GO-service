@@ -72,6 +72,12 @@ func (s *Service) ListQuests(ctx context.Context, userID uuid.UUID) (*QuestsResp
 		}
 	}
 	var maxLimit int64 = baseLimit
+	locale := domain.DefaultLocale
+	if s.users != nil && userID != uuid.Nil {
+		if u, err := s.users.FindByID(ctx, userID); err == nil && u != nil {
+			locale = u.LocalizedLocale()
+		}
+	}
 	for _, q := range quests {
 		maxLimit += q.RewardLimitNanoton
 		current, target := s.questProgress(ctx, userID, q.Code)
@@ -90,8 +96,8 @@ func (s *Service) ListQuests(ctx context.Context, userID uuid.UUID) (*QuestsResp
 		}
 		views = append(views, QuestProgressView{
 			Code:               q.Code,
-			Title:              q.Title,
-			Description:        q.Description,
+			Title:              q.LocalizedTitle(locale),
+			Description:        q.LocalizedDescription(locale),
 			RewardLimitNanoton: q.RewardLimitNanoton,
 			Completed:          done[q.Code],
 			ProgressCurrent:    current,
