@@ -122,6 +122,27 @@ func (r *TonTransferRepo) HasActiveWithdrawal(ctx context.Context, userID uuid.U
 	return count > 0, err
 }
 
+func (r *TonTransferRepo) SumSuccessfulWithdrawalsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.TonTransfer{}).
+		Select("COALESCE(SUM(amount_nanoton - fee_nanoton), 0)").
+		Where("user_id = ? AND direction = ? AND created_at >= ? AND status IN ?",
+			userID,
+			domain.TonDirectionWithdraw,
+			since,
+			[]domain.TonTransferStatus{
+				domain.TonStatusPendingReview,
+				domain.TonStatusApproved,
+				domain.TonStatusQueued,
+				domain.TonStatusBroadcasting,
+				domain.TonStatusCompleted,
+			},
+		).
+		Scan(&total).Error
+	return total, err
+}
+
 func (r *TonTransferRepo) Create(ctx context.Context, transfer *domain.TonTransfer) error {
 	now := time.Now().UTC()
 	if transfer.ID == uuid.Nil {

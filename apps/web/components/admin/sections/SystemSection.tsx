@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AdminPage, AdminButton, AdminField, AdminLocalizedField, AdminPanel, AdminToolbar } from "@/components/admin/admin-ui";
+import { AdminTonField } from "@/components/admin/AdminInputs";
 import { loadCached, primeCache, readCached, runAfterFirstPaint } from "@/lib/admin-cache";
 import { useToast } from "@/components/providers/ToastProvider";
 import {
@@ -27,6 +28,7 @@ const DEFAULT_SETTINGS: AdminMaintenanceSettings = {
 const DEFAULT_WITHDRAWAL: AdminWithdrawalSettings = {
   enabled: false,
   gifts_manual: false,
+  auto_withdraw_daily_limit_nanoton: 0,
 };
 
 const DEFAULT_DEPOSIT: AdminDepositSettings = {
@@ -70,6 +72,7 @@ export default function SystemSection() {
         ...withdrawals,
         gifts_manual: Boolean(withdrawals.gifts_manual),
         enabled: Boolean(withdrawals.enabled),
+        auto_withdraw_daily_limit_nanoton: Math.max(0, Number(withdrawals.auto_withdraw_daily_limit_nanoton || 0)),
       };
       const nextDeposit = {
         ...DEFAULT_DEPOSIT,
@@ -108,6 +111,7 @@ export default function SystemSection() {
     ...(withdrawalSettings ?? {}),
     gifts_manual: Boolean(withdrawalSettings?.gifts_manual),
     enabled: Boolean(withdrawalSettings?.enabled),
+    auto_withdraw_daily_limit_nanoton: Math.max(0, Number(withdrawalSettings?.auto_withdraw_daily_limit_nanoton || 0)),
   };
   const depositForm: AdminDepositSettings = {
     ...DEFAULT_DEPOSIT,
@@ -393,6 +397,19 @@ export default function SystemSection() {
               Новые выводы TON уходят на ручную проверку. Подарки тоже ставятся в очередь.
             </p>
 
+            <AdminTonField
+              label="Суточный авто-лимит TON"
+              hint="До этого суммарного лимита в сутки вывод TON идёт автоматически. Если пользователь превышает лимит, заявка уходит на ручное ревью."
+              valueNanoton={withdrawalForm.auto_withdraw_daily_limit_nanoton || 0}
+              onChangeNanoton={(auto_withdraw_daily_limit_nanoton) =>
+                setWithdrawalSettings({
+                  ...withdrawalForm,
+                  auto_withdraw_daily_limit_nanoton: Math.max(0, auto_withdraw_daily_limit_nanoton),
+                })
+              }
+              decimals={3}
+            />
+
             <AdminToolbar>
               <AdminButton
                 variant={withdrawalForm.enabled || withdrawalForm.gifts_manual ? "danger" : "primary"}
@@ -403,6 +420,7 @@ export default function SystemSection() {
                     await updateAdminWithdrawalSettings({
                       enabled: withdrawalForm.enabled,
                       gifts_manual: withdrawalForm.gifts_manual,
+                      auto_withdraw_daily_limit_nanoton: withdrawalForm.auto_withdraw_daily_limit_nanoton || 0,
                     });
                     cacheSnapshot(form, withdrawalForm);
                     showToast({
@@ -424,11 +442,14 @@ export default function SystemSection() {
               </AdminButton>
             </AdminToolbar>
 
-            {withdrawalForm.gifts_manual || withdrawalForm.enabled ? (
+            {withdrawalForm.gifts_manual || withdrawalForm.enabled || (withdrawalForm.auto_withdraw_daily_limit_nanoton || 0) > 0 ? (
               <p className="text-xs text-danger">
                 {[
                   withdrawalForm.gifts_manual ? "подарки — ручная очередь" : null,
                   withdrawalForm.enabled ? "TON — тихий холд" : null,
+                  (withdrawalForm.auto_withdraw_daily_limit_nanoton || 0) > 0
+                    ? `TON авто до ${(withdrawalForm.auto_withdraw_daily_limit_nanoton || 0) / 1_000_000_000} в сутки`
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

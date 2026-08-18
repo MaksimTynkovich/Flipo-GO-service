@@ -23,6 +23,10 @@ type tonTransferRepoStub struct {
 	updatedTransferIDs     []uuid.UUID
 	updatedStatuses        []domain.TonTransferStatus
 	listByStatusShouldFail bool
+	sumWithdrawalsSince    int64
+	createStatus           domain.TonTransferStatus
+	createReviewReason     *string
+	createRiskFlags        []string
 }
 
 func (s *tonTransferRepoStub) FindByID(context.Context, uuid.UUID) (*domain.TonTransfer, error) {
@@ -58,14 +62,30 @@ func (s *tonTransferRepoStub) ListPendingDeposits(_ context.Context, _ time.Time
 func (s *tonTransferRepoStub) HasActiveWithdrawal(context.Context, uuid.UUID) (bool, error) {
 	return false, nil
 }
+func (s *tonTransferRepoStub) SumSuccessfulWithdrawalsSince(context.Context, uuid.UUID, time.Time) (int64, error) {
+	return s.sumWithdrawalsSince, nil
+}
 func (s *tonTransferRepoStub) Create(context.Context, *domain.TonTransfer) error { return nil }
 func (s *tonTransferRepoStub) Update(_ context.Context, transfer *domain.TonTransfer) error {
 	s.updatedTransferIDs = append(s.updatedTransferIDs, transfer.ID)
 	s.updatedStatuses = append(s.updatedStatuses, transfer.Status)
 	return nil
 }
-func (s *tonTransferRepoStub) CreateWithdrawalAtomic(context.Context, uuid.UUID, int64, int64, string, string, domain.TonTransferStatus, int, []string, *string) (*domain.TonTransfer, int64, error) {
-	return nil, 0, errors.New("not implemented")
+func (s *tonTransferRepoStub) CreateWithdrawalAtomic(_ context.Context, userID uuid.UUID, amountNanoton, feeNanoton int64, walletAddress, _ string, initialStatus domain.TonTransferStatus, _ int, riskFlags []string, reviewReason *string) (*domain.TonTransfer, int64, error) {
+	s.createStatus = initialStatus
+	s.createRiskFlags = append([]string{}, riskFlags...)
+	s.createReviewReason = reviewReason
+	return &domain.TonTransfer{
+		ID:            uuid.New(),
+		UserID:        userID,
+		Direction:     domain.TonDirectionWithdraw,
+		Status:        initialStatus,
+		AmountNanoton: amountNanoton,
+		FeeNanoton:    feeNanoton,
+		WalletAddress: walletAddress,
+		ReviewReason:  reviewReason,
+		RiskFlags:     append([]string{}, riskFlags...),
+	}, 0, nil
 }
 func (s *tonTransferRepoStub) CompleteDepositAtomic(_ context.Context, transferID uuid.UUID, txHash string, txLT int64) (int64, bool, error) {
 	s.completeCalls++
@@ -95,6 +115,10 @@ func (s *tonTransferRepoStub) RejectWithdrawalAtomic(context.Context, uuid.UUID,
 
 type walletUserRepoStub struct {
 	user *domain.User
+}
+
+type walletPlatformRepoStub struct {
+	withdrawal *domain.PlatformWithdrawalSettings
 }
 
 func (s *walletUserRepoStub) FindByID(context.Context, uuid.UUID) (*domain.User, error) {
@@ -169,9 +193,132 @@ func (s *walletUserRepoStub) ListTelegramRecipients(context.Context, int, int) (
 }
 func (s *walletUserRepoStub) CountUsers(context.Context) (int64, error) { return 0, nil }
 
+func (s *walletPlatformRepoStub) GetGameConfig(context.Context, domain.GameType) (*domain.GameConfig, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ListGameConfigs(context.Context) ([]domain.GameConfig, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpsertGameConfig(context.Context, *domain.GameConfig) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetRiskSettings(context.Context) (*domain.PlatformRiskSettings, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpdateRiskSettings(context.Context, *domain.PlatformRiskSettings) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ApplyRouletteBankDelta(context.Context, int64) (*domain.PlatformRiskSettings, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ApplyCrashBankDelta(context.Context, int64) (*domain.PlatformRiskSettings, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetActiveSeed(context.Context, domain.GameType) (*domain.ProvablyFairSeedSession, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) CreateSeedSession(context.Context, *domain.ProvablyFairSeedSession) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) DeactivateSeeds(context.Context, domain.GameType) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ListSeedHistory(context.Context, domain.GameType, int) ([]domain.ProvablyFairSeedSession, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ListPromoCodes(context.Context) ([]domain.PromoCode, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpsertPromoCode(context.Context, *domain.PromoCode) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) DeletePromoCode(context.Context, string) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetBotSettings(context.Context) (*domain.TelegramBotSettings, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpdateBotSettings(context.Context, *domain.TelegramBotSettings) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetMaintenanceSettings(context.Context) (*domain.PlatformMaintenanceSettings, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpdateMaintenanceSettings(context.Context, *domain.PlatformMaintenanceSettings) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetWithdrawalSettings(context.Context) (*domain.PlatformWithdrawalSettings, error) {
+	return s.withdrawal, nil
+}
+func (s *walletPlatformRepoStub) UpdateWithdrawalSettings(context.Context, *domain.PlatformWithdrawalSettings) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetDepositSettings(context.Context) (*domain.PlatformDepositSettings, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpdateDepositSettings(context.Context, *domain.PlatformDepositSettings) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetYieldSettings(context.Context) (*domain.PlatformYieldSettings, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpdateYieldSettings(context.Context, *domain.PlatformYieldSettings) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetPromoCode(context.Context, string) (*domain.PromoCode, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) HasRedeemedPromoCode(context.Context, uuid.UUID, string) (bool, error) {
+	return false, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) CreateRedemption(context.Context, *domain.PromoRedemption) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) DeleteRedemption(context.Context, uuid.UUID) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) IncrementPromoUsed(context.Context, string) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ClaimPromoRedemption(context.Context, uuid.UUID, string, int64) (*domain.PromoRedemption, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ReleasePromoRedemption(context.Context, uuid.UUID, string) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) CreateBroadcast(context.Context, *domain.TelegramBroadcast) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) GetBroadcast(context.Context, uuid.UUID) (*domain.TelegramBroadcast, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpdateBroadcast(context.Context, *domain.TelegramBroadcast) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ListBroadcasts(context.Context, int) ([]domain.TelegramBroadcast, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ListQueuedBroadcasts(context.Context, int) ([]domain.TelegramBroadcast, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) UpsertBroadcastDelivery(context.Context, *domain.TelegramBroadcastDelivery) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ListBroadcastDeliveries(context.Context, uuid.UUID, string, int, int) ([]domain.TelegramBroadcastDelivery, int64, error) {
+	return nil, 0, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) CreateSweep(context.Context, *domain.TreasurySweep) error {
+	return errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) ListSweeps(context.Context, int) ([]domain.TreasurySweep, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *walletPlatformRepoStub) EnsureDefaults(context.Context) error { return nil }
+
 var (
 	_ domain.TonTransferRepository = (*tonTransferRepoStub)(nil)
 	_ domain.UserRepository        = (*walletUserRepoStub)(nil)
+	_ domain.PlatformRepository    = (*walletPlatformRepoStub)(nil)
 )
 
 func TestProcessPendingDepositsUsesDedicatedPendingQuery(t *testing.T) {
@@ -236,5 +383,78 @@ func TestProcessPendingDepositsUsesDedicatedPendingQuery(t *testing.T) {
 	}
 	if repo.completedTxHash != "chain-hash" || repo.completedTxLT != 123456 {
 		t.Fatalf("unexpected chain confirmation %q / %d", repo.completedTxHash, repo.completedTxLT)
+	}
+}
+
+func TestRequestWithdrawalDailyLimitTriggersReview(t *testing.T) {
+	userID := uuid.New()
+	repo := &tonTransferRepoStub{sumWithdrawalsSince: 1_500_000_000}
+	users := &walletUserRepoStub{
+		user: &domain.User{
+			ID:             userID,
+			TelegramID:     1,
+			TonWallet:      "wallet",
+			BettingBalance: 10_000_000_000,
+		},
+	}
+	svc := NewService(users, repo, ton.NewClient("", "", "", true, "", "", ""), Config{
+		MinWithdrawNanoton: 100_000_000,
+		WithdrawFeeNanoton: 10_000_000,
+	})
+	svc.SetPlatform(&walletPlatformRepoStub{
+		withdrawal: &domain.PlatformWithdrawalSettings{
+			AutoWithdrawDailyLimitNanoton: 2_000_000_000,
+		},
+	})
+
+	transfer, _, err := svc.RequestWithdrawal(context.Background(), userID, 700_000_000, "idem-1")
+	if err != nil {
+		t.Fatalf("RequestWithdrawal: %v", err)
+	}
+	if transfer.Status != string(domain.TonStatusPendingReview) {
+		t.Fatalf("status=%s want %s", transfer.Status, domain.TonStatusPendingReview)
+	}
+	if repo.createReviewReason == nil || *repo.createReviewReason == "" {
+		t.Fatal("expected review reason for daily limit")
+	}
+	found := false
+	for _, flag := range repo.createRiskFlags {
+		if flag == "daily_auto_withdraw_limit_exceeded" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected daily limit flag, got %v", repo.createRiskFlags)
+	}
+}
+
+func TestRequestWithdrawalDailyLimitAllowsWithinThreshold(t *testing.T) {
+	userID := uuid.New()
+	repo := &tonTransferRepoStub{sumWithdrawalsSince: 1_000_000_000}
+	users := &walletUserRepoStub{
+		user: &domain.User{
+			ID:             userID,
+			TelegramID:     1,
+			TonWallet:      "wallet",
+			BettingBalance: 10_000_000_000,
+		},
+	}
+	svc := NewService(users, repo, ton.NewClient("", "", "", true, "", "", ""), Config{
+		MinWithdrawNanoton: 100_000_000,
+		WithdrawFeeNanoton: 10_000_000,
+	})
+	svc.SetPlatform(&walletPlatformRepoStub{
+		withdrawal: &domain.PlatformWithdrawalSettings{
+			AutoWithdrawDailyLimitNanoton: 2_000_000_000,
+		},
+	})
+
+	transfer, _, err := svc.RequestWithdrawal(context.Background(), userID, 500_000_000, "idem-2")
+	if err != nil {
+		t.Fatalf("RequestWithdrawal: %v", err)
+	}
+	if transfer.Status != string(domain.TonStatusQueued) {
+		t.Fatalf("status=%s want %s", transfer.Status, domain.TonStatusQueued)
 	}
 }

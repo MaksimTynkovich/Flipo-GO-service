@@ -153,6 +153,7 @@ func main() {
 		DepositTTL:         time.Duration(cfg.TonDepositTTLMinutes) * time.Minute,
 		ChainDevMode:       cfg.TonChainDevMode,
 	})
+	walletSvc.SetPlatform(platformRepo)
 	riskSvc := risk.NewService(platformRepo, gameRepo, userRepo)
 	walletSvc.SetRiskEvaluator(risk.WalletEvaluator{Service: riskSvc})
 	walletSvc.SetAnalytics(analyticsSvc)

@@ -1298,6 +1298,7 @@ export type AdminWithdrawalSettings = {
   id?: number;
   enabled: boolean;
   gifts_manual: boolean;
+  auto_withdraw_daily_limit_nanoton?: number;
   updated_at?: string;
 };
 
@@ -2415,7 +2416,7 @@ export async function getAdminWithdrawalSettings() {
 }
 
 export async function updateAdminWithdrawalSettings(
-  settings: Pick<AdminWithdrawalSettings, "enabled" | "gifts_manual">,
+  settings: Pick<AdminWithdrawalSettings, "enabled" | "gifts_manual" | "auto_withdraw_daily_limit_nanoton">,
 ) {
   return api<{ ok: boolean }>("/api/v1/admin/withdrawals/settings", {
     method: "PATCH",

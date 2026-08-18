@@ -711,12 +711,16 @@ func (s *Service) GetWithdrawalSettings(ctx context.Context) (*domain.PlatformWi
 }
 
 func (s *Service) UpdateWithdrawalSettings(ctx context.Context, adminID uuid.UUID, settings domain.PlatformWithdrawalSettings) error {
+	if settings.AutoWithdrawDailyLimitNanoton < 0 {
+		settings.AutoWithdrawDailyLimitNanoton = 0
+	}
 	if err := s.platform.UpdateWithdrawalSettings(ctx, &settings); err != nil {
 		return err
 	}
 	return s.audit(ctx, adminID, "withdrawal_settings_updated", "platform_withdrawal_settings", "1", map[string]any{
-		"enabled":      settings.Enabled,
-		"gifts_manual": settings.GiftsManual,
+		"enabled":                           settings.Enabled,
+		"gifts_manual":                      settings.GiftsManual,
+		"auto_withdraw_daily_limit_nanoton": settings.AutoWithdrawDailyLimitNanoton,
 	})
 }
 
@@ -753,13 +757,13 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 		existing = &domain.PlatformYieldSettings{
 			ID:                          1,
 			ReferralSharePercent:        5,
-			ReferralGGRSharePercent:       domain.DefaultReferralGGRSharePercent,
-			ReferralMilestoneNanoton:      domain.DefaultReferralMilestoneNanoton,
-			ReferralMilestoneMonthlyCap:   domain.DefaultReferralMilestoneMonthlyCap,
-			StakingBaseMonthlyPercent:     3,
-			StakingBoostMonthlyPercent:    4,
-			StakingTVLCapNanoton:          domain.DefaultStakingTVLCapNanoton,
-			StakingPersonalLimitNanoton:   domain.DefaultStakingPersonalLimitNano,
+			ReferralGGRSharePercent:     domain.DefaultReferralGGRSharePercent,
+			ReferralMilestoneNanoton:    domain.DefaultReferralMilestoneNanoton,
+			ReferralMilestoneMonthlyCap: domain.DefaultReferralMilestoneMonthlyCap,
+			StakingBaseMonthlyPercent:   3,
+			StakingBoostMonthlyPercent:  4,
+			StakingTVLCapNanoton:        domain.DefaultStakingTVLCapNanoton,
+			StakingPersonalLimitNanoton: domain.DefaultStakingPersonalLimitNano,
 		}
 	}
 	existing.ReferralSharePercent = settings.ReferralSharePercent
@@ -779,15 +783,15 @@ func (s *Service) UpdateYieldSettings(ctx context.Context, adminID uuid.UUID, se
 		return err
 	}
 	return s.audit(ctx, adminID, "yield_settings_updated", "platform_yield_settings", "1", map[string]any{
-		"referral_share_percent":             existing.ReferralSharePercent,
-		"referral_ggr_share_percent":         existing.ReferralGGRSharePercent,
-		"referral_milestone_nanoton":         existing.ReferralMilestoneNanoton,
-		"referral_milestone_monthly_cap":     existing.ReferralMilestoneMonthlyCap,
+		"referral_share_percent":              existing.ReferralSharePercent,
+		"referral_ggr_share_percent":          existing.ReferralGGRSharePercent,
+		"referral_milestone_nanoton":          existing.ReferralMilestoneNanoton,
+		"referral_milestone_monthly_cap":      existing.ReferralMilestoneMonthlyCap,
 		"referral_monthly_payout_cap_nanoton": existing.ReferralMonthlyPayoutCapNanoton,
-		"staking_base_monthly_percent":       existing.StakingBaseMonthlyPercent,
-		"staking_boost_monthly_percent":      existing.StakingBoostMonthlyPercent,
-		"staking_tvl_cap_nanoton":            existing.StakingTVLCapNanoton,
-		"staking_personal_limit_nanoton":     existing.StakingPersonalLimitNanoton,
+		"staking_base_monthly_percent":        existing.StakingBaseMonthlyPercent,
+		"staking_boost_monthly_percent":       existing.StakingBoostMonthlyPercent,
+		"staking_tvl_cap_nanoton":             existing.StakingTVLCapNanoton,
+		"staking_personal_limit_nanoton":      existing.StakingPersonalLimitNanoton,
 	})
 }
 
@@ -863,9 +867,9 @@ func (s *Service) UpdateMarketListingPrice(ctx context.Context, adminID, listing
 }
 
 type GiftTraitPriceListResult struct {
-	Items   []domain.GiftTraitPrice             `json:"items"`
-	Total   int64                               `json:"total"`
-	Filters domain.GiftTraitPriceFilterOptions  `json:"filters"`
+	Items   []domain.GiftTraitPrice            `json:"items"`
+	Total   int64                              `json:"total"`
+	Filters domain.GiftTraitPriceFilterOptions `json:"filters"`
 }
 
 func (s *Service) ListGiftTraitPrices(ctx context.Context, filter domain.GiftTraitPriceFilter) (*GiftTraitPriceListResult, error) {

@@ -362,6 +362,7 @@ type TonTransferRepository interface {
 	ListByStatus(ctx context.Context, statuses []TonTransferStatus, limit int) ([]TonTransfer, error)
 	ListPendingDeposits(ctx context.Context, now time.Time, limit int) ([]TonTransfer, error)
 	HasActiveWithdrawal(ctx context.Context, userID uuid.UUID) (bool, error)
+	SumSuccessfulWithdrawalsSince(ctx context.Context, userID uuid.UUID, since time.Time) (int64, error)
 	Create(ctx context.Context, transfer *TonTransfer) error
 	Update(ctx context.Context, transfer *TonTransfer) error
 	CreateWithdrawalAtomic(

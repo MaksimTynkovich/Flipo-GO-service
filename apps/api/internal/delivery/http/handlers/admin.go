@@ -1041,8 +1041,9 @@ func (h *AdminHandler) GetWithdrawalSettings(c *gin.Context) {
 func (h *AdminHandler) UpdateWithdrawalSettings(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	var body struct {
-		Enabled     *bool `json:"enabled"`
-		GiftsManual *bool `json:"gifts_manual"`
+		Enabled                    *bool  `json:"enabled"`
+		GiftsManual                *bool  `json:"gifts_manual"`
+		AutoWithdrawDailyLimitNano *int64 `json:"auto_withdraw_daily_limit_nanoton"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1059,6 +1060,9 @@ func (h *AdminHandler) UpdateWithdrawalSettings(c *gin.Context) {
 	}
 	if body.GiftsManual != nil {
 		settings.GiftsManual = *body.GiftsManual
+	}
+	if body.AutoWithdrawDailyLimitNano != nil {
+		settings.AutoWithdrawDailyLimitNanoton = *body.AutoWithdrawDailyLimitNano
 	}
 	if err := h.admin.UpdateWithdrawalSettings(c.Request.Context(), adminID, settings); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

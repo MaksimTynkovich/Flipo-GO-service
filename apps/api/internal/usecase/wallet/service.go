@@ -41,6 +41,7 @@ type AdminWalletNotifier interface {
 type Service struct {
 	users     domain.UserRepository
 	transfers domain.TonTransferRepository
+	platform  domain.PlatformRepository
 	chain     *ton.Client
 	cfg       Config
 	risk      WithdrawalRiskEvaluator
@@ -60,6 +61,10 @@ func NewService(users domain.UserRepository, transfers domain.TonTransferReposit
 
 func (s *Service) SetRiskEvaluator(r WithdrawalRiskEvaluator) {
 	s.risk = r
+}
+
+func (s *Service) SetPlatform(platform domain.PlatformRepository) {
+	s.platform = platform
 }
 
 func (s *Service) SetAnalytics(analyticsSvc *analyticsuc.Service) {
@@ -277,6 +282,9 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 			initialStatus = domain.TonStatusPendingReview
 		}
 	}
+	if err := s.applyDailyAutoWithdrawLimit(ctx, userID, receiveNanoton, &initialStatus, &riskFlags, &reviewReason); err != nil {
+		return nil, 0, err
+	}
 
 	transfer, balanceAfter, err := s.transfers.CreateWithdrawalAtomic(
 		ctx,
@@ -338,6 +346,56 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID uuid.UUID, recei
 		})
 	}
 	return toView(transfer), balanceAfter, nil
+}
+
+func (s *Service) applyDailyAutoWithdrawLimit(
+	ctx context.Context,
+	userID uuid.UUID,
+	receiveNanoton int64,
+	initialStatus *domain.TonTransferStatus,
+	riskFlags *[]string,
+	reviewReason **string,
+) error {
+	if s.platform == nil || s.transfers == nil {
+		return nil
+	}
+	settings, err := s.platform.GetWithdrawalSettings(ctx)
+	if err != nil || settings == nil {
+		return err
+	}
+	limit := settings.AutoWithdrawDailyLimitNanoton
+	if limit <= 0 {
+		return nil
+	}
+	since := time.Now().UTC().Truncate(24 * time.Hour)
+	used, err := s.transfers.SumSuccessfulWithdrawalsSince(ctx, userID, since)
+	if err != nil {
+		return err
+	}
+	if used+receiveNanoton <= limit {
+		return nil
+	}
+	*initialStatus = domain.TonStatusPendingReview
+	if riskFlags != nil {
+		*riskFlags = appendUnique(*riskFlags, "daily_auto_withdraw_limit_exceeded")
+	}
+	if reviewReason != nil && *reviewReason == nil {
+		msg := fmt.Sprintf("daily auto-withdraw limit exceeded: used=%d requested=%d limit=%d", used, receiveNanoton, limit)
+		*reviewReason = &msg
+	}
+	return nil
+}
+
+func appendUnique(items []string, value string) []string {
+	if value == "" {
+		return items
+	}
+	for _, item := range items {
+		if item == value {
+			return items
+		}
+	}
+	return append(items, value)
 }
 
 func (s *Service) onDepositCredited(ctx context.Context, transfer *domain.TonTransfer) {
